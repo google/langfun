@@ -40,3 +40,5 @@ with lf.context(lm=lf.llms.Gpt35(debug=True)):
         y='two')
   print('Result:', r.result)
 ```
+
+*Disclaimer: this is not an officially supported Google product.*

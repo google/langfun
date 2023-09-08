@@ -25,11 +25,10 @@ import pyglove as pg
 class ExcitedEchoer(language_model.LanguageModel):
   """LM for testing."""
 
-  def _sample(
-      self, prompts: list[str]) -> list[language_model.LMSamplingResult]:
+  def _sample(self, prompts) -> list[language_model.LMSamplingResult]:
     return [
         language_model.LMSamplingResult([
-            language_model.LMSample(prompt + '!!!')
+            language_model.LMSample(prompt.text + '!!!')
             ]) for prompt in prompts
     ]
 

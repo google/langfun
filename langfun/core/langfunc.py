@@ -484,7 +484,7 @@ class LangFunc(
         if not skip_lm:
           # Send rendered text to LM.
           lm_input.tag(message_lib.Message.TAG_LM_INPUT)
-          lm_output = message_lib.AIMessage(self.lm(lm_input.text))
+          lm_output = self.lm(lm_input)
 
           # Track the input as the source of the output.
           lm_output.source = lm_input

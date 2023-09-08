@@ -11,33 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Langfun."""
+"""langfun features on Python code parsing and execution."""
 
 # pylint: disable=g-bad-import-order
-# pylint: disable=g-import-not-at-top
-# pylint: disable=unused-import
-from langfun.core import *
-from langfun.core import structured
+# pylint: disable=g-importing-member
 
-parse = structured.parse
-query = structured.query
-describe = structured.describe
+from langfun.core.coding.python import CodePermission
+from langfun.core.coding.python import PythonCode
+from langfun.core.coding.python import PythonCodeParser
+
+from langfun.core.coding.python import permission
+from langfun.core.coding.python import get_permission
+
+from langfun.core.coding.python import context
+from langfun.core.coding.python import get_context
+
+from langfun.core.coding.python import run
 
 
-from langfun.core import templates
-from langfun.core import transforms
-from langfun.core import coding
-
-PythonCode = coding.PythonCode
-
-from langfun.core import llms
-from langfun.core import memories
-
-import langfun.dev
-import langfun.evals
-
-# pylint: enable=unused-import
-# pylint: enable=g-import-not-at-top
+# pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order
-
-__version__ = "0.0.1"

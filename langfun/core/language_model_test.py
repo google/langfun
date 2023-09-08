@@ -16,7 +16,9 @@
 import contextlib
 import io
 import unittest
+from langfun.core import concurrent
 from langfun.core import language_model as lm_lib
+from langfun.core import message as message_lib
 import pyglove as pg
 
 
@@ -26,26 +28,28 @@ class MockModel(lm_lib.LanguageModel):
 
   failures_before_attempt: int = 0
 
-  def _sample(self, prompts: list[str]) -> list[lm_lib.LMSamplingResult]:
+  def _sample(self,
+              prompts: list[message_lib.Message]
+              ) -> list[lm_lib.LMSamplingResult]:
     context = pg.Dict(attempt=0)
 
     def fake_sample(prompts):
       if context.attempt >= self.failures_before_attempt:
         return [
-            lm_lib.LMSamplingResult([lm_lib.LMSample(
-                text=prompt * self.sampling_options.top_k,
+            lm_lib.LMSamplingResult([lm_lib.LMSample(  # pylint: disable=g-complex-comprehension
+                response=prompt.text * self.sampling_options.top_k,
                 score=self.sampling_options.temperature)])
             for prompt in prompts
         ]
       context.attempt += 1
       raise ValueError('Failed to sample prompts.')
 
-    sample_fn = self._with_max_attempts(
+    return concurrent.with_retry(
         fake_sample,
-        errors_to_retry=ValueError,
-        retry_wait_time_fn=lambda i, e: 0.1,
-    )
-    return sample_fn(prompts)
+        retry_on_errors=ValueError,
+        max_attempts=self.max_attempts,
+        retry_interval=1,
+    )(prompts)
 
 
 class LanguageModelTest(unittest.TestCase):
@@ -63,8 +67,8 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar']),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample(text='foo', score=0.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample(text='bar', score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=0.0)]),
         ],
     )
     # Test override sampling_options.
@@ -75,10 +79,10 @@ class LanguageModelTest(unittest.TestCase):
         ),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample(text='foo' * 2, score=0.5)]
+                [lm_lib.LMSample('foo' * 2, score=0.5)]
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample(text='bar' * 2, score=0.5)]
+                [lm_lib.LMSample('bar' * 2, score=0.5)]
             ),
         ],
     )
@@ -86,18 +90,18 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar'], temperature=1.0),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample(text='foo', score=1.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample(text='bar', score=1.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=1.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=1.0)]),
         ],
     )
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar'], top_k=2, temperature=0.7),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample(text='foo' * 2, score=0.7)]
+                [lm_lib.LMSample('foo' * 2, score=0.7)]
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample(text='bar' * 2, score=0.7)]
+                [lm_lib.LMSample('bar' * 2, score=0.7)]
             ),
         ],
     )
@@ -118,7 +122,7 @@ class LanguageModelTest(unittest.TestCase):
         failures_before_attempt=1, top_k=1,
     )
     with self.assertRaisesRegex(
-        ValueError, 'Calling MockModel failed after 1 attempt'
+        concurrent.RetryError, 'Calling .* failed after 1 attempts'
     ):
       lm('foo', max_attempts=1)
     self.assertEqual(lm('foo', max_attempts=2), 'foo')

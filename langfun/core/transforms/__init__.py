@@ -40,16 +40,6 @@ from langfun.core.message_transform import ParseJson
 from langfun.core.message_transform import Match
 from langfun.core.message_transform import MatchBlock
 
-# LLM-based parsing.
-from langfun.core.transforms.parse_structured import ParseStructured
-from langfun.core.transforms.parse_structured import ParsingExample
-from langfun.core.transforms.parse_structured import ParsingSchema
-from langfun.core.transforms.parse_structured import ParsingError
-from langfun.core.transforms.parse_structured import parse
-
-from langfun.core.transforms.parse_structured import Jsonify
-from langfun.core.transforms.parse_structured import FewshotJsonify
-
 # pylint: enable=g-bad-import-order
 # pylint: enable=g-importing-member
 # pylint: enable=g-import-not-at-top

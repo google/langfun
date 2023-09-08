@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for langfun.core.structures.Completion."""
+"""Tests for langfun.core.templates.Completion."""
 
 import unittest
 import langfun.core as lf
 from langfun.core.llms import fake as lf_llms
-from langfun.core.structures.completion import Completion
+from langfun.core.templates.completion import Completion
 
 
 class CompletionTest(unittest.TestCase):

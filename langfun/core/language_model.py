@@ -15,16 +15,25 @@
 
 import abc
 import time
-from typing import Annotated, Any, Callable, Type
+from typing import Annotated
 from langfun.core import component
 from langfun.core import console
+from langfun.core import message as message_lib
 import pyglove as pg
 
 
 class LMSample(pg.Object):
   """Response candidate."""
 
-  text: Annotated[str, 'The natural language response of LM.']
+  response: pg.typing.Annotated[
+      pg.typing.Object(
+          message_lib.Message,
+          # Allowing automatic conversion from text to AIMessage.
+          transform=message_lib.AIMessage.from_value
+      ),
+      'The natural language response of LM.'
+  ]
+
   score: Annotated[
       float, 'The score of sampled response. The larger is better'
   ] = 0.0
@@ -92,7 +101,7 @@ class LanguageModel(component.Component):
           'A number of max attempts to request the LM if fails.'
           'The retry wait time is determined per LM serivice.'
       ),
-  ] = 3
+  ] = 5
 
   debug: Annotated[
       bool, 'If True, the prompt and the response will be output to stdout.'
@@ -121,19 +130,24 @@ class LanguageModel(component.Component):
     super()._on_bound()
     self._call_counter = 0
 
-  def sample(self, prompts: list[str], **kwargs) -> list[LMSamplingResult]:
+  def sample(self,
+             prompts: list[str | message_lib.Message],
+             **kwargs) -> list[LMSamplingResult]:
     """Samples one or multiple prompts."""
     with component.context(override_attrs=True, **kwargs):
-      return self._sample(prompts)
+      return self._sample([
+          message_lib.UserMessage.from_value(p)
+          for p in prompts
+      ])
 
   @abc.abstractmethod
   def _sample(
       self,
-      prompt: list[str],
+      prompt: list[message_lib.Message],
   ) -> list[LMSamplingResult]:
     """Subclass should override."""
 
-  def __call__(self, prompt: str, **kwargs) -> str:
+  def __call__(self, prompt: message_lib.Message, **kwargs) -> str:
     """Returns the first candidate."""
     with component.context(override_attrs=True, **kwargs):
       sampling_options = self.sampling_options
@@ -145,7 +159,7 @@ class LanguageModel(component.Component):
 
       request_start = time.time()
       result = self.sample([prompt], sampling_options=sampling_options)[0]
-      response = result.samples[0].text
+      response = result.samples[0].response
       elapse = time.time() - request_start
 
       if self.debug:
@@ -160,7 +174,7 @@ class LanguageModel(component.Component):
             color='green',
         )
         console.write(
-            response + '\n',
+            str(response) + '\n',
             title=(
                 f'\n[{call_counter}] LM RESPONSE '
                 f'(in {elapse:.2f} seconds):'
@@ -171,27 +185,3 @@ class LanguageModel(component.Component):
       if result.error:
         raise result.error
       return response
-
-  def _with_max_attempts(
-      self,
-      func: Callable[..., Any],
-      errors_to_retry: Type[Exception] | tuple[Type[Exception]],
-      retry_wait_time_fn: Callable[[int, Exception], float] | None = None,
-  ) -> Callable[..., Any]:
-    """Retry helper."""
-    retry_wait_time_fn = retry_wait_time_fn or (lambda i, e: 5 * (2**i))
-
-    def _func_with_max_attempts(*args, **kwargs):
-      error = None
-      for i in range(max(1, self.max_attempts)):
-        try:
-          return func(*args, **kwargs)
-        except errors_to_retry as e:
-          time.sleep(retry_wait_time_fn(i + 1, e))
-          error = e
-      raise ValueError(
-          f'Calling {self.__class__.__name__} failed after '
-          f'{self.max_attempts} attempt(s).'
-      ) from error
-
-    return _func_with_max_attempts

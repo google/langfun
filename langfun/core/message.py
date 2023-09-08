@@ -14,7 +14,7 @@
 """Messages that are exchanged between users and agents."""
 
 import contextlib
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, Union
 
 from langfun.core import natural_language
 import pyglove as pg
@@ -137,6 +137,13 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
         root_path=root_path,
     )
     self._source = source
+
+  @classmethod
+  def from_value(cls, value: Union[str, 'Message']) -> 'Message':
+    """Creates a message from a value or return value itself if a Message."""
+    if isinstance(value, Message):
+      return value
+    return cls(value)
 
   #
   # Unified interface for accessing text, result and metadata.

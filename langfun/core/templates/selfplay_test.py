@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for langfun.core.structures.selfplay."""
+"""Tests for langfun.core.templates.selfplay."""
 
 
 import unittest
 import langfun.core as lf
-from langfun.core.structures import selfplay
+from langfun.core.templates import selfplay
 
 
 class NumberGuesser(lf.language_model.LanguageModel):

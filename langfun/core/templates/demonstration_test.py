@@ -15,8 +15,8 @@
 
 import inspect
 import unittest
-from langfun.core.structures.completion import Completion
-from langfun.core.structures.demonstration import Demonstration
+from langfun.core.templates.completion import Completion
+from langfun.core.templates.demonstration import Demonstration
 
 
 class DemonstrationTest(unittest.TestCase):

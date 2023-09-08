@@ -16,7 +16,7 @@
 import abc
 from typing import Annotated, Union
 import langfun.core as lf
-from langfun.core.structures.conversation import Conversation
+from langfun.core.templates.conversation import Conversation
 
 
 @lf.use_init_args(['preamble'])

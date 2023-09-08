@@ -11,12 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for langfun.core.structures.Conversation."""
+"""Tests for langfun.core.templates.Conversation."""
 
 import inspect
 import unittest
 import langfun.core as lf
-from langfun.core.structures.conversation import Conversation
+from langfun.core.templates.conversation import Conversation
 
 
 class QuestionCounter(lf.LanguageModel):

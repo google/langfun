@@ -15,10 +15,10 @@
 
 # pylint: disable=g-bad-import-order
 
-from langfun.core.structures.completion import Completion
-from langfun.core.structures.conversation import Conversation
-from langfun.core.structures.selfplay import SelfPlay
+from langfun.core.templates.completion import Completion
+from langfun.core.templates.conversation import Conversation
+from langfun.core.templates.selfplay import SelfPlay
 
-from langfun.core.structures.demonstration import Demonstration
+from langfun.core.templates.demonstration import Demonstration
 
 # pylint: enable=g-bad-import-order

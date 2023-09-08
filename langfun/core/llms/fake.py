@@ -20,9 +20,9 @@ import langfun.core as lf
 class Echo(lf.LanguageModel):
   """A simple echo language model for testing."""
 
-  def _sample(self, prompts: list[str]) -> list[lf.LMSamplingResult]:
+  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     return [
-        lf.LMSamplingResult([lf.LMSample(text=prompt, score=1.0)])
+        lf.LMSamplingResult([lf.LMSample(prompt.text, 1.0)])
         for prompt in prompts
     ]
 
@@ -38,7 +38,7 @@ class StaticMapping(lf.LanguageModel):
 
   def _sample(self, prompts: list[str]) -> list[lf.LMSamplingResult]:
     return [
-        lf.LMSamplingResult([lf.LMSample(text=self.mapping[prompt], score=1.0)])
+        lf.LMSamplingResult([lf.LMSample(self.mapping[prompt], 1.0)])
         for prompt in prompts
     ]
 
@@ -60,6 +60,6 @@ class StaticSequence(lf.LanguageModel):
     results = []
     for _ in prompts:
       results.append(lf.LMSamplingResult(
-          [lf.LMSample(text=self.sequence[self._pos], score=1.0)]))
+          [lf.LMSample(self.sequence[self._pos], 1.0)]))
       self._pos += 1
     return results

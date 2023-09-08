@@ -35,10 +35,11 @@ class ExcitedEchoer(language_model.LanguageModel):
   """LM for testing."""
 
   def _sample(
-      self, prompts: list[str]) -> list[language_model.LMSamplingResult]:
+      self,
+      prompts: list[message.Message]) -> list[language_model.LMSamplingResult]:
     return [
         language_model.LMSamplingResult([
-            language_model.LMSample(prompt + '!!!')
+            language_model.LMSample(prompt.text + '!!!')
             ]) for prompt in prompts
     ]
 
@@ -102,7 +103,7 @@ class LangFuncTest(unittest.TestCase):
         "LangFunc(template_str='Hello', returns=None, lm=ExcitedEchoer("
         'sampling_options=LMSamplingOptions(temperature=0.0, max_tokens=1024, '
         'n=1, top_k=40, top_p=None, random_seed=None), timeout=30.0, '
-        'max_attempts=3, debug=False), input_transform=None, '
+        'max_attempts=5, debug=False), input_transform=None, '
         'output_transform=None, clean=True)',
     )
 

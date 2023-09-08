@@ -16,7 +16,7 @@
 from typing import Annotated
 import langfun.core as lf
 import langfun.core.memories as lf_memories
-from langfun.core.structures.completion import Completion
+from langfun.core.templates.completion import Completion
 
 
 @lf.use_init_args(['preamble', 'input_message'])
