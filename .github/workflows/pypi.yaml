@@ -1,13 +1,11 @@
 # This workflow will upload a Python Package using Twine when a release is created.
 # For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
 
-name: pypi-nightly
+name: pypi
 
 on:
-  workflow_dispatch:
-  schedule:
-    # Everyday@1:00AM PST
-    - cron: "0 8 * * *"
+  release:
+    types: [created]
 
 jobs:
   deploy:
@@ -25,10 +23,10 @@ jobs:
         pip install -r requirements.txt
     - name: Build and publish
       env:
-        TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-        TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
       run: |
         # Remove the parallel image for Github dark mode in README.md
         sed -i -e 's$<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-dark-mode-only" width="320px" alt="logo"></img>$$' README.md
-        python setup.py sdist bdist_wheel -- --nightly
-        twine upload dist/* --skip-existing
+        python setup.py sdist bdist_wheel
+        twine upload dist/*

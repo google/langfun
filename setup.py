@@ -76,7 +76,7 @@ setup(
     include_package_data=True,
     # PyPI package information.
     classifiers=[
-        'Development Status :: 3 - Alpha Copy',
+        'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',
         'Intended Audience :: Education',
         'Intended Audience :: Science/Research',
