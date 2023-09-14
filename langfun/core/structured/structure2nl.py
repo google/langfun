@@ -14,10 +14,11 @@
 """Structured value to natural language."""
 
 import inspect
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import langfun.core as lf
 from langfun.core.structured import mapping
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -34,7 +35,7 @@ class StructureToNaturalLanguage(mapping.Mapping):
 
   {% endif -%}
   {{ value_title}}:
-  {{ object_repr(example.value) | indent(2, True) }}
+  {{ value_str(example.value) | indent(2, True) }}
 
   {{ nl_text_title }}:
   {{ example.nl_text | indent(2, True) }}
@@ -47,7 +48,7 @@ class StructureToNaturalLanguage(mapping.Mapping):
 
   {% endif -%}
   {{ value_title }}:
-  {{ object_repr(value) | indent(2, True) }}
+  {{ value_str(value) | indent(2, True) }}
 
   {{ nl_text_title }}:
   """
@@ -64,7 +65,7 @@ class StructureToNaturalLanguage(mapping.Mapping):
       'NATURAL_LANGUAGE_TEXT'
   )
 
-  value_title: Annotated[str, 'The section title for schema.'] = 'JSON_OBJECT'
+  value_title: Annotated[str, 'The section title for schema.'] = 'PYTHON_OBJECT'
 
   @property
   def value(self) -> Any:
@@ -76,16 +77,17 @@ class StructureToNaturalLanguage(mapping.Mapping):
     """Returns the context information for the description."""
     return self.message.text
 
-  def object_repr(self, value: Any) -> str:
-    return pg.format(value, compact=False, python_format=True)
+  def value_str(self, value: Any) -> str:
+    return schema_lib.value_repr('python').repr(
+        value, markdown=False, compact=False)
 
 
 @pg.use_init_args(['examples'])
 class DescribeStructure(StructureToNaturalLanguage):
-  """Describe a structured value using natural language."""
+  """Describe a structured value in natural language."""
 
   preamble = """
-      Please help describe a JSON formatted object using natural language.
+      Please help describe {{ value_title }} in natural language.
 
       INSTRUCTIONS:
         1. Do not add details which are not present in the object.
@@ -172,7 +174,7 @@ class _Country(pg.Object):
 
   name: str
   continents: list[
-      pg.typing.Enum[
+      Literal[
           'Africa',
           'Asia',
           'Europe',

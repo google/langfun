@@ -15,7 +15,7 @@
 
 import abc
 import inspect
-from typing import Annotated, Any, Callable, Type, Union
+from typing import Annotated, Any, Callable, Literal, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -41,10 +41,10 @@ class NaturalLanguageToStructure(mapping.Mapping):
 
   {% endif -%}
   {{ schema_title }}:
-  {{ example.schema_repr | indent(2, True) }}
+  {{ example.schema_str(protocol) | indent(2, True) }}
 
   {{ value_title }}:
-  {{ example.value_repr | indent(2, True) }}
+  {{ example.value_str(protocol) | indent(2, True) }}
 
   {% endfor %}
   {% endif -%}
@@ -59,15 +59,14 @@ class NaturalLanguageToStructure(mapping.Mapping):
 
   {% endif -%}
   {{ schema_title }}:
-  {{ schema.schema_repr() | indent(2, True) }}
+  {{ schema.schema_str(protocol) | indent(2, True) }}
 
   {{ value_title }}:
   """
 
   schema: pg.typing.Annotated[
       # Automatic conversion from annotation to schema.
-      pg.typing.Object(
-          schema_lib.Schema, transform=schema_lib.JsonSchema.from_value),
+      schema_lib.schema_spec(),
       'A `lf.structured.Schema` that constrains the structured value.',
   ]
 
@@ -94,15 +93,14 @@ class NaturalLanguageToStructure(mapping.Mapping):
       'The section title for nl_text.'
   ] = 'LM_RESPONSE'
 
-  schema_title: Annotated[
-      str,
-      'The section title for schema.'
-  ] = 'SCHEMA'
+  schema_title: Annotated[str, 'The section title for schema.']
 
-  value_title: Annotated[
-      str,
-      'The section title for schema.'
-  ] = 'JSON'
+  value_title: Annotated[str, 'The section title for schema.']
+
+  protocol: Annotated[
+      Literal['json', 'python'],
+      'The protocol for representing the schema and value.'
+  ]
 
   @property
   @abc.abstractmethod
@@ -111,7 +109,8 @@ class NaturalLanguageToStructure(mapping.Mapping):
 
     Returns:
       The natural language context (prompt) for obtaining the response (either
-      in natural language or directly to structured format). If None, `nl_text`
+      in natural language or directly to structured protocol). If None,
+      `nl_text`
       must be provided.
     """
 
@@ -122,13 +121,15 @@ class NaturalLanguageToStructure(mapping.Mapping):
 
     Returns:
       The natural language text (in LM response) to map to object. If None,
-      the LM directly outputs structured format instead of natural language.
+      the LM directly outputs structured protocol instead of natural language.
       If None, `nl_context` must be provided.
     """
 
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
     try:
-      lm_output.result = self.schema.parse(lm_output.text)
+      lm_output.result = self.schema.parse(
+          lm_output.text, protocol=self.protocol
+      )
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
         raise mapping.MappingError(
@@ -147,14 +148,6 @@ class NaturalLanguageToStructure(mapping.Mapping):
 @lf.use_init_args(['schema', 'default', 'examples'])
 class ParseStructure(NaturalLanguageToStructure):
   """Parse an object out from a natural language text."""
-
-  preamble = """
-      Please help transform the LM response into JSON based on the request and the schema:
-
-      INSTRUCTIONS:
-        1. If the schema has `_type`, carry it over to the JSON output.
-        2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
-      """
 
   # Customize the source of the text to be mapped and its context.
   nl_context_getter: Annotated[
@@ -192,14 +185,45 @@ class ParseStructure(NaturalLanguageToStructure):
     return self.response_getter(self.message)    # pylint: disable=not-callable
 
 
+class ParseStructureJson(ParseStructure):
+  """Parse an object out from a NL text using JSON as the protocol."""
+
+  preamble = """
+      Please help translate the LM response into JSON based on the request and the schema:
+
+      INSTRUCTIONS:
+        1. If the schema has `_type`, carry it over to the JSON output.
+        2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
+      """
+
+  protocol = 'json'
+  schema_title = 'SCHEMA'
+  value_title = 'JSON'
+
+
+class ParseStructurePython(ParseStructure):
+  """Parse an object out from a NL text using Python as the protocol."""
+
+  preamble = """
+      Please help translate {{ nl_text_title }} into {{ value_title}} based on {{ schema_title }}.
+      Both {{ schema_title }} and {{ value_title }} are described in Python.
+      """
+
+  protocol = 'python'
+  schema_title = 'RESULT_TYPE'
+  value_title = 'RESULT_OBJECT'
+
+
 def parse(
     message: Union[lf.Message, str],
-    schema: Union[schema_lib.Schema,
-                  Type[Any], list[Type[Any]], dict[str, Any]],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
+    ],
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     *,
     user_prompt: str | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    protocol: Literal['json', 'python'] = 'json',
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -246,6 +270,8 @@ def parse(
       message, which provide more context for parsing.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    protocol: The protocol for schema/value representation. Applicable values
+      are 'json' and 'python'. By default the JSON representation will be used.
     **kwargs: Keyword arguments passed to the `lf.structured.ParseStructure`
       transform, e.g. `lm` for specifying the language model.
 
@@ -254,7 +280,10 @@ def parse(
   """
   if examples is None:
     examples = _default_parsing_examples()
-  t = ParseStructure(schema, default=default, examples=examples, **kwargs)
+
+  t = _parse_structure_cls(protocol)(
+      schema, default=default, examples=examples, **kwargs
+  )
   if isinstance(message, str):
     message = lf.AIMessage(message)
 
@@ -263,11 +292,24 @@ def parse(
   return t.transform(message=message).result
 
 
+def _parse_structure_cls(
+    protocol: Literal['json', 'python']
+) -> Type[ParseStructure]:
+  if protocol == 'json':
+    return ParseStructureJson
+  elif protocol == 'python':
+    return ParseStructurePython
+  else:
+    raise ValueError(f'Unknown protocol: {protocol!r}.')
+
+
 def as_structured(
     self,
     annotation: Union[Type[Any], list[Type[Any]], dict[str, Any]],
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     examples: list[mapping.Mapping] | None = None,
+    *,
+    protocol: Literal['json', 'python'] = 'json',
     **kwargs,
 ):
   """Returns the structured representation of the message text.
@@ -280,6 +322,8 @@ def as_structured(
       will be raised.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    protocol: The protocol for schema/value representation. Applicable values
+      are 'json' and 'python'. By default the JSON representation will be used.
     **kwargs: Additional keyword arguments that will be passed to
       `lf.structured.NaturalLanguageToStructure`.
 
@@ -288,7 +332,7 @@ def as_structured(
   """
   if examples is None:
     examples = _default_parsing_examples()
-  return self >> ParseStructure(
+  return self >> _parse_structure_cls(protocol)(
       schema=annotation,
       default=default,
       examples=examples,
@@ -299,7 +343,7 @@ def as_structured(
 class _Country(pg.Object):
   """A example dataclass for structured parsing."""
   name: str
-  continents: list[pg.typing.Enum[
+  continents: list[Literal[
       'Africa',
       'Asia',
       'Europe',
@@ -356,15 +400,7 @@ lf.MessageTransform.as_structured = as_structured
 
 @lf.use_init_args(['schema', 'default', 'examples'])
 class QueryStructure(NaturalLanguageToStructure):
-  """Parse an object out from a natural language text."""
-
-  preamble = """
-      Please respond to the user request with JSON according to a schema:
-
-      INSTRUCTIONS:
-        1. If the schema has `_type`, carry it over to the JSON output.
-        2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
-      """
+  """Query an object out from a natural language text."""
 
   @property
   def nl_context(self) -> str:
@@ -375,6 +411,44 @@ class QueryStructure(NaturalLanguageToStructure):
   def nl_text(self) -> None:
     """Returns the LM response."""
     return None
+
+
+class QueryStructureJson(QueryStructure):
+  """Query a structured value using JSON as the protocol."""
+
+  preamble = """
+      Please respond to {{ nl_context_title }} with {{ value_title}} according to {{ schema_title }}:
+
+      INSTRUCTIONS:
+        1. If the schema has `_type`, carry it over to the JSON output.
+        2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
+      """
+
+  protocol = 'json'
+  schema_title = 'SCHEMA'
+  value_title = 'JSON'
+
+
+class QueryStructurePython(QueryStructure):
+  """Query a structured value using Python as the protocol."""
+
+  preamble = """
+      Please respond to {{ nl_context_title }} with {{ value_title }} according to {{ schema_title }}.
+      """
+  protocol = 'python'
+  schema_title = 'RESULT_TYPE'
+  value_title = 'RESULT_OBJECT'
+
+
+def _query_structure_cls(
+    protocol: Literal['json', 'python']
+) -> Type[QueryStructure]:
+  if protocol == 'json':
+    return QueryStructureJson
+  elif protocol == 'python':
+    return QueryStructurePython
+  else:
+    raise ValueError(f'Unknown protocol: {protocol!r}.')
 
 
 def _default_query_examples() -> list[mapping.MappingExample]:
@@ -403,11 +477,13 @@ def _default_query_examples() -> list[mapping.MappingExample]:
 
 def query(
     prompt: Union[lf.Message, str],
-    schema: Union[schema_lib.Schema,
-                  Type[Any], list[Type[Any]], dict[str, Any]],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
+    ],
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     *,
     examples: list[mapping.MappingExample] | None = None,
+    protocol: Literal['json', 'python'] = 'json',
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -448,6 +524,8 @@ def query(
       be raised.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    protocol: The protocol for schema/value representation. Applicable values
+      are 'json' and 'python'. By default the JSON representation will be used.
     **kwargs: Keyword arguments passed to the
       `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
       specifying the language model for structured parsing, `jsonify` for
@@ -458,6 +536,8 @@ def query(
   """
   if examples is None:
     examples = _default_query_examples()
-  t = QueryStructure(schema, default=default, examples=examples, **kwargs)
+  t = _query_structure_cls(protocol)(
+      schema, default=default, examples=examples, **kwargs
+  )
   message = lf.AIMessage.from_value(prompt)
   return t.transform(message=message).result

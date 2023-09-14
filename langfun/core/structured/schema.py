@@ -15,8 +15,10 @@
 
 import abc
 import io
-from typing import Any
+import typing
+from typing import Any, Literal, Type
 import langfun.core as lf
+from langfun.core import coding as lf_coding
 import pyglove as pg
 
 
@@ -71,20 +73,31 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
       ),
   ]
 
-  @abc.abstractmethod
-  def schema_repr(self) -> str:
+  def schema_str(
+      self,
+      protocol: Literal['json', 'python'] = 'json',
+      **kwargs) -> str:
     """Returns the representation of the schema."""
+    return schema_repr(protocol).repr(self, **kwargs)
 
-  @abc.abstractmethod
-  def value_repr(self, value: Any) -> str:
+  def value_str(
+      self,
+      value: Any,
+      protocol: Literal['json', 'python'] = 'json',
+      **kwargs) -> str:
     """Returns the representation of a structured value."""
+    return value_repr(protocol).repr(value, self, **kwargs)
 
-  @abc.abstractmethod
-  def parse(self, text: str) -> Any:
+  def parse(
+      self,
+      text: str,
+      protocol: Literal['json', 'python'] = 'json',
+      **kwargs) -> Any:
     """Parse a LM generated text into a structured value."""
+    return self.spec.apply(value_repr(protocol).parse(text, self, **kwargs))
 
   def natural_language_format(self) -> str:
-    return self.schema_repr()
+    return self.schema_str()
 
   def schema_dict(self) -> dict[str, Any]:
     """Returns the dict representation of the schema."""
@@ -107,24 +120,249 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
               }
           )
           return d
-      raise TypeError(f'Unsupported value spec for structured parsing: {vs}.')
+      raise TypeError(
+          'Unsupported value spec being used as the schema for '
+          f'structured data: {vs}.')
 
     return {'result': _node(self.spec)}
+
+  def class_dependencies(
+      self,
+      include_subclasses: bool = True) -> list[Type[Any]]:
+    """Returns a set of dependent classes for a ValueSpec."""
+    seen = set()
+    dependencies = []
+
+    def _add_dependency(cls_or_classes):
+      if isinstance(cls_or_classes, type):
+        cls_or_classes = [cls_or_classes]
+      for cls in cls_or_classes:
+        if cls not in seen:
+          dependencies.append(cls)
+          seen.add(cls)
+
+    def _fill_dependencies(vs: pg.typing.ValueSpec, include_subclasses: bool):
+      if isinstance(vs, pg.typing.Object):
+        if issubclass(vs.cls, pg.Object) and vs.cls not in seen:
+          # Add base classes as dependencies.
+          for base_cls in vs.cls.__bases__:
+            # We only keep track of user-defined symbolic classes.
+            if issubclass(
+                base_cls, pg.Object
+            ) and not base_cls.__module__.startswith('pyglove'):
+              _fill_dependencies(
+                  pg.typing.Object(base_cls), include_subclasses=False)
+
+          # Add members as dependencies.
+          if hasattr(vs.cls, '__schema__'):
+            for field in vs.cls.__schema__.values():
+              _fill_dependencies(field.value, include_subclasses)
+        _add_dependency(vs.cls)
+
+        # Check subclasses if available.
+        if include_subclasses:
+          for _, cls in pg.object_utils.registered_types():
+            if issubclass(cls, vs.cls) and cls not in dependencies:
+              _fill_dependencies(
+                  pg.typing.Object(cls), include_subclasses=True)
+
+      if isinstance(vs, pg.typing.List):
+        _fill_dependencies(
+            vs.element.value, include_subclasses)
+      elif isinstance(vs, pg.typing.Tuple):
+        for elem in vs.elements:
+          _fill_dependencies(elem.value, include_subclasses)
+      elif isinstance(vs, pg.typing.Dict) and vs.schema:
+        for v in vs.schema.values():
+          _fill_dependencies(v, include_subclasses)
+      elif isinstance(vs, pg.typing.Union):
+        for v in vs.candidates:
+          _fill_dependencies(v, include_subclasses)
+
+    _fill_dependencies(self.spec, include_subclasses)
+    return dependencies
 
   @classmethod
   def from_value(cls, value) -> 'Schema':
     """Creates a schema from an equivalent representation."""
-
     if isinstance(value, Schema):
       return value
     return cls(parse_value_spec(value))
 
 
-class JsonSchema(Schema):
-  """JSON-represented schema."""
+def schema_spec(noneable: bool = False) -> pg.typing.ValueSpec:  # pylint: disable=unused-argument
+  if typing.TYPE_CHECKING:
+    return Any
+  return pg.typing.Object(
+      Schema, transform=Schema.from_value, is_noneable=noneable
+  )  # pylint: disable=unreachable-code
 
-  def schema_repr(self) -> str:
-    """Render the schema into a natural language string."""
+
+#
+# Schema representations.
+#
+
+
+class SchemaRepr(metaclass=abc.ABCMeta):
+  """Base class for schema representation."""
+
+  @abc.abstractmethod
+  def repr(self, schema: Schema) -> str:
+    """Returns the representation of the schema."""
+
+
+class SchemaPythonRepr(SchemaRepr):
+  """Python-representation for a schema."""
+
+  def repr(self, schema: Schema) -> str:
+    ret = self.result_definition(schema)
+    class_definition_str = self.class_definitions(schema)
+    if class_definition_str:
+      ret += f'\n\n```python\n{class_definition_str}```'
+    return ret
+
+  def class_definitions(
+      self,
+      schema: Schema,
+      include_subclasses: bool = True) -> str | None:
+    """Returns a str for class definitions from a schema."""
+    class_dependencies = schema.class_dependencies(
+        include_subclasses=include_subclasses)
+    if not class_dependencies:
+      return None
+    def_str = io.StringIO()
+    for i, cls in enumerate(class_dependencies):
+      if i > 0:
+        def_str.write('\n')
+      def_str.write(self.class_def(cls))
+    return def_str.getvalue()
+
+  def result_definition(self, schema: Schema) -> str:
+    return self.annotate(schema.spec)
+
+  def class_def(self, cls, strict: bool = False) -> str:
+    """Returns the Python class definition."""
+    out = io.StringIO()
+    if not issubclass(cls, pg.Object):
+      raise TypeError(
+          'Classes must be `pg.Object` subclasses to be used as schema. '
+          f'Encountered: {cls}.'
+      )
+    schema = cls.__schema__
+    eligible_bases = []
+    for base_cls in cls.__bases__:
+      if issubclass(
+          base_cls, pg.Symbolic
+      ) and not base_cls.__module__.startswith('pyglove'):
+        eligible_bases.append(base_cls.__name__)
+    if eligible_bases:
+      base_cls_str = ', '.join(eligible_bases)
+      out.write(f'class {cls.__name__}({base_cls_str}):\n')
+    else:
+      out.write(f'class {cls.__name__}:\n')
+
+    if schema.fields:
+      for key, field in schema.items():
+        if not isinstance(key, pg.typing.ConstStrKey):
+          raise TypeError(
+              'Variable-length keyword arguments is not supported in '
+              f'structured parsing or query. Encountered: {field}'
+          )
+        out.write(
+            f'  {field.key}: {self.annotate(field.value, strict=strict)}\n')
+    else:
+      out.write('  pass\n')
+    return out.getvalue()
+
+  def annotate(
+      self,
+      vs: pg.typing.ValueSpec,
+      annotate_optional: bool = True,
+      strict: bool = False,
+  ) -> str:
+    """Returns the annotation string for a value spec."""
+    if isinstance(vs, pg.typing.Any):
+      return 'Any'
+    elif isinstance(vs, pg.typing.Enum):
+      candidate_str = ', '.join([repr(v) for v in vs.values])
+      return f'Literal[{candidate_str}]'
+    elif isinstance(vs, pg.typing.Union):
+      candidate_str = ', '.join(
+          [
+              self.annotate(c, annotate_optional=False, strict=strict)
+              for c in vs.candidates
+          ]
+      )
+      if vs.is_noneable:
+        candidate_str += ', None'
+      return f'Union[{candidate_str}]'
+
+    if isinstance(vs, pg.typing.Bool):
+      x = 'bool'
+    elif isinstance(vs, pg.typing.Str):
+      if vs.regex is None:
+        x = 'str'
+      else:
+        if strict:
+          x = f"pg.typing.Str(regex='{vs.regex.pattern}')"
+        else:
+          x = f"str(regex='{vs.regex.pattern}')"
+    elif isinstance(vs, pg.typing.Number):
+      constraints = []
+      min_label = 'min_value' if strict else 'min'
+      max_label = 'max_value' if strict else 'max'
+      if vs.min_value is not None:
+        constraints.append(f'{min_label}={vs.min_value}')
+      if vs.max_value is not None:
+        constraints.append(f'{max_label}={vs.max_value}')
+      x = 'int' if isinstance(vs, pg.typing.Int) else 'float'
+      if constraints:
+        if strict:
+          x = (
+              'pg.typing.Int'
+              if isinstance(vs, pg.typing.Int)
+              else 'pg.typing.Float'
+          )
+        x += '(' + ', '.join(constraints) + ')'
+    elif isinstance(vs, pg.typing.Object):
+      x = vs.cls.__name__
+    elif isinstance(vs, pg.typing.List):
+      item_str = self.annotate(vs.element.value, strict=strict)
+      x = f'list[{item_str}]'
+    elif isinstance(vs, pg.typing.Tuple):
+      elem_str = ', '.join(
+          [self.annotate(el.value, strict=strict) for el in vs.elements]
+      )
+      x = f'tuple[{elem_str}]'
+    elif isinstance(vs, pg.typing.Dict):
+      kv_pairs = None
+      if vs.schema is not None:
+        kv_pairs = [
+            (k, self.annotate(f.value, strict=strict))
+            for k, f in vs.schema.items()
+            if isinstance(k, pg.typing.ConstStrKey)
+        ]
+
+      if kv_pairs:
+        kv_str = ', '.join(f'\'{k}\': {v}' for k, v in kv_pairs)
+        x = '{' + kv_str + '}'
+        if strict:
+          x = f'pg.typing.Dict({x})'
+      else:
+        x = 'dict[str, Any]'
+
+    else:
+      raise TypeError(f'Unsupported value spec being used as schema: {vs}.')
+
+    if annotate_optional and vs.is_noneable:
+      x += ' | None'
+    return x
+
+
+class SchemaJsonRepr(SchemaRepr):
+  """JSON-representation for a schema."""
+
+  def repr(self, schema: Schema) -> str:
     out = io.StringIO()
     def _visit(node: Any) -> None:
       if isinstance(node, str):
@@ -163,24 +401,88 @@ class JsonSchema(Schema):
           x = x + ' | None'
         out.write(x)
       else:
-        raise ValueError(f'Unsupported schema node: {node}.')
-    _visit(self.schema_dict())
+        raise ValueError(
+            f'Unsupported value spec being used as schema: {node}.')
+    _visit(schema.schema_dict())
     return out.getvalue()
 
-  def value_repr(self, value: Any) -> str:
+
+#
+# Value representations.
+#
+
+
+class ValueRepr(metaclass=abc.ABCMeta):
+  """Base class for value representation."""
+
+  @abc.abstractmethod
+  def repr(self, value: Any, schema: Schema | None = None, **kwargs) -> str:
+    """Returns the representation of a structured value."""
+
+  @abc.abstractmethod
+  def parse(self, text: str, schema: Schema | None = None, **kwargs) -> Any:
+    """Parse a LM generated text into a structured value."""
+
+
+class ValuePythonRepr(ValueRepr):
+  """Python-representation for value."""
+
+  def repr(self,
+           value: Any,
+           schema: Schema | None = None,
+           *,
+           compact: bool = True,
+           verbose: bool = False,
+           markdown: bool = True,
+           **kwargs) -> str:
+    del schema
+    object_code = pg.format(
+        value, compact=compact, verbose=verbose, python_format=True)
+    if markdown:
+      return f'```python\n{ object_code }\n```'
+    return object_code
+
+  def parse(self,
+            text: str,
+            schema: Schema | None = None,
+            **kwargs) -> Any:
+    context = {
+        'pg': pg,
+        'Any': typing.Any,
+        'List': typing.List,
+        'Tuple': typing.Tuple,
+        'Dict': typing.Dict,
+        'Sequence': typing.Sequence,
+        'Optional': typing.Optional,
+        'Union': typing.Union,
+    }
+    if schema is not None:
+      dependencies = schema.class_dependencies()
+      context.update({d.__name__: d for d in dependencies})
+    with lf_coding.context(**context):
+      return lf_coding.run(text)['__result__']
+
+
+class ValueJsonRepr(ValueRepr):
+  """JSON-representation for value."""
+
+  def repr(self, value: Any, schema: Schema | None = None, **kwargs) -> str:
+    del schema
     return pg.to_json_str(dict(result=value))
 
-  def parse(self, text: str) -> Any:
+  def parse(self, text: str, schema: Schema | None = None, **kwargs) -> Any:
     """Parse a JSON string into a structured object."""
+    del schema
     v = pg.from_json_str(self._cleanup_json(text))
     if not isinstance(v, dict) or 'result' not in v:
       raise ValueError(
           'The root node of the JSON must be a dict with key `result`. '
           f'Encountered: {v}'
       )
-    return self.spec.apply(v['result'])
+    return v['result']
 
   def _cleanup_json(self, json_str: str) -> str:
+    """Clean up the LM responded JSON string."""
     # Treatments:
     # 1. Extract the JSON string with a top-level dict from the response.
     #    This prevents the leading and trailing texts in the response to
@@ -228,3 +530,20 @@ class JsonSchema(Schema):
       )
 
     return cleaned.getvalue()
+
+
+def schema_repr(protocol: Literal['json', 'python']) -> SchemaRepr:
+  """Gets a SchemaRepr object from protocol."""
+  if protocol == 'json':
+    return SchemaJsonRepr()
+  elif protocol == 'python':
+    return SchemaPythonRepr()
+  raise ValueError(f'Unsupported protocol: {protocol}.')
+
+
+def value_repr(protocol: Literal['json', 'python']) -> ValueRepr:
+  if protocol == 'json':
+    return ValueJsonRepr()
+  elif protocol == 'python':
+    return ValuePythonRepr()
+  raise ValueError(f'Unsupported protocol: {protocol}.')

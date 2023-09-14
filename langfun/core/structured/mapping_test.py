@@ -31,6 +31,14 @@ class MappingErrorTest(unittest.TestCase):
 
 class MappingExampleTest(unittest.TestCase):
 
+  def test_basics(self):
+    m = mapping.MappingExample('Compute 1 + 1', '2')
+    self.assertEqual(m.schema_str(), '')
+
+    m = mapping.MappingExample('Compute 1 + 1', '2', schema=int)
+    self.assertEqual(m.schema_str('python'), 'int')
+    self.assertEqual(m.schema_str('json'), '{"result": int}')
+
   def test_str(self):
     self.assertEqual(
         str(mapping.MappingExample(
@@ -44,7 +52,7 @@ class MappingExampleTest(unittest.TestCase):
 
             \x1b[1m[TEXT]
             \x1b[0m\x1b[32m1 + 1 = 2\x1b[0m
-            
+
             \x1b[1m[SCHEMA]
             \x1b[0m\x1b[31m{"result": int}\x1b[0m
 
@@ -59,12 +67,69 @@ class MappingExampleTest(unittest.TestCase):
         inspect.cleandoc("""
             \x1b[1m[TEXT]
             \x1b[0m\x1b[32m1 + 1 = 2\x1b[0m
-            
+
             \x1b[1m[SCHEMA]
             \x1b[0m\x1b[31m{"result": int}\x1b[0m
 
             \x1b[1m[VALUE]
             \x1b[0m\x1b[34m{"result": 2}\x1b[0m
+            """),
+    )
+
+  def test_str_no_text(self):
+    self.assertEqual(
+        str(mapping.MappingExample(
+            'Give the answer.',
+            None,
+            2,
+            int)),
+        inspect.cleandoc("""
+            \x1b[1m[CONTEXT]
+            \x1b[0m\x1b[35mGive the answer.\x1b[0m
+
+            \x1b[1m[SCHEMA]
+            \x1b[0m\x1b[31m{"result": int}\x1b[0m
+
+            \x1b[1m[VALUE]
+            \x1b[0m\x1b[34m{"result": 2}\x1b[0m
+            """),
+    )
+
+  def test_str_no_schema(self):
+    self.assertEqual(
+        str(mapping.MappingExample(
+            'Give the answer.',
+            '1 + 1 = 2',
+            2,
+            None)),
+        inspect.cleandoc("""
+            \x1b[1m[CONTEXT]
+            \x1b[0m\x1b[35mGive the answer.\x1b[0m
+
+            \x1b[1m[TEXT]
+            \x1b[0m\x1b[32m1 + 1 = 2\x1b[0m
+
+            \x1b[1m[VALUE]
+            \x1b[0m\x1b[34m{"result": 2}\x1b[0m
+            """),
+    )
+
+  def test_str_no_value(self):
+    self.assertEqual(
+        str(mapping.MappingExample(
+            'Give the answer.',
+            '1 + 1 = 2',
+            mapping.MappingExample.MISSING_VALUE,
+            int)),
+        inspect.cleandoc("""
+            \x1b[1m[CONTEXT]
+            \x1b[0m\x1b[35mGive the answer.\x1b[0m
+
+            \x1b[1m[TEXT]
+            \x1b[0m\x1b[32m1 + 1 = 2\x1b[0m
+
+            \x1b[1m[SCHEMA]
+            \x1b[0m\x1b[31m{"result": int}\x1b[0m
             """),
     )
 

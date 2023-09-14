@@ -17,7 +17,15 @@
 # pylint: disable=g-importing-member
 
 from langfun.core.structured.schema import Schema
-from langfun.core.structured.schema import JsonSchema
+
+from langfun.core.structured.schema import SchemaRepr
+from langfun.core.structured.schema import SchemaJsonRepr
+from langfun.core.structured.schema import SchemaPythonRepr
+from langfun.core.structured.schema import ValueRepr
+from langfun.core.structured.schema import ValueJsonRepr
+from langfun.core.structured.schema import ValuePythonRepr
+from langfun.core.structured.schema import schema_repr
+from langfun.core.structured.schema import value_repr
 
 from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingExample
@@ -25,7 +33,11 @@ from langfun.core.structured.mapping import MappingError
 
 from langfun.core.structured.nl2structure import NaturalLanguageToStructure
 from langfun.core.structured.nl2structure import ParseStructure
+from langfun.core.structured.nl2structure import ParseStructureJson
+from langfun.core.structured.nl2structure import ParseStructurePython
 from langfun.core.structured.nl2structure import QueryStructure
+from langfun.core.structured.nl2structure import QueryStructureJson
+from langfun.core.structured.nl2structure import QueryStructurePython
 from langfun.core.structured.nl2structure import parse
 from langfun.core.structured.nl2structure import query
 
