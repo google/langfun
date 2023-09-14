@@ -1,6 +1,11 @@
+<div align="center">
+<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-light-mode-only" width="320px" alt="logo"></img>
+<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-dark-mode-only" width="320px" alt="logo"></img>
+</div>
+
 # Langfun
 
-Langfun is a PyGlove powered library that aims to make language models (LM) fun
+Langfun is a Python library that aims to make language models (LM) fun
 to work with. Its design enables a programming model that flows naturally,
 resembling the human thought process. It emphasizes the reuse and combination of
 language pieces to form prompts, thereby accelerating innovation. In contrast to
@@ -11,8 +16,19 @@ natural language and optional structured output. Consequently, langfun can
 aptly be described as Language as functions, capturing the core of its
 methodology.
 
+## Install
 
-# Hello World
+```
+pip install langfun
+```
+
+Or install nightly build with:
+
+```
+pip install langfun --pre
+```
+
+## Hello World
 
 ```python
 import langfun as lf

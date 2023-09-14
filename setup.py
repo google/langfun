@@ -1,4 +1,4 @@
-# Copyright 2019 The PyGlove Authors
+# Copyright 2019 The Langfun Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,8 +63,8 @@ setup(
     version=_VERSION,
     url='https://github.com/google/langfun',
     license='Apache License 2.0',
-    author='PyGlove Authors',
-    description='PyGlove: A library for manipulating Python objects.',
+    author='Langfun Authors',
+    description='Langfun: Language as Functions.',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     author_email='langfun-authors@google.com',
@@ -72,7 +72,7 @@ setup(
     packages=find_namespace_packages(include=['langfun*']),
     install_requires=_parse_requirements('requirements.txt'),
     extras_require={},
-    requires_python='>=3.7',
+    requires_python='>=3.9',
     include_package_data=True,
     # PyPI package information.
     classifiers=[
