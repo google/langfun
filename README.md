@@ -1,3 +1,8 @@
+<div align="center">
+<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-light-mode-only" width="320px" alt="logo"></img>
+<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-dark-mode-only" width="320px" alt="logo"></img>
+</div>
+
 # Langfun
 
 Langfun is a PyGlove powered library that aims to make language models (LM) fun

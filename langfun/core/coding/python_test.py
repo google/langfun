@@ -76,11 +76,13 @@ class PythonCodeParserTest(unittest.TestCase):
     self.assert_clean(
         """
         x = y + 1
-        z = x * y
+        if x > 0:
+          print(x)
         """,
         """
         x = y + 1
-        z = x * y
+        if x > 0:
+          print(x)
         """
     )
     self.assert_clean(
@@ -88,13 +90,31 @@ class PythonCodeParserTest(unittest.TestCase):
         Here is the code:
 
         ```
-        x = y + 1
-        z = x * y
+        x = 'abc\\\''
+        if len(x) > 10:
+          print(x)
         ```
         """,
         """
-        x = y + 1
-        z = x * y
+        x = 'abc\\\''
+        if len(x) > 10:
+          print(x)
+        """
+    )
+    self.assert_clean(
+        """
+        Here is the code:
+
+        ```
+        x = 'abc'  # Comment with '
+        if len(x) > 10:
+          print(x)
+        ```
+        """,
+        """
+        x = 'abc'  # Comment with '
+        if len(x) > 10:
+          print(x)
         """
     )
     self.assert_clean(
@@ -134,6 +154,20 @@ class PythonCodeParserTest(unittest.TestCase):
           ```
         '''
         z = x * y
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = y + 1
+        ```
+        And another one:
+        ```python
+        y = z + 1
+        ```
+        """,
+        """
+        x = y + 1
         """
     )
 

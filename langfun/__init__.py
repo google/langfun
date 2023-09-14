@@ -33,8 +33,7 @@ PythonCode = coding.PythonCode
 from langfun.core import llms
 from langfun.core import memories
 
-import langfun.dev
-import langfun.evals
+# Placeholder for Google-internal imports.
 
 # pylint: enable=unused-import
 # pylint: enable=g-import-not-at-top

@@ -288,6 +288,7 @@ class LangFuncTest(unittest.TestCase):
       def _transform_path(self, unused_message, input_path, value):
         return int(str(value))
 
+    prev_as_structured = message_transform.MessageTransform.as_structured
     message_transform.MessageTransform.as_structured = (
         lambda self, *args: self >> FakeParseStructured())
 
@@ -306,6 +307,7 @@ class LangFuncTest(unittest.TestCase):
     ):
       r = l()
       self.assertEqual(r.result, 3)
+    message_transform.MessageTransform.as_structured = prev_as_structured
 
   def test_nesting(self):
     l = LangFunc(

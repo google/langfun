@@ -14,9 +14,8 @@
 """Mapping interfaces."""
 
 import io
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 import langfun.core as lf
-import langfun.core.llms as lf_llms
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
@@ -36,6 +35,9 @@ class MappingError(ValueError):   # pylint: disable=g-bad-exception-name
 @pg.use_init_args(['nl_context', 'nl_text', 'value', 'schema'])
 class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
   """Mapping example between text, schema and structured value."""
+
+  # Value marker for missing value in Mapping.
+  MISSING_VALUE = (pg.MISSING_VALUE,)
 
   nl_context: Annotated[
       str | None,
@@ -65,9 +67,7 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
 
   schema: pg.typing.Annotated[
       # Automatic conversion from annotation to schema.
-      pg.typing.Object(
-          schema_lib.Schema, transform=schema_lib.JsonSchema.from_value
-      ).noneable(),
+      schema_lib.schema_spec(noneable=True),
       (
           'A `lf.structured.Schema` object that constrains the structured '
           'value. It could be used as input when we map `nl_context`/`nl_text` '
@@ -76,7 +76,7 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
           "will be None. A mapping's schema could be None when we map a "
           '`value` to natural language.'
       ),
-  ] = lf.contextual()
+  ] = lf.contextual(default=None)
 
   value: Annotated[
       Any,
@@ -86,15 +86,24 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
           '`value` could be used as input when we map a structured value to '
           'natural language, or as output when we map it reversely.'
       )
-  ] = None
+  ] = MISSING_VALUE
 
-  @property
-  def schema_repr(self) -> str:
-    return self.schema.schema_repr()
+  def schema_str(
+      self,
+      protocol: Literal['json', 'python'] = 'json',
+      **kwargs) -> str:
+    """Returns the string representation of schema based on protocol."""
+    if self.schema is None:
+      return ''
+    return self.schema.schema_str(protocol, **kwargs)
 
-  @property
-  def value_repr(self) -> str:
-    return self.schema.value_repr(self.value)
+  def value_str(
+      self,
+      protocol: Literal['json', 'python'] = 'json',
+      **kwargs) -> str:
+    """Returns the string representation of value based on protocol."""
+    return schema_lib.value_repr(
+        protocol).repr(self.value, self.schema, **kwargs)
 
   def natural_language_format(self) -> str:
     result = io.StringIO()
@@ -108,14 +117,15 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       result.write(lf.colored(self.nl_text, color='green'))
       result.write('\n\n')
 
-    result.write(lf.colored('[SCHEMA]\n', styles=['bold']))
-    result.write(lf.colored(self.schema_repr, color='red'))
-    result.write('\n\n')
+    if self.schema is not None:
+      result.write(lf.colored('[SCHEMA]\n', styles=['bold']))
+      result.write(lf.colored(self.schema_str(), color='red'))
+      result.write('\n\n')
 
-    if pg.MISSING_VALUE != self.value:
+    if MappingExample.MISSING_VALUE != self.value:
       result.write(lf.colored('[VALUE]\n', styles=['bold']))
-      result.write(lf.colored(self.value_repr, color='blue'))
-    return result.getvalue()
+      result.write(lf.colored(self.value_str(), color='blue'))
+    return result.getvalue().strip()
 
 
 class Mapping(lf.LangFunc):
@@ -130,6 +140,3 @@ class Mapping(lf.LangFunc):
       list[MappingExample] | None,
       'Fewshot examples for improving the quality of mapping.'
   ] = lf.contextual(default=None)
-
-  # The default model for generating the mappings.
-  lm = lf_llms.Gpt35(temperature=0.0)

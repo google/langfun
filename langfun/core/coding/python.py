@@ -17,7 +17,7 @@ import ast
 import contextlib
 import enum
 import inspect
-import re
+import io
 from typing import Annotated, Any
 
 import langfun.core as lf
@@ -127,10 +127,6 @@ class PythonCodeParser(lf.Component):
 
       super().generic_visit(node)
 
-  _MARKDOWN_CODE_REGEX = re.compile(
-      r'```(.*)```', re.DOTALL
-  )
-
   def parse(self, code_text: str, perm: CodePermission) -> ast.AST:
     code_block = ast.parse(self.clean(code_text), mode='exec')
     PythonCodeParser._CodeValidator(perm).visit(code_block)
@@ -138,10 +134,52 @@ class PythonCodeParser(lf.Component):
 
   def clean(self, code_text: str) -> str:
     # TODO(daiyip): Deal with markdown in docstrings.
-    match = self._MARKDOWN_CODE_REGEX.search(code_text)
-    if match:
-      code_text = match.group(1).lstrip('python')
-    return inspect.cleandoc(code_text)
+    code = io.StringIO()
+    quote_char = None
+    in_code = False
+    i = 0
+    in_comment = False
+    while i < len(code_text):
+      c = code_text[i]
+      # Detect code block separator (```).
+      if (quote_char is None
+          and c == '`'
+          and i < len(code_text) - 2
+          and code_text[i:i + 3] == '```'):
+        in_code = not in_code
+        if in_code:
+          i += 3
+          continue
+        else:
+          break
+
+      if in_code:
+        code.write(c)
+
+      # Detect string literal boundary.
+      if (not in_comment
+          and c in ('\'', '"')
+          and i > 0
+          and code_text[i - 1] != '\\'):
+        if quote_char is None:
+          quote_char = c
+        elif quote_char == c:
+          quote_char = None
+      # Detect comment.
+      elif c == '#' and quote_char is None:
+        in_comment = True
+      # Detect end-of-comment.
+      elif c == '\n':
+        in_comment = False
+      i += 1
+
+    code = code.getvalue()
+    if code:
+      code = code.lstrip('python\n')
+    else:
+      # Maybe-code that resides not within a code markdown block.
+      code = code_text
+    return inspect.cleandoc(code).strip()
 
 
 # Key in the returned dict that represents the final result.
@@ -190,7 +228,7 @@ def get_permission() -> CodePermission:
 @contextlib.contextmanager
 def context(**kwargs):
   """Context manager to inject symbols for code execution."""
-  ctx = dict(pg.object_utils.thread_local_get(_TLS_CODE_RUN_CONTEXT, [{}])[-1])
+  ctx = get_context()
   ctx.update(kwargs)
   pg.object_utils.thread_local_push(_TLS_CODE_RUN_CONTEXT, ctx)
 
@@ -202,7 +240,8 @@ def context(**kwargs):
 
 def get_context() -> dict[str, Any]:
   """Gets the current context for code execution."""
-  return pg.object_utils.thread_local_get(_TLS_CODE_RUN_CONTEXT, [{}])[-1]
+  context_stack = pg.object_utils.thread_local_get(_TLS_CODE_RUN_CONTEXT, None)
+  return dict(context_stack[-1]) if context_stack else {}
 
 
 def run(
@@ -235,8 +274,7 @@ def run(
 
   # Parse the code str.
   code_block = PythonCodeParser().parse(code, perm)
-  global_vars, local_vars = {}, dict(ctx)
-
+  global_vars, local_vars = ctx, {}
   if hasattr(code_block.body[-1], 'value'):
     last_expr = code_block.body.pop()  # pytype: disable=attribute-error
     result_vars = [_FINAL_RESULT_KEY]
@@ -257,9 +295,6 @@ def run(
   else:
     exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
     local_vars[_FINAL_RESULT_KEY] = list(local_vars.values())[-1]
-
-  for k in ctx:
-    del local_vars[k]
   return local_vars
 
 

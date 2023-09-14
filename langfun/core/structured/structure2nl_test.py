@@ -71,7 +71,7 @@ class DescribeStructureTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help describe a JSON formatted object using natural language.
+            Please help describe PYTHON_OBJECT in natural language.
 
             INSTRUCTIONS:
               1. Do not add details which are not present in the object.
@@ -80,7 +80,7 @@ class DescribeStructureTest(unittest.TestCase):
             CONTEXT_FOR_DESCRIPTION:
               Compute 1 + 2
 
-            JSON_OBJECT:
+            PYTHON_OBJECT:
               3
 
             NATURAL_LANGUAGE_TEXT:
@@ -89,7 +89,7 @@ class DescribeStructureTest(unittest.TestCase):
             CONTEXT_FOR_DESCRIPTION:
               Best activity to do in New York city.
 
-            JSON_OBJECT:
+            PYTHON_OBJECT:
               Activity(
                 description='Visit Broadway threatres for shows'
               )
@@ -101,7 +101,7 @@ class DescribeStructureTest(unittest.TestCase):
             CONTEXT_FOR_DESCRIPTION:
               1 day itinerary to SF
 
-            JSON_OBJECT:
+            PYTHON_OBJECT:
               Itinerary(
                 day=1,
                 type='daytime',
@@ -142,7 +142,7 @@ class DescribeStructureTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help describe a JSON formatted object using natural language.
+            Please help describe PYTHON_OBJECT in natural language.
 
             INSTRUCTIONS:
               1. Do not add details which are not present in the object.
@@ -151,7 +151,7 @@ class DescribeStructureTest(unittest.TestCase):
             CONTEXT_FOR_DESCRIPTION:
               1 day itinerary to SF
 
-            JSON_OBJECT:
+            PYTHON_OBJECT:
               Itinerary(
                 day=1,
                 type='daytime',
@@ -192,13 +192,13 @@ class DescribeStructureTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help describe a JSON formatted object using natural language.
+            Please help describe PYTHON_OBJECT in natural language.
 
             INSTRUCTIONS:
               1. Do not add details which are not present in the object.
               2. If a field in the object has None as its value, do not mention it.
 
-            JSON_OBJECT:
+            PYTHON_OBJECT:
               Itinerary(
                 day=1,
                 type='daytime',
