@@ -1,9 +1,16 @@
 <div align="center">
-<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-light-mode-only" width="320px" alt="logo"></img>
-<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-dark-mode-only" width="320px" alt="logo"></img>
+<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg" width="520px" alt="logo"></img>
 </div>
 
 # Langfun
+
+[![PyPI version](https://badge.fury.io/py/langfun.svg)](https://badge.fury.io/py/langfun)
+[![codecov](https://codecov.io/gh/google/langfun/branch/main/graph/badge.svg)](https://codecov.io/gh/google/langfun)
+![pytest](https://github.com/google/langfun/actions/workflows/ci.yaml/badge.svg)
+
+[**Installation**](#install) | [**Getting started**](#hello-world)
+
+## What is Langfun
 
 Langfun is a Python library that aims to make language models (LM) fun
 to work with. Its design enables a programming model that flows naturally,

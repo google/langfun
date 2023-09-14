@@ -26,7 +26,5 @@ jobs:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
       run: |
-        # Remove the parallel image for Github dark mode in README.md
-        sed -i -e 's$<img src="https://raw.githubusercontent.com/google/langfun/main/docs/_static/logo.svg#gh-dark-mode-only" width="320px" alt="logo"></img>$$' README.md
         python setup.py sdist bdist_wheel
         twine upload dist/*
