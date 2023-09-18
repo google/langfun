@@ -191,7 +191,8 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     if key_path == Message.PATH_TEXT:
       return self.text
     else:
-      return self.metadata.sym_get(key_path, default)
+      v = self.metadata.sym_get(key_path, default)
+      return v.value if isinstance(v, pg.Ref) else v
 
   #
   # API for accessing the structured result and error.
@@ -393,7 +394,8 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
   def __getattr__(self, key: str) -> Any:
     if key not in self.metadata:
       raise AttributeError(key)
-    return self.metadata[key]
+    v = self.metadata[key]
+    return v.value if isinstance(v, pg.Ref) else v
 
 
 #

@@ -23,6 +23,8 @@ Please see //third_party/py/langfun/__init__.py for details.
 
 # Interface for all langfun components.
 from langfun.core.component import Component
+
+from langfun.core.template import Template
 from langfun.core.langfunc import LangFunc
 
 # Decorator for set the positional init args for component.
@@ -56,9 +58,8 @@ from langfun.core.subscription import subscribers
 from langfun.core.subscription import subscriptions
 from langfun.core.subscription import clear_subscriptions
 
-# LangFunc events.
-from langfun.core.langfunc import LangFuncEvent
-from langfun.core.langfunc import LangFuncRenderEvent
+# Events
+from langfun.core.template import TemplateRenderEvent
 from langfun.core.langfunc import LangFuncCallEvent
 
 # Helper methods for concurrent sampling.

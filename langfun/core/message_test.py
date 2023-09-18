@@ -21,15 +21,22 @@ import pyglove as pg
 class MessageTest(unittest.TestCase):
 
   def test_basics(self):
-    m = message.UserMessage('hi', metadata=dict(x=1), x=2, y=2)
-    self.assertEqual(m.metadata, {'x': 2, 'y': 2})
+
+    class A(pg.Object):
+      pass
+
+    d = pg.Dict(x=A())
+
+    m = message.UserMessage('hi', metadata=dict(x=1), x=pg.Ref(d.x), y=2)
+    self.assertEqual(m.metadata, {'x': pg.Ref(d.x), 'y': 2})
     self.assertEqual(m.sender, 'User')
-    self.assertEqual(m.x, 2)
+    self.assertIs(m.x, d.x)
     self.assertEqual(m.y, 2)
 
     with self.assertRaises(AttributeError):
       _ = m.z
     self.assertEqual(hash(m), hash(m.text))
+    del d
 
   def test_source_tracking(self):
     m1 = message.UserMessage('hi')
@@ -79,13 +86,24 @@ class MessageTest(unittest.TestCase):
     self.assertEqual(pg.from_json_str(m.to_json_str()), m)
 
   def test_get(self):
-    m = message.UserMessage('hi', x=1, y=dict(z=[0, 1, 2]))
+
+    class A(pg.Object):
+      pass
+
+    # Create a symbolic object and assign it to a container, so we could test
+    # pg.Ref.
+    a = A()
+    d = pg.Dict(x=a)
+
+    m = message.UserMessage('hi', x=pg.Ref(a), y=dict(z=[0, 1, 2]))
     self.assertEqual(m.get('text'), 'hi')
+    self.assertIs(m.get('x'), a)
     self.assertEqual(m.get('y'), dict(z=[0, 1, 2]))
     self.assertEqual(m.get('y.z'), [0, 1, 2])
     self.assertEqual(m.get('y.z[0]'), 0)
     self.assertIsNone(m.get('p'))
     self.assertEqual(m.get('p', default='foo'), 'foo')
+    del d
 
   def test_set(self):
     m = message.UserMessage('hi', metadata=dict(x=1, z=0))
