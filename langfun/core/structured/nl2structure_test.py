@@ -41,7 +41,6 @@ class ParseStructurePythonTest(unittest.TestCase):
     m = lf.AIMessage('Bla bla bla 12 / 6 + 2 = 4.', result='12 / 6 + 2 = 4')
     m.source = lf.UserMessage('Compute 12 / 6 + 2.', tags=['lm-input'])
 
-    print(l.render(message=m).text)
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""

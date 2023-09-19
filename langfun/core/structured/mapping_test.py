@@ -17,6 +17,7 @@ import inspect
 import unittest
 
 from langfun.core.structured import mapping
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -116,11 +117,11 @@ class MappingExampleTest(unittest.TestCase):
 
   def test_str_no_value(self):
     self.assertEqual(
-        str(mapping.MappingExample(
-            'Give the answer.',
-            '1 + 1 = 2',
-            mapping.MappingExample.MISSING_VALUE,
-            int)),
+        str(
+            mapping.MappingExample(
+                'Give the answer.', '1 + 1 = 2', schema_lib.MISSING, int
+            )
+        ),
         inspect.cleandoc("""
             \x1b[1m[CONTEXT]
             \x1b[0m\x1b[35mGive the answer.\x1b[0m
@@ -144,4 +145,3 @@ class MappingExampleTest(unittest.TestCase):
 
 if __name__ == '__main__':
   unittest.main()
-

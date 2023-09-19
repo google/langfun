@@ -16,7 +16,20 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-importing-member
 
+from langfun.core.structured.schema import Missing
+from langfun.core.structured.schema import MISSING
+from langfun.core.structured.schema import Unknown
+from langfun.core.structured.schema import UNKNOWN
+
 from langfun.core.structured.schema import Schema
+from langfun.core.structured.schema import SchemaProtocol
+from langfun.core.structured.schema import schema_spec
+
+from langfun.core.structured.schema import class_dependencies
+from langfun.core.structured.schema import class_definition
+from langfun.core.structured.schema import class_definitions
+from langfun.core.structured.schema import annotation
+from langfun.core.structured.schema import structure_from_python
 
 from langfun.core.structured.schema import SchemaRepr
 from langfun.core.structured.schema import SchemaJsonRepr
@@ -26,6 +39,7 @@ from langfun.core.structured.schema import ValueJsonRepr
 from langfun.core.structured.schema import ValuePythonRepr
 from langfun.core.structured.schema import schema_repr
 from langfun.core.structured.schema import value_repr
+
 
 from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingExample
@@ -44,6 +58,11 @@ from langfun.core.structured.nl2structure import query
 from langfun.core.structured.structure2nl import StructureToNaturalLanguage
 from langfun.core.structured.structure2nl import DescribeStructure
 from langfun.core.structured.structure2nl import describe
+
+from langfun.core.structured.structure2structure import StructureToStructure
+from langfun.core.structured.structure2structure import CompleteStructure
+from langfun.core.structured.structure2structure import complete
+
 
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order

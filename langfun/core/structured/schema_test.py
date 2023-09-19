@@ -160,6 +160,70 @@ class SchemaTest(unittest.TestCase):
       schema.parse('1', protocol='text')
 
 
+class ClassDependenciesTest(unittest.TestCase):
+
+  def test_class_dependencies_from_specs(self):
+    class Foo(pg.Object):
+      x: int
+
+    class Bar(pg.Object):
+      y: str
+
+    class A(pg.Object):
+      foo: tuple[Foo, int]
+
+    class X(pg.Object):
+      k: int
+
+    class B(A):
+      bar: Bar
+      foo2: Foo | X
+
+    self.assertEqual(schema_lib.class_dependencies(Foo), [Foo])
+
+    self.assertEqual(
+        schema_lib.class_dependencies((A,), include_subclasses=False), [Foo, A]
+    )
+
+    self.assertEqual(
+        schema_lib.class_dependencies(A, include_subclasses=True),
+        [Foo, A, Bar, X, B],
+    )
+
+    self.assertEqual(
+        schema_lib.class_dependencies(schema_lib.Schema(A)), [Foo, A, Bar, X, B]
+    )
+
+    self.assertEqual(
+        schema_lib.class_dependencies(pg.typing.Object(A)), [Foo, A, Bar, X, B]
+    )
+
+    with self.assertRaisesRegex(TypeError, 'Unsupported spec type'):
+      schema_lib.class_dependencies((Foo, 1))
+
+  def test_class_dependencies_from_value(self):
+    class Foo(pg.Object):
+      x: int
+
+    class Bar(pg.Object):
+      y: str
+
+    class A(pg.Object):
+      foo: tuple[Foo, int]
+
+    class X(pg.Object):
+      k: int
+
+    class B(A):
+      bar: Bar
+      foo2: Foo | X
+
+    a = A(foo=(Foo(1), 0))
+    self.assertEqual(schema_lib.class_dependencies(a), [Foo, A, Bar, X, B])
+
+    self.assertEqual(schema_lib.class_dependencies(1), [])
+
+
 class SchemaPythonReprTest(unittest.TestCase):
 
   def assert_annotation(
@@ -169,7 +233,7 @@ class SchemaPythonReprTest(unittest.TestCase):
       strict: bool = False,
   ) -> None:
     self.assertEqual(
-        schema_lib.SchemaPythonRepr().annotate(value_spec, strict=strict),
+        schema_lib.annotation(value_spec, strict=strict),
         expected_annotation,
     )
 
@@ -300,13 +364,13 @@ class SchemaPythonReprTest(unittest.TestCase):
     self.assert_annotation(pg.typing.Any(), 'Any')
     self.assert_annotation(pg.typing.Any().noneable(), 'Any')
 
-  def test_class_def(self):
+  def test_class_definition(self):
     self.assertEqual(
-        schema_lib.SchemaPythonRepr().class_def(Activity),
+        schema_lib.class_definition(Activity),
         'class Activity:\n  description: str\n',
     )
     self.assertEqual(
-        schema_lib.SchemaPythonRepr().class_def(Itinerary),
+        schema_lib.class_definition(Itinerary),
         inspect.cleandoc("""
             class Itinerary:
               day: int(min=1)
@@ -320,7 +384,7 @@ class SchemaPythonReprTest(unittest.TestCase):
       pass
 
     self.assertEqual(
-        schema_lib.SchemaPythonRepr().class_def(A),
+        schema_lib.class_definition(A),
         'class A:\n  pass\n',
     )
 
@@ -329,7 +393,7 @@ class SchemaPythonReprTest(unittest.TestCase):
 
     with self.assertRaisesRegex(
         TypeError, 'Classes must be `pg.Object` subclasses.*'):
-      schema_lib.SchemaPythonRepr().class_def(B)
+      schema_lib.class_definition(B)
 
     class C(pg.Object):
       x: str
@@ -337,7 +401,7 @@ class SchemaPythonReprTest(unittest.TestCase):
 
     with self.assertRaisesRegex(
         TypeError, 'Variable-length keyword arguments is not supported'):
-      schema_lib.SchemaPythonRepr().class_def(C)
+      schema_lib.class_definition(C)
 
   def test_repr(self):
     class Foo(pg.Object):
@@ -549,6 +613,78 @@ class ProtocolTest(unittest.TestCase):
         schema_lib.value_repr('python'), schema_lib.ValuePythonRepr)
     with self.assertRaisesRegex(ValueError, 'Unsupported protocol'):
       schema_lib.value_repr('text')
+
+
+class MissingTest(unittest.TestCase):
+
+  def test_basics(self):
+    a = Itinerary(
+        day=1,
+        type=schema_lib.Missing(),
+        activities=schema_lib.Missing(),
+        hotel=schema_lib.Missing(),
+    )
+    self.assertFalse(a.is_partial)
+    self.assertEqual(str(schema_lib.Missing()), 'MISSING')
+    self.assertEqual(str(a.type), "MISSING(Literal['daytime', 'nighttime'])")
+    self.assertEqual(str(a.activities), 'MISSING(list[Activity])')
+    self.assertEqual(str(a.hotel), "MISSING(str(regex='.*Hotel') | None)")
+
+  def assert_missing(self, value, expected_missing):
+    value = schema_lib.mark_missing(value)
+    self.assertEqual(schema_lib.Missing.find_missing(value), expected_missing)
+
+  def test_find_missing(self):
+    self.assert_missing(
+        Itinerary.partial(),
+        {
+            'day': schema_lib.MISSING,
+            'type': schema_lib.MISSING,
+            'activities': schema_lib.MISSING,
+        },
+    )
+
+    self.assert_missing(
+        Itinerary.partial(
+            day=1, type='daytime', activities=[Activity.partial()]
+        ),
+        {
+            'activities[0].description': schema_lib.MISSING,
+        },
+    )
+
+  def test_mark_missing(self):
+    class A(pg.Object):
+      x: typing.Any
+
+    self.assertEqual(schema_lib.mark_missing(1), 1)
+    self.assertEqual(
+        schema_lib.mark_missing(pg.MISSING_VALUE), pg.MISSING_VALUE
+    )
+    self.assertEqual(
+        schema_lib.mark_missing(A.partial(A.partial(A.partial()))),
+        A(A(A(schema_lib.MISSING))),
+    )
+    self.assertEqual(
+        schema_lib.mark_missing(dict(a=A.partial())),
+        dict(a=A(schema_lib.MISSING)),
+    )
+    self.assertEqual(
+        schema_lib.mark_missing([1, dict(a=A.partial())]),
+        [1, dict(a=A(schema_lib.MISSING))],
+    )
+
+
+class UnknownTest(unittest.TestCase):
+
+  def test_basics(self):
+    class A(pg.Object):
+      x: int
+
+    a = A(x=schema_lib.Unknown())
+    self.assertFalse(a.is_partial)
+    self.assertEqual(a.x, schema_lib.UNKNOWN)
+    self.assertEqual(schema_lib.UNKNOWN, schema_lib.Unknown())
 
 
 if __name__ == '__main__':

@@ -14,7 +14,7 @@
 """Mapping interfaces."""
 
 import io
-from typing import Annotated, Any, Literal
+from typing import Annotated
 import langfun.core as lf
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
@@ -35,9 +35,6 @@ class MappingError(ValueError):   # pylint: disable=g-bad-exception-name
 @pg.use_init_args(['nl_context', 'nl_text', 'value', 'schema'])
 class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
   """Mapping example between text, schema and structured value."""
-
-  # Value marker for missing value in Mapping.
-  MISSING_VALUE = (pg.MISSING_VALUE,)
 
   nl_context: Annotated[
       str | None,
@@ -78,29 +75,27 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       ),
   ] = lf.contextual(default=None)
 
-  value: Annotated[
-      Any,
+  value: pg.typing.Annotated[
+      pg.typing.Any(transform=schema_lib.mark_missing),
       (
           'The structured representation for `nl_text` (or directly prompted '
           'from `nl_context`). It should align with schema.'
           '`value` could be used as input when we map a structured value to '
           'natural language, or as output when we map it reversely.'
-      )
-  ] = MISSING_VALUE
+      ),
+  ] = schema_lib.MISSING
 
   def schema_str(
-      self,
-      protocol: Literal['json', 'python'] = 'json',
-      **kwargs) -> str:
+      self, protocol: schema_lib.SchemaProtocol = 'json', **kwargs
+  ) -> str:
     """Returns the string representation of schema based on protocol."""
     if self.schema is None:
       return ''
     return self.schema.schema_str(protocol, **kwargs)
 
   def value_str(
-      self,
-      protocol: Literal['json', 'python'] = 'json',
-      **kwargs) -> str:
+      self, protocol: schema_lib.SchemaProtocol = 'json', **kwargs
+  ) -> str:
     """Returns the string representation of value based on protocol."""
     return schema_lib.value_repr(
         protocol).repr(self.value, self.schema, **kwargs)
@@ -122,7 +117,7 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       result.write(lf.colored(self.schema_str(), color='red'))
       result.write('\n\n')
 
-    if MappingExample.MISSING_VALUE != self.value:
+    if schema_lib.MISSING != self.value:
       result.write(lf.colored('[VALUE]\n', styles=['bold']))
       result.write(lf.colored(self.value_str(), color='blue'))
     return result.getvalue().strip()

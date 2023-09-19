@@ -80,7 +80,7 @@ class NaturalLanguageToStructure(mapping.Mapping):
 
   preamble: Annotated[
       lf.LangFunc,
-      'Preamble used for zeroshot jsonify.',
+      'Preamble used for natural language-to-structure mapping.',
   ]
 
   nl_context_title: Annotated[
@@ -98,8 +98,8 @@ class NaturalLanguageToStructure(mapping.Mapping):
   value_title: Annotated[str, 'The section title for schema.']
 
   protocol: Annotated[
-      Literal['json', 'python'],
-      'The protocol for representing the schema and value.'
+      schema_lib.SchemaProtocol,
+      'The protocol for representing the schema and value.',
   ]
 
   @property
@@ -223,7 +223,7 @@ def parse(
     *,
     user_prompt: str | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: Literal['json', 'python'] = 'json',
+    protocol: schema_lib.SchemaProtocol = 'json',
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -293,7 +293,7 @@ def parse(
 
 
 def _parse_structure_cls(
-    protocol: Literal['json', 'python']
+    protocol: schema_lib.SchemaProtocol,
 ) -> Type[ParseStructure]:
   if protocol == 'json':
     return ParseStructureJson
@@ -309,7 +309,7 @@ def as_structured(
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     examples: list[mapping.Mapping] | None = None,
     *,
-    protocol: Literal['json', 'python'] = 'json',
+    protocol: schema_lib.SchemaProtocol = 'json',
     **kwargs,
 ):
   """Returns the structured representation of the message text.
@@ -441,7 +441,7 @@ class QueryStructurePython(QueryStructure):
 
 
 def _query_structure_cls(
-    protocol: Literal['json', 'python']
+    protocol: schema_lib.SchemaProtocol,
 ) -> Type[QueryStructure]:
   if protocol == 'json':
     return QueryStructureJson
@@ -483,7 +483,7 @@ def query(
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     *,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: Literal['json', 'python'] = 'json',
+    protocol: schema_lib.SchemaProtocol = 'json',
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -528,8 +528,7 @@ def query(
       are 'json' and 'python'. By default the JSON representation will be used.
     **kwargs: Keyword arguments passed to the
       `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
-      specifying the language model for structured parsing, `jsonify` for
-      customizing the prompt for structured parsing, and etc.
+      specifying the language model for structured parsing.
 
   Returns:
     The result based on the schema.

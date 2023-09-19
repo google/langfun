@@ -19,10 +19,14 @@
 from langfun.core import *
 from langfun.core import structured
 
+Schema = structured.Schema
+MISSING = structured.MISSING
+UNKNOWN = structured.UNKNOWN
+
 parse = structured.parse
 query = structured.query
 describe = structured.describe
-
+complete = structured.complete
 
 from langfun.core import templates
 from langfun.core import transforms
