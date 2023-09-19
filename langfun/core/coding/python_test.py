@@ -170,6 +170,20 @@ class PythonCodeParserTest(unittest.TestCase):
         x = y + 1
         """
     )
+    self.assert_clean(
+        """
+        ```python
+        class A:
+          x: int
+          y: str
+        ```
+        """,
+        """
+        class A:
+          x: int
+          y: str
+        """
+    )
 
   def assert_allowed(self, code: str, permission: python.CodePermission):
     self.assertIsNotNone(python.PythonCodeParser().parse(code, permission))

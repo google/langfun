@@ -175,7 +175,7 @@ class PythonCodeParser(lf.Component):
 
     code = code.getvalue()
     if code:
-      code = code.lstrip('python\n')
+      code = code.lstrip('python')
     else:
       # Maybe-code that resides not within a code markdown block.
       code = code_text
