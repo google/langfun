@@ -111,7 +111,7 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
       elif isinstance(vs, pg.typing.List):
         return [_node(vs.element.value)]
       elif isinstance(vs, pg.typing.Object):
-        if issubclass(vs.cls, pg.Symbolic):
+        if issubclass(vs.cls, pg.Object):
           d = {pg.JSONConvertible.TYPE_NAME_KEY: vs.cls.__type_name__}
           d.update(
               {
