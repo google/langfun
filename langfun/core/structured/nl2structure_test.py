@@ -249,14 +249,12 @@ class ParseStructurePythonTest(unittest.TestCase):
   def test_parse(self):
     lm = fake.StaticSequence(['1'])
     self.assertEqual(
-        nl2structure.parse('the answer is 1', int, lm=lm, protocol='python'),
+        nl2structure.parse('the answer is 1', int, lm=lm),
         1
     )
     self.assertEqual(
         nl2structure.parse(
-            'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm,
-            protocol='python',
-        ),
+            'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm),
         1,
     )
 
@@ -506,7 +504,7 @@ class ParseStructureJsonTest(unittest.TestCase):
 
   def test_bad_transform(self):
     with lf.context(
-        lm=fake.StaticSequence(['three', '3']),
+        lm=fake.StaticSequence(['three', '`3`']),
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
@@ -517,10 +515,14 @@ class ParseStructureJsonTest(unittest.TestCase):
 
   def test_parse(self):
     lm = fake.StaticSequence(['{"result": 1}'])
-    self.assertEqual(nl2structure.parse('the answer is 1', int, lm=lm), 1)
+    self.assertEqual(
+        nl2structure.parse('the answer is 1', int, lm=lm, protocol='json'),
+        1
+    )
     self.assertEqual(
         nl2structure.parse(
-            'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm
+            'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm,
+            protocol='json',
         ),
         1,
     )
@@ -673,12 +675,11 @@ class QueryStructurePythonTest(unittest.TestCase):
           mapping.MappingError,
           'Cannot parse message text into structured output',
       ):
-        nl2structure.query('Compute 1 + 2', int, protocol='python')
+        nl2structure.query('Compute 1 + 2', int)
 
   def test_query(self):
     lm = fake.StaticSequence(['1'])
-    self.assertEqual(
-        nl2structure.query('what is 1 + 0', int, lm=lm, protocol='python'), 1)
+    self.assertEqual(nl2structure.query('what is 1 + 0', int, lm=lm), 1)
 
 
 class QueryStructureJsonTest(unittest.TestCase):
@@ -870,11 +871,12 @@ class QueryStructureJsonTest(unittest.TestCase):
           mapping.MappingError,
           'Cannot parse message text into structured output',
       ):
-        nl2structure.query('Compute 1 + 2', int)
+        nl2structure.query('Compute 1 + 2', int, protocol='json')
 
   def test_query(self):
     lm = fake.StaticSequence(['{"result": 1}'])
-    self.assertEqual(nl2structure.query('what is 1 + 0', int, lm=lm), 1)
+    self.assertEqual(
+        nl2structure.query('what is 1 + 0', int, lm=lm, protocol='json'), 1)
 
 
 if __name__ == '__main__':

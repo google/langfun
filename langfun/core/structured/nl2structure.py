@@ -223,7 +223,7 @@ def parse(
     *,
     user_prompt: str | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'json',
+    protocol: schema_lib.SchemaProtocol = 'python',
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -271,7 +271,7 @@ def parse(
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
     protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default the JSON representation will be used.
+      are 'json' and 'python'. By default 'python' will be used.`
     **kwargs: Keyword arguments passed to the `lf.structured.ParseStructure`
       transform, e.g. `lm` for specifying the language model.
 
@@ -309,7 +309,7 @@ def as_structured(
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     examples: list[mapping.Mapping] | None = None,
     *,
-    protocol: schema_lib.SchemaProtocol = 'json',
+    protocol: schema_lib.SchemaProtocol = 'python',
     **kwargs,
 ):
   """Returns the structured representation of the message text.
@@ -323,7 +323,7 @@ def as_structured(
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
     protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default the JSON representation will be used.
+      are 'json' and 'python'. By default 'python' will be used.
     **kwargs: Additional keyword arguments that will be passed to
       `lf.structured.NaturalLanguageToStructure`.
 
@@ -483,7 +483,7 @@ def query(
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     *,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'json',
+    protocol: schema_lib.SchemaProtocol = 'python',
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -525,7 +525,7 @@ def query(
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
     protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default the JSON representation will be used.
+      are 'json' and 'python'. By default `python` will be used.
     **kwargs: Keyword arguments passed to the
       `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
       specifying the language model for structured parsing.
