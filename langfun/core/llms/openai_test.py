@@ -57,6 +57,10 @@ def mock_chat_completion_query(messages, *, n=1, **kwargs):
 class OpenaiTest(unittest.TestCase):
   """Tests for OpenAI language model."""
 
+  def test_model_id(self):
+    self.assertEqual(
+        openai.Gpt35(api_key='test_key').model_id, 'OpenAI(text-davinci-003)')
+
   def test_call_completion(self):
     with mock.patch('openai.Completion.create') as mock_completion:
       mock_completion.side_effect = mock_completion_query

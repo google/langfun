@@ -15,7 +15,7 @@
 
 import collections
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 import langfun.core as lf
 import openai
 import pyglove as pg
@@ -40,7 +40,7 @@ class OpenAI(lf.LanguageModel):
   """OpenAI model."""
 
   model: pg.typing.Annotated[
-      pg.typing.Enum[
+      Literal[
           'gpt-4',
           'gpt-4-32k',
           'gpt-3.5-turbo',
@@ -90,6 +90,11 @@ class OpenAI(lf.LanguageModel):
     org = self.organization or os.environ.get('OPENAI_ORGANIZATION', None)
     if org:
       openai.organization = org
+
+  @property
+  def model_id(self) -> str:
+    """Returns a string to identify the model."""
+    return f'OpenAI({self.model})'
 
   @classmethod
   def dir(cls):

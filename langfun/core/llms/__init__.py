@@ -36,5 +36,8 @@ from langfun.core.llms.openai import Gpt3Ada
 
 # Placeholder for Google-internal imports.
 
+# Include cache as sub-module.
+from langfun.core.llms import cache
+
 # pylint: enable=g-bad-import-order
 # pylint: enable=g-importing-member

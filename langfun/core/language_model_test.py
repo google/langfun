@@ -52,11 +52,49 @@ class MockModel(lm_lib.LanguageModel):
     )(prompts)
 
 
+class SimpleCache(lm_lib.LMCache):
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._cache = {}
+    self.cache_hit = 0
+
+  def get(self, lm, prompt):
+    del lm
+    r = self._cache.get(prompt.text)
+    if r is not None:
+      self.cache_hit += 1
+    return r
+
+  def put(self, lm, prompt, result):
+    self._cache[prompt.text] = result
+
+  @property
+  def num_records(self):
+    return len(self._cache)
+
+
+class LMSamplingOptionsTest(unittest.TestCase):
+  """Tests for LMSamplingOptions."""
+
+  def test_cache_key(self):
+    options = lm_lib.LMSamplingOptions()
+    key1 = options.cache_key()
+    self.assertEqual(key1, (0.0, 1024, 1, 40, None, None))
+    with options.override(temperature=1.0, max_tokens=256):
+      key2 = options.cache_key()
+      self.assertEqual(key2, (1.0, 256, 1, 40, None, None))
+
+      # Make sure key1 does not change upon override.
+      self.assertEqual(key1, (0.0, 1024, 1, 40, None, None))
+
+
 class LanguageModelTest(unittest.TestCase):
   """Tests for LanguageModel."""
 
   def test_init(self):
     lm = MockModel(1, temperature=0.5, top_k=2, max_attempts=2)
+    self.assertEqual(lm.model_id, 'MockModel')
     self.assertEqual(lm.failures_before_attempt, 1)
     self.assertEqual(lm.sampling_options.temperature, 0.5)
     self.assertEqual(lm.sampling_options.top_k, 2)
@@ -116,6 +154,31 @@ class LanguageModelTest(unittest.TestCase):
     )
     # Test override individual flags within sampling_options.
     self.assertEqual(lm('foo', top_k=2), 'foo' * 2)
+
+  def test_using_cache(self):
+    cache = SimpleCache()
+    lm = MockModel(cache=cache, top_k=1)
+    self.assertEqual(
+        lm.sample(prompts=['foo', 'bar']),
+        [
+            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=0.0)]),
+        ])
+
+    self.assertEqual(cache.cache_hit, 0)
+    self.assertEqual(cache.num_records, 2)
+    self.assertEqual(
+        lm.sample(prompts=['foo', 'baz'], temperature=1.0),
+        [
+            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('baz', score=1.0)]),
+        ])
+    self.assertEqual(cache.cache_hit, 1)
+    self.assertEqual(cache.num_records, 3)
+
+    self.assertEqual(lm('baz', temperature=1.0), 'baz')
+    self.assertEqual(cache.cache_hit, 2)
+    self.assertEqual(cache.num_records, 3)
 
   def test_retry(self):
     lm = MockModel(
