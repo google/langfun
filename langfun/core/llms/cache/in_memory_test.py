@@ -23,7 +23,7 @@ from langfun.core.llms.cache import in_memory
 class InMemoryLMCacheTest(unittest.TestCase):
 
   def test_basics(self):
-    in_memory.InMemory().reset()
+    in_memory.InMemory.reset()
     lm = fake.StaticSequence(['1', '2', '3'], cache=in_memory.InMemory())
     self.assertEqual(lm('a'), '1')
     self.assertEqual(lm('a'), '1')
@@ -32,7 +32,7 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(lm('c'), '3')
 
   def test_ttl(self):
-    in_memory.InMemory().reset()
+    in_memory.InMemory.reset()
     lm = fake.StaticSequence(['1', '2', '3'], cache=in_memory.InMemory(ttl=1))
     self.assertEqual(lm('a'), '1')
     self.assertEqual(lm('a'), '1')
@@ -40,7 +40,7 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(lm('a'), '2')
 
   def test_different_sampling_options(self):
-    in_memory.InMemory().reset()
+    in_memory.InMemory.reset()
     lm = fake.StaticSequence(['1', '2', '3'], cache=in_memory.InMemory())
     self.assertEqual(lm('a'), '1')
     self.assertEqual(lm('a'), '1')

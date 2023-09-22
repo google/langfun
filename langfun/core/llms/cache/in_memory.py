@@ -28,7 +28,8 @@ class InMemory(base.LMCacheBase):
     """Puts a LM cache entry associated with the key."""
     _CACHE_MEMORY[key] = entry
 
-  def reset(self) -> None:
+  @classmethod
+  def reset(cls) -> None:
     """Resets the cache."""
     _CACHE_MEMORY.clear()
 

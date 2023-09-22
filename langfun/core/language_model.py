@@ -50,14 +50,6 @@ class LMSamplingResult(pg.Object):
       ),
   ] = []
 
-  error: Annotated[
-      Exception | None,
-      (
-          'Error information if sampling request failed. If Not None, '
-          '`samples` will be an empty list.'
-      ),
-  ] = None
-
 
 class LMSamplingOptions(component.Component):
   """Language model sampling options."""
@@ -200,14 +192,15 @@ class LanguageModel(component.Component):
         results[i] = r.clone()
 
     # Sample non-cache-hit prompts.
-    requested_results = self._sample(requests)
-    assert len(requested_results) == len(requests), (
-        requests, requested_results)
+    if requests:
+      requested_results = self._sample(requests)
+      assert len(requested_results) == len(requests), (
+          requests, requested_results)
 
-    # Combine cached results and newly requested results.
-    for i, (prompt, result) in enumerate(zip(requests, requested_results)):
-      results[request_to_result_index[i]] = result
-      self.cache.put(self, prompt, result)
+      # Combine cached results and newly requested results.
+      for i, (prompt, result) in enumerate(zip(requests, requested_results)):
+        results[request_to_result_index[i]] = result
+        self.cache.put(self, prompt, result.clone())
 
     return results  # pytype: disable=bad-return-type
 
@@ -218,7 +211,10 @@ class LanguageModel(component.Component):
   ) -> list[LMSamplingResult]:
     """Subclass should override."""
 
-  def __call__(self, prompt: message_lib.Message, **kwargs) -> str:
+  def __call__(
+      self,
+      prompt: message_lib.Message,
+      **kwargs) -> message_lib.Message:
     """Returns the first candidate."""
     with component.context(override_attrs=True, **kwargs):
       sampling_options = self.sampling_options
@@ -252,7 +248,4 @@ class LanguageModel(component.Component):
             ),
             color='blue',
         )
-
-      if result.error:
-        raise result.error
       return response

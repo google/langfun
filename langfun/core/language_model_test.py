@@ -180,6 +180,18 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(cache.cache_hit, 2)
     self.assertEqual(cache.num_records, 3)
 
+    lm = MockModel(cache=cache,
+                   top_k=1,
+                   failures_before_attempt=1,
+                   max_attempts=1)
+    try:
+      lm.sample(['a']),
+    except concurrent.RetryError:
+      pass
+
+    lm = MockModel(cache=cache, top_k=1)
+    self.assertEqual(lm('a'), 'a')
+
   def test_retry(self):
     lm = MockModel(
         failures_before_attempt=1, top_k=1,
