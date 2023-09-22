@@ -42,9 +42,17 @@ class OpenAI(lf.LanguageModel):
   model: pg.typing.Annotated[
       Literal[
           'gpt-4',
+          'gpt-4-0613',
+          'gpt-4-0314',
           'gpt-4-32k',
+          'gpt-4-32k-0613',
+          'gpt-4-32k-0314',
           'gpt-3.5-turbo',
+          'gpt-3.5-turbo-0613',
+          'gpt-3.5-turbo-0301',
           'gpt-3.5-turbo-16k',
+          'gpt-3.5-turbo-16k-0613',
+          'gpt-3.5-turbo-16k-0301',
           'text-davinci-003',
           'davinci',
           'curie',
@@ -53,13 +61,6 @@ class OpenAI(lf.LanguageModel):
       ],
       'The name of the model to use.',
   ] = 'gpt-3.5-turbo'
-
-  _CHAT_MODELS = frozenset([
-      'gpt-4',
-      'gpt-4-32k',
-      'gpt-3.5-turbo',
-      'gpt-3.5-turbo-16k',
-  ])
 
   api_key: Annotated[
       str | None,
@@ -103,7 +104,7 @@ class OpenAI(lf.LanguageModel):
   @property
   def is_chat_model(self):
     """Returns True if the model is a chat model."""
-    return self.model in OpenAI._CHAT_MODELS
+    return self.model.startswith(('gpt-4', 'gpt-3.5-turbo'))
 
   def _get_request_args(
       self, options: lf.LMSamplingOptions) -> dict[str, Any]:
@@ -208,9 +209,29 @@ class Gpt4(OpenAI):
   model = 'gpt-4'
 
 
+class Gpt4_0613(Gpt4):    # pylint:disable=invalid-name
+  """GPT-4 0613."""
+  model = 'gpt-4-0613'
+
+
+class Gpt4_0314(Gpt4):   # pylint:disable=invalid-name
+  """GPT-4 0314."""
+  model = 'gpt-4-0314'
+
+
 class Gpt4_32K(Gpt4):       # pylint:disable=invalid-name
   """GPT-4 with 32K context window size."""
   model = 'gpt-4-32k'
+
+
+class Gpt4_32K_0613(Gpt4_32K):    # pylint:disable=invalid-name
+  """GPT-4 32K 0613."""
+  model = 'gpt-4-32k-0613'
+
+
+class Gpt4_32K_0314(Gpt4_32K):   # pylint:disable=invalid-name
+  """GPT-4 32K 0314."""
+  model = 'gpt-4-32k-0314'
 
 
 class Gpt35(OpenAI):
@@ -223,9 +244,29 @@ class Gpt35Turbo(Gpt35):
   model = 'gpt-3.5-turbo'
 
 
+class Gpt35Turbo_0613(Gpt35Turbo):   # pylint:disable=invalid-name
+  """Gtp 3.5 Turbo 0613."""
+  model = 'gpt-3.5-turbo-0613'
+
+
+class Gpt35Turbo_0301(Gpt35Turbo):   # pylint:disable=invalid-name
+  """Gtp 3.5 Turbo 0301."""
+  model = 'gpt-3.5-turbo-0301'
+
+
 class Gpt35Turbo16K(Gpt35Turbo):
   """Latest GPT-3.5 model with 16K context window size."""
   model = 'gpt-3.5-turbo-16k'
+
+
+class Gpt35Turbo16K_0613(Gpt35Turbo):   # pylint:disable=invalid-name
+  """Gtp 3.5 Turbo 16K 0613."""
+  model = 'gpt-3.5-turbo-16k-0613'
+
+
+class Gpt35Turbo16K_0301(Gpt35Turbo):   # pylint:disable=invalid-name
+  """Gtp 3.5 Turbo 16K 0301."""
+  model = 'gpt-3.5-turbo-16k-0301'
 
 
 class Gpt3(OpenAI):

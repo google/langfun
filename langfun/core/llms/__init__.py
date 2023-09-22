@@ -25,10 +25,21 @@ from langfun.core.llms.fake import StaticSequence
 from langfun.core.llms.openai import OpenAI
 
 from langfun.core.llms.openai import Gpt4
+from langfun.core.llms.openai import Gpt4_0613
+from langfun.core.llms.openai import Gpt4_0314
 from langfun.core.llms.openai import Gpt4_32K
-from langfun.core.llms.openai import Gpt35
+from langfun.core.llms.openai import Gpt4_32K_0613
+from langfun.core.llms.openai import Gpt4_32K_0314
+
 from langfun.core.llms.openai import Gpt35Turbo
+from langfun.core.llms.openai import Gpt35Turbo_0613
+from langfun.core.llms.openai import Gpt35Turbo_0301
 from langfun.core.llms.openai import Gpt35Turbo16K
+from langfun.core.llms.openai import Gpt35Turbo16K_0613
+from langfun.core.llms.openai import Gpt35Turbo16K_0301
+
+from langfun.core.llms.openai import Gpt35
+
 from langfun.core.llms.openai import Gpt3
 from langfun.core.llms.openai import Gpt3Curie
 from langfun.core.llms.openai import Gpt3Babbage
