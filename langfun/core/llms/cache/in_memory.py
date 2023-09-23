@@ -13,29 +13,100 @@
 # limitations under the License.
 """In-memory LM cache."""
 
-from typing import Any
+import collections
+from typing import Annotated, Any, Iterator
 from langfun.core.llms.cache import base
+import pyglove as pg
 
 
+@pg.use_init_args(['filename', 'ttl', 'key'])
 class InMemory(base.LMCacheBase):
   """In memory cache."""
 
-  def _get(self, key: Any) -> base.LMCacheEntry | None:
+  filename: Annotated[
+      str | None,
+      (
+          'File name to load and save in memory cache.'
+      )
+  ] = None
+
+  def _on_bound(self) -> None:
+    super()._on_bound()
+    self._cache = collections.defaultdict(dict)
+
+    if self.filename is not None:
+      records = pg.load(self.filename)
+      for record in records:
+        model_cache = {}
+        for entry in record.entries:
+          model_cache[entry.k] = entry.v
+        self._cache[record.model_id] = model_cache
+
+  def model_ids(self) -> list[str]:
+    """Returns the model ids of cached queires."""
+    return list(self._cache.keys())
+
+  def __len__(self) -> int:
+    """Returns the number of entries in the cache."""
+    return sum(len(v) for v in self._cache.values())
+
+  def keys(self, model_id: str | None = None) -> Iterator[str]:
+    """Returns the cached keys for a model."""
+    if model_id is None:
+      for model_cache in self._cache.values():
+        for k in model_cache.keys():
+          yield k
+    else:
+      for k in self._cache[model_id].keys():
+        yield k
+
+  def values(self, model_id: str | None = None) -> Iterator[base.LMCacheEntry]:
+    """Returns the cached entries for a model."""
+    if model_id is None:
+      for model_cache in self._cache.values():
+        for v in model_cache.values():
+          yield v
+    else:
+      for v in self._cache[model_id].values():
+        yield v
+
+  def items(
+      self,
+      model_id: str | None = None
+      ) -> Iterator[tuple[str, base.LMCacheEntry]]:
+    """Returns the cached items for a model."""
+    if model_id is None:
+      for model_cache in self._cache.values():
+        for k, v in model_cache.items():
+          yield k, v
+    else:
+      for k, v in self._cache[model_id].items():
+        yield k, v
+
+  def _get(self, model_id: str, key: Any) -> base.LMCacheEntry | None:
     """Returns a LM cache entry associated with the key."""
-    return _CACHE_MEMORY.get(key, None)
+    return self._cache[model_id].get(key, None)
 
-  def _put(self, key: Any, entry: base.LMCacheEntry) -> None:
+  def _put(self, model_id: str, key: Any, entry: base.LMCacheEntry) -> None:
     """Puts a LM cache entry associated with the key."""
-    _CACHE_MEMORY[key] = entry
+    self._cache[model_id][key] = entry
 
-  @classmethod
-  def reset(cls) -> None:
+  def reset(self, model_id: str | None = None) -> None:
     """Resets the cache."""
-    _CACHE_MEMORY.clear()
+    if model_id is not None:
+      self._cache[model_id].clear()
+    else:
+      self._cache.clear()
 
+  def _sym_clone(self, deep: bool, memo: Any = None) -> 'InMemory':
+    v = super()._sym_clone(deep, memo)
+    v._cache = self._cache  # pylint: disable=protected-access
+    return v
 
-# NOTE(daiyip): We install a process-level cache store, so different InMemory()
-# object could access the same memory. This is not a problem across different
-# language models, since the `model_id` of the language model is included as a
-# part of the cache key.
-_CACHE_MEMORY = {}
+  def save(self, path: str) -> None:
+    """Saves the in-memory cache."""
+    records = []
+    for model_id in self.model_ids():
+      entries = [dict(k=k, v=v) for k, v in self.items(model_id)]
+      records.append(dict(model_id=model_id, entries=entries))
+    pg.save(records, path)
