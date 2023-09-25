@@ -122,7 +122,7 @@ class OpenAI(lf.LanguageModel):
     args['model' if self.is_chat_model else 'engine'] = self.model
 
     if options.top_p is not None:
-      args['top_p'] = options.top_k
+      args['top_p'] = options.top_p
     return args
 
   def _sample(self, prompts: list[lf.Message]) -> list[LMSamplingResult]:

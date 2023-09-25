@@ -54,16 +54,28 @@ class LMSamplingResult(pg.Object):
 class LMSamplingOptions(component.Component):
   """Language model sampling options."""
 
-  temperature: Annotated[float, 'Model temperature between [0, 1.0].'] = 0.0
+  temperature: Annotated[
+      float,
+      (
+          'Model temperature, which is usually between 0 and 1.0. '
+          'OpenAI models have temperature range from 0.0 to 2.0.'
+      )
+  ] = 0.0
   max_tokens: Annotated[int, 'Per example max tokens to generate.'] = 1024
   n: Annotated[int | None, 'Max number of samples to return.'] = 1
-  top_k: Annotated[int | None, 'Top k tokens to sample the next token.'] = 40
+  top_k: Annotated[
+      int | None,
+      (
+          'Top k tokens to sample the next token. '
+          'Not applicable to OpenAI models.'
+      )
+  ] = 40
   top_p: Annotated[
       float | None,
       (
           'Only sample the next token from top N tokens whose accumulated '
-          'probability // mass <= p. Not applicable to OpenAI models and '
-          'BigBard.'
+          'probability // mass <= p. For OpenAI models, set `temperature` or '
+          '`top_p` but not both.'
       ),
   ] = None
   random_seed: Annotated[
@@ -116,7 +128,7 @@ class LanguageModel(component.Component):
       (
           'Sampling cache. If None, no cache will be used.'
       )
-  ] = None
+  ] = component.contextual(default=None)
 
   timeout: Annotated[
       float | None, 'Timeout in seconds. If None, there is no timeout.'

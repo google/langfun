@@ -14,7 +14,9 @@
 """In-memory LM cache."""
 
 import collections
+import contextlib
 from typing import Annotated, Any, Iterator
+import langfun.core as lf
 from langfun.core.llms.cache import base
 import pyglove as pg
 
@@ -110,3 +112,30 @@ class InMemory(base.LMCacheBase):
       entries = [dict(k=k, v=v) for k, v in self.items(model_id)]
       records.append(dict(model_id=model_id, entries=entries))
     pg.save(records, path)
+
+
+@contextlib.contextmanager
+def lm_cache(
+    load: str | None = None,
+    save: str | None = None,
+) -> Iterator[InMemory]:
+  """Context manager to enable cache for LMs under the context.
+
+  If LMs under the context manager have explicitly specified cache, they will
+  use their own cache. Otherwise they will use the cache created by the context
+  manager.
+
+  Args:
+    load: If not None, JSON file to load the cache.
+    save: If not None, JSON file to save the cache when context manager exits.
+
+  Yields:
+    A cache object created.
+  """
+  c = InMemory(load)
+  try:
+    with lf.context(cache=c):
+      yield c
+  finally:
+    if save:
+      c.save(save)

@@ -35,6 +35,8 @@ from langfun.core import coding
 PythonCode = coding.PythonCode
 
 from langfun.core import llms
+lm_cache = llms.cache.lm_cache
+
 from langfun.core import memories
 
 # Placeholder for Google-internal imports.

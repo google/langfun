@@ -61,6 +61,39 @@ class OpenaiTest(unittest.TestCase):
     self.assertEqual(
         openai.Gpt35(api_key='test_key').model_id, 'OpenAI(text-davinci-003)')
 
+  def test_get_request_args(self):
+    self.assertEqual(
+        openai.Gpt35(api_key='test_key', timeout=90.0)._get_request_args(
+            lf.LMSamplingOptions(
+                temperature=2.0,
+                n=2,
+                max_tokens=4096,
+                top_p=1.0)),
+        dict(
+            engine='text-davinci-003',
+            n=2,
+            temperature=2.0,
+            max_tokens=4096,
+            stream=False,
+            timeout=90.0,
+            top_p=1.0,
+        )
+    )
+    self.assertEqual(
+        openai.Gpt4(api_key='test_key')._get_request_args(
+            lf.LMSamplingOptions(
+                temperature=1.0,
+                n=1)),
+        dict(
+            model='gpt-4',
+            n=1,
+            temperature=1.0,
+            max_tokens=1024,
+            stream=False,
+            timeout=120.0,
+        )
+    )
+
   def test_call_completion(self):
     with mock.patch('openai.Completion.create') as mock_completion:
       mock_completion.side_effect = mock_completion_query

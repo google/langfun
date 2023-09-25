@@ -176,6 +176,7 @@ def _concurrent_sample(
   for _, result, error in concurrent.concurrent_map(
       _call_fn,
       pg_sample_fn(sampling_space, num_examples=num_examples),
+      silence_on_errors=concurrent.RetryError,
       max_workers=max_workers
   ):
     if error is None:

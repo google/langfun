@@ -173,7 +173,7 @@ class ConcurrentMapTest(unittest.TestCase):
       return x**2
 
     with component.context(y=2):
-      it = concurrent.concurrent_map(fun, [1, 2, 3])
+      it = concurrent.concurrent_map(fun, [1, 2, 3], silence_on_errors=KeyError)
       self.assertEqual(next(it), (1, 1, None))
       with self.assertRaises(ValueError):
         _ = next(it)
@@ -276,7 +276,8 @@ class ConcurrentMapTest(unittest.TestCase):
       return x**2
 
     with component.context(y=2):
-      it = concurrent.concurrent_map(fun, [1, 2, 3], ordered=True)
+      it = concurrent.concurrent_map(
+          fun, [1, 2, 3], ordered=True, silence_on_errors=KeyError)
       self.assertEqual(next(it)[1], 1)
 
       with self.assertRaises(ValueError):
@@ -301,6 +302,24 @@ class ConcurrentMapTest(unittest.TestCase):
               (3, 3),
           ],
       )
+
+  def test_concurrent_map_with_showing_progress(self):
+    def fun(x):
+      return x
+
+    self.assertEqual(
+        [
+            (i, o)
+            for i, o, _ in concurrent.concurrent_map(
+                fun, [1, 2, 3], ordered=True, show_progress=True
+            )
+        ],
+        [
+            (1, 1),
+            (2, 2),
+            (3, 3),
+        ],
+    )
 
 
 if __name__ == '__main__':

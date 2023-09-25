@@ -20,6 +20,7 @@ from langfun.core.llms.cache.base import LMCacheBase
 from langfun.core.llms.cache.base import LMCacheEntry
 
 from langfun.core.llms.cache.in_memory import InMemory
+from langfun.core.llms.cache.in_memory import lm_cache
 
 
 # pylint: enable=g-bad-import-order

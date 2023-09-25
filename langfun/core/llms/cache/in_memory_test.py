@@ -189,5 +189,40 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(lm2('a'), 'a')
 
 
+class UseCacheTest(unittest.TestCase):
+
+  def test_lm_cache(self):
+    with in_memory.lm_cache() as c:
+      lm = fake.Echo()
+      self.assertIs(lm.cache, c)
+      lm = fake.Echo(cache=in_memory.InMemory())
+      self.assertIsNot(lm.cache, c)
+
+  def test_lm_cache_load_save(self):
+    pg.set_load_handler(pg.symbolic.default_load_handler)
+    pg.set_save_handler(pg.symbolic.default_save_handler)
+
+    cache = in_memory.InMemory()
+    lm = fake.StaticSequence(['1', '2', '3'], cache=cache)
+    self.assertEqual(lm('a'), '1')
+    self.assertEqual(lm('b'), '2')
+
+    tmp_dir = tempfile.gettempdir()
+    path1 = os.path.join(tmp_dir, 'memory1.json')
+    cache.save(path1)
+
+    path2 = os.path.join(tmp_dir, 'memory2.json')
+
+    with in_memory.lm_cache(load=path1, save=path2) as c1:
+      self.assertEqual(len(c1), 2)
+
+      lm = fake.StaticSequence(['4', '5', '6'])
+      self.assertEqual(lm('a'), '1')
+      self.assertEqual(lm('b'), '2')
+
+    with in_memory.lm_cache(load=path2, save=path2) as c2:
+      self.assertEqual(len(c2), 2)
+
+
 if __name__ == '__main__':
   unittest.main()

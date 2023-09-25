@@ -21,6 +21,7 @@ from typing import Any, Callable, Iterable, Iterator, Sequence, Tuple, Type, Uni
 
 from langfun.core import component
 import pyglove as pg
+from tqdm import auto as tqdm
 
 
 def with_context_access(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -234,12 +235,14 @@ def concurrent_map(
     func: Callable[[Any], Any],
     parallel_inputs: Iterable[Any],
     *,
+    executor: concurrent.futures.ThreadPoolExecutor | None = None,
     max_workers: int = 32,
     ordered: bool = False,
+    show_progress: bool = False,
     timeout: int | None = None,
     silence_on_errors: Union[
         Type[Exception], Tuple[Type[Exception], ...], None
-    ] = RetryError,
+    ] = Exception,
     retry_on_errors: Union[
         Type[Exception],
         Tuple[Type[Exception], ...],
@@ -254,10 +257,13 @@ def concurrent_map(
   Args:
     func: A user function.
     parallel_inputs: The inputs for `func` which will be processed in parallel.
+    executor: Thread pool exeutor to pool work items. If None, a new thread pool
+      executor will be created for current execution.
     max_workers: The max number of workers.
     ordered: If True, the returned iterator will emit (input, output, error) in
       the order of the elements in `parallel_inputs`. Otherwise, elements that
       are finished earlier will be delivered first.
+    show_progress: If True, show progress on console.
     timeout: The timeout in seconds for processing each input. It is the total
       processing time for each input, even multiple retries take place. If None,
       there is no timeout.
@@ -298,11 +304,13 @@ def concurrent_map(
       return None
     return time.time() - start_time
 
-  with concurrent.futures.ThreadPoolExecutor(
-      max_workers=max_workers
-  ) as executor:
+  executor = executor or concurrent.futures.ThreadPoolExecutor(
+      max_workers=max_workers)
+
+  with executor:
     future_to_job = {}
     pending_futures = []
+    total = 0
     for inputs in parallel_inputs:
       job = Job(func, inputs)
       future = executor.submit(
@@ -310,17 +318,33 @@ def concurrent_map(
       )
       pending_futures.append(future)
       future_to_job[future] = job
+      total += 1
+
+    progress = tqdm.tqdm(total=total) if show_progress else None
+    def update_progress(success: int, failure: int) -> None:
+      if progress is not None:
+        completed = success + failure
+        progress.update(1)
+        progress.set_description(
+            'Success: %.2f%% (%d/%d), Failure: %.2f%% (%d/%d)'
+            % (success * 100.0 / completed, success, completed,
+               failure * 100.0 / completed, failure, completed))
 
     remaining_futures = []
+    success, failure = 0, 0
     if ordered:
       for i, future in enumerate(pending_futures):
         try:
           _ = future.result(timeout=remaining_time())
           job = future_to_job[future]
-          if job.error is not None and not (
-              silence_on_errors and isinstance(job.error, silence_on_errors)
-          ):
-            raise job.error
+          if job.error is not None:
+            failure += 1
+            if not (
+                silence_on_errors and isinstance(job.error, silence_on_errors)):
+              raise job.error
+          else:
+            success += 1
+          update_progress(success, failure)
           del future_to_job[future]
           yield job.arg, job.result, job.error
         except concurrent.futures.TimeoutError:
@@ -332,10 +356,15 @@ def concurrent_map(
       ):
         job = future_to_job[future]
         del future_to_job[future]
-        if job.error is not None and not (
-            silence_on_errors and isinstance(job.error, silence_on_errors)
-        ):
-          raise job.error   # pylint: disable=g-doc-exception
+        if job.error is not None:
+          failure += 1
+          if not (
+              silence_on_errors and isinstance(job.error, silence_on_errors)
+          ):
+            raise job.error   # pylint: disable=g-doc-exception
+        else:
+          success += 1
+        update_progress(success, failure)
         yield job.arg, job.result, job.error
       remaining_futures = future_to_job
 
@@ -346,3 +375,6 @@ def concurrent_map(
         future.cancel()
         job.error = TimeoutError(f'Execution time exceeds {timeout} seconds.')
       yield job.arg, job.result, job.error
+
+    if progress is not None:
+      progress.close()
