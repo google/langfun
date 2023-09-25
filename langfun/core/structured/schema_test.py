@@ -32,6 +32,10 @@ class Itinerary(pg.Object):
   hotel: pg.typing.Str['.*Hotel'] | None
 
 
+class Node(pg.Object):
+  children: list['Node']
+
+
 class SchemaTest(unittest.TestCase):
 
   def assert_schema(self, annotation, spec):
@@ -200,6 +204,12 @@ class ClassDependenciesTest(unittest.TestCase):
 
     with self.assertRaisesRegex(TypeError, 'Unsupported spec type'):
       schema_lib.class_dependencies((Foo, 1))
+
+  def test_class_dependencies_recursive(self):
+    self.assertEqual(
+        schema_lib.class_dependencies(Node),
+        [Node]
+    )
 
   def test_class_dependencies_from_value(self):
     class Foo(pg.Object):

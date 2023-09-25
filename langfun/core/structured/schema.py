@@ -188,13 +188,14 @@ def class_dependencies(
     if isinstance(cls_or_classes, type):
       cls_or_classes = [cls_or_classes]
     for cls in cls_or_classes:
-      if cls not in seen:
+      if cls not in dependencies:
         dependencies.append(cls)
-        seen.add(cls)
 
   def _fill_dependencies(vs: pg.typing.ValueSpec, include_subclasses: bool):
     if isinstance(vs, pg.typing.Object):
       if issubclass(vs.cls, pg.Object) and vs.cls not in seen:
+        seen.add(vs.cls)
+
         # Add base classes as dependencies.
         for base_cls in vs.cls.__bases__:
           # We only keep track of user-defined symbolic classes.
