@@ -488,7 +488,8 @@ class LangFunc(
       exclude_keys.append('input_path')
     if self.output_path is None:
       exclude_keys.append('output_path')
-    return self.format(compact=True, exclude_keys=exclude_keys)
+    return self.format(
+        compact=True, use_inferred=True, exclude_keys=exclude_keys)
 
 
 # Register converter from str to LangFunc, therefore we can always

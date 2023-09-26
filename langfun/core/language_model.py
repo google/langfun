@@ -243,7 +243,7 @@ class LanguageModel(component.Component):
 
       if self.debug:
         console.write(
-            self.format(compact=True),
+            self.format(compact=True, use_inferred=True),
             title=f'[{call_counter}] LM INFO:',
             color='magenta',
         )

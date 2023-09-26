@@ -26,6 +26,19 @@ _RAISE_IF_ATTR_NOT_AVAILABLE = (pg.MISSING_VALUE,)
 class Component(pg.Object):
   """Base class for langfun components."""
 
+  # Override __repr__ format to use inferred values when available.
+  __str_format_args__ = dict(
+      compact=True,
+      use_inferred=True,
+  )
+
+  # Override __str__ format to use inferred values when available.
+  __str_format_args__ = dict(
+      compact=False,
+      verbose=False,
+      use_inferred=True,
+  )
+
   # Allow symbolic assignment, which invalidates the object and recomputes
   # states upon update.
   allow_symbolic_assignment = True
