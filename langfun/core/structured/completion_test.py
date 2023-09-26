@@ -11,15 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for langfun.core.structured.structure2structure."""
+"""Tests for langfun.core.structured.completion."""
 
 import inspect
 import unittest
+
 import langfun.core as lf
 from langfun.core.llms import fake
+from langfun.core.structured import completion
 from langfun.core.structured import mapping
-from langfun.core.structured import schema as schema_lib
-from langfun.core.structured import structure2structure
 import pyglove as pg
 
 
@@ -39,22 +39,10 @@ class TripPlan(pg.Object):
   itineraries: list[Itinerary]
 
 
-class PairTest(unittest.TestCase):
-
-  def test_partial(self):
-    p = structure2structure.Pair(
-        TripPlan.partial(place='San Francisco'),
-        TripPlan.partial(itineraries=[Itinerary.partial(day=1)]),
-    )
-    self.assertEqual(p.left.itineraries, schema_lib.MISSING)
-    self.assertEqual(p.right.place, schema_lib.MISSING)
-    self.assertEqual(p.right.itineraries[0].activities, schema_lib.MISSING)
-
-
 class CompleteStructureTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = structure2structure.CompleteStructure()
+    l = completion.CompleteStructure()
     m = lf.UserMessage(
         '',
         result=TripPlan.partial(
@@ -115,7 +103,7 @@ class CompleteStructureTest(unittest.TestCase):
     )
 
   def test_render_no_class_definitions(self):
-    l = structure2structure.CompleteStructure()
+    l = completion.CompleteStructure()
     m = lf.UserMessage(
         '',
         result=TripPlan.partial(
@@ -182,8 +170,8 @@ class CompleteStructureTest(unittest.TestCase):
     )
 
   def test_render_with_examples(self):
-    l = structure2structure.CompleteStructure(
-        examples=structure2structure._default_complete_examples()
+    l = completion.CompleteStructure(
+        examples=completion._default_complete_examples()
     )
     m = lf.UserMessage(
         '',
@@ -323,7 +311,7 @@ class CompleteStructureTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      r = structure2structure.complete(
+      r = completion.complete(
           TripPlan.partial(
               place='San Francisco',
               itineraries=[
@@ -413,9 +401,7 @@ class CompleteStructureTest(unittest.TestCase):
 
   def test_bad_init(self):
     with self.assertRaisesRegex(ValueError, '.*must be.*Pair'):
-      structure2structure.CompleteStructure(
-          examples=[mapping.MappingExample(value=1)]
-      )
+      completion.CompleteStructure(examples=[mapping.MappingExample(value=1)])
 
   def test_bad_transform(self):
     with lf.context(
@@ -426,14 +412,14 @@ class CompleteStructureTest(unittest.TestCase):
           mapping.MappingError,
           'Cannot parse message text into structured output',
       ):
-        structure2structure.complete(Activity.partial())
+        completion.complete(Activity.partial())
 
   def test_default(self):
     with lf.context(
         lm=fake.StaticSequence(['Activity(description=1)']),
         override_attrs=True,
     ):
-      self.assertIsNone(structure2structure.complete(Activity.partial(), None))
+      self.assertIsNone(completion.complete(Activity.partial(), None))
 
 
 if __name__ == '__main__':

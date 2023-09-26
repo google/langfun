@@ -14,76 +14,15 @@
 """Structured value to natural language."""
 
 import inspect
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 import langfun.core as lf
 from langfun.core.structured import mapping
-from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
-class StructureToNaturalLanguage(mapping.Mapping):
-  """LangFunc for converting a structured value to natural language.
-
-  {{ preamble }}
-
-  {% if examples -%}
-  {% for example in examples -%}
-  {%- if example.nl_context -%}
-  {{ nl_context_title}}:
-  {{ example.nl_context | indent(2, True)}}
-
-  {% endif -%}
-  {{ value_title}}:
-  {{ value_str(example.value) | indent(2, True) }}
-
-  {{ nl_text_title }}:
-  {{ example.nl_text | indent(2, True) }}
-
-  {% endfor %}
-  {% endif -%}
-  {% if nl_context -%}
-  {{ nl_context_title }}:
-  {{ nl_context | indent(2, True)}}
-
-  {% endif -%}
-  {{ value_title }}:
-  {{ value_str(value) | indent(2, True) }}
-
-  {{ nl_text_title }}:
-  """
-
-  preamble: Annotated[
-      lf.LangFunc, 'Preamble used for zeroshot natural language mapping.'
-  ]
-
-  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
-      'CONTEXT_FOR_DESCRIPTION'
-  )
-
-  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
-      'NATURAL_LANGUAGE_TEXT'
-  )
-
-  value_title: Annotated[str, 'The section title for schema.'] = 'PYTHON_OBJECT'
-
-  @property
-  def value(self) -> Any:
-    """Returns the structured input value."""
-    return self.message.result
-
-  @property
-  def nl_context(self) -> str:
-    """Returns the context information for the description."""
-    return self.message.text
-
-  def value_str(self, value: Any) -> str:
-    return schema_lib.value_repr('python').repr(
-        value, markdown=False, compact=False)
-
-
 @pg.use_init_args(['examples'])
-class DescribeStructure(StructureToNaturalLanguage):
+class DescribeStructure(mapping.StructureToNaturalLanguage):
   """Describe a structured value in natural language."""
 
   preamble = """

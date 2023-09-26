@@ -143,5 +143,33 @@ class MappingExampleTest(unittest.TestCase):
     )
 
 
+class Activity(pg.Object):
+  description: str
+
+
+class Itinerary(pg.Object):
+  day: pg.typing.Int[1, None]
+  type: pg.typing.Enum['daytime', 'nighttime']
+  activities: list[Activity]
+  hotel: pg.typing.Str['.*Hotel'] | None
+
+
+class TripPlan(pg.Object):
+  place: str
+  itineraries: list[Itinerary]
+
+
+class PairTest(unittest.TestCase):
+
+  def test_partial(self):
+    p = mapping.Pair(
+        TripPlan.partial(place='San Francisco'),
+        TripPlan.partial(itineraries=[Itinerary.partial(day=1)]),
+    )
+    self.assertEqual(p.left.itineraries, schema_lib.MISSING)
+    self.assertEqual(p.right.place, schema_lib.MISSING)
+    self.assertEqual(p.right.itineraries[0].activities, schema_lib.MISSING)
+
+
 if __name__ == '__main__':
   unittest.main()
