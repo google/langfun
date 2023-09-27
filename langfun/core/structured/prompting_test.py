@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for structured query_lib."""
+"""Tests for structured prompting."""
 
 import inspect
 import unittest
@@ -19,7 +19,7 @@ import unittest
 import langfun.core as lf
 from langfun.core.llms import fake
 from langfun.core.structured import mapping
-from langfun.core.structured import query as query_lib
+from langfun.core.structured import prompting
 import pyglove as pg
 
 
@@ -37,7 +37,7 @@ class Itinerary(pg.Object):
 class QueryStructurePythonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = query_lib.QueryStructurePython(int)
+    l = prompting.QueryStructurePython(int)
     m = lf.AIMessage('Compute 12 / 6 + 2.')
 
     self.assertEqual(
@@ -56,7 +56,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = query_lib.QueryStructurePython(
+    l = prompting.QueryStructurePython(
         int,
         examples=[
             mapping.MappingExample('What is the answer of 1 plus 1?', None, 2),
@@ -145,7 +145,7 @@ class QueryStructurePythonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = query_lib.QueryStructurePython(
+      l = prompting.QueryStructurePython(
           [Itinerary],
           examples=[
               mapping.MappingExample(
@@ -181,17 +181,17 @@ class QueryStructurePythonTest(unittest.TestCase):
           mapping.MappingError,
           'Cannot parse message text into structured output',
       ):
-        query_lib.query('Compute 1 + 2', int)
+        prompting.query('Compute 1 + 2', int)
 
   def test_query(self):
     lm = fake.StaticSequence(['1'])
-    self.assertEqual(query_lib.query('what is 1 + 0', int, lm=lm), 1)
+    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
 
 
 class QueryStructureJsonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = query_lib.QueryStructureJson(int)
+    l = prompting.QueryStructureJson(int)
     m = lf.AIMessage('Compute 12 / 6 + 2.')
 
     self.assertEqual(
@@ -214,7 +214,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = query_lib.QueryStructureJson(
+    l = prompting.QueryStructureJson(
         int,
         examples=[
             mapping.MappingExample('What is the answer of 1 plus 1?', None, 2),
@@ -341,7 +341,7 @@ class QueryStructureJsonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = query_lib.QueryStructureJson(
+      l = prompting.QueryStructureJson(
           [Itinerary],
           examples=[
               mapping.MappingExample(
@@ -377,12 +377,12 @@ class QueryStructureJsonTest(unittest.TestCase):
           mapping.MappingError,
           'Cannot parse message text into structured output',
       ):
-        query_lib.query('Compute 1 + 2', int, protocol='json')
+        prompting.query('Compute 1 + 2', int, protocol='json')
 
   def test_query(self):
     lm = fake.StaticSequence(['{"result": 1}'])
     self.assertEqual(
-        query_lib.query('what is 1 + 0', int, lm=lm, protocol='json'), 1
+        prompting.query('what is 1 + 0', int, lm=lm, protocol='json'), 1
     )
 
 

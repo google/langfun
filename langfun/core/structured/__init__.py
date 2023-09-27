@@ -55,12 +55,10 @@ from langfun.core.structured.parsing import ParseStructureJson
 from langfun.core.structured.parsing import ParseStructurePython
 from langfun.core.structured.parsing import parse
 
-import langfun.core.structured.query as query_lib
-
-from langfun.core.structured.query import QueryStructure
-from langfun.core.structured.query import QueryStructureJson
-from langfun.core.structured.query import QueryStructurePython
-from langfun.core.structured.query import query
+from langfun.core.structured.prompting import QueryStructure
+from langfun.core.structured.prompting import QueryStructureJson
+from langfun.core.structured.prompting import QueryStructurePython
+from langfun.core.structured.prompting import query
 
 from langfun.core.structured.description import DescribeStructure
 from langfun.core.structured.description import describe
