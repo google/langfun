@@ -13,7 +13,7 @@
 # limitations under the License.
 """Structure-to-structure mappings."""
 
-from typing import Annotated, Any, Literal, Type
+from typing import Any, Literal
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -21,118 +21,7 @@ from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
-class Pair(pg.Object):
-  """Value pair used for expressing structure-to-structure mapping."""
-
-  left: pg.typing.Annotated[
-      pg.typing.Any(transform=schema_lib.mark_missing), 'The left-side value.'
-  ]
-  right: pg.typing.Annotated[
-      pg.typing.Any(transform=schema_lib.mark_missing), 'The right-side value.'
-  ]
-
-
-class StructureToStructure(mapping.Mapping):
-  """Base class for structure-to-structure mapping.
-
-  {{ preamble }}
-
-  {% if examples -%}
-  {% for example in examples -%}
-  {{ input_value_title }}:
-  {{ value_str(example.value.left) | indent(2, True) }}
-
-  {%- if missing_type_dependencies(example.value) %}
-
-  {{ type_definitions_title }}:
-  {{ type_definitions_str(example.value) | indent(2, True) }}
-  {%- endif %}
-
-  {{ output_value_title }}:
-  {{ value_str(example.value.right) | indent(2, True) }}
-
-  {% endfor %}
-  {% endif -%}
-  {{ input_value_title }}:
-  {{ value_str(input_value) | indent(2, True) }}
-  {%- if missing_type_dependencies(input_value) %}
-
-  {{ type_definitions_title }}:
-  {{ type_definitions_str(input_value) | indent(2, True) }}
-  {%- endif %}
-
-  {{ output_value_title }}:
-  """
-
-  default: Annotated[
-      Any,
-      (
-          'The default value to use if mapping failed. '
-          'If unspecified, error will be raisen.'
-      ),
-  ] = lf.message_transform.RAISE_IF_HAS_ERROR
-
-  preamble: Annotated[
-      lf.LangFunc,
-      'Preamble used for structure-to-structure mapping.',
-  ]
-
-  type_definitions_title: Annotated[
-      str, 'The section title for type definitions.'
-  ] = 'CLASS_DEFINITIONS'
-
-  input_value_title: Annotated[str, 'The section title for input value.']
-  output_value_title: Annotated[str, 'The section title for output value.']
-
-  def _on_bound(self):
-    super()._on_bound()
-    if self.examples:
-      for example in self.examples:
-        if not isinstance(example.value, Pair):
-          raise ValueError(
-              'The value of example must be a `lf.structured.Pair` object. '
-              f'Encountered: { example.value }.'
-          )
-
-  @property
-  def input_value(self) -> Any:
-    return schema_lib.mark_missing(self.message.result)
-
-  def value_str(self, value: Any) -> str:
-    return schema_lib.value_repr('python').repr(value, compact=False)
-
-  def missing_type_dependencies(self, value: Any) -> list[Type[Any]]:
-    value_specs = tuple(
-        [v.value_spec for v in schema_lib.Missing.find_missing(value).values()]
-    )
-    return schema_lib.class_dependencies(value_specs, include_subclasses=True)
-
-  def type_definitions_str(self, value: Any) -> str | None:
-    return schema_lib.class_definitions(
-        self.missing_type_dependencies(value), markdown=True
-    )
-
-  def _value_context(self):
-    classes = schema_lib.class_dependencies(self.input_value)
-    return {cls.__name__: cls for cls in classes}
-
-  def transform_output(self, lm_output: lf.Message) -> lf.Message:
-    try:
-      result = schema_lib.value_repr('python').parse(
-          lm_output.text, additional_context=self._value_context()
-      )
-    except Exception as e:  # pylint: disable=broad-exception-caught
-      if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
-        raise mapping.MappingError(
-            'Cannot parse message text into structured output. '
-            f'Error={e}. Text={lm_output.text!r}.'
-        ) from e
-      result = self.default
-    lm_output.result = result
-    return lm_output
-
-
-class CompleteStructure(StructureToStructure):
+class CompleteStructure(mapping.StructureToStructure):
   """Complete structure by filling the missing fields."""
 
   preamble = lf.LangFunc("""
@@ -173,7 +62,7 @@ class _Country(pg.Object):
 def _default_complete_examples() -> list[mapping.MappingExample]:
   return [
       mapping.MappingExample(
-          value=Pair(
+          value=mapping.Pair(
               left=_Country.partial(name='United States of America'),
               right=_Country(
                   name='United States of America',

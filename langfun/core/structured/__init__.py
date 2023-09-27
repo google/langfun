@@ -45,23 +45,28 @@ from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingExample
 from langfun.core.structured.mapping import MappingError
 
-from langfun.core.structured.nl2structure import NaturalLanguageToStructure
-from langfun.core.structured.nl2structure import ParseStructure
-from langfun.core.structured.nl2structure import ParseStructureJson
-from langfun.core.structured.nl2structure import ParseStructurePython
-from langfun.core.structured.nl2structure import QueryStructure
-from langfun.core.structured.nl2structure import QueryStructureJson
-from langfun.core.structured.nl2structure import QueryStructurePython
-from langfun.core.structured.nl2structure import parse
-from langfun.core.structured.nl2structure import query
+# Mappings of between different forms of content.
+from langfun.core.structured.mapping import NaturalLanguageToStructure
+from langfun.core.structured.mapping import StructureToNaturalLanguage
+from langfun.core.structured.mapping import StructureToStructure
 
-from langfun.core.structured.structure2nl import StructureToNaturalLanguage
-from langfun.core.structured.structure2nl import DescribeStructure
-from langfun.core.structured.structure2nl import describe
+from langfun.core.structured.parsing import ParseStructure
+from langfun.core.structured.parsing import ParseStructureJson
+from langfun.core.structured.parsing import ParseStructurePython
+from langfun.core.structured.parsing import parse
 
-from langfun.core.structured.structure2structure import StructureToStructure
-from langfun.core.structured.structure2structure import CompleteStructure
-from langfun.core.structured.structure2structure import complete
+import langfun.core.structured.query as query_lib
+
+from langfun.core.structured.query import QueryStructure
+from langfun.core.structured.query import QueryStructureJson
+from langfun.core.structured.query import QueryStructurePython
+from langfun.core.structured.query import query
+
+from langfun.core.structured.description import DescribeStructure
+from langfun.core.structured.description import describe
+
+from langfun.core.structured.completion import CompleteStructure
+from langfun.core.structured.completion import complete
 
 
 # pylint: enable=g-importing-member

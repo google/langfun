@@ -18,8 +18,8 @@ import unittest
 
 import langfun.core as lf
 from langfun.core.llms import fake
+from langfun.core.structured import description as description_lib
 from langfun.core.structured import mapping
-from langfun.core.structured import structure2nl
 import pyglove as pg
 
 
@@ -37,7 +37,7 @@ class Itinerary(pg.Object):
 class DescribeStructureTest(unittest.TestCase):
 
   def test_render(self):
-    l = structure2nl.DescribeStructure(
+    l = description_lib.DescribeStructure(
         examples=[
             mapping.MappingExample(
                 nl_context='Compute 1 + 2',
@@ -124,7 +124,7 @@ class DescribeStructureTest(unittest.TestCase):
     )
 
   def test_render_no_examples(self):
-    l = structure2nl.DescribeStructure()
+    l = description_lib.DescribeStructure()
     m = lf.UserMessage(
         '1 day itinerary to SF',
         result=Itinerary(
@@ -174,7 +174,7 @@ class DescribeStructureTest(unittest.TestCase):
     )
 
   def test_render_no_context(self):
-    l = structure2nl.DescribeStructure()
+    l = description_lib.DescribeStructure()
     m = lf.UserMessage(
         '',
         result=Itinerary(
@@ -230,7 +230,7 @@ class DescribeStructureTest(unittest.TestCase):
         ]
     )
     self.assertEqual(
-        structure2nl.describe(
+        description_lib.describe(
             Itinerary(
                 day=1,
                 type='daytime',

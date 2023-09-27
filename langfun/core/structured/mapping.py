@@ -13,8 +13,9 @@
 # limitations under the License.
 """Mapping interfaces."""
 
+import abc
 import io
-from typing import Annotated
+from typing import Annotated, Any, Type
 import langfun.core as lf
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
@@ -135,3 +136,290 @@ class Mapping(lf.LangFunc):
       list[MappingExample] | None,
       'Fewshot examples for improving the quality of mapping.'
   ] = lf.contextual(default=None)
+
+
+class NaturalLanguageToStructure(Mapping):
+  """LangFunc for converting natural language text to structured value.
+
+  {{ preamble }}
+
+  {% if examples -%}
+  {% for example in examples -%}
+  {%- if example.nl_context -%}
+  {{ nl_context_title}}:
+  {{ example.nl_context | indent(2, True)}}
+
+  {% endif -%}
+  {%- if example.nl_text -%}
+  {{ nl_text_title }}:
+  {{ example.nl_text | indent(2, True) }}
+
+  {% endif -%}
+  {{ schema_title }}:
+  {{ example.schema_str(protocol) | indent(2, True) }}
+
+  {{ value_title }}:
+  {{ example.value_str(protocol) | indent(2, True) }}
+
+  {% endfor %}
+  {% endif -%}
+  {% if nl_context -%}
+  {{ nl_context_title }}:
+  {{ nl_context | indent(2, True)}}
+
+  {% endif -%}
+  {% if nl_text -%}
+  {{ nl_text_title }}:
+  {{ nl_text | indent(2, True) }}
+
+  {% endif -%}
+  {{ schema_title }}:
+  {{ schema.schema_str(protocol) | indent(2, True) }}
+
+  {{ value_title }}:
+  """
+
+  schema: pg.typing.Annotated[
+      # Automatic conversion from annotation to schema.
+      schema_lib.schema_spec(),
+      'A `lf.structured.Schema` that constrains the structured value.',
+  ]
+
+  default: Annotated[
+      Any,
+      (
+          'The default value to use if parsing failed. '
+          'If unspecified, error will be raisen.'
+      ),
+  ] = lf.message_transform.RAISE_IF_HAS_ERROR
+
+  preamble: Annotated[
+      lf.LangFunc,
+      'Preamble used for natural language-to-structure mapping.',
+  ]
+
+  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
+      'USER_REQUEST'
+  )
+
+  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
+      'LM_RESPONSE'
+  )
+
+  schema_title: Annotated[str, 'The section title for schema.']
+
+  value_title: Annotated[str, 'The section title for schema.']
+
+  protocol: Annotated[
+      schema_lib.SchemaProtocol,
+      'The protocol for representing the schema and value.',
+  ]
+
+  @property
+  @abc.abstractmethod
+  def nl_context(self) -> str | None:
+    """Returns the natural language context for obtaining the response.
+
+    Returns:
+      The natural language context (prompt) for obtaining the response (either
+      in natural language or directly to structured protocol). If None,
+      `nl_text`
+      must be provided.
+    """
+
+  @property
+  @abc.abstractmethod
+  def nl_text(self) -> str | None:
+    """Returns the natural language text to map.
+
+    Returns:
+      The natural language text (in LM response) to map to object. If None,
+      the LM directly outputs structured protocol instead of natural language.
+      If None, `nl_context` must be provided.
+    """
+
+  def transform_output(self, lm_output: lf.Message) -> lf.Message:
+    try:
+      lm_output.result = self.schema.parse(
+          lm_output.text, protocol=self.protocol
+      )
+    except Exception as e:  # pylint: disable=broad-exception-caught
+      if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
+        raise MappingError(
+            'Cannot parse message text into structured output. '
+            f'Error={e}. Text={lm_output.text!r}.'
+        ) from e
+      lm_output.result = self.default
+    return lm_output
+
+
+class StructureToNaturalLanguage(Mapping):
+  """LangFunc for converting a structured value to natural language.
+
+  {{ preamble }}
+
+  {% if examples -%}
+  {% for example in examples -%}
+  {%- if example.nl_context -%}
+  {{ nl_context_title}}:
+  {{ example.nl_context | indent(2, True)}}
+
+  {% endif -%}
+  {{ value_title}}:
+  {{ value_str(example.value) | indent(2, True) }}
+
+  {{ nl_text_title }}:
+  {{ example.nl_text | indent(2, True) }}
+
+  {% endfor %}
+  {% endif -%}
+  {% if nl_context -%}
+  {{ nl_context_title }}:
+  {{ nl_context | indent(2, True)}}
+
+  {% endif -%}
+  {{ value_title }}:
+  {{ value_str(value) | indent(2, True) }}
+
+  {{ nl_text_title }}:
+  """
+
+  preamble: Annotated[
+      lf.LangFunc, 'Preamble used for zeroshot natural language mapping.'
+  ]
+
+  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
+      'CONTEXT_FOR_DESCRIPTION'
+  )
+
+  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
+      'NATURAL_LANGUAGE_TEXT'
+  )
+
+  value_title: Annotated[str, 'The section title for schema.'] = 'PYTHON_OBJECT'
+
+  @property
+  def value(self) -> Any:
+    """Returns the structured input value."""
+    return self.message.result
+
+  @property
+  def nl_context(self) -> str:
+    """Returns the context information for the description."""
+    return self.message.text
+
+  def value_str(self, value: Any) -> str:
+    return schema_lib.value_repr('python').repr(
+        value, markdown=False, compact=False
+    )
+
+
+class Pair(pg.Object):
+  """Value pair used for expressing structure-to-structure mapping."""
+
+  left: pg.typing.Annotated[
+      pg.typing.Any(transform=schema_lib.mark_missing), 'The left-side value.'
+  ]
+  right: pg.typing.Annotated[
+      pg.typing.Any(transform=schema_lib.mark_missing), 'The right-side value.'
+  ]
+
+
+class StructureToStructure(Mapping):
+  """Base class for structure-to-structure mapping.
+
+  {{ preamble }}
+
+  {% if examples -%}
+  {% for example in examples -%}
+  {{ input_value_title }}:
+  {{ value_str(example.value.left) | indent(2, True) }}
+
+  {%- if missing_type_dependencies(example.value) %}
+
+  {{ type_definitions_title }}:
+  {{ type_definitions_str(example.value) | indent(2, True) }}
+  {%- endif %}
+
+  {{ output_value_title }}:
+  {{ value_str(example.value.right) | indent(2, True) }}
+
+  {% endfor %}
+  {% endif -%}
+  {{ input_value_title }}:
+  {{ value_str(input_value) | indent(2, True) }}
+  {%- if missing_type_dependencies(input_value) %}
+
+  {{ type_definitions_title }}:
+  {{ type_definitions_str(input_value) | indent(2, True) }}
+  {%- endif %}
+
+  {{ output_value_title }}:
+  """
+
+  default: Annotated[
+      Any,
+      (
+          'The default value to use if mapping failed. '
+          'If unspecified, error will be raisen.'
+      ),
+  ] = lf.message_transform.RAISE_IF_HAS_ERROR
+
+  preamble: Annotated[
+      lf.LangFunc,
+      'Preamble used for structure-to-structure mapping.',
+  ]
+
+  type_definitions_title: Annotated[
+      str, 'The section title for type definitions.'
+  ] = 'CLASS_DEFINITIONS'
+
+  input_value_title: Annotated[str, 'The section title for input value.']
+  output_value_title: Annotated[str, 'The section title for output value.']
+
+  def _on_bound(self):
+    super()._on_bound()
+    if self.examples:
+      for example in self.examples:
+        if not isinstance(example.value, Pair):
+          raise ValueError(
+              'The value of example must be a `lf.structured.Pair` object. '
+              f'Encountered: { example.value }.'
+          )
+
+  @property
+  def input_value(self) -> Any:
+    return schema_lib.mark_missing(self.message.result)
+
+  def value_str(self, value: Any) -> str:
+    return schema_lib.value_repr('python').repr(value, compact=False)
+
+  def missing_type_dependencies(self, value: Any) -> list[Type[Any]]:
+    value_specs = tuple(
+        [v.value_spec for v in schema_lib.Missing.find_missing(value).values()]
+    )
+    return schema_lib.class_dependencies(value_specs, include_subclasses=True)
+
+  def type_definitions_str(self, value: Any) -> str | None:
+    return schema_lib.class_definitions(
+        self.missing_type_dependencies(value), markdown=True
+    )
+
+  def _value_context(self):
+    classes = schema_lib.class_dependencies(self.input_value)
+    return {cls.__name__: cls for cls in classes}
+
+  def transform_output(self, lm_output: lf.Message) -> lf.Message:
+    try:
+      result = schema_lib.value_repr('python').parse(
+          lm_output.text, additional_context=self._value_context()
+      )
+    except Exception as e:  # pylint: disable=broad-exception-caught
+      if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
+        raise MappingError(
+            'Cannot parse message text into structured output. '
+            f'Error={e}. Text={lm_output.text!r}.'
+        ) from e
+      result = self.default
+    lm_output.result = result
+    return lm_output
