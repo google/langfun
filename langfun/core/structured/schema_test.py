@@ -29,7 +29,10 @@ class Itinerary(pg.Object):
   day: pg.typing.Int[1, None]
   type: pg.typing.Enum['daytime', 'nighttime']
   activities: list[Activity]
-  hotel: pg.typing.Str['.*Hotel'] | None
+  hotel: pg.typing.Annotated[
+      pg.typing.Str['.*Hotel'] | None,
+      'Hotel to stay if applicable.'
+  ]
 
 
 class Node(pg.Object):
@@ -387,7 +390,7 @@ class SchemaPythonReprTest(unittest.TestCase):
               day: int(min=1)
               type: Literal['daytime', 'nighttime']
               activities: list[Activity]
-              hotel: str(regex='.*Hotel') | None
+              hotel: str(regex='.*Hotel') | None  # Hotel to stay if applicable.
             """) + '\n',
     )
 

@@ -360,7 +360,11 @@ def class_definition(cls, strict: bool = False) -> str:
             'Variable-length keyword arguments is not supported in '
             f'structured parsing or query. Encountered: {field}'
         )
-      out.write(f'  {field.key}: {annotation(field.value, strict=strict)}\n')
+      out.write(f'  {field.key}: {annotation(field.value, strict=strict)}')
+      if field.description:
+        description = field.description.replace('\n', ' ')
+        out.write(f'  # {description}')
+      out.write('\n')
   else:
     out.write('  pass\n')
   return out.getvalue()
