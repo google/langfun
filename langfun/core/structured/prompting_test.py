@@ -17,9 +17,11 @@ import inspect
 import unittest
 
 import langfun.core as lf
+from langfun.core import coding
 from langfun.core.llms import fake
 from langfun.core.structured import mapping
 from langfun.core.structured import prompting
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -178,8 +180,8 @@ class QueryStructurePythonTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          mapping.MappingError,
-          'Cannot parse message text into structured output',
+          coding.CodeError,
+          'name .* is not defined',
       ):
         prompting.query('Compute 1 + 2', int)
 
@@ -374,8 +376,8 @@ class QueryStructureJsonTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          mapping.MappingError,
-          'Cannot parse message text into structured output',
+          schema_lib.JsonError,
+          'No JSON dict in the output',
       ):
         prompting.query('Compute 1 + 2', int, protocol='json')
 

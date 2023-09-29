@@ -16,6 +16,7 @@
 import abc
 import inspect
 import io
+import textwrap
 import typing
 from typing import Any, Literal, Sequence, Type, Union
 import langfun.core as lf
@@ -66,6 +67,41 @@ def parse_value_spec(value) -> pg.typing.ValueSpec:
 SchemaProtocol = Literal['json', 'python']
 
 
+class SchemaError(Exception):   # pylint: disable=g-bad-exception-name
+  """Schema error."""
+
+  def __init__(self,
+               schema: 'Schema',
+               value: Any,
+               protocol: SchemaProtocol,
+               cause: Exception):
+    self.schema = schema
+    self.value = value
+    self.protocol = protocol
+    self.cause = cause
+
+  def __str__(self):
+    r = io.StringIO()
+    r.write(
+        lf.colored(f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'))
+
+    r.write('\n')
+    r.write(lf.colored('Schema:', 'red'))
+    r.write('\n\n')
+    r.write(textwrap.indent(
+        lf.colored(schema_repr(self.protocol).repr(self.schema), 'magenta'),
+        ' ' * 2
+    ))
+    r.write('\n\n')
+    r.write(lf.colored('Generated value:', 'red'))
+    r.write('\n\n')
+    r.write(textwrap.indent(
+        lf.colored(value_repr(self.protocol).repr(self.value), 'magenta'),
+        ' ' * 2
+    ))
+    return r.getvalue()
+
+
 class Schema(lf.NaturalLanguageFormattable, pg.Object):
   """Base class for structured data schema."""
 
@@ -91,7 +127,12 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
       self, text: str, protocol: SchemaProtocol = 'json', **kwargs
   ) -> Any:
     """Parse a LM generated text into a structured value."""
-    return self.spec.apply(value_repr(protocol).parse(text, self, **kwargs))
+    value = value_repr(protocol).parse(text, self, **kwargs)
+
+    try:
+      return self.spec.apply(value)
+    except Exception as e:
+      raise SchemaError(self, value, protocol, e)  # pylint: disable=raise-missing-from
 
   def natural_language_format(self) -> str:
     return self.schema_str()
@@ -529,6 +570,25 @@ def structure_from_python(code: str, **symbols) -> Any:
     return lf_coding.run(code)['__result__']
 
 
+class JsonError(Exception):
+  """Json parsing error."""
+
+  def __init__(self, json: str, cause: Exception):
+    self.json = json
+    self.cause = cause
+
+  def __str__(self) -> str:
+    r = io.StringIO()
+    r.write(
+        lf.colored(f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'))
+
+    r.write('\n\n')
+    r.write(lf.colored('JSON text:', 'red'))
+    r.write('\n\n')
+    r.write(textwrap.indent(lf.colored(self.json, 'magenta'), ' ' * 2))
+    return r.getvalue()
+
+
 class ValueJsonRepr(ValueRepr):
   """JSON-representation for value."""
 
@@ -539,12 +599,17 @@ class ValueJsonRepr(ValueRepr):
   def parse(self, text: str, schema: Schema | None = None, **kwargs) -> Any:
     """Parse a JSON string into a structured object."""
     del schema
-    v = pg.from_json_str(self._cleanup_json(text))
+    try:
+      text = self._cleanup_json(text)
+      v = pg.from_json_str(text)
+    except Exception as e:
+      raise JsonError(text, e)  # pylint: disable=raise-missing-from
+
     if not isinstance(v, dict) or 'result' not in v:
-      raise ValueError(
+      raise JsonError(text, ValueError(
           'The root node of the JSON must be a dict with key `result`. '
           f'Encountered: {v}'
-      )
+      ))
     return v['result']
 
   def _cleanup_json(self, json_str: str) -> str:

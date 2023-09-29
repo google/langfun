@@ -17,6 +17,8 @@
 # pylint: disable=g-importing-member
 
 from langfun.core.coding.python import CodePermission
+from langfun.core.coding.python import CodeError
+
 from langfun.core.coding.python import PythonCode
 from langfun.core.coding.python import PythonCodeParser
 

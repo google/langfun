@@ -17,7 +17,9 @@ import inspect
 import unittest
 
 import langfun.core as lf
+from langfun.core import coding
 from langfun.core.llms import fake
+
 from langfun.core.structured import mapping
 from langfun.core.structured import parsing
 import pyglove as pg
@@ -241,8 +243,8 @@ class ParseStructurePythonTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          mapping.MappingError,
-          'Cannot parse message text into structured output',
+          coding.CodeError,
+          'name .* is not defined',
       ):
         lf.LangFunc('Compute 1 + 2').as_structured(int)()
 
@@ -506,8 +508,8 @@ class ParseStructureJsonTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          mapping.MappingError,
-          'Cannot parse message text into structured output',
+          coding.CodeError,
+          'invalid syntax',
       ):
         lf.LangFunc('Compute 1 + 2').as_structured(int)()
 

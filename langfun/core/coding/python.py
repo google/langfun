@@ -18,6 +18,7 @@ import contextlib
 import enum
 import inspect
 import io
+import textwrap
 from typing import Annotated, Any
 
 import langfun.core as lf
@@ -58,19 +59,64 @@ class CodePermission(enum.Flag):
         CodePermission.FUNCTION_DEFINITION | CodePermission.IMPORT)
 
 
+class CodeError(RuntimeError):
+  """Python code error."""
+
+  def __init__(self, code: str, cause: Exception):
+    self.code = code
+    self.cause = cause
+
+  def __str__(self):
+    r = io.StringIO()
+    r.write(
+        lf.colored(f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'))
+
+    if isinstance(self.cause, SyntaxError):
+      r.write('\n\n')
+      r.write(textwrap.indent(
+          lf.colored(self.cause.text, 'magenta'),
+          ' ' * 2
+      ))
+      if not self.cause.text.endswith('\n'):
+        r.write('\n')
+
+    r.write('\n')
+    r.write(lf.colored('Generated Code:', 'red'))
+    r.write('\n\n')
+    r.write(lf.colored('  ```python\n', 'magenta'))
+    r.write(textwrap.indent(
+        lf.colored(self.code, 'magenta'),
+        ' ' * 2
+    ))
+    r.write(lf.colored('\n  ```\n', 'magenta'))
+    return r.getvalue()
+
+
 class PythonCodeParser(lf.Component):
   """Python code parser with permission control."""
 
   class _CodeValidator(ast.NodeVisitor):
     """Python AST node visitor for ensuring code are permitted."""
 
-    def __init__(self, perm: CodePermission):
+    def __init__(self, code: str, perm: CodePermission):
       super().__init__()
+      self.code = code
       self.perm = perm
 
     def verify(self, node, flag: CodePermission, node_type, error_message: str):
       if isinstance(node, node_type) and not (self.perm & flag):
-        raise SyntaxError(error_message)
+        raise SyntaxError(
+            error_message, (
+                '<generated-code>',
+                node.lineno,
+                node.col_offset,
+                self._code_line(node.lineno),
+                node.end_lineno,
+                node.end_col_offset,
+            ))
+
+    def _code_line(self, lineno):
+      return self.code.split('\n')[lineno - 1]
 
     def generic_visit(self, node):
       self.verify(
@@ -96,7 +142,7 @@ class PythonCodeParser(lf.Component):
               ast.Raise,
               ast.Assert
           ),
-          'Class definition is not allowed.')
+          'Exception is not allowed.')
 
       self.verify(
           node,
@@ -127,10 +173,14 @@ class PythonCodeParser(lf.Component):
 
       super().generic_visit(node)
 
-  def parse(self, code_text: str, perm: CodePermission) -> ast.AST:
-    code_block = ast.parse(self.clean(code_text), mode='exec')
-    PythonCodeParser._CodeValidator(perm).visit(code_block)
-    return code_block
+  def parse(self, code: str, perm: CodePermission) -> tuple[str, ast.AST]:
+    code = self.clean(code)
+    try:
+      parsed_code = ast.parse(code, mode='exec')
+      PythonCodeParser._CodeValidator(code, perm).visit(parsed_code)
+    except SyntaxError as e:
+      raise CodeError(code, e) from e
+    return code, parsed_code
 
   def clean(self, code_text: str) -> str:
     # TODO(daiyip): Deal with markdown in docstrings.
@@ -273,8 +323,9 @@ def run(
   ctx.update(kwargs)
 
   # Parse the code str.
-  code_block = PythonCodeParser().parse(code, perm)
+  code, code_block = PythonCodeParser().parse(code, perm)
   global_vars, local_vars = ctx, {}
+
   if hasattr(code_block.body[-1], 'value'):
     last_expr = code_block.body.pop()  # pytype: disable=attribute-error
     result_vars = [_FINAL_RESULT_KEY]
@@ -285,15 +336,23 @@ def run(
 
     last_expr = ast.Expression(last_expr.value)  # pytype: disable=attribute-error
 
-    # Execute the lines before the last expression.
-    exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
+    try:
+      # Execute the lines before the last expression.
+      exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
 
-    # Evaluate the last expression.
-    result = eval(compile(last_expr, '', mode='eval'), global_vars, local_vars)  # pylint: disable=eval-used
+      # Evaluate the last expression.
+      result = eval(  # pylint: disable=eval-used
+          compile(last_expr, '', mode='eval'), global_vars, local_vars)
+    except Exception as e:
+      raise CodeError(code, e) from e
+
     for result_var in result_vars:
       local_vars[result_var] = result
   else:
-    exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
+    try:
+      exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
+    except Exception as e:
+      raise CodeError(code, e) from e
     local_vars[_FINAL_RESULT_KEY] = list(local_vars.values())[-1]
   return local_vars
 

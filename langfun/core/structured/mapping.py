@@ -21,16 +21,6 @@ from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
-class MappingError(ValueError):   # pylint: disable=g-bad-exception-name
-  """Mappingg error."""
-
-  def __eq__(self, other):
-    return isinstance(other, MappingError) and self.args == other.args
-
-  def __ne__(self, other):
-    return not self.__eq__(other)
-
-
 # NOTE(daiyip): We put `schema` at last as it could inherit from the parent
 # objects.
 @pg.use_init_args(['nl_context', 'nl_text', 'value', 'schema'])
@@ -245,10 +235,7 @@ class NaturalLanguageToStructure(Mapping):
       )
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
-        raise MappingError(
-            'Cannot parse message text into structured output. '
-            f'Error={e}. Text={lm_output.text!r}.'
-        ) from e
+        raise e
       lm_output.result = self.default
     return lm_output
 
@@ -416,10 +403,7 @@ class StructureToStructure(Mapping):
       )
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
-        raise MappingError(
-            'Cannot parse message text into structured output. '
-            f'Error={e}. Text={lm_output.text!r}.'
-        ) from e
+        raise e
       result = self.default
     lm_output.result = result
     return lm_output

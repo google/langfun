@@ -17,6 +17,7 @@ import inspect
 import unittest
 
 import langfun.core as lf
+from langfun.core import coding
 from langfun.core.llms import fake
 from langfun.core.structured import completion
 from langfun.core.structured import mapping
@@ -409,8 +410,8 @@ class CompleteStructureTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          mapping.MappingError,
-          'Cannot parse message text into structured output',
+          coding.CodeError,
+          'Expect .* but encountered .*',
       ):
         completion.complete(Activity.partial())
 

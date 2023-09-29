@@ -21,15 +21,6 @@ from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
-class MappingErrorTest(unittest.TestCase):
-
-  def test_eq(self):
-    self.assertEqual(
-        mapping.MappingError('Parse failed.'),
-        mapping.MappingError('Parse failed.')
-    )
-
-
 class MappingExampleTest(unittest.TestCase):
 
   def test_basics(self):

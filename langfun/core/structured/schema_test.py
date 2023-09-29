@@ -157,7 +157,8 @@ class SchemaTest(unittest.TestCase):
   def test_parse(self):
     schema = schema_lib.Schema(int)
     self.assertEqual(schema.parse('{"result": 1}'), 1)
-    with self.assertRaisesRegex(TypeError, 'Expect .* but encountered .*'):
+    with self.assertRaisesRegex(
+        schema_lib.SchemaError, 'Expect .* but encountered .*'):
       schema.parse('{"result": "def"}')
 
     with self.assertRaisesRegex(ValueError, 'Unsupported protocol'):
@@ -576,7 +577,13 @@ class ValueJsonReprTest(unittest.TestCase):
         Activity('play'),
     )
     with self.assertRaisesRegex(
-        ValueError, 'The root node of the JSON must be a dict with key `result`'
+        schema_lib.JsonError, 'JSONDecodeError'
+    ):
+      schema_lib.ValueJsonRepr().parse('{"abc", 1}')
+
+    with self.assertRaisesRegex(
+        schema_lib.JsonError,
+        'The root node of the JSON must be a dict with key `result`'
     ):
       schema_lib.ValueJsonRepr().parse('{"abc": 1}')
 
@@ -596,12 +603,13 @@ bar"]
 
   def test_parse_with_malformated_json(self):
     with self.assertRaisesRegex(
-        ValueError, 'No JSON dict in the output'
+        schema_lib.JsonError, 'No JSON dict in the output'
     ):
       schema_lib.ValueJsonRepr().parse('The answer is 1.')
 
     with self.assertRaisesRegex(
-        ValueError, 'Malformated JSON: missing .* closing curly braces'
+        schema_lib.JsonError,
+        'Malformated JSON: missing .* closing curly braces'
     ):
       schema_lib.ValueJsonRepr().parse('{"result": 1')
 

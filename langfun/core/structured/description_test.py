@@ -110,7 +110,7 @@ class DescribeStructureTest(unittest.TestCase):
                     description='Visit Golden Gate Bridge.'
                   ),
                   Activity(
-                    description='Visit Fisherman's Wharf.'
+                    description="Visit Fisherman's Wharf."
                   ),
                   Activity(
                     description='Visit Alcatraz Island.'
@@ -138,7 +138,6 @@ class DescribeStructureTest(unittest.TestCase):
             hotel=None,
         ),
     )
-
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
@@ -160,7 +159,7 @@ class DescribeStructureTest(unittest.TestCase):
                     description='Visit Golden Gate Bridge.'
                   ),
                   Activity(
-                    description='Visit Fisherman's Wharf.'
+                    description="Visit Fisherman's Wharf."
                   ),
                   Activity(
                     description='Visit Alcatraz Island.'
@@ -207,7 +206,7 @@ class DescribeStructureTest(unittest.TestCase):
                     description='Visit Golden Gate Bridge.'
                   ),
                   Activity(
-                    description='Visit Fisherman's Wharf.'
+                    description="Visit Fisherman's Wharf."
                   ),
                   Activity(
                     description='Visit Alcatraz Island.'

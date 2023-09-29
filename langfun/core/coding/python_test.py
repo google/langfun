@@ -186,10 +186,11 @@ class PythonCodeParserTest(unittest.TestCase):
     )
 
   def assert_allowed(self, code: str, permission: python.CodePermission):
-    self.assertIsNotNone(python.PythonCodeParser().parse(code, permission))
+    _, ast = python.PythonCodeParser().parse(code, permission)
+    self.assertIsNotNone(ast)
 
   def assert_not_allowed(self, code: str, permission: python.CodePermission):
-    with self.assertRaisesRegex(SyntaxError, '.* is not allowed'):
+    with self.assertRaisesRegex(python.CodeError, '.* is not allowed'):
       python.PythonCodeParser().parse(code, permission)
 
   def test_parse_with_allowed_code(self):
@@ -364,6 +365,17 @@ class RunTest(unittest.TestCase):
     self.assertTrue(inspect.isfunction(ret['foo']))
     self.assertIsInstance(ret['k'], pg.Object)
     self.assertEqual(ret['__result__'], 10)
+
+  def test_run_with_error(self):
+    with self.assertRaisesRegex(
+        python.CodeError, 'NameError: name .* is not defined'):
+      python.run(
+          """
+          x = 1
+          y = x + z
+          """,
+          python.CodePermission.ALL
+      )
 
 
 class PythonCodeTest(unittest.TestCase):

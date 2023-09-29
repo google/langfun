@@ -39,6 +39,11 @@ lm_cache = llms.cache.lm_cache
 
 from langfun.core import memories
 
+# Error types.
+SchemaError = structured.SchemaError
+JsonError = structured.JsonError
+CodeError = coding.CodeError
+
 # Placeholder for Google-internal imports.
 
 # pylint: enable=unused-import

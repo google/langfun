@@ -25,6 +25,9 @@ from langfun.core.structured.schema import Schema
 from langfun.core.structured.schema import SchemaProtocol
 from langfun.core.structured.schema import schema_spec
 
+from langfun.core.structured.schema import SchemaError
+from langfun.core.structured.schema import JsonError
+
 from langfun.core.structured.schema import class_dependencies
 from langfun.core.structured.schema import class_definition
 from langfun.core.structured.schema import class_definitions
@@ -43,7 +46,6 @@ from langfun.core.structured.schema import value_repr
 
 from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingExample
-from langfun.core.structured.mapping import MappingError
 
 # Mappings of between different forms of content.
 from langfun.core.structured.mapping import NaturalLanguageToStructure
