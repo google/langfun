@@ -509,3 +509,33 @@ class LangFuncCallEvent(subscription.Event[LangFunc]):
   lm_input: message_lib.Message
   lm_output: message_lib.Message
   lm_callstack: list[LangFunc]
+
+
+def call(prompt: str, returns: Any = None, **kwargs) -> Any:
+  """Call a language model with prompt and formulate response in return type.
+
+  Examples::
+
+    lf.call('Compute one plus one', lm=lf.llms.Gpt35())
+    # Returns "two".
+
+    lf.call('Compute one plus one', int, lm=lf.llms.Gpt35())
+    # Returns 2.
+
+  Args:
+    prompt: User prompt that will be sent to LM, which could be a string or a
+      string template whose variables are provided from **kwargs.
+    returns: Type annotations for return type. If None, the raw LM response will
+      be returned (str). Otherwise, the response will be parsed based on the
+      return type.
+    **kwargs: Keyword arguments. Including options that control the calling
+      behavior, such as `lm`, `temperature`, etc. As well as variables that will
+      be fed to the prompt if it's a string template.
+
+  Returns:
+    A string if `returns` is None or an instance of the return type.
+  """
+  message = LangFunc(prompt, returns=returns)(**kwargs)
+  if returns is None:
+    return message.text
+  return message.result

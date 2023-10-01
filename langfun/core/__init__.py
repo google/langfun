@@ -27,6 +27,9 @@ from langfun.core.component import Component
 from langfun.core.template import Template
 from langfun.core.langfunc import LangFunc
 
+# Function for convenient call LM with possible structured output.
+from langfun.core.langfunc import call
+
 # Decorator for set the positional init args for component.
 from langfun.core.component import use_init_args
 

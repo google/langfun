@@ -19,9 +19,12 @@ from langfun.core import language_model
 from langfun.core import message
 from langfun.core import message_transform
 from langfun.core import subscription
+from langfun.core.langfunc import call
 from langfun.core.langfunc import LangFunc
 from langfun.core.langfunc import LangFuncCallEvent
 from langfun.core.llms import fake
+# Enables as_structured() operation of LangFunc.
+from langfun.core.structured import parsing  # pylint: disable=unused-import
 import pyglove as pg
 
 
@@ -69,7 +72,7 @@ class BasicTest(unittest.TestCase):
       self.assertEqual(l.lm_output, 'Hello!!!')
 
 
-class CallTest(unittest.TestCase):
+class LangFuncCallTest(unittest.TestCase):
 
   def test_call(self):
     l = LangFunc('Hello', lm=ExcitedEchoer())
@@ -238,32 +241,21 @@ class CallTest(unittest.TestCase):
       self.assertEqual(t(lm_input=message.UserMessage('Hi')), 'Hi!!!')
 
   def test_call_with_structured_output(self):
-
-    class FakeParseStructured(message_transform.MessageTransform):
-
-      def _transform_path(self, unused_message, input_path, value):
-        return int(str(value))
-
-    prev_as_structured = message_transform.MessageTransform.as_structured
-    message_transform.MessageTransform.as_structured = (
-        lambda self, *args: self >> FakeParseStructured())
-
     l = LangFunc('Compute 1 + 2', returns=int)
-    with component.context(lm=fake.StaticMapping({
-        'Compute 1 + 2': '3',
-    })):
+    with component.context(lm=fake.StaticSequence([
+        'three', '3'
+    ])):
       r = l()
       self.assertEqual(r.result, 3)
 
     l = LangFunc('Compute 1 + 2', returns=int, output_transform=lambda x: '3')
     with component.context(
-        lm=fake.StaticMapping({
-            'Compute 1 + 2': 'three',
-        })
+        lm=fake.StaticSequence([
+            'three', '3'
+        ])
     ):
       r = l()
       self.assertEqual(r.result, 3)
-    message_transform.MessageTransform.as_structured = prev_as_structured
 
 
 class TransformTest(unittest.TestCase):
@@ -377,6 +369,17 @@ class CallEventTest(unittest.TestCase):
             ('living dead', 'living dead!!!'),
         ],
     )
+
+
+class CallTest(unittest.TestCase):
+
+  def test_call(self):
+    with component.context(lm=fake.StaticSequence(['three'])):
+      self.assertEqual(call('Compute 1 + 1'), 'three')
+
+  def test_call_with_returns(self):
+    with component.context(lm=fake.StaticSequence(['three', '3'])):
+      self.assertEqual(call('Compute 1 + 1', returns=int), 3)
 
 
 if __name__ == '__main__':
