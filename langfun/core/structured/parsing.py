@@ -182,7 +182,7 @@ def _parse_structure_cls(
 
 def as_structured(
     self,
-    annotation: Union[Type[Any], list[Type[Any]], dict[str, Any]],
+    annotation: Union[Type[Any], list[Type[Any]], dict[str, Any], None],
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     examples: list[mapping.Mapping] | None = None,
     *,
@@ -194,7 +194,8 @@ def as_structured(
   Args:
     self: The Message transform object.
     annotation: The annotation used for representing the structured output. E.g.
-      int, list[int], {'x': int, 'y': str}, A.
+      int, list[int], {'x': int, 'y': str}, A. If None, the return value will be
+      the original LM response (str).
     default: The default value to use if parsing failed. If not specified, error
       will be raised.
     examples: An optional list of fewshot examples for helping parsing. If None,
@@ -207,6 +208,8 @@ def as_structured(
   Returns:
     The structured output according to the annotation.
   """
+  if annotation is None:
+    return self
   if examples is None:
     examples = _default_parsing_examples()
   return self >> _parse_structure_cls(protocol)(

@@ -511,16 +511,31 @@ class LangFuncCallEvent(subscription.Event[LangFunc]):
   lm_callstack: list[LangFunc]
 
 
-def call(prompt: str, returns: Any = None, **kwargs) -> Any:
+def call(
+    prompt: str | template_lib.Template,
+    returns: Any = None, **kwargs
+    ) -> Any:
   """Call a language model with prompt and formulate response in return type.
 
   Examples::
 
+    # Call with constant string-type prompt.
     lf.call('Compute one plus one', lm=lf.llms.Gpt35())
-    # Returns "two".
+    >> "two"
 
+    # Call with returning a structured (int) type.
     lf.call('Compute one plus one', int, lm=lf.llms.Gpt35())
-    # Returns 2.
+    >> 2
+
+    # Call with a template string with variables.
+    lf.call('Compute {{x}} plus {{y}}', int,
+            x='one', y='one', lm=lf.llms.Gpt35())
+    >> 2
+
+    # Call with an `lf.Template` object with variables.
+    lf.call(lf.Template('Compute {{x}} plus {{y}}', x=1), int,
+            y=1, lm=lf.llms.Gpt35())
+    >> 2
 
   Args:
     prompt: User prompt that will be sent to LM, which could be a string or a
@@ -535,7 +550,18 @@ def call(prompt: str, returns: Any = None, **kwargs) -> Any:
   Returns:
     A string if `returns` is None or an instance of the return type.
   """
-  message = LangFunc(prompt, returns=returns)(**kwargs)
+  if isinstance(prompt, LangFunc):
+    lfun = prompt.as_structured(returns)
+  elif isinstance(prompt, template_lib.Template):
+    lfun = LangFunc(prompt.render(**kwargs).text, returns=returns)
+  elif isinstance(prompt, str):
+    lfun = LangFunc(prompt, returns=returns)
+  else:
+    raise TypeError(
+        '`prompt` should be a string or an `lf.Template` object. '
+        f'Encountered {prompt!r}.')
+
+  message = lfun(**kwargs)
   if returns is None:
     return message.text
   return message.result

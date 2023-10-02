@@ -19,6 +19,7 @@ from langfun.core import language_model
 from langfun.core import message
 from langfun.core import message_transform
 from langfun.core import subscription
+from langfun.core import template as template_lib
 from langfun.core.langfunc import call
 from langfun.core.langfunc import LangFunc
 from langfun.core.langfunc import LangFuncCallEvent
@@ -373,13 +374,52 @@ class CallEventTest(unittest.TestCase):
 
 class CallTest(unittest.TestCase):
 
-  def test_call(self):
-    with component.context(lm=fake.StaticSequence(['three'])):
-      self.assertEqual(call('Compute 1 + 1'), 'three')
+  def test_call_with_const_str(self):
+    with component.context(lm=fake.StaticMapping({
+        'Compute 1 + 2': 'three',
+    })):
+      self.assertEqual(call('Compute 1 + 2'), 'three')
+
+  def test_call_with_template_str(self):
+    with component.context(lm=fake.StaticMapping({
+        'Compute 1 + 2': 'three',
+    })):
+      self.assertEqual(call('Compute {{x}} + {{y}}', x=1, y=2), 'three')
+
+  def test_call_with_explicit_template(self):
+    with component.context(lm=fake.StaticMapping({
+        'Compute 1 + 2': 'three',
+    })):
+      self.assertEqual(
+          call(template_lib.Template('Compute {{x}} + {{y}}', x=1, y=2)),
+          'three')
+
+    with component.context(lm=fake.StaticMapping({
+        'Compute 1 + 2': 'three',
+    })):
+      self.assertEqual(
+          call(template_lib.Template('Compute {{x}} + {{y}}'), x=1, y=2),
+          'three')
+
+  def test_call_with_lfun(self):
+    with component.context(lm=fake.StaticMapping({
+        'Compute 1 + 2': 'three',
+    })):
+      self.assertEqual(
+          call(LangFunc('Compute {{x}} + {{y}}', x=1, y=2)),
+          'three')
 
   def test_call_with_returns(self):
     with component.context(lm=fake.StaticSequence(['three', '3'])):
-      self.assertEqual(call('Compute 1 + 1', returns=int), 3)
+      self.assertEqual(call('Compute 1 + 2', returns=int), 3)
+
+    with component.context(lm=fake.StaticSequence(['three', '3'])):
+      self.assertEqual(
+          call(LangFunc('Compute {{x}} + {{y}}', x=1, y=2), returns=int), 3)
+
+  def test_bad_call(self):
+    with self.assertRaisesRegex(TypeError, '`prompt` should be .*'):
+      call(1)
 
 
 if __name__ == '__main__':
