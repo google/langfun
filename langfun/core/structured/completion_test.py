@@ -172,7 +172,7 @@ class CompleteStructureTest(unittest.TestCase):
 
   def test_render_with_examples(self):
     l = completion.CompleteStructure(
-        examples=completion._default_complete_examples()
+        examples=completion.DEFAULT_COMPLETE_EXAMPLES
     )
     m = lf.UserMessage(
         '',

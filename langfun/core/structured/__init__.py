@@ -68,6 +68,15 @@ from langfun.core.structured.description import describe
 from langfun.core.structured.completion import CompleteStructure
 from langfun.core.structured.completion import complete
 
+# Expose default examples for structured operations so users could refer to
+# them.
+from langfun.core.structured.parsing import DEFAULT_PARSE_EXAMPLES
+from langfun.core.structured.prompting import DEFAULT_QUERY_EXAMPLES
+from langfun.core.structured.completion import DEFAULT_COMPLETE_EXAMPLES
+from langfun.core.structured.description import DEFAULT_DESCRIBE_EXAMPLES
+
+# Default examples.
+
 
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order

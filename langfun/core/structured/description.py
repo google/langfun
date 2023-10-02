@@ -104,7 +104,7 @@ def describe(
     )
 
   if examples is None:
-    examples = _default_describe_examples()
+    examples = DEFAULT_DESCRIBE_EXAMPLES
   return DescribeStructure(examples, **kwargs)(message=message).text
 
 
@@ -129,32 +129,31 @@ class _Country(pg.Object):
   president: str | None
 
 
-def _default_describe_examples() -> list[mapping.MappingExample]:
-  return [
-      mapping.MappingExample(
-          nl_context='Brief intro to United States',
-          nl_text=inspect.cleandoc("""
-              The United States of America is a country primarily located in North America
-              consisting of fifty states. It shares land borders with Canada to its north
-              and with Mexico to its south and has maritime borders with the Bahamas, Cuba,
-              Russia, and other nations. With a population of over 333 million. The national
-              capital of the United States is Washington, D.C.
-              """),
-          schema=None,
-          value=_Country(
-              name='The United States of America',
-              continents=['North America'],
-              num_states=50,
-              neighbor_countries=[
-                  'Canada',
-                  'Mexico',
-                  'Bahamas',
-                  'Cuba',
-                  'Russia',
-              ],
-              population=333000000,
-              capital='Washington, D.C',
-              president=None,
-          ),
-      )
-  ]
+DEFAULT_DESCRIBE_EXAMPLES: list[mapping.MappingExample] = [
+    mapping.MappingExample(
+        nl_context='Brief intro to United States',
+        nl_text=inspect.cleandoc("""
+            The United States of America is a country primarily located in North America
+            consisting of fifty states. It shares land borders with Canada to its north
+            and with Mexico to its south and has maritime borders with the Bahamas, Cuba,
+            Russia, and other nations. With a population of over 333 million. The national
+            capital of the United States is Washington, D.C.
+            """),
+        schema=None,
+        value=_Country(
+            name='The United States of America',
+            continents=['North America'],
+            num_states=50,
+            neighbor_countries=[
+                'Canada',
+                'Mexico',
+                'Bahamas',
+                'Cuba',
+                'Russia',
+            ],
+            population=333000000,
+            capital='Washington, D.C',
+            president=None,
+        ),
+    ),
+]

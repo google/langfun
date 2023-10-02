@@ -156,7 +156,7 @@ def parse(
     The parsed result based on the schema.
   """
   if examples is None:
-    examples = _default_parsing_examples()
+    examples = DEFAULT_PARSE_EXAMPLES
 
   t = _parse_structure_cls(protocol)(
       schema, default=default, examples=examples, **kwargs
@@ -211,7 +211,7 @@ def as_structured(
   if annotation is None:
     return self
   if examples is None:
-    examples = _default_parsing_examples()
+    examples = DEFAULT_PARSE_EXAMPLES
   return self >> _parse_structure_cls(protocol)(
       schema=annotation,
       default=default,
@@ -238,36 +238,35 @@ class _Country(pg.Object):
   president: str | None
 
 
-def _default_parsing_examples() -> list[mapping.MappingExample]:
-  return [
-      mapping.MappingExample(
-          nl_context='Brief introduction of the U.S.A.',
-          nl_text=inspect.cleandoc("""
-              The United States of America is a country primarily located in North America
-              consisting of fifty states, a federal district, five major unincorporated territories,
-              nine Minor Outlying Islands, and 326 Indian reservations. It shares land borders
-              with Canada to its north and with Mexico to its south and has maritime borders
-              with the Bahamas, Cuba, Russia, and other nations. With a population of over 333
-              million. The national capital of the United States is Washington, D.C.
-              """),
-          schema=_Country,
-          value=_Country(
-              name='The United States of America',
-              continents=['North America'],
-              num_states=50,
-              neighbor_countries=[
-                  'Canada',
-                  'Mexico',
-                  'Bahamas',
-                  'Cuba',
-                  'Russia',
-              ],
-              population=333000000,
-              capital='Washington, D.C',
-              president=None,
-          ),
-      )
-  ]
+DEFAULT_PARSE_EXAMPLES: list[mapping.MappingExample] = [
+    mapping.MappingExample(
+        nl_context='Brief introduction of the U.S.A.',
+        nl_text=inspect.cleandoc("""
+            The United States of America is a country primarily located in North America
+            consisting of fifty states, a federal district, five major unincorporated territories,
+            nine Minor Outlying Islands, and 326 Indian reservations. It shares land borders
+            with Canada to its north and with Mexico to its south and has maritime borders
+            with the Bahamas, Cuba, Russia, and other nations. With a population of over 333
+            million. The national capital of the United States is Washington, D.C.
+            """),
+        schema=_Country,
+        value=_Country(
+            name='The United States of America',
+            continents=['North America'],
+            num_states=50,
+            neighbor_countries=[
+                'Canada',
+                'Mexico',
+                'Bahamas',
+                'Cuba',
+                'Russia',
+            ],
+            population=333000000,
+            capital='Washington, D.C',
+            president=None,
+        ),
+    ),
+]
 
 
 lf.MessageTransform.as_structured = as_structured

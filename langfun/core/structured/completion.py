@@ -59,21 +59,20 @@ class _Country(pg.Object):
   hobby: str
 
 
-def _default_complete_examples() -> list[mapping.MappingExample]:
-  return [
-      mapping.MappingExample(
-          value=mapping.Pair(
-              left=_Country.partial(name='United States of America'),
-              right=_Country(
-                  name='United States of America',
-                  founding_date=_Date(year=1776, month=7, day=4),
-                  continent='North America',
-                  population=33_000_000,
-                  hobby=schema_lib.UNKNOWN,
-              ),
-          )
-      )
-  ]
+DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
+    mapping.MappingExample(
+        value=mapping.Pair(
+            left=_Country.partial(name='United States of America'),
+            right=_Country(
+                name='United States of America',
+                founding_date=_Date(year=1776, month=7, day=4),
+                continent='North America',
+                population=33_000_000,
+                hobby=schema_lib.UNKNOWN,
+            ),
+        )
+    ),
+]
 
 
 def complete(
@@ -128,6 +127,6 @@ def complete(
     The result based on the schema.
   """
   if examples is None:
-    examples = _default_complete_examples()
+    examples = DEFAULT_COMPLETE_EXAMPLES
   t = CompleteStructure(default=default, examples=examples, **kwargs)
   return t.transform(message=lf.UserMessage(text='', result=value)).result

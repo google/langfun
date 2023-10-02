@@ -92,28 +92,27 @@ class _Country(pg.Object):
   president: str | None
 
 
-def _default_query_examples() -> list[mapping.MappingExample]:
-  return [
-      mapping.MappingExample(
-          nl_context='Brief introduction of the U.S.A.',
-          schema=_Country,
-          value=_Country(
-              name='The United States of America',
-              continents=['North America'],
-              num_states=50,
-              neighbor_countries=[
-                  'Canada',
-                  'Mexico',
-                  'Bahamas',
-                  'Cuba',
-                  'Russia',
-              ],
-              population=333000000,
-              capital='Washington, D.C',
-              president=None,
-          ),
-      )
-  ]
+DEFAULT_QUERY_EXAMPLES: list[mapping.MappingExample] = [
+    mapping.MappingExample(
+        nl_context='Brief introduction of the U.S.A.',
+        schema=_Country,
+        value=_Country(
+            name='The United States of America',
+            continents=['North America'],
+            num_states=50,
+            neighbor_countries=[
+                'Canada',
+                'Mexico',
+                'Bahamas',
+                'Cuba',
+                'Russia',
+            ],
+            population=333000000,
+            capital='Washington, D.C',
+            president=None,
+        ),
+    ),
+]
 
 
 def query(
@@ -175,7 +174,7 @@ def query(
     The result based on the schema.
   """
   if examples is None:
-    examples = _default_query_examples()
+    examples = DEFAULT_QUERY_EXAMPLES
   t = _query_structure_cls(protocol)(
       schema, default=default, examples=examples, **kwargs
   )
