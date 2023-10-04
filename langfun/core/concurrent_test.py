@@ -283,25 +283,64 @@ class ConcurrentMapTest(unittest.TestCase):
       with self.assertRaises(ValueError):
         _ = next(it)
 
-  def test_concurrent_map_with_timeout(self):
+  def test_concurrent_map_with_order_and_timeout(self):
     def fun(x):
       time.sleep(3 - x)
       return x
 
-    with component.context(y=0.9):
-      self.assertEqual(
-          [
-              (i, o)
-              for i, o, _ in concurrent.concurrent_map(
-                  fun, [1, 2, 3], ordered=True, timeout=2
-              )
-          ],
-          [
-              (1, pg.MISSING_VALUE),
-              (2, pg.MISSING_VALUE),
-              (3, 3),
-          ],
-      )
+    self.assertEqual(
+        [
+            (i, o)
+            for i, o, _ in concurrent.concurrent_map(
+                fun, [1, 2, 3], ordered=True, timeout=1.5
+            )
+        ],
+        [
+            (1, pg.MISSING_VALUE),
+            (2, 2),
+            (3, 3),
+        ],
+    )
+
+  def test_concurent_map_unordered_with_timeout(self):
+    def fun(x):
+      time.sleep(x)
+      return x
+
+    self.assertEqual(
+        [
+            (i, o)
+            for i, o, _ in concurrent.concurrent_map(
+                fun, [5, 2, 1, 4], timeout=3
+            )
+        ],
+        [
+            (1, 1),
+            (2, 2),
+            (5, pg.MISSING_VALUE),
+            (4, pg.MISSING_VALUE),
+        ],
+    )
+
+  def test_concurent_map_unordered_with_timeout_less_worker(self):
+    def fun(x):
+      time.sleep(x)
+      return x
+
+    self.assertEqual(
+        [
+            (i, o)
+            for i, o, _ in concurrent.concurrent_map(
+                fun, [5, 2, 1, 4], timeout=3, max_workers=1
+            )
+        ],
+        [
+            (5, pg.MISSING_VALUE),
+            (2, 2),
+            (1, 1),
+            (4, pg.MISSING_VALUE),
+        ],
+    )
 
   def test_concurrent_map_with_showing_progress(self):
     def fun(x):
