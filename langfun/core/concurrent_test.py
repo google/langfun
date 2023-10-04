@@ -331,32 +331,35 @@ class ConcurrentMapTest(unittest.TestCase):
         [
             (i, o)
             for i, o, _ in concurrent.concurrent_map(
-                fun, [5, 2, 1, 4], timeout=3, max_workers=1
+                fun, [5, 2, 1, 6], timeout=3, max_workers=1
             )
         ],
         [
             (5, pg.MISSING_VALUE),
             (2, 2),
             (1, 1),
-            (4, pg.MISSING_VALUE),
+            (6, pg.MISSING_VALUE),
         ],
     )
 
   def test_concurrent_map_with_showing_progress(self):
     def fun(x):
+      if x == 2:
+        raise ValueError('Intentional error.')
+      time.sleep(x)
       return x
 
     self.assertEqual(
         [
             (i, o)
             for i, o, _ in concurrent.concurrent_map(
-                fun, [1, 2, 3], ordered=True, show_progress=True
+                fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
             )
         ],
         [
             (1, 1),
-            (2, 2),
-            (3, 3),
+            (2, pg.MISSING_VALUE),
+            (3, pg.MISSING_VALUE),
         ],
     )
 
