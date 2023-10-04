@@ -96,8 +96,9 @@ class Template(
       # Declare template variables as symbolic attributes.
       template_vars = Template.resolve_vars(template_str)
       for var_name in template_vars:
-        var_attr = getattr(cls, var_name, pg.MISSING_VALUE)
-        if var_attr == pg.MISSING_VALUE:
+        # NOTE(daiyip): This is to avoid warning from accessing
+        # `pg.Object.schema`, which was replaced by `pg.Object.__schema__`.
+        if var_name == 'schema' or not hasattr(cls, var_name):
           setattr(cls, var_name, component.contextual())
 
     super().__init_subclass__()
