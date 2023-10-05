@@ -162,6 +162,50 @@ class ConcurrentExecuteTest(unittest.TestCase):
       self.assertEqual(concurrent.concurrent_execute(fun, [A(1), A(2)]), [2, 4])
 
 
+class ProgressTest(unittest.TestCase):
+
+  def test_progress(self):
+    p = concurrent.Progress(total=10)
+    self.assertEqual(p.total, 10)
+    self.assertEqual(p.succeeded, 0)
+    self.assertEqual(p.failed, 0)
+    self.assertEqual(p.completed, 0)
+    self.assertEqual(p.success_rate, 0)
+    self.assertEqual(p.failure_rate, 0)
+    self.assertEqual(p.avg_duration, 0)
+
+    def fun(x):
+      time.sleep(x)
+      return x
+
+    def fun2(unused_x):
+      raise ValueError('Intentional error.')
+
+    job1 = concurrent.Job(fun, 1)
+    job2 = concurrent.Job(fun2, 2)
+    job1()
+    job2()
+
+    p.update(job1)
+    self.assertEqual(p.succeeded, 1)
+    self.assertEqual(p.failed, 0)
+    self.assertEqual(p.completed, 1)
+    self.assertEqual(p.success_rate, 1)
+    self.assertEqual(p.failure_rate, 0)
+    self.assertGreater(p.avg_duration, 0.5)
+    self.assertIs(p.job, job1)
+    self.assertIsNone(p.last_error)
+
+    p.update(job2)
+    self.assertEqual(p.succeeded, 1)
+    self.assertEqual(p.failed, 1)
+    self.assertEqual(p.completed, 2)
+    self.assertEqual(p.success_rate, 0.5)
+    self.assertEqual(p.failure_rate, 0.5)
+    self.assertIs(p.job, job2)
+    self.assertIs(p.last_error, job2.error)
+
+
 class ConcurrentMapTest(unittest.TestCase):
   def test_concurrent_map_raise_on_error(self):
     error = ValueError()
@@ -351,9 +395,29 @@ class ConcurrentMapTest(unittest.TestCase):
 
     self.assertEqual(
         [
-            (i, o)
-            for i, o, _ in concurrent.concurrent_map(
+            (i, o) for i, o, _ in concurrent.concurrent_map(
                 fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
+            )
+        ],
+        [
+            (1, 1),
+            (2, pg.MISSING_VALUE),
+            (3, pg.MISSING_VALUE),
+        ],
+    )
+
+  def test_concurrent_map_with_showing_progress_and_status_fn(self):
+    def fun(x):
+      if x == 2:
+        raise ValueError('Intentional error.')
+      time.sleep(x)
+      return x
+
+    self.assertEqual(
+        [
+            (i, o) for i, o, _ in concurrent.concurrent_map(
+                fun, [1, 2, 3], timeout=1.5, max_workers=1,
+                show_progress=True, status_fn=lambda p: dict(x=1, y=1)
             )
         ],
         [
