@@ -102,7 +102,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
       sender: str | pg.object_utils.MissingValue = pg.MISSING_VALUE,
       metadata: dict[str, Any] | None = None,
       tags: list[str] | None = None,
-      source: 'Message' = None,
+      source: 'Message' | None = None,
       # The rest are `pg.Object.__init__` arguments.
       allow_partial: bool = False,
       sealed: bool = False,
