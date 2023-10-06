@@ -379,7 +379,8 @@ class StructureToStructure(Mapping):
     return schema_lib.mark_missing(self.message.result)
 
   def value_str(self, value: Any) -> str:
-    return schema_lib.value_repr('python').repr(value, compact=False)
+    return schema_lib.value_repr('python').repr(
+        value, compact=False, verbose=True)
 
   def missing_type_dependencies(self, value: Any) -> list[Type[Any]]:
     value_specs = tuple(

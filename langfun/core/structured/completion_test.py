@@ -30,7 +30,10 @@ class Activity(pg.Object):
 
 class Itinerary(pg.Object):
   day: pg.typing.Int[1, None]
-  type: pg.typing.Enum['daytime', 'nighttime']
+  type: pg.typing.Annotated[
+      pg.typing.Enum['daytime', 'nighttime'],
+      'Type of itinerary.'
+  ]
   activities: list[Activity]
   hotel: pg.typing.Str['.*Hotel'] | None
 
@@ -73,18 +76,21 @@ class CompleteStructureTest(unittest.TestCase):
                 itineraries=[
                   Itinerary(
                     day=1,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=MISSING(list[Activity]),
                     hotel=None
                   ),
                   Itinerary(
                     day=2,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=MISSING(list[Activity]),
                     hotel=None
                   ),
                   Itinerary(
                     day=3,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=MISSING(list[Activity]),
                     hotel=None
@@ -134,6 +140,7 @@ class CompleteStructureTest(unittest.TestCase):
                 itineraries=[
                   Itinerary(
                     day=1,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=[
                       Activity(
@@ -144,6 +151,7 @@ class CompleteStructureTest(unittest.TestCase):
                   ),
                   Itinerary(
                     day=2,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=[
                       Activity(
@@ -154,6 +162,7 @@ class CompleteStructureTest(unittest.TestCase):
                   ),
                   Itinerary(
                     day=3,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=[
                       Activity(
@@ -238,18 +247,21 @@ class CompleteStructureTest(unittest.TestCase):
                 itineraries=[
                   Itinerary(
                     day=1,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=MISSING(list[Activity]),
                     hotel=None
                   ),
                   Itinerary(
                     day=2,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=MISSING(list[Activity]),
                     hotel=None
                   ),
                   Itinerary(
                     day=3,
+                    # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
                     activities=MISSING(list[Activity]),
                     hotel=None
