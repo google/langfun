@@ -27,6 +27,22 @@ class Echo(lf.LanguageModel):
     ]
 
 
+@lf.use_init_args(['response'])
+class StaticResponse(lf.LanguageModel):
+  """Language model that always gives the same canned response."""
+
+  response: Annotated[
+      str,
+      'A canned response that will be returned regardless of the prompt.'
+  ]
+
+  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
+    return [
+        lf.LMSamplingResult([lf.LMSample(self.response, 1.0)])
+        for _ in prompts
+    ]
+
+
 @lf.use_init_args(['mapping'])
 class StaticMapping(lf.LanguageModel):
   """A static mapping from prompt to response."""
@@ -45,11 +61,11 @@ class StaticMapping(lf.LanguageModel):
 
 @lf.use_init_args(['sequence'])
 class StaticSequence(lf.LanguageModel):
-  """A static mapping from prompt to response."""
+  """A static sequence of responses to use."""
 
   sequence: Annotated[
       list[str],
-      'A sequence of strings as the respones.'
+      'A sequence of strings as the response.'
   ]
 
   def _on_bound(self):
