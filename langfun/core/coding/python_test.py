@@ -122,13 +122,13 @@ class PythonCodeParserTest(unittest.TestCase):
         The code looks as below:
 
         ```python
-        x = y + 1
-        z = x * y
+        x = y + 1  # ```
+        z = x * y  # "
         ```
         """,
         """
-        x = y + 1
-        z = x * y
+        x = y + 1  # ```
+        z = x * y  # "
         """
     )
     self.assert_clean(
@@ -182,6 +182,71 @@ class PythonCodeParserTest(unittest.TestCase):
         class A:
           x: int
           y: str
+        """
+    )
+    self.assert_clean(
+        """
+        ```tool-code
+        class A:
+          x: int
+          y: str
+        ```
+        """,
+        """
+        class A:
+          x: int
+          y: str
+        """
+    )
+    self.assert_clean(
+        """
+        ```
+        class A:
+          '''Class a.
+
+          Examples:
+            ```
+            A(1, 2)
+            ```
+          '''
+          x: int
+          y: str
+        ```
+        """,
+        """
+        class A:
+          '''Class a.
+
+          Examples:
+            ```
+            A(1, 2)
+            ```
+          '''
+          x: int
+          y: str
+        """
+    )
+
+  def test_clean_with_auto_correction(self):
+    self.assert_clean(
+        """
+        ```python
+        x = 'John's home'
+        ```
+        """,
+        """
+        x = 'John\\'s home'
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'Hello
+        World'
+        ```
+        """,
+        """
+        x = 'Hello\\n        World'
         """
     )
 
