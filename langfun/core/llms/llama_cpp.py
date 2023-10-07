@@ -20,7 +20,7 @@ import requests
 import langfun.core as lf
 
 @lf.use_init_args(['url'])
-class RemoteLLaMACPP(lf.LanguageModel):
+class LlamaCppRemote(lf.LanguageModel):
   """The remote LLaMA C++ model.
 
   The Remote LLaMA C++ models can be launched via

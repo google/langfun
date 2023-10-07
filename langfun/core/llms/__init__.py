@@ -47,7 +47,7 @@ from langfun.core.llms.openai import Gpt3Babbage
 from langfun.core.llms.openai import Gpt3Ada
 
 # LLaMA C++ models.
-from langfun.core.llms.llama_cpp import RemoteLLaMACPP
+from langfun.core.llms.llama_cpp import LlamaCppRemote
 
 # Placeholder for Google-internal imports.
 
