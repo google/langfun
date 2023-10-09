@@ -35,6 +35,9 @@ class Itinerary(pg.Object):
   ]
 
 
+Itinerary.__serialization_key__ = 'Itinerary'
+
+
 class Node(pg.Object):
   children: list['Node']
 
@@ -100,7 +103,7 @@ class SchemaTest(unittest.TestCase):
             'result': [
                 {
                     'x': {
-                        '_type': Itinerary.__type_name__,
+                        '_type': 'Itinerary',
                         'day': pg.typing.Int(min_value=1),
                         'activities': [{
                             '_type': Activity.__type_name__,
@@ -139,11 +142,10 @@ class SchemaTest(unittest.TestCase):
     self.assertEqual(
         schema.schema_str(protocol='json'),
         (
-            '{"result": [{"x": {"_type": "%s", "day":'
+            '{"result": [{"x": {"_type": "Itinerary", "day":'
             ' int(min=1), "type": "daytime" | "nighttime", "activities":'
             ' [{"_type": "%s", "description": str}], "hotel":'
             ' str(regex=.*Hotel) | None}}]}' % (
-                Itinerary.__type_name__,
                 Activity.__type_name__,
             )
         ),
@@ -495,11 +497,10 @@ class SchemaJsonReprTest(unittest.TestCase):
     self.assertEqual(
         schema_lib.SchemaJsonRepr().repr(schema),
         (
-            '{"result": [{"x": {"_type": "%s", "day":'
+            '{"result": [{"x": {"_type": "Itinerary", "day":'
             ' int(min=1), "type": "daytime" | "nighttime", "activities":'
             ' [{"_type": "%s", "description": str}], "hotel":'
             ' str(regex=.*Hotel) | None}}]}' % (
-                Itinerary.__type_name__,
                 Activity.__type_name__,
             )
         ),
