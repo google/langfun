@@ -39,29 +39,44 @@ pip install langfun --pre
 
 ```python
 import langfun as lf
+import pyglove as pg
 
-class NumericAnswerExtractor(lf.LangFunc):
-  """Numeric answer extractor.
+question = (
+    'Janet’s ducks lay 16 eggs per day. She eats three for breakfast every morning and '
+    'bakes muffins for her friends every day with four. She sells the remainder at the '
+    'farmers\' market daily for $2 per fresh duck egg. '
+    'How much in dollars does she make every day at the farmers\' market?')
 
-  Here is my question:
-  {{question}}
+class Step(pg.Object):
+  description: str
+  step_output: float
 
-  Here is the response:
-  {{question()}}
+class Solution(pg.Object):
+  steps: list[Step]
+  final_answer: int
 
-  Can you help me extract a number from the response as the answer to my
-  question? Your response should only contain a number in numeric form.
-  If the answer is not a number or you cannot extract it, respond with UNKNOWN.
-  """
-  output_transform = lf.transforms.Match('\d+').to_int()
-
-l = NumericAnswerExtractor()
-
-with lf.context(lm=lf.llms.Gpt35(debug=True)):
-  r = l(question=lf.LangFunc('What is result of {{x}} plus {{y}}?'),
-        x='one',
-        y='two')
-  print('Result:', r.result)
+r = lf.query(question, Solution, lm=lf.llms.Gpt35())
+print(r)
+```
+Output:
+```
+Solution(
+  steps = [
+    0 : Step(
+      description = 'Janet has 16 eggs - 3 eggs for breakfast = 13 eggs left',
+      step_output = 13.0
+    ),
+    1 : Step(
+      description = 'Janet has 13 eggs - 4 eggs for muffins = 9 eggs left',
+      step_output = 9.0
+    ),
+    2 : Step(
+      description = 'Janet makes 9 eggs * $2 per egg = $18 at the farmers market',
+      step_output = 18.0
+    )
+  ],
+  final_answer = 18
+)
 ```
 
 *Disclaimer: this is not an officially supported Google product.*
