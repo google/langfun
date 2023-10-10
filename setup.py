@@ -1,4 +1,4 @@
-# Copyright 2019 The Langfun Authors
+# Copyright 2023 The Langfun Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -72,7 +72,7 @@ setup(
     packages=find_namespace_packages(include=['langfun*']),
     install_requires=_parse_requirements('requirements.txt'),
     extras_require={},
-    requires_python='>=3.9',
+    requires_python='>=3.10',
     include_package_data=True,
     # PyPI package information.
     classifiers=[
