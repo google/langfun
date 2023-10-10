@@ -1,2 +1,0 @@
-[flake8]
-ignore = E111  # ignore the error of "indentation is not a multiple of 4"
