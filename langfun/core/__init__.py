@@ -102,6 +102,7 @@ from langfun.core.language_model import LMSample
 from langfun.core.language_model import LMSamplingOptions
 from langfun.core.language_model import LMSamplingResult
 from langfun.core.language_model import LMCache
+from langfun.core.language_model import LMDebugMode
 
 # Components for building agents.
 from langfun.core.memory import Memory

@@ -213,6 +213,45 @@ class LanguageModelTest(unittest.TestCase):
     self.assertIn('[0] PROMPT SENT TO LM', debug_info)
     self.assertIn('[0] LM RESPONSE', debug_info)
 
+  def test_debug_modes(self):
+    info_flag = lm_lib.LMDebugMode.INFO
+    prompt_flag = lm_lib.LMDebugMode.PROMPT
+    response_flag = lm_lib.LMDebugMode.RESPONSE
+    debug_prints = {
+        info_flag: 'LM INFO',
+        prompt_flag: 'PROMPT SENT TO LM',
+        response_flag: 'LM RESPONSE'
+    }
+    debug_modes = [
+        info_flag,
+        prompt_flag,
+        response_flag,
+        info_flag | prompt_flag,
+        info_flag | response_flag,
+        prompt_flag | response_flag,
+        info_flag | prompt_flag | response_flag,
+    ]
+
+    for debug_mode in debug_modes:
+      string_io = io.StringIO()
+      lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
+
+      with contextlib.redirect_stdout(string_io):
+        self.assertEqual(lm('hi', debug=debug_mode), 'hi')
+
+      debug_info = string_io.getvalue()
+      expected_included = [
+          debug_prints[f] for f in lm_lib.LMDebugMode if f in debug_mode
+      ]
+      expected_excluded = [
+          debug_prints[f] for f in lm_lib.LMDebugMode if f not in debug_mode
+      ]
+
+      for expected_include in expected_included:
+        self.assertIn('[0] ' + expected_include, debug_info)
+      for expected_exclude in expected_excluded:
+        self.assertNotIn('[0] ' + expected_exclude, debug_info)
+
 
 if __name__ == '__main__':
   unittest.main()
