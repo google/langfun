@@ -28,19 +28,14 @@ class LlamaCppRemote(lf.LanguageModel):
   """
 
   url: Annotated[
-      str | None,
+      str,
       'The name of the model to use.',
-  ] = None
+  ] = ""
 
   name: Annotated[
       str,
       'The abbreviation for the LLaMA CPP-based model name.',
   ] = ''
-
-  def _on_bound(self):
-    super()._on_bound()
-    if not self.url:
-      raise ValueError('Please specify `url`')
 
   @property
   def model_id(self) -> str:
