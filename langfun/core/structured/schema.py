@@ -604,7 +604,7 @@ class ValueJsonRepr(ValueRepr):
     """Parse a JSON string into a structured object."""
     del schema
     try:
-      text = self._cleanup_json(text)
+      text = self.cleanup_json(text)
       v = pg.from_json_str(text)
     except Exception as e:
       raise JsonError(text, e)  # pylint: disable=raise-missing-from
@@ -616,7 +616,7 @@ class ValueJsonRepr(ValueRepr):
       ))
     return v['result']
 
-  def _cleanup_json(self, json_str: str) -> str:
+  def cleanup_json(self, json_str: str) -> str:
     """Clean up the LM responded JSON string."""
     # Treatments:
     # 1. Extract the JSON string with a top-level dict from the response.
