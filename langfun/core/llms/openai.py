@@ -15,9 +15,12 @@
 
 import collections
 import os
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
+
 import langfun.core as lf
 import openai
+from openai import error as openai_error
+from openai import openai_object
 import pyglove as pg
 
 
@@ -128,7 +131,8 @@ class OpenAI(lf.LanguageModel):
   def _sample(self, prompts: list[lf.Message]) -> list[LMSamplingResult]:
     if self.is_chat_model:
       return self._chat_complete_batch(prompts)
-    return self._complete_batch(prompts)
+    else:
+      return self._complete_batch(prompts)
 
   def _complete_batch(
       self, prompts: list[lf.Message]) -> list[LMSamplingResult]:
@@ -138,7 +142,7 @@ class OpenAI(lf.LanguageModel):
           prompt=[p.text for p in prompts],
           **self._get_request_args(self.sampling_options),
       )
-
+      response = cast(openai_object.OpenAIObject, response)
       # Parse response.
       samples_by_index = collections.defaultdict(list)
       for choice in response.choices:
@@ -161,8 +165,8 @@ class OpenAI(lf.LanguageModel):
     return lf.with_retry(
         _open_ai_completion,
         retry_on_errors=(
-            openai.error.ServiceUnavailableError,
-            openai.error.RateLimitError,
+            openai_error.ServiceUnavailableError,
+            openai_error.RateLimitError,
         ),
         max_attempts=self.max_attempts,
         retry_interval=(1, 60),
@@ -170,14 +174,15 @@ class OpenAI(lf.LanguageModel):
     )(prompts)
 
   def _chat_complete_batch(
-      self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
-
+      self, prompts: list[lf.Message]
+  ) -> list[LMSamplingResult]:
     def _open_ai_chat_completion(prompt):
       response = openai.ChatCompletion.create(
-          # TODO(daiyip): support conversation history.
+          # TODO(daiyip): support conversation history and system prompt.
           messages=[{'role': 'user', 'content': prompt.text}],
           **self._get_request_args(self.sampling_options),
       )
+      response = cast(openai_object.OpenAIObject, response)
       return LMSamplingResult(
           [
               lf.LMSample(choice.message.content, score=0.0)
@@ -195,8 +200,8 @@ class OpenAI(lf.LanguageModel):
         prompts,
         max_workers=8,
         retry_on_errors=(
-            openai.error.ServiceUnavailableError,
-            openai.error.RateLimitError,
+            openai_error.ServiceUnavailableError,
+            openai_error.RateLimitError,
         ),
         max_attempts=self.max_attempts,
         retry_interval=(1, 60),
