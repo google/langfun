@@ -41,5 +41,11 @@ class LlamaCppRemoteTest(unittest.TestCase):
           'hello\nhttp://127.0.0.1:8080/completion',
       )
 
+  def test_name(self):
+      lm = llama_cpp.LlamaCppRemote()
+      self.assertEqual(lm.model_id, "LLaMAC++()")
+      lm = llama_cpp.LlamaCppRemote(url="xxx", name="x")
+      self.assertEqual(lm.model_id, "LLaMAC++(x)")
+
 if __name__ == '__main__':
   unittest.main()
