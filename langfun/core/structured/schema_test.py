@@ -162,6 +162,11 @@ class SchemaTest(unittest.TestCase):
   def test_parse(self):
     schema = schema_lib.Schema(int)
     self.assertEqual(schema.parse('{"result": 1}'), 1)
+    schema = schema_lib.Schema(dict[str, int])
+    self.assertEqual(
+        schema.parse(
+            '{"result": {"_type": "Unknown", "x": 1}}}', force_dict=True),
+        dict(x=1))
     with self.assertRaisesRegex(
         schema_lib.SchemaError, 'Expect .* but encountered .*'):
       schema.parse('{"result": "def"}')

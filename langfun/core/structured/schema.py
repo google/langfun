@@ -605,7 +605,7 @@ class ValueJsonRepr(ValueRepr):
     del schema
     try:
       text = self.cleanup_json(text)
-      v = pg.from_json_str(text)
+      v = pg.from_json_str(text, **kwargs)
     except Exception as e:
       raise JsonError(text, e)  # pylint: disable=raise-missing-from
 
