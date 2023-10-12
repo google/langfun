@@ -207,7 +207,8 @@ class PythonCodeParser(lf.Component):
           break
 
       # Detect string literal boundary.
-      if (not in_comment
+      if (in_code
+          and not in_comment
           and c in ('\'', '"')
           and i > 0
           and code_text[i - 1] != '\\'):

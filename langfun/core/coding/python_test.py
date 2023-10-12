@@ -103,7 +103,7 @@ class PythonCodeParserTest(unittest.TestCase):
     )
     self.assert_clean(
         """
-        Here is the code:
+        Here's the code:
 
         ```
         x = 'abc'  # Comment with '
