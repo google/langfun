@@ -227,7 +227,7 @@ class PythonCodeParserTest(unittest.TestCase):
         """
     )
 
-  def test_clean_with_auto_correction(self):
+  def test_clean_with_auto_escape(self):
     self.assert_clean(
         """
         ```python
@@ -236,6 +236,66 @@ class PythonCodeParserTest(unittest.TestCase):
         """,
         """
         x = 'John\\'s home'
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'Girls' home'
+        ```
+        """,
+        """
+        x = 'Girls\\' home'
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'These are the girls'.'
+        ```
+        """,
+        """
+        x = 'These are the girls\\'.'
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'girls'.split('')
+        ```
+        """,
+        """
+        x = 'girls'.split('')
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'girls' + 'boys'
+        ```
+        """,
+        """
+        x = 'girls' + 'boys'
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'girls' in ['girls', 'boys']
+        ```
+        """,
+        """
+        x = 'girls' in ['girls', 'boys']
+        """
+    )
+    self.assert_clean(
+        """
+        ```python
+        x = 'girls' not in ['girls', 'boys']
+        ```
+        """,
+        """
+        x = 'girls' not in ['girls', 'boys']
         """
     )
     self.assert_clean(

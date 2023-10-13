@@ -212,7 +212,6 @@ class PythonCodeParser(lf.Component):
           and c in ('\'', '"')
           and i > 0
           and code_text[i - 1] != '\\'):
-
         # Handle ''' and """.
         if code_text[i: i + 3] == c * 3:
           c = c * 3
@@ -223,11 +222,32 @@ class PythonCodeParser(lf.Component):
         elif quote_char == c:
           # NOTE(daiyip): at times, LM forgets to escape quotes inside a string.
           # Thus we do some smart checking here to automatically correct such
-          # case.
-          if i < len(code_text) - 1 and code_text[i + 1] not in '.,]}) \t\n+*':
-            c = f'\\{c}'
+          # case. This logic here is pretty involved in handling special cases.
+          # We might want to revisit them later.
+
+          # Peek forward to see if it could be a valid string.
+          nt, nnt_start = _next_token(code_text, i + 1)
+          if nt in (',', '[', ']', '}', ')', '+', '*', '%', '\n'):
+            end_quote = True
+          elif nt == ' ':
+            # Detect if . could be a method invocation.
+            # NOTE(daiyip): 'in' and 'not in' might have false positives. But
+            # given the chance is low, we do not complicate the reasoning logic
+            # for now.
+            nnt, _ = _next_token(code_text, nnt_start, skip_whitespace=True)
+            end_quote = nnt in ('+', '*', '%', '#', '[', 'in', 'not')
+          elif nt == '.':
+            # Detect if . could be method invocation on string.
+            nnt, nnnt_start = _next_token(code_text, nnt_start)
+            nnnt, _ = _next_token(code_text, nnnt_start)
+            end_quote = nnt.isidentifier() and nnnt == '('
           else:
+            end_quote = False
+
+          if end_quote:
             quote_char = None
+          else:
+            c = f'\\{c}'
       # Detect comment.
       elif c == '#' and quote_char is None:
         in_comment = True
@@ -257,6 +277,24 @@ class PythonCodeParser(lf.Component):
       # Maybe-code that resides not within a code markdown block.
       code = code_text
     return inspect.cleandoc(code).strip()
+
+
+def _next_token(
+    text: str,
+    start: int = 0,
+    skip_whitespace: bool = False
+    ) -> tuple[str, int]:
+  """Find the next token in a string with a start position."""
+  token_start = start
+  if skip_whitespace:
+    while token_start < len(text) and text[token_start] in ' \t':
+      token_start += 1
+  token_end = token_start + 1
+  if text[token_start].isalpha():
+    while (token_end < len(text)
+           and text[token_end].isalpha() or text[token_end] in '_'):
+      token_end += 1
+  return text[token_start:token_end], token_end
 
 
 # Key in the returned dict that represents the final result.
