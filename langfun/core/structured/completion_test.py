@@ -35,7 +35,6 @@ class Itinerary(pg.Object):
       'Type of itinerary.'
   ]
   activities: list[Activity]
-  hotel: pg.typing.Str['.*Hotel'] | None
 
 
 class TripPlan(pg.Object):
@@ -67,7 +66,6 @@ class CompleteStructureTest(unittest.TestCase):
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
             2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
-            3. If a MISSING field could not be filled, mark it as `UNKNOWN`.
 
             INPUT_OBJECT:
               ```python
@@ -78,22 +76,19 @@ class CompleteStructureTest(unittest.TestCase):
                     day=1,
                     # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity]),
-                    hotel=None
+                    activities=MISSING(list[Activity])
                   ),
                   Itinerary(
                     day=2,
                     # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity]),
-                    hotel=None
+                    activities=MISSING(list[Activity])
                   ),
                   Itinerary(
                     day=3,
                     # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity]),
-                    hotel=None
+                    activities=MISSING(list[Activity])
                   )
                 ]
               )
@@ -131,7 +126,6 @@ class CompleteStructureTest(unittest.TestCase):
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
             2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
-            3. If a MISSING field could not be filled, mark it as `UNKNOWN`.
 
             INPUT_OBJECT:
               ```python
@@ -146,8 +140,7 @@ class CompleteStructureTest(unittest.TestCase):
                       Activity(
                         description=MISSING(str)
                       )
-                    ],
-                    hotel=None
+                    ]
                   ),
                   Itinerary(
                     day=2,
@@ -157,8 +150,7 @@ class CompleteStructureTest(unittest.TestCase):
                       Activity(
                         description=MISSING(str)
                       )
-                    ],
-                    hotel=None
+                    ]
                   ),
                   Itinerary(
                     day=3,
@@ -168,8 +160,7 @@ class CompleteStructureTest(unittest.TestCase):
                       Activity(
                         description=MISSING(str)
                       )
-                    ],
-                    hotel=None
+                    ]
                   )
                 ]
               )
@@ -203,7 +194,6 @@ class CompleteStructureTest(unittest.TestCase):
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
             2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
-            3. If a MISSING field could not be filled, mark it as `UNKNOWN`.
 
             INPUT_OBJECT:
               ```python
@@ -211,8 +201,7 @@ class CompleteStructureTest(unittest.TestCase):
                 name='United States of America',
                 founding_date=MISSING(_Date),
                 continent=MISSING(Literal['Africa', 'Asia', 'Europe', 'Oceania', 'North America', 'South America']),
-                population=MISSING(int),
-                hobby=MISSING(str)
+                population=MISSING(int)
               )
               ```
 
@@ -234,8 +223,7 @@ class CompleteStructureTest(unittest.TestCase):
                   day=4
                 ),
                 continent='North America',
-                population=33000000,
-                hobby=UNKNOWN
+                population=33000000
               )
               ```
 
@@ -249,22 +237,19 @@ class CompleteStructureTest(unittest.TestCase):
                     day=1,
                     # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity]),
-                    hotel=None
+                    activities=MISSING(list[Activity])
                   ),
                   Itinerary(
                     day=2,
                     # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity]),
-                    hotel=None
+                    activities=MISSING(list[Activity])
                   ),
                   Itinerary(
                     day=3,
                     # Type of itinerary.
                     type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity]),
-                    hotel=None
+                    activities=MISSING(list[Activity])
                   )
                 ]
               )
@@ -294,7 +279,7 @@ class CompleteStructureTest(unittest.TestCase):
                     Activity(description='Take a walk around Fisherman\\'s Wharf and have dinner at one of the many seafood restaurants.'),
                     Activity(description='Visit Pier 39 and see the sea lions.'),
                 ], 
-                hotel=None),
+                ),
             Itinerary(
                 day=2,
                 type='daytime',
@@ -303,7 +288,7 @@ class CompleteStructureTest(unittest.TestCase):
                     Activity(description='Take a walk across the Golden Gate Bridge.'),
                     Activity(description='Visit the Japanese Tea Garden in Golden Gate Park.'),
                 ], 
-                hotel=None),
+                ),
             Itinerary(
                 day=3,
                 type='daytime',
@@ -312,7 +297,7 @@ class CompleteStructureTest(unittest.TestCase):
                     Activity(description='Visit the San Francisco Museum of Modern Art.'),
                     Activity(description='Take a cable car ride.'),
                 ], 
-                hotel=None),
+                ),
           ]
         )
         ```
@@ -361,7 +346,6 @@ class CompleteStructureTest(unittest.TestCase):
                               description='Visit Pier 39 and see the sea lions.'
                           ),
                       ],
-                      hotel=None,
                   ),
                   Itinerary(
                       day=2,
@@ -385,7 +369,6 @@ class CompleteStructureTest(unittest.TestCase):
                               )
                           ),
                       ],
-                      hotel=None,
                   ),
                   Itinerary(
                       day=3,
@@ -405,7 +388,6 @@ class CompleteStructureTest(unittest.TestCase):
                           ),
                           Activity(description='Take a cable car ride.'),
                       ],
-                      hotel=None,
                   ),
               ],
           ),

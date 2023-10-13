@@ -17,7 +17,6 @@ from typing import Any, Literal
 
 import langfun.core as lf
 from langfun.core.structured import mapping
-from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -30,7 +29,6 @@ class CompleteStructure(mapping.StructureToStructure):
       INSTRUCTIONS:
       1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
       2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
-      3. If a MISSING field could not be filled, mark it as `UNKNOWN`.
       """)
 
   # NOTE(daiyip): Set the input path of the transform to root, so this transform
@@ -56,7 +54,6 @@ class _Country(pg.Object):
       'Africa', 'Asia', 'Europe', 'Oceania', 'North America', 'South America'
   ]
   population: int
-  hobby: str
 
 
 DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
@@ -68,7 +65,6 @@ DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
                 founding_date=_Date(year=1776, month=7, day=4),
                 continent='North America',
                 population=33_000_000,
-                hobby=schema_lib.UNKNOWN,
             ),
         )
     ),
