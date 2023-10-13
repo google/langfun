@@ -23,6 +23,7 @@ Schema = structured.Schema
 MISSING = structured.MISSING
 UNKNOWN = structured.UNKNOWN
 
+call = structured.call
 parse = structured.parse
 query = structured.query
 describe = structured.describe

@@ -19,8 +19,6 @@ from langfun.core import language_model
 from langfun.core import message
 from langfun.core import message_transform
 from langfun.core import subscription
-from langfun.core import template as template_lib
-from langfun.core.langfunc import call
 from langfun.core.langfunc import LangFunc
 from langfun.core.langfunc import LangFuncCallEvent
 from langfun.core.llms import fake
@@ -95,7 +93,7 @@ class LangFuncCallTest(unittest.TestCase):
     self.assertEqual(str(l), 'Hello')
     self.assertEqual(
         repr(l),
-        "LangFunc(template_str='Hello', clean=True, returns=None, "
+        "LangFunc(template_str='Hello', clean=True, "
         'lm=ExcitedEchoer(sampling_options=LMSamplingOptions(temperature=0.0, '
         'max_tokens=1024, n=1, top_k=40, top_p=None, random_seed=None), '
         'cache=None, timeout=120.0, max_attempts=5, debug=False), '
@@ -242,14 +240,16 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(t(lm_input=message.UserMessage('Hi')), 'Hi!!!')
 
   def test_call_with_structured_output(self):
-    l = LangFunc('Compute 1 + 2', returns=int)
+    l = LangFunc('Compute 1 + 2').as_structured(int)
     with component.context(lm=fake.StaticSequence([
         'three', '3'
     ])):
       r = l()
       self.assertEqual(r.result, 3)
 
-    l = LangFunc('Compute 1 + 2', returns=int, output_transform=lambda x: '3')
+    l = LangFunc('Compute 1 + 2', output_transform=lambda x: '3').as_structured(
+        int
+    )
     with component.context(
         lm=fake.StaticSequence([
             'three', '3'
@@ -370,56 +370,6 @@ class CallEventTest(unittest.TestCase):
             ('living dead', 'living dead!!!'),
         ],
     )
-
-
-class CallTest(unittest.TestCase):
-
-  def test_call_with_const_str(self):
-    with component.context(lm=fake.StaticMapping({
-        'Compute 1 + 2': 'three',
-    })):
-      self.assertEqual(call('Compute 1 + 2'), 'three')
-
-  def test_call_with_template_str(self):
-    with component.context(lm=fake.StaticMapping({
-        'Compute 1 + 2': 'three',
-    })):
-      self.assertEqual(call('Compute {{x}} + {{y}}', x=1, y=2), 'three')
-
-  def test_call_with_explicit_template(self):
-    with component.context(lm=fake.StaticMapping({
-        'Compute 1 + 2': 'three',
-    })):
-      self.assertEqual(
-          call(template_lib.Template('Compute {{x}} + {{y}}', x=1, y=2)),
-          'three')
-
-    with component.context(lm=fake.StaticMapping({
-        'Compute 1 + 2': 'three',
-    })):
-      self.assertEqual(
-          call(template_lib.Template('Compute {{x}} + {{y}}'), x=1, y=2),
-          'three')
-
-  def test_call_with_lfun(self):
-    with component.context(lm=fake.StaticMapping({
-        'Compute 1 + 2': 'three',
-    })):
-      self.assertEqual(
-          call(LangFunc('Compute {{x}} + {{y}}', x=1, y=2)),
-          'three')
-
-  def test_call_with_returns(self):
-    with component.context(lm=fake.StaticSequence(['three', '3'])):
-      self.assertEqual(call('Compute 1 + 2', returns=int), 3)
-
-    with component.context(lm=fake.StaticSequence(['three', '3'])):
-      self.assertEqual(
-          call(LangFunc('Compute {{x}} + {{y}}', x=1, y=2), returns=int), 3)
-
-  def test_bad_call(self):
-    with self.assertRaisesRegex(TypeError, '`prompt` should be .*'):
-      call(1)
 
 
 if __name__ == '__main__':

@@ -182,19 +182,6 @@ class LangFunc(
   docstr is not treated as a template str :).
   """
 
-  returns: Annotated[
-      Any,
-      (
-          'PyGlove extended annotation for the structured return value of this '
-          'LangFunc, which can be accessed via the `result` property of the '
-          'returned message upon invocation. If None, no structured output '
-          'will be returned. Here are a few applicable values: '
-          'int, str, str | None, list[str], {"x": int, "y": str}, Foo (a '
-          '`pg.Object` subclass). '
-          '(This is an experimental feature and is not stable) '
-      )
-  ] = None
-
   lm: Annotated[
       language_model.LanguageModel,
       (
@@ -228,14 +215,6 @@ class LangFunc(
 
   def _on_bound(self):
     super()._on_bound()
-
-    # Set internal output transform based on return schema.
-    internal_output_transform = None
-    if self.returns is not None:
-      internal_output_transform = message_transform.Identity().as_structured(
-          self.returns
-      )
-    self._internal_output_transform = internal_output_transform
 
     # Last LM input and output.
     self._cached_lm_input = None
@@ -425,9 +404,6 @@ class LangFunc(
   def transform_output(
       self, lm_output: message_lib.Message) -> message_lib.Message:
     """Transforms the output message before returning from __call__."""
-    if self._internal_output_transform is not None:
-      transform_output = self._internal_output_transform.transform(lm_output)
-      lm_output.result = transform_output.result
     return lm_output
 
   #
@@ -510,58 +486,3 @@ class LangFuncCallEvent(subscription.Event[LangFunc]):
   lm_output: message_lib.Message
   lm_callstack: list[LangFunc]
 
-
-def call(
-    prompt: str | template_lib.Template,
-    returns: Any = None, **kwargs
-    ) -> Any:
-  """Call a language model with prompt and formulate response in return type.
-
-  Examples::
-
-    # Call with constant string-type prompt.
-    lf.call('Compute one plus one', lm=lf.llms.Gpt35())
-    >> "two"
-
-    # Call with returning a structured (int) type.
-    lf.call('Compute one plus one', int, lm=lf.llms.Gpt35())
-    >> 2
-
-    # Call with a template string with variables.
-    lf.call('Compute {{x}} plus {{y}}', int,
-            x='one', y='one', lm=lf.llms.Gpt35())
-    >> 2
-
-    # Call with an `lf.Template` object with variables.
-    lf.call(lf.Template('Compute {{x}} plus {{y}}', x=1), int,
-            y=1, lm=lf.llms.Gpt35())
-    >> 2
-
-  Args:
-    prompt: User prompt that will be sent to LM, which could be a string or a
-      string template whose variables are provided from **kwargs.
-    returns: Type annotations for return type. If None, the raw LM response will
-      be returned (str). Otherwise, the response will be parsed based on the
-      return type.
-    **kwargs: Keyword arguments. Including options that control the calling
-      behavior, such as `lm`, `temperature`, etc. As well as variables that will
-      be fed to the prompt if it's a string template.
-
-  Returns:
-    A string if `returns` is None or an instance of the return type.
-  """
-  if isinstance(prompt, LangFunc):
-    lfun = prompt.as_structured(returns)
-  elif isinstance(prompt, template_lib.Template):
-    lfun = LangFunc(prompt.render(**kwargs).text, returns=returns)
-  elif isinstance(prompt, str):
-    lfun = LangFunc(prompt, returns=returns)
-  else:
-    raise TypeError(
-        '`prompt` should be a string or an `lf.Template` object. '
-        f'Encountered {prompt!r}.')
-
-  message = lfun(**kwargs)
-  if returns is None:
-    return message.text
-  return message.result

@@ -169,6 +169,78 @@ def parse(
   return t.transform(message=message).result
 
 
+def call(
+    prompt: str | lf.Template,
+    returns: Any = None,
+    *,
+    parsing_lm: lf.LanguageModel | None = None,
+    parsing_examples: list[mapping.MappingExample] | None = None,
+    **kwargs,
+) -> Any:
+  """Call a language model with prompt and formulate response in return type.
+
+  Examples::
+
+    # Call with constant string-type prompt.
+    lf.call('Compute one plus one', lm=lf.llms.Gpt35())
+    >> "two"
+
+    # Call with returning a structured (int) type.
+    lf.call('Compute one plus one', int, lm=lf.llms.Gpt35())
+    >> 2
+
+    # Call with a template string with variables.
+    lf.call('Compute {{x}} plus {{y}}', int,
+            x='one', y='one', lm=lf.llms.Gpt35())
+    >> 2
+
+    # Call with an `lf.Template` object with variables.
+    lf.call(lf.Template('Compute {{x}} plus {{y}}', x=1), int,
+            y=1, lm=lf.llms.Gpt35())
+    >> 2
+
+  Args:
+    prompt: User prompt that will be sent to LM, which could be a string or a
+      string template whose variables are provided from **kwargs.
+    returns: Type annotations for return type. If None, the raw LM response will
+      be returned (str). Otherwise, the response will be parsed based on the
+      return type.
+    parsing_lm: Language model that will be used for parsing. If None, the `lm`
+      for prompting the LM will be used.
+    parsing_examples: Examples for parsing the output. If None,
+      `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
+    **kwargs: Keyword arguments. Including options that control the calling
+      behavior, such as `lm`, `temperature`, etc. As well as variables that will
+      be fed to the prompt if it's a string template.
+
+  Returns:
+    A string if `returns` is None or an instance of the return type.
+  """
+  if isinstance(prompt, lf.LangFunc):
+    lfun = prompt
+  elif isinstance(prompt, lf.Template):
+    lfun = lf.LangFunc(prompt.render(**kwargs).text)
+  elif isinstance(prompt, str):
+    lfun = lf.LangFunc(prompt)
+  else:
+    raise TypeError(
+        '`prompt` should be a string or an `lf.Template` object. '
+        f'Encountered {prompt!r}.'
+    )
+
+  parsing_kwargs = {}
+  if parsing_lm is not None:
+    parsing_kwargs['lm'] = parsing_lm
+  if parsing_examples is not None:
+    parsing_kwargs['examples'] = parsing_examples
+  lfun = lfun.as_structured(returns, **parsing_kwargs)
+
+  message = lfun(**kwargs)
+  if returns is None:
+    return message.text
+  return message.result
+
+
 def _parse_structure_cls(
     protocol: schema_lib.SchemaProtocol,
 ) -> Type[ParseStructure]:

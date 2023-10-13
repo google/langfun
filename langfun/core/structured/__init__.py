@@ -56,6 +56,7 @@ from langfun.core.structured.parsing import ParseStructure
 from langfun.core.structured.parsing import ParseStructureJson
 from langfun.core.structured.parsing import ParseStructurePython
 from langfun.core.structured.parsing import parse
+from langfun.core.structured.parsing import call
 
 from langfun.core.structured.prompting import QueryStructure
 from langfun.core.structured.prompting import QueryStructureJson

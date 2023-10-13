@@ -539,5 +539,89 @@ class ParseStructureJsonTest(unittest.TestCase):
     )
 
 
+class CallTest(unittest.TestCase):
+
+  def test_call_with_const_str(self):
+    with lf.context(
+        lm=fake.StaticMapping({
+            'Compute 1 + 2': 'three',
+        })
+    ):
+      self.assertEqual(parsing.call('Compute 1 + 2'), 'three')
+
+  def test_call_with_template_str(self):
+    with lf.context(
+        lm=fake.StaticMapping({
+            'Compute 1 + 2': 'three',
+        })
+    ):
+      self.assertEqual(parsing.call('Compute {{x}} + {{y}}', x=1, y=2), 'three')
+
+  def test_call_with_explicit_template(self):
+    with lf.context(
+        lm=fake.StaticMapping({
+            'Compute 1 + 2': 'three',
+        })
+    ):
+      self.assertEqual(
+          parsing.call(lf.Template('Compute {{x}} + {{y}}', x=1, y=2)), 'three'
+      )
+
+    with lf.context(
+        lm=fake.StaticMapping({
+            'Compute 1 + 2': 'three',
+        })
+    ):
+      self.assertEqual(
+          parsing.call(lf.Template('Compute {{x}} + {{y}}'), x=1, y=2), 'three'
+      )
+
+  def test_call_with_lfun(self):
+    with lf.context(
+        lm=fake.StaticMapping({
+            'Compute 1 + 2': 'three',
+        })
+    ):
+      self.assertEqual(
+          parsing.call(lf.LangFunc('Compute {{x}} + {{y}}', x=1, y=2)), 'three'
+      )
+
+  def test_call_with_returns(self):
+    self.assertEqual(
+        parsing.call(
+            'Compute 1 + 2', int, lm=fake.StaticSequence(['three', '3'])
+        ),
+        3,
+    )
+
+    with lf.context(lm=fake.StaticSequence(['three', '3'])):
+      self.assertEqual(
+          parsing.call(lf.LangFunc('Compute {{x}} + {{y}}', x=1, y=2), int), 3
+      )
+
+  def test_call_with_parsing_args(self):
+    self.assertEqual(
+        parsing.call(
+            'Compute 1 + 2',
+            int,
+            lm=fake.StaticSequence(['three']),
+            parsing_lm=fake.StaticSequence(['3']),
+            parsing_examples=[
+                mapping.MappingExample(
+                    nl_context='Multiple four and five',
+                    nl_text='twenty',
+                    schema=int,
+                    value=20
+                )
+            ]
+        ),
+        3,
+    )
+
+  def test_bad_call(self):
+    with self.assertRaisesRegex(TypeError, '`prompt` should be .*'):
+      parsing.call(1)
+
+
 if __name__ == '__main__':
   unittest.main()
