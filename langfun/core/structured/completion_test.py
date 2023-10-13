@@ -61,7 +61,7 @@ class CompleteStructureTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the INPUT_OBJECT.
+            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
@@ -121,7 +121,7 @@ class CompleteStructureTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the INPUT_OBJECT.
+            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
@@ -189,7 +189,7 @@ class CompleteStructureTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the INPUT_OBJECT.
+            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
