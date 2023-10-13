@@ -438,7 +438,7 @@ def concurrent_map(
         progress_bar.update(1)
 
     if ordered:
-      for future in pending_futures:
+      for i, future in enumerate(pending_futures):
         job = future_to_job[future]
         wait_time = (timeout - job.elapse) if timeout else None
         try:
@@ -446,6 +446,9 @@ def concurrent_map(
           if job.error is not None:
             if not (
                 silence_on_errors and isinstance(job.error, silence_on_errors)):
+              # Cancel remaining futures before raising the error.
+              for f in pending_futures[i + 1:]:
+                f.cancel()
               raise job.error
         except concurrent.futures.TimeoutError:
           future.cancel()
@@ -467,6 +470,10 @@ def concurrent_map(
               if not (
                   silence_on_errors and isinstance(job.error, silence_on_errors)
               ):
+                # Cancel pending futures before raising the error.
+                for future in pending_futures:
+                  if future not in completed_batch:
+                    future.cancel()
                 raise job.error   # pylint: disable=g-doc-exception
             yield job.arg, job.result, job.error
             progress.update(job)
@@ -490,9 +497,6 @@ def concurrent_map(
                 job.mark_canceled(
                     TimeoutError(f'Execution time ({job.elapse}) '
                                  f'exceeds {timeout} seconds.'))
-
-              if job.error is not None:
-                last_error = job.error
 
               yield job.arg, job.result, job.error
               progress.update(job)
