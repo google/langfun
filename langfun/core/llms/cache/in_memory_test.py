@@ -31,32 +31,40 @@ class InMemoryLMCacheTest(unittest.TestCase):
 
   def test_basics(self):
     cache = in_memory.InMemory()
-    lm = fake.StaticSequence(['1', '2', '3'], cache=cache)
+    lm = fake.StaticSequence(['1', '2', '3', '4', '5', '6'], cache=cache)
     self.assertEqual(lm('a'), '1')
+    self.assertEqual(lm('a', cache_seed=1), '2')
+    self.assertEqual(lm('b'), '3')
     self.assertEqual(lm('a'), '1')
-    self.assertEqual(lm('b'), '2')
-    self.assertEqual(lm('a'), '1')
-    self.assertEqual(lm('c'), '3')
+    self.assertEqual(lm('c'), '4')
+    self.assertEqual(lm('a', cache_seed=None), '5')
+    self.assertEqual(lm('a', cache_seed=None), '6')
+
     self.assertEqual(cache.model_ids(), ['StaticSequence'])
     self.assertEqual(
         list(cache.keys()),
         [
-            ('a', (0.0, 1024, 1, 40, None, None)),
-            ('b', (0.0, 1024, 1, 40, None, None)),
-            ('c', (0.0, 1024, 1, 40, None, None)),
-        ])
+            ('a', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, 1024, 1, 40, None, None), 1),
+            ('b', (0.0, 1024, 1, 40, None, None), 0),
+            ('c', (0.0, 1024, 1, 40, None, None), 0),
+        ],
+    )
     self.assertEqual(
         list(cache.keys('StaticSequence')),
         [
-            ('a', (0.0, 1024, 1, 40, None, None)),
-            ('b', (0.0, 1024, 1, 40, None, None)),
-            ('c', (0.0, 1024, 1, 40, None, None)),
-        ])
+            ('a', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, 1024, 1, 40, None, None), 1),
+            ('b', (0.0, 1024, 1, 40, None, None), 0),
+            ('c', (0.0, 1024, 1, 40, None, None), 0),
+        ],
+    )
 
-    def cache_entry(response_text):
+    def cache_entry(response_text, cache_seed=0):
       return base.LMCacheEntry(
           lf.LMSamplingResult([
-              lf.LMSample(lf.AIMessage(response_text), score=1.0)
+              lf.LMSample(
+                  lf.AIMessage(response_text, cache_seed=cache_seed), score=1.0)
           ])
       )
 
@@ -64,63 +72,85 @@ class InMemoryLMCacheTest(unittest.TestCase):
         list(cache.values()),
         [
             cache_entry('1'),
-            cache_entry('2'),
+            cache_entry('2', 1),
             cache_entry('3'),
-        ])
+            cache_entry('4'),
+        ],
+    )
     self.assertEqual(
         list(cache.values('StaticSequence')),
         [
             cache_entry('1'),
-            cache_entry('2'),
+            cache_entry('2', 1),
             cache_entry('3'),
-        ])
+            cache_entry('4'),
+        ],
+    )
     self.assertEqual(
         list(cache.items()),
         [
             (
-                ('a', (0.0, 1024, 1, 40, None, None)),
+                ('a', (0.0, 1024, 1, 40, None, None), 0),
                 cache_entry('1'),
             ),
             (
-                ('b', (0.0, 1024, 1, 40, None, None)),
-                cache_entry('2'),
+                ('a', (0.0, 1024, 1, 40, None, None), 1),
+                cache_entry('2', 1),
             ),
             (
-                ('c', (0.0, 1024, 1, 40, None, None)),
+                ('b', (0.0, 1024, 1, 40, None, None), 0),
                 cache_entry('3'),
-            )
-        ]
+            ),
+            (
+                ('c', (0.0, 1024, 1, 40, None, None), 0),
+                cache_entry('4'),
+            ),
+        ],
     )
     self.assertEqual(
         list(cache.items('StaticSequence')),
         [
             (
-                ('a', (0.0, 1024, 1, 40, None, None)),
+                ('a', (0.0, 1024, 1, 40, None, None), 0),
                 cache_entry('1'),
             ),
             (
-                ('b', (0.0, 1024, 1, 40, None, None)),
-                cache_entry('2'),
+                ('a', (0.0, 1024, 1, 40, None, None), 1),
+                cache_entry('2', 1),
             ),
             (
-                ('c', (0.0, 1024, 1, 40, None, None)),
+                ('b', (0.0, 1024, 1, 40, None, None), 0),
                 cache_entry('3'),
-            )
-        ]
+            ),
+            (
+                ('c', (0.0, 1024, 1, 40, None, None), 0),
+                cache_entry('4'),
+            ),
+        ],
     )
 
     # Test clone/copy semantics.
+    self.assertIs(cache.clone()._stats, cache._stats)
     self.assertIs(cache.clone()._cache, cache._cache)
     self.assertIs(cache.clone(deep=True)._cache, cache._cache)
+    self.assertIs(cache.clone(deep=True)._stats, cache._stats)
     self.assertIs(copy.copy(cache)._cache, cache._cache)
+    self.assertIs(copy.copy(cache)._stats, cache._stats)
     self.assertIs(copy.deepcopy(cache)._cache, cache._cache)
+    self.assertIs(copy.deepcopy(cache)._stats, cache._stats)
 
   def test_ttl(self):
-    lm = fake.StaticSequence(['1', '2', '3'], cache=in_memory.InMemory(ttl=1))
+    cache = in_memory.InMemory(ttl=1)
+    lm = fake.StaticSequence(['1', '2', '3'], cache=cache)
     self.assertEqual(lm('a'), '1')
     self.assertEqual(lm('a'), '1')
     time.sleep(2)
     self.assertEqual(lm('a'), '2')
+    self.assertEqual(cache.stats.num_updates, 2)
+    self.assertEqual(cache.stats.num_queries, 3)
+    self.assertEqual(cache.stats.num_hits, 1)
+    self.assertEqual(cache.stats.num_hit_expires, 1)
+    self.assertEqual(cache.stats.num_misses, 1)
 
   def test_different_sampling_options(self):
     cache = in_memory.InMemory()
@@ -131,9 +161,10 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(
         list(cache.keys()),
         [
-            ('a', (0.0, 1024, 1, 40, None, None)),
-            ('a', (1.0, 1024, 1, 40, None, None))
-        ])
+            ('a', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (1.0, 1024, 1, 40, None, None), 0),
+        ],
+    )
 
   def test_different_model(self):
     cache = in_memory.InMemory()
@@ -149,15 +180,17 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(
         list(cache.keys('StaticSequence')),
         [
-            ('a', (0.0, 1024, 1, 40, None, None)),
-            ('b', (0.0, 1024, 1, 40, None, None)),
-        ])
+            ('a', (0.0, 1024, 1, 40, None, None), 0),
+            ('b', (0.0, 1024, 1, 40, None, None), 0),
+        ],
+    )
     self.assertEqual(
         list(cache.keys('Echo')),
         [
-            ('a', (0.0, 1024, 1, 40, None, None)),
-            ('b', (0.0, 1024, 1, 40, None, None)),
-        ])
+            ('a', (0.0, 1024, 1, 40, None, None), 0),
+            ('b', (0.0, 1024, 1, 40, None, None), 0),
+        ],
+    )
     self.assertEqual(len(cache), 4)
     cache.reset('Echo')
     self.assertEqual(list(cache.keys('Echo')), [])
@@ -174,13 +207,26 @@ class InMemoryLMCacheTest(unittest.TestCase):
 
     self.assertEqual(lm1('a'), '1')
     self.assertEqual(lm2('a'), 'a')
+    self.assertEqual(cache.stats.num_updates, 2)
 
     tmp_dir = tempfile.gettempdir()
     path = os.path.join(tmp_dir, 'memory.json')
+
+    # Path does not exist at the moment.
+    cache1 = in_memory.InMemory(path)
+    self.assertEqual(len(cache1._cache), 0)
+
+    # Now save the cache to path.
+    with self.assertRaisesRegex(ValueError, '`path` must be specified'):
+      cache.save()
     cache.save(path)
 
     cache2 = in_memory.InMemory(path)
     self.assertEqual(cache2._cache, cache._cache)
+
+    # Do nothing since there is no updates.
+    self.assertEqual(cache2.stats.num_updates, 0)
+    cache2.save()
 
     lm1 = fake.StaticSequence(['x', 'y'], cache=cache2)
     lm2 = fake.Echo(cache=cache2)
@@ -188,8 +234,14 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(lm1('a'), '1')
     self.assertEqual(lm2('a'), 'a')
 
+    # A new entry.
+    self.assertEqual(lm2('b'), 'b')
+    self.assertEqual(lm2('c'), 'c')
+    self.assertEqual(cache2.stats.num_updates, 2)
+    cache2.save()
 
-class UseCacheTest(unittest.TestCase):
+
+class LmCacheTest(unittest.TestCase):
 
   def test_lm_cache(self):
     with in_memory.lm_cache() as c:
@@ -198,7 +250,7 @@ class UseCacheTest(unittest.TestCase):
       lm = fake.Echo(cache=in_memory.InMemory())
       self.assertIsNot(lm.cache, c)
 
-  def test_lm_cache_load_save(self):
+  def test_lm_cache_with_file(self):
     pg.set_load_handler(pg.symbolic.default_load_handler)
     pg.set_save_handler(pg.symbolic.default_save_handler)
 
@@ -211,17 +263,16 @@ class UseCacheTest(unittest.TestCase):
     path1 = os.path.join(tmp_dir, 'memory1.json')
     cache.save(path1)
 
-    path2 = os.path.join(tmp_dir, 'memory2.json')
-
-    with in_memory.lm_cache(load=path1, save=path2) as c1:
+    with in_memory.lm_cache(path1) as c1:
       self.assertEqual(len(c1), 2)
 
       lm = fake.StaticSequence(['4', '5', '6'])
       self.assertEqual(lm('a'), '1')
       self.assertEqual(lm('b'), '2')
+      self.assertEqual(lm('c'), '4')
 
-    with in_memory.lm_cache(load=path2, save=path2) as c2:
-      self.assertEqual(len(c2), 2)
+    with in_memory.lm_cache(path1) as c2:
+      self.assertEqual(len(c2), 3)
 
 
 if __name__ == '__main__':

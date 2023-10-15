@@ -22,6 +22,7 @@ from langfun.core import subscription
 from langfun.core.langfunc import LangFunc
 from langfun.core.langfunc import LangFuncCallEvent
 from langfun.core.llms import fake
+from langfun.core.llms.cache import in_memory
 # Enables as_structured() operation of LangFunc.
 from langfun.core.structured import parsing  # pylint: disable=unused-import
 import pyglove as pg
@@ -257,6 +258,18 @@ class LangFuncCallTest(unittest.TestCase):
     ):
       r = l()
       self.assertEqual(r.result, 3)
+
+  def test_call_with_cache(self):
+    l = LangFunc('{{x}}')
+    with component.context(
+        lm=fake.StaticSequence(['a', 'b', 'c', 'd'], cache=in_memory.InMemory())
+    ):
+      self.assertEqual(l(x=1), 'a')
+      self.assertEqual(l(x=2), 'b')
+      self.assertEqual(l(x=1), 'a')
+      self.assertEqual(l(x=1, cache_seed=None), 'c')
+      self.assertEqual(l(x=1, cache_seed=None), 'd')
+      self.assertEqual(l(x=2), 'b')
 
 
 class TransformTest(unittest.TestCase):

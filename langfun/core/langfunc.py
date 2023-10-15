@@ -235,18 +235,23 @@ class LangFunc(
       *,
       lm: language_model.LanguageModel | None = None,
       lm_input: message_lib.Message | None = None,
+      cache_seed: int | None = 0,
       skip_input_transform: bool = False,
       skip_lm: bool = False,
       skip_output_transform: bool = False,
-      **variables) -> message_lib.Message:
+      **variables,
+  ) -> message_lib.Message:
     """Calls language model with `lm_input` or rendered text.
 
     Args:
-      lm: Language model to use. When present, it takes precedence over 
-        the value from the `lm` attribute as well as from the containing chain.
+      lm: Language model to use. When present, it takes precedence over the
+        value from the `lm` attribute as well as from the containing chain.
       lm_input: An optional `lf.Message` object as the `lm_input`. If present,
         it will be directly used to call the LM. Otherwise, `render()` will be
         called to produce an LM input first.
+      cache_seed: Seed for computing cache key. The cache key is determined by a
+        tuple of (lm, prompt, cache seed). If None, cache will be disabled for
+        the query even cache is configured by the LM.
       skip_input_transform: If True, the input transform will be skipped.
       skip_lm: If True, skipping LM. In such case, the input message will be
         returned.
@@ -259,6 +264,7 @@ class LangFunc(
     return self._call_once(
         lm=lm,
         lm_input=lm_input,
+        cache_seed=cache_seed,
         skip_input_transform=skip_input_transform,
         skip_lm=skip_lm,
         skip_output_transform=skip_output_transform,
@@ -270,6 +276,7 @@ class LangFunc(
       *,
       lm: language_model.LanguageModel | None = None,
       lm_input: message_lib.Message | None = None,
+      cache_seed: int | None = 0,
       skip_input_transform: bool = False,
       skip_lm: bool = False,
       skip_output_transform: bool = False,
@@ -293,7 +300,7 @@ class LangFunc(
         if not skip_lm:
           # Send rendered text to LM.
           lm_input.tag(message_lib.Message.TAG_LM_INPUT)
-          lm_output = self.lm(lm_input)
+          lm_output = self.lm(lm_input, cache_seed=cache_seed)
 
           # Track the input as the source of the output.
           lm_output.source = lm_input
@@ -485,4 +492,3 @@ class LangFuncCallEvent(subscription.Event[LangFunc]):
   lm_input: message_lib.Message
   lm_output: message_lib.Message
   lm_callstack: list[LangFunc]
-

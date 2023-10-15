@@ -19,6 +19,7 @@ import unittest
 from langfun.core import concurrent
 from langfun.core import language_model as lm_lib
 from langfun.core import message as message_lib
+from langfun.core.llms.cache import in_memory
 import pyglove as pg
 
 
@@ -50,28 +51,6 @@ class MockModel(lm_lib.LanguageModel):
         max_attempts=self.max_attempts,
         retry_interval=1,
     )(prompts)
-
-
-class SimpleCache(lm_lib.LMCache):
-
-  def _on_bound(self):
-    super()._on_bound()
-    self._cache = {}
-    self.cache_hit = 0
-
-  def get(self, lm, prompt):
-    del lm
-    r = self._cache.get(prompt.text)
-    if r is not None:
-      self.cache_hit += 1
-    return r
-
-  def put(self, lm, prompt, result):
-    self._cache[prompt.text] = result
-
-  @property
-  def num_records(self):
-    return len(self._cache)
 
 
 class LMSamplingOptionsTest(unittest.TestCase):
@@ -156,29 +135,47 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(lm('foo', top_k=2), 'foo' * 2)
 
   def test_using_cache(self):
-    cache = SimpleCache()
+    cache = in_memory.InMemory()
     lm = MockModel(cache=cache, top_k=1)
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar']),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=0.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample(
+                message_lib.AIMessage('foo', cache_seed=0), score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample(
+                message_lib.AIMessage('bar', cache_seed=0), score=0.0)]),
         ])
+    self.assertEqual(cache.stats.num_queries, 2)
+    self.assertEqual(cache.stats.num_hits, 0)
+    self.assertEqual(cache.stats.num_updates, 2)
 
-    self.assertEqual(cache.cache_hit, 0)
-    self.assertEqual(cache.num_records, 2)
+    self.assertEqual(lm('foo'), 'foo')
+    self.assertEqual(lm('bar'), 'bar')
+    self.assertEqual(cache.stats.num_queries, 4)
+    self.assertEqual(cache.stats.num_hits, 2)
+    self.assertEqual(cache.stats.num_updates, 2)
+
+    # Test cache_seed=None will not trigger cache query.
+    self.assertEqual(lm('foo', cache_seed=None), 'foo')
+    self.assertEqual(cache.stats.num_queries, 4)
+    self.assertEqual(cache.stats.num_updates, 2)
+
     self.assertEqual(
         lm.sample(prompts=['foo', 'baz'], temperature=1.0),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=0.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample('baz', score=1.0)]),
-        ])
-    self.assertEqual(cache.cache_hit, 1)
-    self.assertEqual(cache.num_records, 3)
+            lm_lib.LMSamplingResult([lm_lib.LMSample(
+                message_lib.AIMessage('foo', cache_seed=0), score=1.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample(
+                message_lib.AIMessage('baz', cache_seed=0), score=1.0)]),
+        ],
+    )
+    self.assertEqual(cache.stats.num_queries, 6)
+    self.assertEqual(cache.stats.num_hits, 2)
+    self.assertEqual(cache.stats.num_updates, 4)
 
     self.assertEqual(lm('baz', temperature=1.0), 'baz')
-    self.assertEqual(cache.cache_hit, 2)
-    self.assertEqual(cache.num_records, 3)
+    self.assertEqual(cache.stats.num_hits, 3)
+    self.assertEqual(cache.stats.num_updates, 4)
 
     lm = MockModel(cache=cache,
                    top_k=1,
@@ -241,10 +238,14 @@ class LanguageModelTest(unittest.TestCase):
 
       debug_info = string_io.getvalue()
       expected_included = [
-          debug_prints[f] for f in lm_lib.LMDebugMode if f in debug_mode
+          debug_prints[f]
+          for f in lm_lib.LMDebugMode
+          if f != lm_lib.LMDebugMode.NONE and f in debug_mode
       ]
       expected_excluded = [
-          debug_prints[f] for f in lm_lib.LMDebugMode if f not in debug_mode
+          debug_prints[f]
+          for f in lm_lib.LMDebugMode
+          if f != lm_lib.LMDebugMode.NONE and f not in debug_mode
       ]
 
       for expected_include in expected_included:

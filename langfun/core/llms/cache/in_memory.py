@@ -37,12 +37,18 @@ class InMemory(base.LMCacheBase):
     self._cache = collections.defaultdict(dict)
 
     if self.filename is not None:
-      records = pg.load(self.filename)
-      for record in records:
-        model_cache = {}
-        for entry in record.entries:
-          model_cache[entry.k] = entry.v
-        self._cache[record.model_id] = model_cache
+      try:
+        records = pg.load(self.filename)
+        for record in records:
+          model_cache = {}
+          for entry in record.entries:
+            model_cache[entry.k] = entry.v
+          self._cache[record.model_id] = model_cache
+      except FileNotFoundError:
+        pg.logging.warning(
+            "Creating a new cache as cache file '%s' does not exist.",
+            self.filename,
+        )
 
   def model_ids(self) -> list[str]:
     """Returns the model ids of cached queires."""
@@ -105,8 +111,17 @@ class InMemory(base.LMCacheBase):
     v._cache = self._cache  # pylint: disable=protected-access
     return v
 
-  def save(self, path: str) -> None:
+  def save(self, path: str | None = None) -> None:
     """Saves the in-memory cache."""
+    if path is None:
+      if self.filename is None:
+        raise ValueError('`path` must be specified.')
+      path = self.filename
+
+    # Do nothing if there is no update, this avoids unnecessary rewrites.
+    if self.stats.num_updates == 0 and path == self.filename:
+      return
+
     records = []
     for model_id in self.model_ids():
       entries = [dict(k=k, v=v) for k, v in self.items(model_id)]
@@ -115,10 +130,7 @@ class InMemory(base.LMCacheBase):
 
 
 @contextlib.contextmanager
-def lm_cache(
-    load: str | None = None,
-    save: str | None = None,
-) -> Iterator[InMemory]:
+def lm_cache(filename: str | None = None) -> Iterator[InMemory]:
   """Context manager to enable cache for LMs under the context.
 
   If LMs under the context manager have explicitly specified cache, they will
@@ -126,16 +138,15 @@ def lm_cache(
   manager.
 
   Args:
-    load: If not None, JSON file to load the cache.
-    save: If not None, JSON file to save the cache when context manager exits.
+    filename: If not None, JSON file to load and save the cache.
 
   Yields:
     A cache object created.
   """
-  c = InMemory(load)
+  cache = InMemory(filename)
   try:
-    with lf.context(cache=c):
-      yield c
+    with lf.context(cache=cache):
+      yield cache
   finally:
-    if save:
-      c.save(save)
+    if filename is not None:
+      cache.save()
