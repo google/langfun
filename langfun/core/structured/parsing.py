@@ -66,7 +66,7 @@ class ParseStructureJson(ParseStructure):
   """Parse an object out from a NL text using JSON as the protocol."""
 
   preamble = """
-      Please help translate the LM response into JSON based on the request and the schema:
+      Please help translate the last LM response into JSON based on the request and the schema:
 
       INSTRUCTIONS:
         1. If the schema has `_type`, carry it over to the JSON output.
@@ -82,7 +82,7 @@ class ParseStructurePython(ParseStructure):
   """Parse an object out from a NL text using Python as the protocol."""
 
   preamble = """
-      Please help translate {{ nl_text_title }} into {{ value_title}} based on {{ schema_title }}.
+      Please help translate the last {{ nl_text_title }} into {{ value_title}} based on {{ schema_title }}.
       Both {{ schema_title }} and {{ value_title }} are described in Python.
       """
 

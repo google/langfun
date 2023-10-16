@@ -46,7 +46,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help translate LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
+            Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
             Both RESULT_TYPE and RESULT_OBJECT are described in Python.
 
             USER_REQUEST:
@@ -69,7 +69,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help translate LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
+            Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
             Both RESULT_TYPE and RESULT_OBJECT are described in Python.
 
             LM_RESPONSE:
@@ -97,7 +97,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
-            Please help translate LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
+            Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
             Both RESULT_TYPE and RESULT_OBJECT are described in Python.
 
             USER_REQUEST:
@@ -269,7 +269,7 @@ class ParseStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help translate the LM response into JSON based on the request and the schema:
+            Please help translate the last LM response into JSON based on the request and the schema:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
@@ -295,7 +295,7 @@ class ParseStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=m).text,
         inspect.cleandoc("""
-            Please help translate the LM response into JSON based on the request and the schema:
+            Please help translate the last LM response into JSON based on the request and the schema:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
@@ -326,7 +326,7 @@ class ParseStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render(message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
-            Please help translate the LM response into JSON based on the request and the schema:
+            Please help translate the last LM response into JSON based on the request and the schema:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
