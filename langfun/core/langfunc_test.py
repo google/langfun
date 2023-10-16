@@ -86,7 +86,7 @@ class LangFuncCallTest(unittest.TestCase):
     self.assertEqual(i.tags, ['rendered'])
 
     r = l()
-    self.assertEqual(r, message.AIMessage('Hello!!!'))
+    self.assertEqual(r, message.AIMessage('Hello!!!', score=0.0))
     self.assertEqual(r.tags, ['lm-response', 'lm-output'])
     self.assertEqual(r.source, message.UserMessage('Hello'))
     self.assertEqual(r.source.tags, ['rendered', 'lm-input'])
@@ -107,7 +107,7 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(l.natural_language_format(), 'Hello')
       self.assertEqual(l.render(), 'Hello')
       r = l()
-      self.assertEqual(r, message.AIMessage('Hello!!!'))
+      self.assertEqual(r, message.AIMessage('Hello!!!', score=0.0))
       self.assertEqual(r.tags, ['lm-response', 'lm-output'])
 
     self.assertEqual(str(l), 'Hello')
@@ -131,7 +131,7 @@ class LangFuncCallTest(unittest.TestCase):
 
     with component.context(lm=ExcitedEchoer()):
       r = l()
-      self.assertEqual(r, message.AIMessage('Hello?!!!'))
+      self.assertEqual(r, message.AIMessage('Hello?!!!', score=0.0))
       self.assertEqual(r.tags, ['lm-response', 'lm-output'])
       self.assertEqual(r.source, message.UserMessage('Hello?'))
       self.assertEqual(r.source.tags, ['transformed', 'lm-input'])
@@ -158,7 +158,7 @@ class LangFuncCallTest(unittest.TestCase):
     l = LangFunc('Hello', input_transform=NewMessageTransform(suffix='???'))
     with component.context(lm=ExcitedEchoer()):
       r = l()
-      self.assertEqual(r, message.AIMessage('Hello???!!!'))
+      self.assertEqual(r, message.AIMessage('Hello???!!!', score=0.0))
       self.assertEqual(r.tags, ['lm-response', 'lm-output'])
 
   def test_call_with_output_transform(self):
@@ -167,12 +167,12 @@ class LangFuncCallTest(unittest.TestCase):
       r = l()
       self.assertEqual(r, message.AIMessage('Hello', num_exclaims=3))
       self.assertEqual(r.tags, ['transformed', 'lm-output'])
-      self.assertEqual(r.source, message.AIMessage('Hello!!!'))
+      self.assertEqual(r.source, message.AIMessage('Hello!!!', score=0.0))
       self.assertEqual(r.source.tags, ['lm-response'])
 
       # Test `skip_output_transform``.
       r = l(skip_output_transform=True)
-      self.assertEqual(r, message.AIMessage('Hello!!!'))
+      self.assertEqual(r, message.AIMessage('Hello!!!', score=0.0))
       self.assertEqual(r.tags, ['lm-response', 'lm-output'])
 
   def test_call_with_init_time_vars(self):
@@ -279,7 +279,7 @@ class TransformTest(unittest.TestCase):
     i = message.AIMessage('foo')
     with component.context(lm=ExcitedEchoer()):
       r = t.transform(i)
-    self.assertEqual(r, message.AIMessage('hi foo!!!'))
+    self.assertEqual(r, message.AIMessage('hi foo!!!', score=0.0))
     self.assertEqual(r.tags, ['lm-response', 'lm-output', 'transformed'])
     self.assertEqual(
         r.lm_input, message.UserMessage('hi foo', message=pg.Ref(i))
@@ -290,7 +290,7 @@ class TransformTest(unittest.TestCase):
     t = LangFunc('hi {{message.text}}', input_path='result')
     with component.context(lm=ExcitedEchoer()):
       r = t.transform(message.AIMessage('abc', result='bar'))
-      self.assertEqual(r, message.AIMessage('hi bar!!!'))
+      self.assertEqual(r, message.AIMessage('hi bar!!!', score=0.0))
       self.assertEqual(r.tags, ['lm-response', 'lm-output', 'transformed'])
       self.assertEqual(
           r.source,

@@ -125,7 +125,9 @@ class LanguageModelTest(unittest.TestCase):
 
   def test_call(self):
     lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
-    self.assertEqual(lm(prompt='foo'), 'foo')
+    response = lm(prompt='foo')
+    self.assertEqual(response.text, 'foo')
+    self.assertEqual(response.score, 0.0)
 
     # Test override sampling_options.
     self.assertEqual(

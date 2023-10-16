@@ -299,6 +299,7 @@ class LanguageModel(component.Component):
           [prompt], sampling_options=sampling_options, cache_seed=cache_seed
       )[0]
       response = result.samples[0].response
+      response.set('score', result.samples[0].score)
       elapse = time.time() - request_start
 
       debug = self.debug

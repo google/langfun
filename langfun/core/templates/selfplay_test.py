@@ -56,7 +56,7 @@ class SelfPlayTest(unittest.TestCase):
     g = NumberGuess(target_num=10)
 
     with lf.context(lm=NumberGuesser(guesses=[50, 20, 5, 10])):
-      self.assertEqual(g(), lf.AIMessage('10'))
+      self.assertEqual(g(), lf.AIMessage('10', score=0.0))
 
     self.assertEqual(g.num_turns, 4)
 
@@ -64,7 +64,7 @@ class SelfPlayTest(unittest.TestCase):
     g = NumberGuess(target_num=10, max_turns=10)
 
     with lf.context(lm=NumberGuesser(guesses=[50, 20, 5, 2, 5, 4])):
-      self.assertEqual(g(), lf.AIMessage('2'))
+      self.assertEqual(g(), lf.AIMessage('2', score=0.0))
 
     self.assertEqual(g.num_turns, 10)
 
