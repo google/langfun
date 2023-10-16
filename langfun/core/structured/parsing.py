@@ -312,7 +312,6 @@ class _Country(pg.Object):
 
 DEFAULT_PARSE_EXAMPLES: list[mapping.MappingExample] = [
     mapping.MappingExample(
-        nl_context='Brief introduction of the U.S.A.',
         nl_text=inspect.cleandoc("""
             The United States of America is a country primarily located in North America
             consisting of fifty states, a federal district, five major unincorporated territories,
