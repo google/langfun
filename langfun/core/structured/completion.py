@@ -76,6 +76,7 @@ def complete(
     default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
     *,
     examples: list[mapping.MappingExample] | None = None,
+    returns_message: bool = False,
     **kwargs,
 ) -> Any:
   """Complete a symbolic value by filling its missing fields.
@@ -115,6 +116,8 @@ def complete(
       be raised.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    returns_message: If True, returns `lf.Message` as the output, instead of
+      returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the
       `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
       specifying the language model for structured parsing.
@@ -125,4 +128,5 @@ def complete(
   if examples is None:
     examples = DEFAULT_COMPLETE_EXAMPLES
   t = CompleteStructure(default=default, examples=examples, **kwargs)
-  return t.transform(message=lf.UserMessage(text='', result=value)).result
+  output = t.transform(message=lf.UserMessage(text='', result=value))
+  return output if returns_message else output.result

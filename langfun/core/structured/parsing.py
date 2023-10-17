@@ -101,6 +101,7 @@ def parse(
     user_prompt: str | None = None,
     examples: list[mapping.MappingExample] | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
+    returns_message: bool = False,
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -149,6 +150,8 @@ def parse(
       the default one-shot example will be added.
     protocol: The protocol for schema/value representation. Applicable values
       are 'json' and 'python'. By default 'python' will be used.`
+    returns_message: If True, returns `lf.Message` as the output, instead of
+      returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the `lf.structured.ParseStructure`
       transform, e.g. `lm` for specifying the language model.
 
@@ -166,15 +169,19 @@ def parse(
 
   if message.source is None and user_prompt is not None:
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
-  return t.transform(message=message).result
+  output = t.transform(message=message)
+  return output if returns_message else output.result
 
 
 def call(
     prompt: str | lf.Template,
-    returns: Any = None,
+    schema: Union[
+        None, schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
+    ] = None,
     *,
     parsing_lm: lf.LanguageModel | None = None,
     parsing_examples: list[mapping.MappingExample] | None = None,
+    returns_message: bool = False,
     **kwargs,
 ) -> Any:
   """Call a language model with prompt and formulate response in return type.
@@ -202,13 +209,15 @@ def call(
   Args:
     prompt: User prompt that will be sent to LM, which could be a string or a
       string template whose variables are provided from **kwargs.
-    returns: Type annotations for return type. If None, the raw LM response will
+    schema: Type annotations for return type. If None, the raw LM response will
       be returned (str). Otherwise, the response will be parsed based on the
       return type.
     parsing_lm: Language model that will be used for parsing. If None, the `lm`
       for prompting the LM will be used.
     parsing_examples: Examples for parsing the output. If None,
       `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
+    returns_message: If True, return a `lf.Message` object instead of its text
+      or result.
     **kwargs: Keyword arguments. Including options that control the calling
       behavior, such as `lm`, `temperature`, etc. As well as variables that will
       be fed to the prompt if it's a string template.
@@ -233,10 +242,12 @@ def call(
     parsing_kwargs['lm'] = parsing_lm
   if parsing_examples is not None:
     parsing_kwargs['examples'] = parsing_examples
-  lfun = lfun.as_structured(returns, **parsing_kwargs)
+  lfun = lfun.as_structured(schema, **parsing_kwargs)
 
   message = lfun(**kwargs)
-  if returns is None:
+  if returns_message:
+    return message
+  if schema is None:
     return message.text
   return message.result
 

@@ -394,6 +394,20 @@ class CompleteStructureTest(unittest.TestCase):
       )
       # pylint: enable=line-too-long
 
+  def test_returns_message(self):
+    self.assertEqual(
+        completion.complete(
+            Activity.partial(),
+            lm=fake.StaticSequence(['Activity(description="foo")']),
+            returns_message=True),
+        lf.AIMessage(
+            text='Activity(description="foo")',
+            result=Activity(description='foo'),
+            score=1.0,
+            tags=['lm-response', 'lm-output', 'transformed']
+        )
+    )
+
   def test_bad_init(self):
     with self.assertRaisesRegex(ValueError, '.*must be.*Pair'):
       completion.CompleteStructure(examples=[mapping.MappingExample(value=1)])

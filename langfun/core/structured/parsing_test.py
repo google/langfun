@@ -257,6 +257,16 @@ class ParseStructurePythonTest(unittest.TestCase):
         ),
         1,
     )
+    self.assertEqual(
+        parsing.parse(
+            'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm,
+            returns_message=True
+        ),
+        lf.AIMessage(
+            '1', score=1.0, result=1,
+            tags=['lm-response', 'lm-output', 'transformed']
+        ),
+    )
 
 
 class ParseStructureJsonTest(unittest.TestCase):
@@ -586,7 +596,7 @@ class CallTest(unittest.TestCase):
           parsing.call(lf.LangFunc('Compute {{x}} + {{y}}', x=1, y=2)), 'three'
       )
 
-  def test_call_with_returns(self):
+  def test_call_with_schema(self):
     self.assertEqual(
         parsing.call(
             'Compute 1 + 2', int, lm=fake.StaticSequence(['three', '3'])
@@ -598,6 +608,18 @@ class CallTest(unittest.TestCase):
       self.assertEqual(
           parsing.call(lf.LangFunc('Compute {{x}} + {{y}}', x=1, y=2), int), 3
       )
+
+  def test_call_with_returning_message(self):
+    self.assertEqual(
+        parsing.call(
+            'Compute 1 + 2', int, lm=fake.StaticSequence(['three', '3']),
+            returns_message=True
+        ),
+        lf.AIMessage(
+            '3', result=3, score=1.0,
+            tags=['lm-response', 'lm-output', 'transformed']
+        ),
+    )
 
   def test_call_with_parsing_args(self):
     self.assertEqual(

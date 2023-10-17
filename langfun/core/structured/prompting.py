@@ -124,6 +124,7 @@ def query(
     *,
     examples: list[mapping.MappingExample] | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
+    returns_message: bool = False,
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -166,6 +167,8 @@ def query(
       the default one-shot example will be added.
     protocol: The protocol for schema/value representation. Applicable values
       are 'json' and 'python'. By default `python` will be used.
+    returns_message: If True, returns `lf.Message` as the output, instead of
+      returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the
       `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
       specifying the language model for structured parsing.
@@ -179,4 +182,5 @@ def query(
       schema, default=default, examples=examples, **kwargs
   )
   message = lf.AIMessage.from_value(prompt)
-  return t.transform(message=message).result
+  output = t.transform(message=message)
+  return output if returns_message else output.result
