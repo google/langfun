@@ -444,6 +444,17 @@ class Evaluation(Evaluable):
       ),
   ] = None
 
+  completion_prompt_field: Annotated[
+      str | None,
+      (
+          'A str field that will be automatically added to the class of the '
+          'input object for `lf.complete`. If None, no field will be added to '
+          'the class, instead the prompt will be passed as the first argument '
+          'of the input object to complete. Applicable only when `method` is '
+          'set to `complete`.'
+      )
+  ] = None
+
   use_cache: Annotated[bool, 'If True, LM cache will be enabled.'] = True
 
   max_workers: Annotated[
@@ -519,8 +530,10 @@ class Evaluation(Evaluable):
     """Schema."""
     schema = self.schema_fn()
     if isinstance(schema, tuple):
-      schema, self.__dict__['fewshot_examples'] = schema
-    return lf_structured.Schema.from_value(schema)
+      schema, fewshot_examples = schema
+      self.__dict__['fewshot_examples'] = (
+          self._maybe_adjust_examples_for_completion(fewshot_examples))
+    return self._formalize_schema(schema)
 
   @functools.cached_property
   def fewshot_examples(self) -> list[lf.structured.MappingExample] | None:
@@ -529,8 +542,53 @@ class Evaluation(Evaluable):
     fewshot_examples = None
     if isinstance(schema, tuple):
       schema, fewshot_examples = schema
-    self.__dict__['schema'] = lf_structured.Schema.from_value(schema)
-    return fewshot_examples
+    self.__dict__['schema'] = self._formalize_schema(schema)
+    return self._maybe_adjust_examples_for_completion(fewshot_examples)
+
+  def _formalize_schema(self, annotation) -> lf_structured.Schema:
+    """Formalizes schema from annotation."""
+    if self.method == 'complete':
+      if not hasattr(annotation, '__schema__'):
+        raise TypeError(
+            'The annotation returned by `schema_fn` must be a `pg.Object` '
+            'subclassclass to be used for `lf.complete`. '
+            'Encountered: {annotation!r}.'
+        )
+      self._maybe_adjust_schema_for_completion(annotation)
+    return lf_structured.Schema.from_value(annotation)
+
+  def _maybe_adjust_schema_for_completion(self, cls):
+    if (self.completion_prompt_field is None
+        or self.completion_prompt_field in cls.__schema__):
+      return
+
+    fields = list(cls.__schema__.values())
+    fields.insert(0, (self.completion_prompt_field, pg.typing.Str()))
+    pg.symbolic.update_schema(cls, fields, extend=False)
+
+  def _maybe_adjust_examples_for_completion(
+      self,
+      fewshot_examples: list[lf.structured.MappingExample] | None
+      ) -> list[lf.structured.MappingExample] | None:
+    if (not fewshot_examples
+        or self.completion_prompt_field is None
+        or self.method != 'complete'):
+      return fewshot_examples
+
+    completion_examples = []
+    for ex in fewshot_examples:
+      if ex.nl_context is not None:
+        init_args = dict(ex.value.sym_init_args)
+        example_cls = ex.value.__class__
+        self._maybe_adjust_schema_for_completion(example_cls)
+        ex = lf.structured.MappingExample(
+            value=lf.structured.mapping.Pair(
+                left=example_cls.partial(ex.nl_context),
+                right=example_cls(ex.nl_context, **init_args),
+            )
+        )
+      completion_examples.append(ex)
+    return completion_examples
 
   @functools.cached_property
   def children(self) -> list['Evaluation']:

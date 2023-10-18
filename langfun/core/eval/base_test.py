@@ -74,6 +74,7 @@ def eval_set(
       ],
       method=method,
       prompt='{{example.question}}',
+      completion_prompt_field='question',
       schema_fn=schema_fn,
       lm=lm,
       use_cache=use_cache,
@@ -119,6 +120,60 @@ class EvaluationTest(unittest.TestCase):
             ]
         )
     )
+
+  def test_schema_for_completion(self):
+
+    @pg.functor()
+    def _answer_schema():
+
+      class Solution1(pg.Object):
+        final_answer: int
+
+      return Solution1, [
+          lf.structured.MappingExample(
+              nl_context='The result of one plus two',
+              schema=Solution1,
+              value=Solution1(3)
+          )
+      ]
+
+    s = eval_set(
+        'schema_for_completion', 'complete',
+        schema_fn=_answer_schema(), lm=fake.StaticResponse('hi'))
+
+    fewshot_examples = s.fewshot_examples
+    solution_cls = s.schema.spec.cls
+
+    # Verify class schema get updated.
+    self.assertEqual('question', list(solution_cls.__schema__.keys())[0])
+
+    # Verify query examples are mapped to completion examples.
+    self.assertTrue(
+        pg.eq(
+            fewshot_examples,
+            [
+                lf.structured.MappingExample(
+                    value=lf.structured.mapping.Pair(
+                        left=solution_cls.partial(
+                            question='The result of one plus two'),
+                        right=solution_cls('The result of one plus two', 3),
+                    )
+                )
+            ]
+        )
+    )
+
+  def test_bad_init(self):
+    @pg.functor()
+    def _bad_completion_schema():
+      return int
+
+    s = eval_set(
+        'bad_init1', 'complete',
+        schema_fn=_bad_completion_schema(), lm=fake.StaticResponse('hi'))
+
+    with self.assertRaisesRegex(TypeError, '.*must be .*class.*'):
+      _ = s.schema
 
   def test_dryrun(self):
     lm = fake.StaticResponse('Solution(final_answer=2)')
@@ -321,6 +376,25 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(
         s.process(s.examples[0]), SolutionForCompletion('Compute 1 + 1', 2)
     )
+
+    # Testing for using a query schema for completion.
+
+    @pg.functor()
+    def _answer_schema():
+
+      class Solution2(pg.Object):
+        answer: int
+
+      return Solution2
+
+    lm = fake.StaticSequence(
+        ["Solution2(question='Compute 1 + 1', answer=2)"],
+        debug=True,
+    )
+    s = eval_set(
+        'complete_test2', 'complete', schema_fn=_answer_schema(), lm=lm
+    )
+    self.assertEqual(s.process(s.examples[0]).answer, 2)
 
 
 class SuiteTest(unittest.TestCase):
