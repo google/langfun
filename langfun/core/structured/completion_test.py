@@ -408,6 +408,14 @@ class CompleteStructureTest(unittest.TestCase):
         )
     )
 
+  def test_using_the_same_lm_instance(self):
+    lm = fake.StaticSequence(['Activity(description="foo")'])
+    self.assertEqual(
+        completion.complete(Activity.partial(), lm=lm), Activity('foo')
+    )
+    with self.assertRaises(IndexError):
+      completion.complete(Activity.partial(), lm=lm)
+
   def test_bad_init(self):
     with self.assertRaisesRegex(ValueError, '.*must be.*Pair'):
       completion.CompleteStructure(examples=[mapping.MappingExample(value=1)])

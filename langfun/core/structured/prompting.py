@@ -178,9 +178,8 @@ def query(
   """
   if examples is None:
     examples = DEFAULT_QUERY_EXAMPLES
-  t = _query_structure_cls(protocol)(
-      schema, default=default, examples=examples, **kwargs
-  )
+  t = _query_structure_cls(protocol)(schema, default=default, examples=examples)
   message = lf.AIMessage.from_value(prompt)
-  output = t.transform(message=message)
+  with t.override(**kwargs):
+    output = t.transform(message=message)
   return output if returns_message else output.result

@@ -127,6 +127,7 @@ def complete(
   """
   if examples is None:
     examples = DEFAULT_COMPLETE_EXAMPLES
-  t = CompleteStructure(default=default, examples=examples, **kwargs)
-  output = t.transform(message=lf.UserMessage(text='', result=value))
+  t = CompleteStructure(default=default, examples=examples)
+  with t.override(**kwargs):
+    output = t.transform(message=lf.UserMessage(text='', result=value))
   return output if returns_message else output.result

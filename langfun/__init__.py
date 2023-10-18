@@ -29,6 +29,7 @@ query = structured.query
 describe = structured.describe
 complete = structured.complete
 
+from langfun.core import eval  # pylint: disable=redefined-builtin
 from langfun.core import templates
 from langfun.core import transforms
 from langfun.core import coding

@@ -1,0 +1,170 @@
+# Copyright 2023 The Langfun Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tests for language model."""
+
+import os
+import tempfile
+import unittest
+
+import langfun.core as lf
+from langfun.core.eval import groundtruth_based
+from langfun.core.llms import fake
+import pyglove as pg
+
+
+# We put class definitions outside the functors just to make it easier
+# to refer to them in test.
+class Solution(pg.Object):
+  final_answer: int
+
+
+class SolutionForCompletion(pg.Object):
+  question: str
+  final_answer: int
+
+
+@pg.functor
+def answer_schema():
+  return Solution
+
+
+@pg.functor
+def complete_schema():
+  return SolutionForCompletion
+
+
+def eval_set(
+    eval_id: str,
+    method: str,
+    schema_fn,
+    lm: lf.LanguageModel,
+    use_cache: bool = True,
+):
+  """Creates an evaluation object for testing."""
+  tmp_dir = tempfile.gettempdir()
+  return groundtruth_based.GroundTruthMatch(
+      id=eval_id,
+      root_dir=tmp_dir,
+      inputs=[
+          pg.Dict(question='Compute 1 + 1', groundtruth=2),
+          pg.Dict(question='Compute 1 + 2', groundtruth=3),
+          pg.Dict(question='Compute 1 + 3', groundtruth=4),
+          pg.Dict(question='Compute 1 + 1', groundtruth=2),
+      ],
+      method=method,
+      prompt='{{example.question}}',
+      groundtruth_field='groundtruth',
+      answer_field='final_answer',
+      schema_fn=schema_fn,
+      lm=lm,
+      use_cache=use_cache,
+      max_workers=1,
+  )
+
+
+class GroundTruthMatchTest(unittest.TestCase):
+  """GroundTruthMatch test."""
+
+  def setUp(self):
+    super().setUp()
+    pg.symbolic.set_save_handler(pg.symbolic.default_save_handler)
+    pg.symbolic.set_load_handler(pg.symbolic.default_load_handler)
+
+  def test_run(self):
+    lm = fake.StaticSequence([
+        'Solution(final_answer=2)',
+        '3',
+        'Solution(final_answer=3)',
+    ])
+
+    s = eval_set('match_run_test', 'query', schema_fn=answer_schema(), lm=lm)
+    self.assertEqual(
+        s.run(),
+        dict(
+            experiment_setup=dict(
+                id='match_run_test',
+                dir=s.dir,
+                model='StaticSequence',
+                prompt_template='{{example.question}}',
+                method='query',
+                schema_fn='answer_schema()',
+            ),
+            cache_stats=dict(
+                use_cache=True,
+                num_queries=4,
+                num_hits=1,
+                num_updates=3,
+            ),
+            metrics=dict(
+                total=4,
+                failures=1,
+                failure_rate=0.25,
+                num_matches=2,
+                match_rate=0.5,
+                num_mismatches=1,
+                mismatch_rate=0.25,
+            ),
+        ),
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(
+                s.dir, groundtruth_based.GroundTruthMatch.EXPERIMENT_JSON
+            )
+        )
+    )
+
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.RESULT_JSON)
+        )
+    )
+
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.CACHE_JSON)
+        )
+    )
+
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.INDEX_HTML)
+        )
+    )
+
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(
+                s.dir, groundtruth_based.GroundTruthMatch.FAILURES_HTML
+            )
+        )
+    )
+
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.MATCHES_HTML)
+        )
+    )
+
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(
+                s.dir, groundtruth_based.GroundTruthMatch.MISMATCHES_HTML
+            )
+        )
+    )
+
+
+if __name__ == '__main__':
+  unittest.main()

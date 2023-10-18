@@ -188,12 +188,21 @@ class QueryStructurePythonTest(unittest.TestCase):
   def test_query(self):
     lm = fake.StaticSequence(['1'])
     self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
+
+    # Testing calling the same `lm` without copy.
+    with self.assertRaises(IndexError):
+      prompting.query('what is 1 + 2', int, lm=lm)
+
     self.assertEqual(
-        prompting.query('what is 1 + 0', int, lm=lm, returns_message=True),
+        prompting.query(
+            'what is 1 + 0', int, lm=lm.clone(), returns_message=True
+        ),
         lf.AIMessage(
-            '1', result=1, score=1.0,
-            tags=['lm-response', 'lm-output', 'transformed']
-        )
+            '1',
+            result=1,
+            score=1.0,
+            tags=['lm-response', 'lm-output', 'transformed'],
+        ),
     )
 
 
