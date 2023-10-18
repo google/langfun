@@ -16,6 +16,7 @@
 import abc
 import base64
 import functools
+import inspect
 import io
 import os
 from typing import Annotated, Any, Callable, Literal, Optional
@@ -403,26 +404,35 @@ class Evaluation(Evaluable):
   ]
 
   schema_fn: pg.typing.Annotated[
-      pg.typing.Functor(
-          args=[],
-          returns=pg.typing.Object(
-              lf_structured.Schema,
-              transform=lf_structured.Schema.from_value,
-          ),
-      ),
+      pg.typing.Functor(),
       (
-          'A functor that returns type annotations that will be '
-          'converted to `lf.Schema`.'
+          'A functor that returns a type annotation that will be converted to '
+          '`lf.Schema`, or a tuple of (annotation, fewshot examples). '
+          'For "call" method, the fewshot examples will be used for parsing, '
+          'while for "query" and "complete", the fewshot examples will be used '
+          'directly for prompting. Here are the example code on how the '
+          'functors should be defined:' + inspect.cleandoc("""
+              ```
+              @pg.functor()
+              def solution():
+                class Solution(pg.Object):
+                  final_answer: int
+                return Solution
+
+              @pg.functor()
+              def solution_with_fewshot_examples():
+                class Solution(pg.Object):
+                  final_answer: int
+                return Solution, [
+                    lf.structured.MappingExample(
+                        nl_text='Compute 1 + 2',
+                        schema=Solution,
+                        value=Solution(3))
+                ]
+              ```
+              """)
       ),
   ]
-
-  fewshot_examples: Annotated[
-      list[lf.structured.MappingExample] | None,
-      (
-          'Fewshot examples that will be passed to `lf.call`, `lf.query` or '
-          '`lf.complete`. If None, the default single example will be used.'
-      ),
-  ] = None
 
   lm: Annotated[lf.LanguageModel, 'Language model to use for evaluation.']
 
@@ -507,7 +517,20 @@ class Evaluation(Evaluable):
   @functools.cached_property
   def schema(self) -> lf_structured.Schema:
     """Schema."""
-    return lf_structured.Schema.from_value(self.schema_fn())
+    schema = self.schema_fn()
+    if isinstance(schema, tuple):
+      schema, self.__dict__['fewshot_examples'] = schema
+    return lf_structured.Schema.from_value(schema)
+
+  @functools.cached_property
+  def fewshot_examples(self) -> list[lf.structured.MappingExample] | None:
+    """Fewshot examples."""
+    schema = self.schema_fn()
+    fewshot_examples = None
+    if isinstance(schema, tuple):
+      schema, fewshot_examples = schema
+    self.__dict__['schema'] = lf_structured.Schema.from_value(schema)
+    return fewshot_examples
 
   @functools.cached_property
   def children(self) -> list['Evaluation']:
@@ -539,6 +562,7 @@ class Evaluation(Evaluable):
     self.__dict__.pop('children', None)
     self.__dict__.pop('examples', None)
     self.__dict__.pop('schema', None)
+    self.__dict__.pop('fewshot_examples', None)
     self.__dict__.pop('cache', None)
 
   def _reset(self):

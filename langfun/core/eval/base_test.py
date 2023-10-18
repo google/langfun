@@ -20,6 +20,7 @@ import unittest
 import langfun.core as lf
 from langfun.core.eval import base
 from langfun.core.llms import fake
+import langfun.core.structured as lf_structured
 import pyglove as pg
 
 
@@ -37,6 +38,17 @@ class SolutionForCompletion(pg.Object):
 @pg.functor
 def answer_schema():
   return Solution
+
+
+@pg.functor
+def answer_schema_with_fewshot_examples():
+  return Solution, [
+      lf_structured.MappingExample(
+          nl_text='The result of one plus two',
+          schema=Solution,
+          value=Solution(3)
+      )
+  ]
 
 
 @pg.functor
@@ -90,6 +102,23 @@ class EvaluationTest(unittest.TestCase):
         s.hash, s.clone(override={'prompt': 'Hello {{example.question}}'}).hash
     )
     self.assertIsNone(s.parent)
+    self.assertIs(s.schema.spec.cls, Solution)
+    self.assertIsNone(s.fewshot_examples)
+
+    # Test schema_fn with fewshot examples.
+    s.rebind(schema_fn=answer_schema_with_fewshot_examples())
+    self.assertIs(s.schema.spec.cls, Solution)
+    self.assertTrue(
+        pg.eq(
+            s.fewshot_examples,
+            [
+                lf_structured.MappingExample(
+                    nl_text='The result of one plus two',
+                    schema=Solution,
+                    value=Solution(3))
+            ]
+        )
+    )
 
   def test_dryrun(self):
     lm = fake.StaticResponse('Solution(final_answer=2)')
@@ -272,6 +301,15 @@ class EvaluationTest(unittest.TestCase):
     lm = fake.StaticSequence(['Solution(final_answer=2)'])
     s = eval_set('query_test', 'query', schema_fn=answer_schema(), lm=lm)
     self.assertEqual(s.process(s.examples[0]), Solution(2))
+
+    # Test query with fewshot examples.
+    lm = fake.StaticSequence(['two', 'Solution(final_answer=2)'])
+    s = eval_set(
+        'basic_test', 'call',
+        schema_fn=answer_schema_with_fewshot_examples(),
+        lm=lm)
+    m = s.process(s.examples[0], returns_message=True)
+    self.assertIn('The result of one plus two', m.lm_input.text)
 
   def test_complete(self):
     lm = fake.StaticSequence(
