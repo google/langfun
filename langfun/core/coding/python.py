@@ -227,7 +227,7 @@ class PythonCodeParser(lf.Component):
 
           # Peek forward to see if it could be a valid string.
           nt, nnt_start = _next_token(code_text, i + 1)
-          if nt in (',', '[', ']', '}', ')', '+', '*', '%', '\n'):
+          if nt in (',', '[', ']', '}', ')', '+', '*', '%', '\n', ':'):
             end_quote = True
           elif nt == ' ':
             # Detect if . could be a method invocation.
@@ -235,7 +235,7 @@ class PythonCodeParser(lf.Component):
             # given the chance is low, we do not complicate the reasoning logic
             # for now.
             nnt, _ = _next_token(code_text, nnt_start, skip_whitespace=True)
-            end_quote = nnt in ('+', '*', '%', '#', '[', 'in', 'not')
+            end_quote = nnt in ('+', '*', '%', '#', '[', 'in', 'not', ':')
           elif nt == '.':
             # Detect if . could be method invocation on string.
             nnt, nnnt_start = _next_token(code_text, nnt_start)
