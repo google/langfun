@@ -181,6 +181,16 @@ class LanguageModel(component.Component):
       ),
   ] = 5
 
+  exponential_backoff: Annotated[
+      bool,
+      ('If True, time between retrying sampling will exponentially increase.'),
+  ] = True
+
+  retry_interval: Annotated[
+      int | tuple[int, int],
+      ('Interval to wait before retrying if sampling is unsuccessful.'),
+  ] = (1, 60)
+
   debug: Annotated[
       bool | LMDebugMode,
       (
