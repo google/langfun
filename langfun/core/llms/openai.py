@@ -169,8 +169,8 @@ class OpenAI(lf.LanguageModel):
             openai_error.RateLimitError,
         ),
         max_attempts=self.max_attempts,
-        retry_interval=(1, 60),
-        exponential_backoff=True,
+        retry_interval=self.retry_interval,
+        exponential_backoff=self.exponential_backoff,
     )(prompts)
 
   def _chat_complete_batch(
@@ -204,8 +204,8 @@ class OpenAI(lf.LanguageModel):
             openai_error.RateLimitError,
         ),
         max_attempts=self.max_attempts,
-        retry_interval=(1, 60),
-        exponential_backoff=True,
+        retry_interval=self.retry_interval,
+        exponential_backoff=self.exponential_backoff,
     )
 
 

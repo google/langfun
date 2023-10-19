@@ -181,6 +181,27 @@ class LanguageModel(component.Component):
       ),
   ] = 5
 
+  retry_interval: Annotated[
+      int | tuple[int, int],
+      (
+          'An integer as a constant wait time in seconds before next retry, '
+          'or a tuple of two integers representing the range of wait time, '
+          'based on which the next wait time will be randmly chosen.'
+      )
+  ] = (5, 60)
+
+  exponential_backoff: Annotated[
+      bool,
+      (
+          'If True, the wait time among multiple attempts will exponentially '
+          'grow. If `retry_interval` is an integer, the wait time for the '
+          'k\'th attempt will be `retry_interval * 2 ^ (k - 1)` seconds. If '
+          '`retry_interval` is a tuple, the wait time range for the k\'th '
+          'attempt will be `(retry_interval[0] * 2 ^ (k - 1), '
+          'retry_interval[1] * 2 ^ (k - 1)`) seconds.'
+      )
+  ] = True
+
   debug: Annotated[
       bool | LMDebugMode,
       (

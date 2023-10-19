@@ -71,6 +71,6 @@ class LlamaCppRemote(lf.LanguageModel):
         _complete_fn,
         retry_on_errors=(),
         max_attempts=self.max_attempts,
-        retry_interval=(1, 60),
-        exponential_backoff=True,
+        retry_interval=self.retry_interval,
+        exponential_backoff=self.exponential_backoff,
     )(prompts)
