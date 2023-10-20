@@ -21,6 +21,7 @@ from langfun.core.coding.python import CodeError
 
 from langfun.core.coding.python import PythonCode
 from langfun.core.coding.python import PythonCodeParser
+from langfun.core.coding.python import PythonFunction
 
 from langfun.core.coding.python import permission
 from langfun.core.coding.python import get_permission
@@ -28,7 +29,10 @@ from langfun.core.coding.python import get_permission
 from langfun.core.coding.python import context
 from langfun.core.coding.python import get_context
 
+from langfun.core.coding.python import sandbox_call
+
 from langfun.core.coding.python import run
+from langfun.core.coding.python import sandbox_run
 
 
 # pylint: enable=g-importing-member

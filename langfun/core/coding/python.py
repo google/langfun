@@ -16,11 +16,13 @@
 import ast
 import contextlib
 import enum
+import functools
 import inspect
 import io
+import multiprocessing
 import re
 import textwrap
-from typing import Annotated, Any
+from typing import Annotated, Any, Callable, ContextManager
 
 import langfun.core as lf
 import pyglove as pg
@@ -374,7 +376,7 @@ def run(
   Args:
     code: Python code to run.
     perm: Permission for the Python code to run.
-    **kwargs: The override to the key value pairs provided in `run_context`,
+    **kwargs: The override to the key value pairs provided in `context`,
       which will be exposed as symbols to be referenced by the code.
 
   Returns:
@@ -422,7 +424,71 @@ def run(
   return local_vars
 
 
-class PythonCode(pg.Functor):
+def sandbox_call(
+    func: Callable[..., Any],
+    *args,
+    timeout: int | None = None,
+    **kwargs) -> Any:
+  """Calls a function with sandboxing.
+
+  Args:
+    func: Function to call.
+    *args: Positional arguments for `func`
+    timeout: Execution timeout in seconds. If None, wait `func` to complete.
+    **kwargs: Keyword arguments for `func`.
+
+  Returns:
+    Return value from `func`.
+
+  Raises:
+    TimeoutError: If the execution time exceeds the timeout.
+    Exception: Exception raised from `func`.
+  """
+  def _call(q, *args, **kwargs):
+    try:
+      q.put(pg.to_json_str(func(*args, **kwargs)))
+    except Exception as e:  # pylint: disable=broad-exception-caught
+      q.put(e)
+
+  q = multiprocessing.Queue()
+  p = multiprocessing.Process(
+      target=_call, args=tuple([q] + list(args)), kwargs=kwargs)
+  p.start()
+  p.join(timeout=timeout)
+  if p.is_alive():
+    p.terminate()
+    raise TimeoutError(f'Execution time exceed {timeout} seconds.')
+  x = q.get()
+  if isinstance(x, Exception):
+    raise x
+  return pg.from_json_str(x)
+
+
+def sandbox_run(
+    code: str,
+    perm: CodePermission | None = None,
+    timeout: int | None = None,
+    **kwargs) -> dict[str, Any]:
+  """Run Python code with sandboxing.
+
+  Args:
+    code: Code to run.
+    perm: Permissiong to run.
+    timeout: Execution timeout in seconds. If None, wait the code the complete.
+    **kwargs: Globals that could be accessed within the code.
+
+  Returns:
+    A dict of local variables, with the value of the last expression kept
+      in key `__result__`.
+
+  Raises:
+    TimeoutError: If the execution time exceeds the timeout.
+    Exception: Exception  that are raised from the code.
+  """
+  return sandbox_call(run, code, perm, time=timeout, **kwargs)
+
+
+class PythonCode(pg.Object):
   """Symbolic class for Python code."""
 
   source: Annotated[
@@ -430,10 +496,148 @@ class PythonCode(pg.Functor):
       'Source code.'
   ]
 
-  def _call(self) -> Any:
-    """Returns the final result."""
-    return self.eval()[_FINAL_RESULT_KEY]
+  _TLS_AUTO_RUN = '__auto_run__'
 
-  def eval(self) -> dict[str, Any]:
-    """Evaluates the code and return a dict of variables to their values."""
-    return run(self.source)
+  @classmethod
+  def auto_run(
+      cls,
+      enabled: bool = True,
+      sandbox: bool = True,
+      timeout: int | None = 5) -> ContextManager[None]:
+    """Returns a context manager to enable/disable auto run of PythonCode.
+
+    `auto_run` is thread-safe and can be nested. For example::
+
+      with lf.coding.PythonCode.auto_run(True, sandbox=True, timeout=1):
+        a = PythonCode('1 + 2')
+        assert a == 1
+        with lf.coding.PythonCode.auto_run(False):
+          b = PythonCode('2 + 3')
+          assert isinstance(b, lf.PythonCode)
+
+    Args:
+      enabled: If True, enable auto call for functors.
+        Otherwise, auto call will be disabled.
+      sandbox: If True, execute the python code in a sandbox. Applicable when
+        `enabled` is set to True.
+      timeout: Timeout in seconds. Applicable when both `enabled` and `sandbox`
+        are set to True.
+
+    Returns:
+      A context manager for enabling/disabling auto call for functors.
+    """
+    return pg.object_utils.thread_local_value_scope(
+        cls._TLS_AUTO_RUN,
+        pg.Dict(enabled=enabled, sandbox=sandbox, timeout=timeout),
+        pg.Dict(enabled=False, sandbox=False, timeout=None),
+    )
+
+  def __new__(cls, *args, **kwargs):
+    instance = object.__new__(cls)
+    auto_run = pg.object_utils.thread_local_get(
+        cls._TLS_AUTO_RUN,
+        pg.Dict(enabled=False, sandbox=False, timeout=None)
+    )
+    if auto_run.enabled:
+      instance.__init__(*args, **kwargs)
+      return instance(
+          sandbox=auto_run.sandbox, timeout=auto_run.timeout)
+    return instance
+
+  def __call__(
+      self,
+      *,
+      sandbox: bool = True,
+      timeout: int | None = 5,
+      global_vars: dict[str, Any] | None = None
+      ) -> Any:
+    """Returns the value of the last expression from the source.
+
+    Args:
+      sandbox: If True, evaluate the code in a sand box.
+      timeout: Timeout in seconds. If None, there is no timeout.
+        Applicable when sandbox is set to True.
+      global_vars: Global variables that could be accessed from the source code.
+
+    Returns:
+      The value of the last expression in the source code.
+
+    Raises:
+      TimeoutError: If `sandbox` is True and timeout has reached.
+      Exception: Any errors that the source code has raised.
+    """
+    return self.eval(
+        sandbox=sandbox,
+        timeout=timeout,
+        global_vars=global_vars)[_FINAL_RESULT_KEY]
+
+  def eval(
+      self,
+      *,
+      sandbox: bool = True, timeout: int | None = 5,
+      global_vars: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Evaluates the code and return a dict of local variable names to values.
+
+    Args:
+      sandbox: If True, evaluate the code in a sand box.
+      timeout: Timeout in seconds. If None, there is no timeout.
+        Applicable when sandbox is set to True.
+      global_vars: Global variables that could be accessed from the source code.
+
+    Returns:
+      A dict of local variable names defined in the source code to their values.
+
+    Raises:
+      TimeoutError: If `sandbox` is True and timeout has reached.
+      Exception: Any errors that the source code has raised.
+    """
+    global_vars = global_vars or {}
+    if sandbox:
+      return sandbox_run(self.source, timeout=timeout, **global_vars)
+    return run(self.source, **global_vars)
+
+
+class PythonFunction(pg.Object):
+  """Generated Python function via source code."""
+  name: str
+  args: dict[str, str]
+  returns: str
+  source: Annotated[
+      str,
+      'Source code for the Python function. '
+  ]
+
+  def _on_bound(self):
+    super()._on_bound()
+    self.__dict__.pop('implementation', None)
+
+  @functools.cached_property
+  def implementation(self) -> Callable[..., Any]:
+    """Returns the function implementation based on source code."""
+    return run(self.source)[_FINAL_RESULT_KEY]
+
+  def __call__(
+      self,
+      *args,
+      sandbox: bool = True,
+      timeout: int | None = 5,
+      **kwargs) -> Any:
+    """Calls the function.
+
+    Args:
+      *args: Positional arguments that will be passed to the implementation.
+      sandbox: If True, call the implementation in sandbox.
+      timeout: Timeout in seconds. If None, there is no timeout. Applicable when
+        sandbox is set to True.
+      **kwargs: Keyword arguments that will be passed to the implementation.
+
+    Returns:
+      The return value of the implementation.
+
+    Raises:
+      TimeoutError: If `sandbox` is True and timeout has reached.
+      Exception: Any errors that the source code has raised.
+    """
+    if sandbox:
+      return sandbox_call(self.implementation, *args, timeout=timeout, **kwargs)
+    return self.implementation(*args, **kwargs)

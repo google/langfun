@@ -14,6 +14,7 @@
 """Tests for Python code handling."""
 
 import inspect
+import time
 from typing import Any
 import unittest
 from langfun.core.coding import python
@@ -503,10 +504,59 @@ class RunTest(unittest.TestCase):
       )
 
 
+class Foo(pg.Object):
+  x: int
+  y: int
+
+
+class SandboxTest(unittest.TestCase):
+
+  def test_basics(self):
+    def f(x, y):
+      return x + y
+    self.assertEqual(python.sandbox_call(f, 1, y=2), 3)
+
+  def test_complex_type(self):
+    def f(x, y):
+      return Foo(x, y)
+
+    self.assertEqual(python.sandbox_call(f, 1, 2), Foo(1, 2))
+
+  def test_timeout(self):
+    def f(x):
+      time.sleep(x)
+
+    self.assertIsNone(python.sandbox_call(f, 0, timeout=1))
+    with self.assertRaises(TimeoutError):
+      python.sandbox_call(f, 2, timeout=1)
+
+  def test_raise(self):
+    def f(x):
+      if x == 0:
+        raise ValueError()
+
+    self.assertIsNone(python.sandbox_call(f, 1))
+    with self.assertRaises(ValueError):
+      python.sandbox_call(f, 0)
+
+  def test_sandbox_run(self):
+    code = inspect.cleandoc("""
+        x = Foo(1, 2)
+        y = Foo(2, 3)
+        """)
+    self.assertEqual(
+        python.sandbox_run(code, Foo=Foo),
+        {
+            'x': Foo(1, 2),
+            'y': Foo(2, 3),
+            '__result__': Foo(2, 3)
+        })
+
+
 class PythonCodeTest(unittest.TestCase):
 
   def test_auto_run(self):
-    with pg.auto_call_functors():
+    with python.PythonCode.auto_run():
       self.assertEqual(
           python.PythonCode(
               """
@@ -517,6 +567,8 @@ class PythonCodeTest(unittest.TestCase):
               ),
           3
       )
+      with python.PythonCode.auto_run(False):
+        self.assertIsInstance(python.PythonCode('1'), python.PythonCode)
 
   def test_eval(self):
     self.assertEqual(
@@ -545,8 +597,46 @@ class PythonCodeTest(unittest.TestCase):
           class A:
             pass
           """
-          )()
+          )(sandbox=False)
       self.assertTrue(inspect.isclass(v))
+
+
+class PythonFunctionTest(unittest.TestCase):
+
+  def test_basic(self):
+    f = python.PythonFunction(
+        name='sum',
+        args=dict(x='int', y='int'),
+        returns='int',
+        source=(
+            """
+            def sum(x: int, y: int):
+              return x + y
+            """)
+    )
+    self.assertEqual(f(1, y=2), 3)
+    self.assertEqual(f(1, y=2, sandbox=False), 3)
+
+  @unittest.skip(
+      'coverage data collection failure due to terminated child process.')
+  def test_bad_code(self):
+    f = python.PythonFunction(
+        name='sum',
+        args=dict(x='int', y='int'),
+        returns='int',
+        source=(
+            """
+            def sum(x: int, y: int):
+              s = 0
+              for _ in range(x):
+                s += 1
+              for _ in range(y):
+                s += 1
+              return s
+            """)
+    )
+    with self.assertRaises(TimeoutError):
+      f(100000000, y=10000000, timeout=1)
 
 
 if __name__ == '__main__':

@@ -35,6 +35,7 @@ from langfun.core import transforms
 from langfun.core import coding
 
 PythonCode = coding.PythonCode
+PythonFunction = coding.PythonFunction
 
 from langfun.core import llms
 lm_cache = llms.cache.lm_cache
