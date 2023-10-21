@@ -15,6 +15,7 @@
 
 # pylint: disable=g-importing-member
 # pylint: disable=g-bad-import-order
+# pylint: disable=g-import-not-at-top
 
 # LMs for testing.
 from langfun.core.llms.fake import Echo
@@ -54,5 +55,6 @@ from langfun.core.llms.llama_cpp import LlamaCppRemote
 # Include cache as sub-module.
 from langfun.core.llms import cache
 
+# pylint: enable=g-import-not-at-top
 # pylint: enable=g-bad-import-order
 # pylint: enable=g-importing-member
