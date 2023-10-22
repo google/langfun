@@ -358,11 +358,13 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(s.process(s.examples[0]), Solution(2))
 
     # Test query with fewshot examples.
-    lm = fake.StaticSequence(['two', 'Solution(final_answer=2)'])
+    lm = fake.StaticSequence(['Solution(final_answer=2)'])
     s = eval_set(
-        'basic_test', 'call',
+        'basic_test',
+        'query',
         schema_fn=answer_schema_with_fewshot_examples(),
-        lm=lm)
+        lm=lm,
+    )
     m = s.process(s.examples[0], returns_message=True)
     self.assertIn('The result of one plus two', m.lm_input.text)
 

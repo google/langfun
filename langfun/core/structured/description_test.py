@@ -16,7 +16,6 @@
 import inspect
 import unittest
 
-import langfun.core as lf
 from langfun.core.llms import fake
 from langfun.core.structured import description as description_lib
 from langfun.core.structured import mapping
@@ -54,22 +53,19 @@ class DescribeStructureTest(unittest.TestCase):
             ),
         ]
     )
-    m = lf.UserMessage(
-        '1 day itinerary to SF',
-        result=Itinerary(
-            day=1,
-            type='daytime',
-            activities=[
-                Activity('Visit Golden Gate Bridge.'),
-                Activity("Visit Fisherman's Wharf."),
-                Activity('Visit Alcatraz Island.'),
-            ],
-            hotel=None,
-        ),
+    value = Itinerary(
+        day=1,
+        type='daytime',
+        activities=[
+            Activity('Visit Golden Gate Bridge.'),
+            Activity("Visit Fisherman's Wharf."),
+            Activity('Visit Alcatraz Island.'),
+        ],
+        hotel=None,
     )
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_value=value, nl_context='1 day itinerary to SF').text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -125,21 +121,18 @@ class DescribeStructureTest(unittest.TestCase):
 
   def test_render_no_examples(self):
     l = description_lib.DescribeStructure()
-    m = lf.UserMessage(
-        '1 day itinerary to SF',
-        result=Itinerary(
-            day=1,
-            type='daytime',
-            activities=[
-                Activity('Visit Golden Gate Bridge.'),
-                Activity("Visit Fisherman's Wharf."),
-                Activity('Visit Alcatraz Island.'),
-            ],
-            hotel=None,
-        ),
+    value = Itinerary(
+        day=1,
+        type='daytime',
+        activities=[
+            Activity('Visit Golden Gate Bridge.'),
+            Activity("Visit Fisherman's Wharf."),
+            Activity('Visit Alcatraz Island.'),
+        ],
+        hotel=None,
     )
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_value=value, nl_context='1 day itinerary to SF').text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -174,22 +167,19 @@ class DescribeStructureTest(unittest.TestCase):
 
   def test_render_no_context(self):
     l = description_lib.DescribeStructure()
-    m = lf.UserMessage(
-        '',
-        result=Itinerary(
-            day=1,
-            type='daytime',
-            activities=[
-                Activity('Visit Golden Gate Bridge.'),
-                Activity("Visit Fisherman's Wharf."),
-                Activity('Visit Alcatraz Island.'),
-            ],
-            hotel=None,
-        ),
+    value = Itinerary(
+        day=1,
+        type='daytime',
+        activities=[
+            Activity('Visit Golden Gate Bridge.'),
+            Activity("Visit Fisherman's Wharf."),
+            Activity('Visit Alcatraz Island.'),
+        ],
+        hotel=None,
     )
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_value=value).text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 

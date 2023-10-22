@@ -16,7 +16,6 @@
 import inspect
 from typing import Any, Literal
 
-import langfun.core as lf
 from langfun.core.structured import mapping
 import pyglove as pg
 
@@ -96,16 +95,11 @@ def describe(
   Returns:
     The parsed result based on the schema.
   """
-  if isinstance(value, lf.Message):
-    message = value
-  else:
-    message = lf.UserMessage(
-        context if context else '', result=value, allow_partial=True
-    )
-
   if examples is None:
     examples = DEFAULT_DESCRIBE_EXAMPLES
-  return DescribeStructure(examples, **kwargs)(message=message).text
+  return DescribeStructure(examples, **kwargs)(
+      input_value=value, nl_context=context
+  ).text
 
 
 class _Country(pg.Object):

@@ -14,7 +14,7 @@
 """Natural language text to structured value."""
 
 import inspect
-from typing import Annotated, Any, Callable, Literal, Type, Union
+from typing import Annotated, Any, Literal, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -26,40 +26,21 @@ import pyglove as pg
 class ParseStructure(mapping.NaturalLanguageToStructure):
   """Parse an object out from a natural language text."""
 
-  # Customize the source of the text to be mapped and its context.
-  nl_context_getter: Annotated[
-      Callable[[lf.Message], str] | None,
-      (
-          'A callable object to get the request text from the message. '
-          'If None, it returns the entire LM input message ('
-          '`message.lm_input.text`).'
-      ),
-  ] = None
+  input_message: Annotated[lf.Message, 'The input message.'] = lf.contextual()
 
-  nl_text_getter: Annotated[
-      Callable[[lf.Message], str] | None,
-      (
-          'A callable object to get the text to be mapped from the message. '
-          'If None, it returns the entire LM output message (`message.text`).'
-      ),
-  ] = None
+  def transform_input(self, lm_input: lf.Message) -> lf.Message:
+    lm_input.source = self.input_message
+    return lm_input
 
   @property
   def nl_context(self) -> str | None:
     """Returns the user request."""
-    if self.nl_context_getter is None:
-      return self.message.lm_input.text if self.message.lm_input else None
-    return self.nl_context_getter(self.message)    # pylint: disable=not-callable
+    return getattr(self.input_message.lm_input, 'text', None)
 
   @property
   def nl_text(self) -> str:
     """Returns the LM response."""
-    if self.nl_text_getter is None:
-      # This allows external output transform chaining.
-      if isinstance(self.message.result, str):
-        return self.message.result
-      return self.message.text
-    return self.response_getter(self.message)    # pylint: disable=not-callable
+    return self.input_message.text
 
 
 class ParseStructureJson(ParseStructure):
@@ -96,7 +77,7 @@ def parse(
     schema: Union[
         schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
     ],
-    default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
+    default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
     user_prompt: str | None = None,
     examples: list[mapping.MappingExample] | None = None,
@@ -161,15 +142,12 @@ def parse(
   if examples is None:
     examples = DEFAULT_PARSE_EXAMPLES
 
-  t = _parse_structure_cls(protocol)(
-      schema, default=default, examples=examples, **kwargs
-  )
-  if isinstance(message, str):
-    message = lf.AIMessage(message)
+  t = _parse_structure_cls(protocol)(schema, default=default, examples=examples)
+  message = lf.AIMessage.from_value(message)
 
   if message.source is None and user_prompt is not None:
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
-  output = t.transform(message=message)
+  output = t(input_message=message, **kwargs)
   return output if returns_message else output.result
 
 
@@ -225,31 +203,32 @@ def call(
   Returns:
     A string if `returns` is None or an instance of the return type.
   """
+  if isinstance(prompt, str):
+    prompt = lf.Template(prompt)
+
   if isinstance(prompt, lf.LangFunc):
     lfun = prompt
   elif isinstance(prompt, lf.Template):
-    lfun = lf.LangFunc(prompt.render(**kwargs).text)
-  elif isinstance(prompt, str):
-    lfun = lf.LangFunc(prompt)
+    lfun = lf.LangFunc(prompt.template_str)
+    lfun.sym_setparent(prompt)
   else:
     raise TypeError(
         '`prompt` should be a string or an `lf.Template` object. '
         f'Encountered {prompt!r}.'
     )
 
-  parsing_kwargs = {}
-  if parsing_lm is not None:
-    parsing_kwargs['lm'] = parsing_lm
-  if parsing_examples is not None:
-    parsing_kwargs['examples'] = parsing_examples
-  lfun = lfun.as_structured(schema, **parsing_kwargs)
-
-  message = lfun(**kwargs)
-  if returns_message:
-    return message
+  lm_output = lfun(**kwargs)
   if schema is None:
-    return message.text
-  return message.result
+    return lm_output if returns_message else lm_output.text
+
+  parse_kwargs = dict(kwargs)
+  if parsing_lm is not None:
+    parse_kwargs['lm'] = parsing_lm
+  if parsing_examples is not None:
+    parse_kwargs['examples'] = parsing_examples
+  return parse(
+      lm_output, schema, returns_message=returns_message, **parse_kwargs
+  )
 
 
 def _parse_structure_cls(
@@ -261,46 +240,6 @@ def _parse_structure_cls(
     return ParseStructurePython
   else:
     raise ValueError(f'Unknown protocol: {protocol!r}.')
-
-
-def as_structured(
-    self,
-    annotation: Union[Type[Any], list[Type[Any]], dict[str, Any], None],
-    default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
-    examples: list[mapping.Mapping] | None = None,
-    *,
-    protocol: schema_lib.SchemaProtocol = 'python',
-    **kwargs,
-):
-  """Returns the structured representation of the message text.
-
-  Args:
-    self: The Message transform object.
-    annotation: The annotation used for representing the structured output. E.g.
-      int, list[int], {'x': int, 'y': str}, A. If None, the return value will be
-      the original LM response (str).
-    default: The default value to use if parsing failed. If not specified, error
-      will be raised.
-    examples: An optional list of fewshot examples for helping parsing. If None,
-      the default one-shot example will be added.
-    protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default 'python' will be used.
-    **kwargs: Additional keyword arguments that will be passed to
-      `lf.structured.NaturalLanguageToStructure`.
-
-  Returns:
-    The structured output according to the annotation.
-  """
-  if annotation is None:
-    return self
-  if examples is None:
-    examples = DEFAULT_PARSE_EXAMPLES
-  return self >> _parse_structure_cls(protocol)(
-      schema=annotation,
-      default=default,
-      examples=examples,
-      **kwargs,
-  )
 
 
 class _Country(pg.Object):
@@ -349,6 +288,3 @@ DEFAULT_PARSE_EXAMPLES: list[mapping.MappingExample] = [
         ),
     ),
 ]
-
-
-lf.MessageTransform.as_structured = as_structured

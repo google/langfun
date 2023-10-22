@@ -21,6 +21,9 @@ Please see //third_party/py/langfun/__init__.py for details.
 # pylint: disable=g-importing-member
 # pylint: disable=g-import-not-at-top
 
+# Constants
+from langfun.core.component import RAISE_IF_HAS_ERROR
+
 # Interface for all langfun components.
 from langfun.core.component import Component
 
@@ -87,11 +90,6 @@ from langfun.core.message import UserMessage
 from langfun.core.message import AIMessage
 from langfun.core.message import SystemMessage
 from langfun.core.message import MemoryRecord
-
-
-# Message transforms.
-from langfun.core.message_transform import MessageTransform
-
 
 # Interfaces for languge models.
 from langfun.core.language_model import LanguageModel

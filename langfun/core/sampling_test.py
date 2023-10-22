@@ -109,23 +109,6 @@ class SamplingTest(unittest.TestCase):
     for x in samples:
       self.assertIsInstance(x[1], AttributeError)
 
-  def test_random_sample_lm_input_only(self):
-    l = LangFunc('Compute {{x}} and {{y}}', x=pg.oneof([1, 3, 5]))
-    samples = list(
-        sampling.random_sample(
-            l, y=pg.oneof([2, 4]), lm_input_only=True, num_examples=3, seed=1
-        )
-    )
-    samples = sorted(samples, key=lambda x: (x[0].x, x[0].y))
-    self.assertEqual(
-        [(x[0], x[1]) for x in samples],
-        [
-            ('Compute 1 and 2', None),
-            ('Compute 3 and 2', None),
-            ('Compute 3 and 4', None),
-        ],
-    )
-
 
 if __name__ == '__main__':
   unittest.main()

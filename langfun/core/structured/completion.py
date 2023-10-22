@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 import langfun.core as lf
 from langfun.core.structured import mapping
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -72,8 +73,8 @@ DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
 
 
 def complete(
-    value: pg.Symbolic,
-    default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
+    input_value: pg.Symbolic,
+    default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
     examples: list[mapping.MappingExample] | None = None,
     returns_message: bool = False,
@@ -111,7 +112,7 @@ def complete(
     ```
 
   Args:
-    value: A symbolic value that may contain missing values.
+    input_value: A symbolic value that may contain missing values.
     default: The default value if parsing failed. If not specified, error will
       be raised.
     examples: An optional list of fewshot examples for helping parsing. If None,
@@ -129,5 +130,5 @@ def complete(
     examples = DEFAULT_COMPLETE_EXAMPLES
   t = CompleteStructure(default=default, examples=examples)
   with t.override(**kwargs):
-    output = t.transform(message=lf.UserMessage(text='', result=value))
+    output = t(input_value=schema_lib.mark_missing(input_value))
   return output if returns_message else output.result

@@ -43,7 +43,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     m = lf.AIMessage('Compute 12 / 6 + 2.')
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(user_prompt=m).text,
         inspect.cleandoc("""
             Please respond to USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
@@ -68,7 +68,7 @@ class QueryStructurePythonTest(unittest.TestCase):
         ],
     )
     self.assertEqual(
-        l.render(message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please respond to USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
@@ -105,7 +105,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             """),
     )
 
-  def test_transform(self):
+  def test_invocation(self):
     lm_input = lf.UserMessage('3-day itineraries to San Francisco')
     parse_structured_response = inspect.cleandoc(
         """
@@ -168,13 +168,13 @@ class QueryStructurePythonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(message=lm_input)
+      r = l(user_prompt=lm_input)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
       self.assertIsNone(r.result[0].hotel)
 
-  def test_bad_transform(self):
+  def test_bad_response(self):
     with lf.context(
         lm=fake.StaticSequence(['a2']),
         override_attrs=True,
@@ -204,6 +204,12 @@ class QueryStructurePythonTest(unittest.TestCase):
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )
+    self.assertEqual(
+        prompting.query(
+            lf.Template('what is {{x}} + {{y}}'), int, x=1, y=0, lm=lm.clone()
+        ),
+        1,
+    )
 
 
 class QueryStructureJsonTest(unittest.TestCase):
@@ -213,7 +219,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     m = lf.AIMessage('Compute 12 / 6 + 2.')
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(user_prompt=m).text,
         inspect.cleandoc("""
             Please respond to USER_REQUEST with JSON according to SCHEMA:
 
@@ -242,7 +248,7 @@ class QueryStructureJsonTest(unittest.TestCase):
         ],
     )
     self.assertEqual(
-        l.render(message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please respond to USER_REQUEST with JSON according to SCHEMA:
 
@@ -279,7 +285,7 @@ class QueryStructureJsonTest(unittest.TestCase):
             """),
     )
 
-  def test_transform(self):
+  def test_invocation(self):
     lm_input = lf.UserMessage('3-day itineraries to San Francisco')
     parse_structured_response = (
         lf.LangFunc(
@@ -380,7 +386,7 @@ class QueryStructureJsonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(message=lm_input)
+      r = l(user_prompt=lm_input)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)

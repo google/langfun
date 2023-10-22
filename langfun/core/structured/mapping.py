@@ -117,11 +117,6 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
 class Mapping(lf.LangFunc):
   """Base class for mapping."""
 
-  message: Annotated[
-      lf.Message,
-      'The input message.'
-  ] = lf.contextual()
-
   examples: Annotated[
       list[MappingExample] | None,
       'Fewshot examples for improving the quality of mapping.'
@@ -181,7 +176,7 @@ class NaturalLanguageToStructure(Mapping):
           'The default value to use if parsing failed. '
           'If unspecified, error will be raisen.'
       ),
-  ] = lf.message_transform.RAISE_IF_HAS_ERROR
+  ] = lf.RAISE_IF_HAS_ERROR
 
   preamble: Annotated[
       lf.LangFunc,
@@ -234,7 +229,7 @@ class NaturalLanguageToStructure(Mapping):
           lm_output.text, protocol=self.protocol
       )
     except Exception as e:  # pylint: disable=broad-exception-caught
-      if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
+      if self.default == lf.RAISE_IF_HAS_ERROR:
         raise e
       lm_output.result = self.default
     return lm_output
@@ -266,10 +261,18 @@ class StructureToNaturalLanguage(Mapping):
 
   {% endif -%}
   {{ value_title }}:
-  {{ value_str(value) | indent(2, True) }}
+  {{ value_str(input_value) | indent(2, True) }}
 
   {{ nl_text_title }}:
   """
+
+  input_value: Annotated[
+      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
+  ] = lf.contextual()
+
+  nl_context: Annotated[
+      str | None, 'The natural language context for describing the object.'
+  ] = lf.contextual(default=None)
 
   preamble: Annotated[
       lf.LangFunc, 'Preamble used for zeroshot natural language mapping.'
@@ -284,16 +287,6 @@ class StructureToNaturalLanguage(Mapping):
   )
 
   value_title: Annotated[str, 'The section title for schema.'] = 'PYTHON_OBJECT'
-
-  @property
-  def value(self) -> Any:
-    """Returns the structured input value."""
-    return self.message.result
-
-  @property
-  def nl_context(self) -> str:
-    """Returns the context information for the description."""
-    return self.message.text
 
   def value_str(self, value: Any) -> str:
     return schema_lib.value_repr('python').repr(
@@ -343,6 +336,9 @@ class StructureToStructure(Mapping):
 
   {{ output_value_title }}:
   """
+  input_value: Annotated[
+      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
+  ] = lf.contextual()
 
   default: Annotated[
       Any,
@@ -350,7 +346,7 @@ class StructureToStructure(Mapping):
           'The default value to use if mapping failed. '
           'If unspecified, error will be raisen.'
       ),
-  ] = lf.message_transform.RAISE_IF_HAS_ERROR
+  ] = lf.RAISE_IF_HAS_ERROR
 
   preamble: Annotated[
       lf.LangFunc,
@@ -373,10 +369,6 @@ class StructureToStructure(Mapping):
               'The value of example must be a `lf.structured.Pair` object. '
               f'Encountered: { example.value }.'
           )
-
-  @property
-  def input_value(self) -> Any:
-    return schema_lib.mark_missing(self.message.result)
 
   def value_str(self, value: Any) -> str:
     return schema_lib.value_repr('python').repr(
@@ -403,7 +395,7 @@ class StructureToStructure(Mapping):
           lm_output.text, additional_context=self._value_context()
       )
     except Exception as e:  # pylint: disable=broad-exception-caught
-      if self.default == lf.message_transform.RAISE_IF_HAS_ERROR:
+      if self.default == lf.RAISE_IF_HAS_ERROR:
         raise e
       result = self.default
     lm_output.result = result

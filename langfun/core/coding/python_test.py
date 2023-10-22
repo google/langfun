@@ -617,8 +617,6 @@ class PythonFunctionTest(unittest.TestCase):
     self.assertEqual(f(1, y=2), 3)
     self.assertEqual(f(1, y=2, sandbox=False), 3)
 
-  @unittest.skip(
-      'coverage data collection failure due to terminated child process.')
   def test_bad_code(self):
     f = python.PythonFunction(
         name='sum',

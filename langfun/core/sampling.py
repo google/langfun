@@ -27,7 +27,6 @@ def sweep(
     num_examples: int | None = None,
     *,
     max_workers: int = 32,
-    lm_input_only: bool = False,
     silence_on_errors: Union[
         Type[Exception], Tuple[Type[Exception]], None
     ] = None,
@@ -46,7 +45,6 @@ def sweep(
       for sampling.
     num_examples: Number of examples to sample.
     max_workers: Max number of concurrent workers to do sampling.
-    lm_input_only: If True, only generate `lm_input` without LM call.
     silence_on_errors: Return None for `lm_input` and `lm_output` when errors
       in this category happen. Otherwise error will be raised during sampling.
     ignore_examples_with_errors: If True, the examples with erratic lm_input
@@ -62,7 +60,6 @@ def sweep(
       lfun,
       pg.iter,
       num_examples=num_examples,
-      lm_input_only=lm_input_only,
       max_workers=max_workers,
       silence_on_errors=silence_on_errors,
       ignore_examples_with_errors=ignore_examples_with_errors,
@@ -75,7 +72,6 @@ def random_sample(
     num_examples: int | None = None,
     *,
     max_workers: int = 32,
-    lm_input_only: bool = False,
     silence_on_errors: Union[
         Type[Exception], Tuple[Type[Exception]], None
     ] = None,
@@ -95,7 +91,6 @@ def random_sample(
       for sampling.
     num_examples: Number of examples to sample.
     max_workers: Max number of concurrent workers to do sampling.
-    lm_input_only: If True, only generate `lm_input` without LM call.
     silence_on_errors: Return None for `lm_input` and `lm_output` when errors
       in this category happen. Otherwise error will be raised during sampling.
     ignore_examples_with_errors: If True, the examples with erratic lm_input
@@ -113,7 +108,6 @@ def random_sample(
       functools.partial(pg.random_sample, seed=seed),
       num_examples=num_examples,
       max_workers=max_workers,
-      lm_input_only=lm_input_only,
       silence_on_errors=silence_on_errors,
       ignore_examples_with_errors=ignore_examples_with_errors,
       **kwargs,
@@ -126,7 +120,6 @@ def _concurrent_sample(
     num_examples: int | None = None,
     *,
     max_workers: int = 32,
-    lm_input_only: bool = False,
     silence_on_errors: Union[
         Type[Exception], Tuple[Type[Exception]], None
     ] = None,
@@ -167,7 +160,7 @@ def _concurrent_sample(
   def _call_fn(example):
     lfun, kwargs = example.lfun, example.kwargs
 
-    error = _error_of(lfun, skip_lm=lm_input_only, **kwargs)
+    error = _error_of(lfun, **kwargs)
     lm_input = lfun.lm_input or error
     lm_output = lfun.lm_output or error
     return lm_input, lm_output

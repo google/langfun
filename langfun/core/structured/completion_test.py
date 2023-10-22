@@ -21,6 +21,7 @@ from langfun.core import coding
 from langfun.core.llms import fake
 from langfun.core.structured import completion
 from langfun.core.structured import mapping
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -46,20 +47,18 @@ class CompleteStructureTest(unittest.TestCase):
 
   def test_render_no_examples(self):
     l = completion.CompleteStructure()
-    m = lf.UserMessage(
-        '',
-        result=TripPlan.partial(
+    input_value = schema_lib.mark_missing(
+        TripPlan.partial(
             place='San Francisco',
             itineraries=[
                 Itinerary.partial(day=1),
                 Itinerary.partial(day=2),
                 Itinerary.partial(day=3),
             ],
-        ),
+        )
     )
-
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_value=input_value).text,
         inspect.cleandoc("""
             Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
@@ -106,20 +105,18 @@ class CompleteStructureTest(unittest.TestCase):
 
   def test_render_no_class_definitions(self):
     l = completion.CompleteStructure()
-    m = lf.UserMessage(
-        '',
-        result=TripPlan.partial(
+    input_value = schema_lib.mark_missing(
+        TripPlan.partial(
             place='San Francisco',
             itineraries=[
                 Itinerary.partial(day=1, activities=[Activity.partial()]),
                 Itinerary.partial(day=2, activities=[Activity.partial()]),
                 Itinerary.partial(day=3, activities=[Activity.partial()]),
             ],
-        ),
+        )
     )
-
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_value=input_value).text,
         inspect.cleandoc("""
             Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
@@ -174,20 +171,18 @@ class CompleteStructureTest(unittest.TestCase):
     l = completion.CompleteStructure(
         examples=completion.DEFAULT_COMPLETE_EXAMPLES
     )
-    m = lf.UserMessage(
-        '',
-        result=TripPlan.partial(
+    input_value = schema_lib.mark_missing(
+        TripPlan.partial(
             place='San Francisco',
             itineraries=[
                 Itinerary.partial(day=1),
                 Itinerary.partial(day=2),
                 Itinerary.partial(day=3),
             ],
-        ),
+        )
     )
-
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_value=input_value).text,
         inspect.cleandoc("""
             Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
@@ -265,7 +260,7 @@ class CompleteStructureTest(unittest.TestCase):
             """),
     )
 
-  def test_transform(self):
+  def test_invocation(self):
     structured_response = inspect.cleandoc("""
         ```python
         TripPlan(

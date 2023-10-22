@@ -19,9 +19,9 @@ import unittest
 import langfun.core as lf
 from langfun.core import coding
 from langfun.core.llms import fake
-
 from langfun.core.structured import mapping
 from langfun.core.structured import parsing
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -40,11 +40,11 @@ class ParseStructurePythonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
     l = parsing.ParseStructurePython(int)
-    m = lf.AIMessage('Bla bla bla 12 / 6 + 2 = 4.', result='12 / 6 + 2 = 4')
+    m = lf.AIMessage('12 / 6 + 2 = 4')
     m.source = lf.UserMessage('Compute 12 / 6 + 2.', tags=['lm-input'])
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_message=m).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
             Both RESULT_TYPE and RESULT_OBJECT are described in Python.
@@ -64,10 +64,10 @@ class ParseStructurePythonTest(unittest.TestCase):
 
   def test_render_no_context(self):
     l = parsing.ParseStructurePython(int)
-    m = lf.AIMessage('Bla bla bla 12 / 6 + 2 = 4.', result='12 / 6 + 2 = 4')
+    m = lf.AIMessage('12 / 6 + 2 = 4')
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_message=m).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
             Both RESULT_TYPE and RESULT_OBJECT are described in Python.
@@ -95,7 +95,7 @@ class ParseStructurePythonTest(unittest.TestCase):
         ],
     )
     self.assertEqual(
-        l.render(message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(input_message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
             Both RESULT_TYPE and RESULT_OBJECT are described in Python.
@@ -139,7 +139,7 @@ class ParseStructurePythonTest(unittest.TestCase):
             """),
     )
 
-  def test_transform(self):
+  def test_invocation(self):
     lm_input = '3-day itineraries to San Francisco'
     lm_response = inspect.cleandoc("""
         **Day 1:**
@@ -203,7 +203,7 @@ class ParseStructurePythonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = lf.LangFunc(lm_input) >> parsing.ParseStructurePython(
+      l = parsing.ParseStructurePython(
           [Itinerary],
           examples=[
               mapping.MappingExample(
@@ -231,25 +231,26 @@ class ParseStructurePythonTest(unittest.TestCase):
               )
           ],
       )
-      r = l()
+      m = lf.LangFunc(lm_input)()
+      r = l(input_message=m)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
       self.assertIsNone(r.result[0].hotel)
 
-  def test_bad_transform(self):
+  def test_bad_response(self):
     with lf.context(
-        lm=fake.StaticSequence(['three', 'a3']),
+        lm=fake.StaticResponse('a3'),
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
           coding.CodeError,
           'name .* is not defined',
       ):
-        lf.LangFunc('Compute 1 + 2').as_structured(int)()
+        parsing.parse('three', int)
 
   def test_parse(self):
-    lm = fake.StaticSequence(['1'])
+    lm = fake.StaticResponse('1')
     self.assertEqual(parsing.parse('the answer is 1', int, lm=lm), 1)
     self.assertEqual(
         parsing.parse(
@@ -273,11 +274,11 @@ class ParseStructureJsonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
     l = parsing.ParseStructureJson(int)
-    m = lf.AIMessage('Bla bla bla 12 / 6 + 2 = 4.', result='12 / 6 + 2 = 4')
+    m = lf.AIMessage('12 / 6 + 2 = 4')
     m.source = lf.UserMessage('Compute 12 / 6 + 2.', tags=['lm-input'])
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_message=m).text,
         inspect.cleandoc("""
             Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -300,10 +301,10 @@ class ParseStructureJsonTest(unittest.TestCase):
 
   def test_render_no_context(self):
     l = parsing.ParseStructureJson(int)
-    m = lf.AIMessage('Bla bla bla 12 / 6 + 2 = 4.', result='12 / 6 + 2 = 4')
+    m = lf.AIMessage('12 / 6 + 2 = 4')
 
     self.assertEqual(
-        l.render(message=m).text,
+        l.render(input_message=m).text,
         inspect.cleandoc("""
             Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -334,7 +335,7 @@ class ParseStructureJsonTest(unittest.TestCase):
         ],
     )
     self.assertEqual(
-        l.render(message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(input_message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -377,7 +378,7 @@ class ParseStructureJsonTest(unittest.TestCase):
             """),
     )
 
-  def test_transform(self):
+  def test_invocation(self):
     lm_input = '3-day itineraries to San Francisco'
     lm_response = inspect.cleandoc("""
         **Day 1:**
@@ -478,7 +479,8 @@ class ParseStructureJsonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = lf.LangFunc(lm_input) >> parsing.ParseStructureJson(
+      message = lf.LangFunc(lm_input)()
+      l = parsing.ParseStructureJson(
           [Itinerary],
           examples=[
               mapping.MappingExample(
@@ -506,34 +508,32 @@ class ParseStructureJsonTest(unittest.TestCase):
               )
           ],
       )
-      r = l()
+      r = l(input_message=message)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
       self.assertIsNone(r.result[0].hotel)
 
-  def test_bad_transform(self):
+  def test_bad_response(self):
     with lf.context(
-        lm=fake.StaticSequence(['three', '`3`']),
+        lm=fake.StaticSequence(['`3`']),
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          coding.CodeError,
-          'invalid syntax',
+          schema_lib.JsonError,
+          'No JSON dict in the output',
       ):
-        lf.LangFunc('Compute 1 + 2').as_structured(int)()
+        parsing.parse('three', int, protocol='json')
 
     with lf.context(
-        lm=fake.StaticSequence(['three', '`3`']),
+        lm=fake.StaticSequence(['`3`']),
         override_attrs=True,
     ):
       # Test default.
-      self.assertIsNone(
-          lf.LangFunc('Compute 1 + 2').as_structured(int, default=None)().result
-      )
+      self.assertIsNone(parsing.parse('three', int, default=None))
 
   def test_parse(self):
-    lm = fake.StaticSequence(['{"result": 1}'])
+    lm = fake.StaticResponse('{"result": 1}')
     self.assertEqual(
         parsing.parse('the answer is 1', int, lm=lm, protocol='json'), 1
     )

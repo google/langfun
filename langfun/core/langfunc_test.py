@@ -17,14 +17,11 @@ import unittest
 from langfun.core import component
 from langfun.core import language_model
 from langfun.core import message
-from langfun.core import message_transform
 from langfun.core import subscription
 from langfun.core.langfunc import LangFunc
 from langfun.core.langfunc import LangFuncCallEvent
 from langfun.core.llms import fake
 from langfun.core.llms.cache import in_memory
-# Enables as_structured() operation of LangFunc.
-from langfun.core.structured import parsing  # pylint: disable=unused-import
 import pyglove as pg
 
 
@@ -39,25 +36,6 @@ class ExcitedEchoer(language_model.LanguageModel):
             language_model.LMSample(prompt.text + '!!!')
             ]) for prompt in prompts
     ]
-
-
-class ExclaimCounter(message_transform.MessageTransform):
-  """Transform for output transform testing."""
-
-  input_path = ''
-  output_path = ''
-
-  def _transform_path(
-      self, m: message.Message, path: str, v) -> message.Message:
-    del v
-    num_exclaims = 0
-    result = ''
-    for c in m.text:
-      if c == '!':
-        num_exclaims += 1
-      else:
-        result += c
-    return message.AIMessage(result, metadata=dict(num_exclaims=num_exclaims))
 
 
 class BasicTest(unittest.TestCase):
@@ -92,14 +70,14 @@ class LangFuncCallTest(unittest.TestCase):
     self.assertEqual(r.source.tags, ['rendered', 'lm-input'])
 
     self.assertEqual(str(l), 'Hello')
+    print(repr(l))
     self.assertEqual(
         repr(l),
         "LangFunc(template_str='Hello', clean=True, "
         'lm=ExcitedEchoer(sampling_options=LMSamplingOptions(temperature=0.0, '
         'max_tokens=1024, n=1, top_k=40, top_p=None, random_seed=None), '
         'cache=None, timeout=120.0, max_attempts=5, retry_interval=(5, 60), '
-        'exponential_backoff=True, debug=False), '
-        'input_transform=None, output_transform=None)',
+        'exponential_backoff=True, debug=False))',
     )
 
     l = LangFunc('Hello')
@@ -117,64 +95,6 @@ class LangFuncCallTest(unittest.TestCase):
         AttributeError, '`lm` is not found under its context'
     ):
       l()
-
-  def test_call_with_input_transform(self):
-    # Test input transform on text.
-    l = LangFunc(
-        'Hello',
-        input_transform=message_transform.Lambda(lambda x: str(x) + '?'),
-    )
-    i = l.render()
-    self.assertEqual(i, message.UserMessage('Hello?'))
-    self.assertEqual(i.tags, ['transformed'])
-    self.assertEqual(i.source, message.UserMessage('Hello', result='Hello?'))
-    self.assertEqual(i.source.tags, ['rendered', 'transformed'])
-
-    with component.context(lm=ExcitedEchoer()):
-      r = l()
-      self.assertEqual(r, message.AIMessage('Hello?!!!', score=0.0))
-      self.assertEqual(r.tags, ['lm-response', 'lm-output'])
-      self.assertEqual(r.source, message.UserMessage('Hello?'))
-      self.assertEqual(r.source.tags, ['transformed', 'lm-input'])
-
-    # Test `skip_input_transform``.
-    with component.context(lm=ExcitedEchoer()):
-      i = l.render(skip_input_transform=True)
-      self.assertEqual(i, message.UserMessage('Hello'))
-      self.assertEqual(i.tags, ['rendered'])
-      self.assertEqual(l(skip_input_transform=True), 'Hello!!!')
-
-    # Test transform that operates on the entire input message.
-    class NewMessageTransform(message_transform.MessageTransform):
-      suffix: str
-      input_path = ''
-      output_path = ''
-
-      def _transform_path(self, m, path, v) -> message.Message:
-        del v
-        m = m.clone()
-        m.text += self.suffix
-        return m
-
-    l = LangFunc('Hello', input_transform=NewMessageTransform(suffix='???'))
-    with component.context(lm=ExcitedEchoer()):
-      r = l()
-      self.assertEqual(r, message.AIMessage('Hello???!!!', score=0.0))
-      self.assertEqual(r.tags, ['lm-response', 'lm-output'])
-
-  def test_call_with_output_transform(self):
-    l = LangFunc('Hello', output_transform=ExclaimCounter())
-    with component.context(lm=ExcitedEchoer()):
-      r = l()
-      self.assertEqual(r, message.AIMessage('Hello', num_exclaims=3))
-      self.assertEqual(r.tags, ['transformed', 'lm-output'])
-      self.assertEqual(r.source, message.AIMessage('Hello!!!', score=0.0))
-      self.assertEqual(r.source.tags, ['lm-response'])
-
-      # Test `skip_output_transform``.
-      r = l(skip_output_transform=True)
-      self.assertEqual(r, message.AIMessage('Hello!!!', score=0.0))
-      self.assertEqual(r.tags, ['lm-response', 'lm-output'])
 
   def test_call_with_init_time_vars(self):
     l = LangFunc('Hello, {{foo}}', foo='a')
@@ -241,25 +161,6 @@ class LangFuncCallTest(unittest.TestCase):
     with component.context(lm=ExcitedEchoer()):
       self.assertEqual(t(lm_input=message.UserMessage('Hi')), 'Hi!!!')
 
-  def test_call_with_structured_output(self):
-    l = LangFunc('Compute 1 + 2').as_structured(int)
-    with component.context(lm=fake.StaticSequence([
-        'three', '3'
-    ])):
-      r = l()
-      self.assertEqual(r.result, 3)
-
-    l = LangFunc('Compute 1 + 2', output_transform=lambda x: '3').as_structured(
-        int
-    )
-    with component.context(
-        lm=fake.StaticSequence([
-            'three', '3'
-        ])
-    ):
-      r = l()
-      self.assertEqual(r.result, 3)
-
   def test_call_with_cache(self):
     l = LangFunc('{{x}}')
     with component.context(
@@ -271,55 +172,6 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(l(x=1, cache_seed=None), 'c')
       self.assertEqual(l(x=1, cache_seed=None), 'd')
       self.assertEqual(l(x=2), 'b')
-
-
-class TransformTest(unittest.TestCase):
-
-  def test_transform(self):
-    t = message_transform.Identity() >> LangFunc('hi {{message.text}}')
-    i = message.AIMessage('foo')
-    with component.context(lm=ExcitedEchoer()):
-      r = t.transform(i)
-    self.assertEqual(r, message.AIMessage('hi foo!!!', score=0.0))
-    self.assertEqual(r.tags, ['lm-response', 'lm-output', 'transformed'])
-    self.assertEqual(
-        r.lm_input, message.UserMessage('hi foo', message=pg.Ref(i))
-    )
-    self.assertEqual(r.lm_input.tags, ['rendered', 'lm-input'])
-    self.assertIs(r.root, i)
-
-    t = LangFunc('hi {{message.text}}', input_path='result')
-    with component.context(lm=ExcitedEchoer()):
-      r = t.transform(message.AIMessage('abc', result='bar'))
-      self.assertEqual(r, message.AIMessage('hi bar!!!', score=0.0))
-      self.assertEqual(r.tags, ['lm-response', 'lm-output', 'transformed'])
-      self.assertEqual(
-          r.source,
-          message.UserMessage('hi bar', message=pg.Ref(r.source.source)),
-      )
-      self.assertEqual(r.source.tags, ['rendered', 'lm-input'])
-      self.assertEqual(r.source.source, message.AIMessage('bar'))
-      self.assertEqual(r.source.source.tags, ['transformed'])
-
-      with self.assertRaisesRegex(TypeError, 'Metadata .* should be a string'):
-        t.transform(message.AIMessage('abc', result=1))
-
-  def test_transform_composition(self):
-    self.assertTrue(
-        pg.eq(
-            LangFunc('hi').match(r'\d+').to_int(),
-            LangFunc(
-                'hi', output_transform=message_transform.Match(r'\d+').to_int()
-            ),
-        )
-    )
-
-    self.assertTrue(
-        pg.eq(
-            LangFunc('hi').to_int(),
-            LangFunc('hi', output_transform=message_transform.ParseInt()),
-        )
-    )
 
 
 class CallEventTest(unittest.TestCase):
@@ -334,8 +186,6 @@ class CallEventTest(unittest.TestCase):
             ),
         ),
     )
-    with component.context(lm=ExcitedEchoer()):
-      print('RRR', l.render(name='spirit'))
 
     class CallEventHandler(subscription.EventHandler[LangFuncCallEvent]):
 

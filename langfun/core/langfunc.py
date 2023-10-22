@@ -14,12 +14,11 @@
 """LangFunc: Language-based functions."""
 
 import dataclasses
-from typing import Annotated, Any, Type
+from typing import Annotated
 
 from langfun.core import component
 from langfun.core import language_model
 from langfun.core import message as message_lib
-from langfun.core import message_transform
 from langfun.core import subscription
 from langfun.core import template as template_lib
 import pyglove as pg
@@ -35,9 +34,6 @@ _TLS_LFUN_CALL_STACK = '_langfunc_callstack'
 @pg.use_init_args(['template_str'])
 class LangFunc(
     template_lib.Template,
-    # LangFunc is also a component that transforms an message to another
-    # message, so we can chain it.
-    message_transform.MessageTransform,
 ):
   r"""Base class for natural-language driven component.
 
@@ -191,28 +187,6 @@ class LangFunc(
       ),
   ] = component.contextual()
 
-  input_transform: Annotated[
-      message_transform.MessageTransform | None,
-      (
-          'External input transform, which intercepts LM input before calling '
-          'the internal `transform_input` method. It is designed to apply '
-          'extra structures to the LM input (e.g. COT).'
-          'We set the default value to None as we do not want the child '
-          "LangFun to use the parent's transform accidentally."
-      ),
-  ] = None
-
-  output_transform: Annotated[
-      message_transform.MessageTransform | None,
-      (
-          'Extenral output transform, which intercepts LM response before '
-          'calling the internal `transform_output` method. It is designed to '
-          'clean up LM response before structured parsing. We set the default '
-          'value to None as we do not want the child LangFun to use the '
-          "parent's transform accidentally."
-      ),
-  ] = None
-
   def _on_bound(self):
     super()._on_bound()
 
@@ -236,9 +210,6 @@ class LangFunc(
       lm: language_model.LanguageModel | None = None,
       lm_input: message_lib.Message | None = None,
       cache_seed: int | None = 0,
-      skip_input_transform: bool = False,
-      skip_lm: bool = False,
-      skip_output_transform: bool = False,
       **variables,
   ) -> message_lib.Message:
     """Calls language model with `lm_input` or rendered text.
@@ -252,10 +223,6 @@ class LangFunc(
       cache_seed: Seed for computing cache key. The cache key is determined by a
         tuple of (lm, prompt, cache seed). If None, cache will be disabled for
         the query even cache is configured by the LM.
-      skip_input_transform: If True, the input transform will be skipped.
-      skip_lm: If True, skipping LM. In such case, the input message will be
-        returned.
-      skip_output_transform: If True, the output transform will be skipped.
       **variables: Template variables applicable to this or child LangFunc.
 
     Returns:
@@ -265,9 +232,6 @@ class LangFunc(
         lm=lm,
         lm_input=lm_input,
         cache_seed=cache_seed,
-        skip_input_transform=skip_input_transform,
-        skip_lm=skip_lm,
-        skip_output_transform=skip_output_transform,
         **variables,
     )
 
@@ -277,9 +241,6 @@ class LangFunc(
       lm: language_model.LanguageModel | None = None,
       lm_input: message_lib.Message | None = None,
       cache_seed: int | None = 0,
-      skip_input_transform: bool = False,
-      skip_lm: bool = False,
-      skip_output_transform: bool = False,
       **variables,
   ) -> message_lib.Message:
     """Call the language model once, with invoking the output transform."""
@@ -293,36 +254,27 @@ class LangFunc(
       with self.override(**kwargs):
         # Render the LM input text and creates a user message.
         if lm_input is None:
-          lm_input = self.render(
-              skip_input_transform=skip_input_transform, **kwargs)
+          lm_input = self.render(**kwargs)
+
+        # Transform the input message.
+        lm_input = self.transform_input(lm_input)
         self._cached_lm_input = lm_input
 
-        if not skip_lm:
-          # Send rendered text to LM.
-          lm_input.tag(message_lib.Message.TAG_LM_INPUT)
-          lm_output = self.lm(lm_input, cache_seed=cache_seed)
+        # Send rendered text to LM.
+        lm_input.tag(message_lib.Message.TAG_LM_INPUT)
+        lm_output = self.lm(lm_input, cache_seed=cache_seed)
 
-          # Track the input as the source of the output.
-          lm_output.source = lm_input
-          lm_output.tag(message_lib.Message.TAG_LM_RESPONSE)
+        # Track the input as the source of the output.
+        lm_output.source = lm_input
+        lm_output.tag(message_lib.Message.TAG_LM_RESPONSE)
 
-          # Transform the output message if applicable.
-          if not skip_output_transform:
+        # Transform the output message.
+        lm_output = self.transform_output(lm_output)
+        lm_output.tag(message_lib.Message.TAG_LM_OUTPUT)
 
-            # Call the external output transform first to clean up LM response.
-            if self.output_transform is not None:
-              lm_output = self.output_transform.transform(lm_output)
-
-            lm_output = self.transform_output(lm_output)
-
-          lm_output.tag(message_lib.Message.TAG_LM_OUTPUT)
-
-          # We cache the transformed output instead of the original one
-          # since the old one is tracked with `sym_origin`.
-          self._cached_lm_output = lm_output
-        else:
-          lm_output = lm_input
-          self._cached_lm_output = None
+        # We cache the transformed output instead of the original one
+        # since the old one is tracked with `sym_origin`.
+        self._cached_lm_output = lm_output
 
       # Emit LangFuncCallEvent.
       lm_callstack = list(
@@ -341,65 +293,8 @@ class LangFunc(
       top = pg.object_utils.thread_local_pop(_TLS_LFUN_CALL_STACK, self)
       assert top is self, (top, self)
 
-  def render(
-      self,
-      *,
-      allow_partial: bool = False,
-      implicit: bool = False,
-      skip_input_transform: bool = False,
-      message_cls: Type[message_lib.Message] = message_lib.UserMessage,
-      **kwargs
-  ) -> message_lib.Message:
-    """Renders the template with variables from the context.
-
-    Args:
-      allow_partial: Allow partial rendering, this means that unresolved
-        variables are allowed and remain in the output text.
-      implicit: If True, reuse the rendering output if a parent LangFunc
-        is rendering current LangFunc multiple times. This is important
-        for making sure all references to the same LangFunc within a single
-        top-level rendering would return the same result. If False, every call
-        to `render` will trigger the actual rendering process.
-      skip_input_transform: If True, the input transform will be skipped.
-      message_cls: The message class used for creating the return value.
-      **kwargs: Values for template variables.
-
-    Returns:
-      An Message object as the rendered result.
-    """
-    render_output = super().render(
-        allow_partial=allow_partial,
-        implicit=implicit,
-        message_cls=message_cls,
-        **kwargs,
-    )
-
-    # Transform the input message if applicable.
-    if not skip_input_transform:
-      # Call the external input transform first.
-      render_transformed = render_output
-      if self.input_transform is not None:
-        render_transformed = self.input_transform.transform(render_transformed)
-      render_transformed = self.transform_input(render_transformed)
-
-      if render_transformed is render_output and isinstance(
-          render_transformed.result, str
-      ):
-        render_transformed = render_output.clone(
-            override={
-                'text': render_output.result,
-                'tags': [],
-                'metadata.result': pg.MISSING_VALUE,
-            }
-        )
-        render_transformed.source = render_output
-        render_transformed.tag(message_lib.Message.TAG_TRANSFORMED)
-
-      render_output = render_transformed
-    return render_output
-
   #
-  # Internal input and output transforms.
+  # Input and output transforms.
   # Subclasses can override.
   #
 
@@ -412,67 +307,6 @@ class LangFunc(
       self, lm_output: message_lib.Message) -> message_lib.Message:
     """Transforms the output message before returning from __call__."""
     return lm_output
-
-  #
-  # Override MessageTransform methods.
-  #
-
-  def _transform_path(
-      self,
-      message: message_lib.Message,
-      input_path: str,
-      value: Any
-      ) -> message_lib.Message:
-    """Implements MessageTransform._transform_path."""
-    if input_path in (
-        message_lib.Message.PATH_TEXT, message_lib.Message.PATH_ROOT):
-      input_message = message
-    else:
-      if isinstance(value, message_lib.Message):
-        message.set(input_path, pg.MISSING_VALUE)
-        input_message = value
-      elif isinstance(value, str):
-        input_message = message.clone(override={
-            'text': value,
-            'tags': [message_lib.Message.TAG_TRANSFORMED],
-            f'metadata.{input_path}': pg.MISSING_VALUE
-        })
-      else:
-        raise TypeError(
-            f'Metadata {repr(input_path)} should be a string or '
-            f'a `lf.Message`. Encountered: {value!r}'
-        )
-      input_message.source = message
-
-    # For LangFunc that are used as transforms, its template could access the
-    # input via 'message'.
-    output_message = self(message=input_message)
-
-    # Trace back the source for the root.
-    output_message.root.source = input_message
-    return output_message
-
-  def __rshift__(self, x):
-    """Override >> to chain output transform and return self."""
-    self.rebind(
-        output_transform=(
-            self.output_transform >> message_transform.make_transform(x)),
-        skip_notification=True
-    )
-    return self
-
-  #
-  # Implements NaturalLanguageFormattable
-  #
-
-  def __repr__(self) -> str:
-    exclude_keys = []
-    if self.input_path is None:
-      exclude_keys.append('input_path')
-    if self.output_path is None:
-      exclude_keys.append('output_path')
-    return self.format(
-        compact=True, use_inferred=True, exclude_keys=exclude_keys)
 
 
 # Register converter from str to LangFunc, therefore we can always

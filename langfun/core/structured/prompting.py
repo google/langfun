@@ -13,7 +13,7 @@
 # limitations under the License.
 """Natural language text to structured value."""
 
-from typing import Any, Literal, Type, Union
+from typing import Annotated, Any, Literal, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -25,10 +25,18 @@ import pyglove as pg
 class QueryStructure(mapping.NaturalLanguageToStructure):
   """Query an object out from a natural language text."""
 
+  user_prompt: Annotated[
+      lf.Message, 'Natural language prompt from the user to query the LM.'
+  ] = lf.contextual()
+
+  def transform_input(self, lm_input: lf.Message) -> lf.Message:
+    lm_input.source = self.user_prompt
+    return lm_input
+
   @property
   def nl_context(self) -> str:
     """Returns the user request."""
-    return self.message.text
+    return self.user_prompt.text
 
   @property
   def nl_text(self) -> None:
@@ -116,11 +124,11 @@ DEFAULT_QUERY_EXAMPLES: list[mapping.MappingExample] = [
 
 
 def query(
-    prompt: Union[lf.Message, str],
+    user_prompt: Union[str, lf.Template],
     schema: Union[
         schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
     ],
-    default: Any = lf.message_transform.RAISE_IF_HAS_ERROR,
+    default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
     examples: list[mapping.MappingExample] | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
@@ -159,7 +167,8 @@ def query(
     ```
 
   Args:
-    prompt: A `lf.Message` object  or a string as the natural language prompt.
+    user_prompt: A `lf.Template` object or a string as the natural language
+      prompt from the user.
     schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
     default: The default value if parsing failed. If not specified, error will
       be raised.
@@ -179,7 +188,9 @@ def query(
   if examples is None:
     examples = DEFAULT_QUERY_EXAMPLES
   t = _query_structure_cls(protocol)(schema, default=default, examples=examples)
-  message = lf.AIMessage.from_value(prompt)
+  if isinstance(user_prompt, lf.Template):
+    user_prompt = user_prompt.render(**kwargs)
+  user_prompt = lf.UserMessage.from_value(user_prompt)
   with t.override(**kwargs):
-    output = t.transform(message=message)
+    output = t(user_prompt=user_prompt)
   return output if returns_message else output.result

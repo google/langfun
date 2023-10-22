@@ -20,20 +20,21 @@ from typing import Annotated, Any, ContextManager, Iterator, Type
 import pyglove as pg
 
 
-_RAISE_IF_ATTR_NOT_AVAILABLE = (pg.MISSING_VALUE,)
+# Default value marker that indicates to raise error.
+RAISE_IF_HAS_ERROR = (pg.MISSING_VALUE,)
 
 
 class Component(pg.Object):
   """Base class for langfun components."""
 
   # Override __repr__ format to use inferred values when available.
-  __str_format_args__ = dict(
+  __repr_format_kwargs__ = dict(
       compact=True,
       use_inferred=True,
   )
 
   # Override __str__ format to use inferred values when available.
-  __str_format_args__ = dict(
+  __str_format_kwargs__ = dict(
       compact=False,
       verbose=False,
       use_inferred=True,
