@@ -13,9 +13,18 @@
 # limitations under the License.
 """Tests for message."""
 
+import inspect
 import unittest
 from langfun.core import message
+from langfun.core import modality
 import pyglove as pg
+
+
+class CustomModality(modality.Modality):
+  content: str
+
+  def to_bytes(self):
+    return self.content.encode()
 
 
 class MessageTest(unittest.TestCase):
@@ -206,6 +215,91 @@ class MessageTest(unittest.TestCase):
     m = message.MemoryRecord('hi', sender="Someone's Memory")
     self.assertEqual(m.sender, 'Someone\'s Memory')
     self.assertEqual(str(m), m.text)
+
+  def test_get_modality(self):
+    m1 = message.UserMessage(
+        'hi, this is a {{img1}} and {{x.img2}}',
+        img1=CustomModality('foo'),
+        x=dict(img2=pg.Ref(CustomModality('bar'))),
+    )
+    self.assertIs(m1.get_modality('img1'), m1.img1)
+    self.assertIs(m1.get_modality('x.img2'), m1.x.img2)
+    self.assertIsNone(m1.get_modality('video'))
+
+    m2 = message.SystemMessage('class Question:\n  image={{img1}}', source=m1)
+    self.assertIs(m2.get_modality('img1'), m1.img1)
+    # We could get the modality object even it's not directly used by current
+    # message.
+    self.assertIs(m2.get_modality('x.img2'), m1.x.img2)
+    self.assertIsNone(m2.get_modality('video'))
+
+    m3 = message.AIMessage(
+        'This is the {{output_image}} based on {{x.img2}}',
+        output_image=CustomModality('bar'),
+        source=m2,
+    )
+    self.assertIs(m3.get_modality('x.img2'), m1.x.img2)
+    self.assertIs(m3.get_modality('output_image'), m3.output_image)
+    self.assertIsNone(m3.get_modality('video'))
+
+  def test_referred_modalities(self):
+    m1 = message.UserMessage(
+        'hi, this is a {{img1}} and {{x.img2}}',
+        img1=CustomModality('foo'),
+        x=dict(img2=CustomModality('bar')),
+    )
+    m2 = message.SystemMessage('class Question:\n  image={{img1}}', source=m1)
+    m3 = message.AIMessage(
+        'This is the {{output_image}} based on {{x.img2}}, {{unknown_var}}',
+        output_image=CustomModality('bar'),
+        source=m2,
+    )
+    self.assertEqual(
+        m3.referred_modalities(),
+        {
+            'output_image': m3.output_image,
+            'x.img2': m1.x.img2,
+        },
+    )
+
+  def test_chunking(self):
+    m = message.UserMessage(
+        inspect.cleandoc("""
+            Hi, this is {{a}} and this is {{b}}.
+            {{x.c}} {{something else
+            """),
+        a=CustomModality('foo'),
+        x=dict(c=CustomModality('bar')),
+    )
+    chunks = m.chunk()
+    self.assertTrue(
+        pg.eq(
+            chunks,
+            [
+                'Hi, this is',
+                CustomModality('foo'),
+                'and this is {{b}}.',
+                CustomModality('bar'),
+                ' {{something else',
+            ],
+        )
+    )
+    self.assertTrue(
+        pg.eq(
+            message.AIMessage.from_chunks(chunks),
+            message.AIMessage(
+                inspect.cleandoc("""
+                    Hi, this is
+                    {{obj0}}
+                    and this is {{b}}.
+                    {{obj1}}
+                     {{something else
+                    """),
+                obj0=pg.Ref(m.a),
+                obj1=pg.Ref(m.x.c),
+            ),
+        )
+    )
 
 
 if __name__ == '__main__':

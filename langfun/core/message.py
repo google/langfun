@@ -14,8 +14,10 @@
 """Messages that are exchanged between users and agents."""
 
 import contextlib
+import io
 from typing import Annotated, Any, Optional, Union
 
+from langfun.core import modality
 from langfun.core import natural_language
 import pyglove as pg
 
@@ -267,6 +269,93 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     # Rebind will trigger _on_change, which inserts the updates
     # to current message' updates.
     self.rebind(delta, raise_on_no_change=False)
+
+  #
+  # API for supporting modalities.
+  #
+
+  def get_modality(
+      self, var_name: str, default: Any = None, from_message_chain: bool = True
+  ) -> modality.Modality | None:
+    """Gets the modality object referred in the message.
+
+    Args:
+      var_name: The referred variable name for the modality object.
+      default: default value.
+      from_message_chain: If True, the look up will be performed from the
+        message chain. Otherwise it will be performed in current message.
+
+    Returns:
+      A modality object if found, otherwise None.
+    """
+    obj = self.get(var_name, None)
+    if isinstance(obj, modality.Modality):
+      return obj
+    elif obj is None and self.source is not None:
+      return self.source.get_modality(var_name, default, from_message_chain)
+    return default
+
+  def referred_modalities(self) -> dict[str, modality.Modality]:
+    """Returns modality objects attached on this message."""
+    chunks = self.chunk()
+    return {
+        m.referred_name: m for m in chunks if isinstance(m, modality.Modality)
+    }
+
+  def chunk(self) -> list[str | modality.Modality]:
+    """Chunk a message into a list of str or modality objects."""
+    chunks = []
+
+    def add_text_chunk(text_piece: str) -> None:
+      if text_piece:
+        chunks.append(text_piece)
+
+    text = self.text
+    chunk_start = 0
+    ref_end = 0
+    while chunk_start < len(text):
+      ref_start = text.find(modality.Modality.REF_START, ref_end)
+      if ref_start == -1:
+        add_text_chunk(text[chunk_start:].strip())
+        break
+
+      var_start = ref_start + len(modality.Modality.REF_START)
+      ref_end = text.find(modality.Modality.REF_END, var_start)
+      if ref_end == -1:
+        add_text_chunk(text[chunk_start:])
+        break
+
+      var_name = text[var_start:ref_end].strip()
+      var_value = self.get_modality(var_name)
+      if var_value is not None:
+        add_text_chunk(text[chunk_start:ref_start].strip())
+        chunks.append(var_value)
+        chunk_start = ref_end + len(modality.Modality.REF_END)
+    return chunks
+
+  @classmethod
+  def from_chunks(
+      cls, chunks: list[str | modality.Modality], separator: str = '\n'
+  ) -> 'Message':
+    """Assembly a message from a list of string or modality objects."""
+    fused_text = io.StringIO()
+    ref_index = 0
+    metadata = dict()
+
+    for i, chunk in enumerate(chunks):
+      if i > 0:
+        fused_text.write(separator)
+      if isinstance(chunk, str):
+        fused_text.write(chunk)
+      else:
+        assert isinstance(chunk, modality.Modality), chunk
+        var_name = f'obj{ref_index}'
+        fused_text.write(modality.Modality.text_marker(var_name))
+        # Make a reference if the chunk is already owned by another object
+        # to avoid copy.
+        metadata[var_name] = pg.maybe_ref(chunk)
+        ref_index += 1
+    return cls(fused_text.getvalue().strip(), metadata=metadata)
 
   #
   # API for testing the message types.

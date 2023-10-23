@@ -307,6 +307,7 @@ class LanguageModel(component.Component):
       self, prompt: message_lib.Message, *, cache_seed: int = 0, **kwargs
   ) -> message_lib.Message:
     """Returns the first candidate."""
+    prompt = message_lib.UserMessage.from_value(prompt)
     with component.context(override_attrs=True, **kwargs):
       sampling_options = self.sampling_options
       if sampling_options.n != 1:
@@ -314,7 +315,6 @@ class LanguageModel(component.Component):
 
       call_counter = self._call_counter
       self._call_counter += 1
-
       request_start = time.time()
       result = self.sample(
           [prompt], sampling_options=sampling_options, cache_seed=cache_seed
@@ -322,27 +322,61 @@ class LanguageModel(component.Component):
       response = result.samples[0].response
       response.set('score', result.samples[0].score)
       elapse = time.time() - request_start
-
-      debug = self.debug
-      if isinstance(debug, bool):
-        debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
-
-      if debug & LMDebugMode.INFO:
-        console.write(
-            self.format(compact=True, use_inferred=True),
-            title=f'[{call_counter}] LM INFO:',
-            color='magenta',
-        )
-      if debug & LMDebugMode.PROMPT:
-        console.write(
-            prompt,
-            title=f'\n[{call_counter}] PROMPT SENT TO LM:',
-            color='green',
-        )
-      if debug & LMDebugMode.RESPONSE:
-        console.write(
-            str(response) + '\n',
-            title=f'\n[{call_counter}] LM RESPONSE (in {elapse:.2f} seconds):',
-            color='blue',
-        )
+      self._debug(prompt, response, call_counter, elapse)
       return response
+
+  def _debug(
+      self,
+      prompt: message_lib.Message,
+      response: message_lib.Message,
+      call_counter: int,
+      elapse: float,
+  ):
+    """Outputs debugging information."""
+    debug = self.debug
+    if isinstance(debug, bool):
+      debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
+
+    if debug & LMDebugMode.INFO:
+      self._debug_model_info(call_counter)
+
+    if debug & LMDebugMode.PROMPT:
+      self._debug_prompt(prompt, call_counter)
+
+    if debug & LMDebugMode.RESPONSE:
+      self._debug_response(response, call_counter, elapse)
+
+  def _debug_model_info(self, call_counter: int):
+    """Outputs debugging information about the model."""
+    console.write(
+        self.format(compact=True, use_inferred=True),
+        title=f'[{call_counter}] LM INFO:',
+        color='magenta',
+    )
+
+  def _debug_prompt(self, prompt: message_lib.Message, call_counter: int):
+    """Outputs debugging information about the prompt."""
+    console.write(
+        prompt,
+        title=f'\n[{call_counter}] PROMPT SENT TO LM:',
+        color='green',
+    )
+    referred_modalities = prompt.referred_modalities()
+    if referred_modalities:
+      console.write(
+          pg.object_utils.kvlist_str(
+              [(k, repr(v), None) for k, v in referred_modalities.items()]
+          ),
+          title=f'\n[{call_counter}] MODALITY OBJECTS SENT TO LM:',
+          color='green',
+      )
+
+  def _debug_response(
+      self, response: message_lib.Message, call_counter: int, elapse: float
+  ):
+    """Outputs debugging information about the response."""
+    console.write(
+        str(response) + '\n',
+        title=f'\n[{call_counter}] LM RESPONSE (in {elapse:.2f} seconds):',
+        color='blue',
+    )

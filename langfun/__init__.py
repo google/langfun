@@ -41,6 +41,10 @@ lm_cache = llms.cache.lm_cache
 
 from langfun.core import memories
 
+from langfun.core import modalities
+
+Image = modalities.Image
+
 # Error types.
 SchemaError = structured.SchemaError
 JsonError = structured.JsonError

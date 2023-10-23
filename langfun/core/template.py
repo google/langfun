@@ -23,6 +23,7 @@ import jinja2
 from jinja2 import meta as jinja2_meta
 from langfun.core import component
 from langfun.core import message as message_lib
+from langfun.core import modality
 from langfun.core import natural_language
 from langfun.core import subscription
 import pyglove as pg
@@ -285,7 +286,8 @@ class Template(
             # Natural language formattable objects will be returned in natural
             # language when they are directly returned as rendering elements in
             # the template.
-            rendered_text = self._template.render(**inputs)
+            with modality.format_modality_as_ref():
+              rendered_text = self._template.render(**inputs)
 
         if self.clean:
           rendered_text = rendered_text.strip()

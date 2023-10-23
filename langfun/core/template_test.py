@@ -16,6 +16,7 @@ import inspect
 import unittest
 
 from langfun.core import component
+from langfun.core import modality
 from langfun.core import subscription
 from langfun.core.template import Template
 from langfun.core.template import TemplateRenderEvent
@@ -291,6 +292,20 @@ class RenderTest(unittest.TestCase):
 
     l = Template('{{x}} + {{x.render()}} =', x=DynamicContent())
     self.assertEqual(l.render(), '1 + 2 =')
+
+  def test_render_with_modality(self):
+    class CustomModality(modality.Modality):
+      content: str
+
+      def to_bytes(self):
+        return self.content.encode()
+
+    self.assertEqual(
+        Template(
+            'This is {{ x }} and {{ a }}', x=1, a=CustomModality('foo')
+        ).render(),
+        'This is 1 and {{a}}',
+    )
 
   def test_bad_render(self):
     with self.assertRaises(ValueError):

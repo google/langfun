@@ -19,6 +19,7 @@ import unittest
 from langfun.core import concurrent
 from langfun.core import language_model as lm_lib
 from langfun.core import message as message_lib
+from langfun.core import modality
 from langfun.core.llms.cache import in_memory
 import pyglove as pg
 
@@ -202,14 +203,22 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(lm('foo', max_attempts=2), 'foo')
 
   def test_debug(self):
+    class Image(modality.Modality):
+      def to_bytes(self):
+        return b'fake_image'
+
     string_io = io.StringIO()
     lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
     with contextlib.redirect_stdout(string_io):
-      self.assertEqual(lm('hi', debug=True), 'hi')
+      self.assertEqual(
+          lm(message_lib.UserMessage(
+              'hi {{image}}', image=Image()), debug=True),
+          'hi {{image}}')
 
     debug_info = string_io.getvalue()
     self.assertIn('[0] LM INFO', debug_info)
     self.assertIn('[0] PROMPT SENT TO LM', debug_info)
+    self.assertIn('[0] MODALITY OBJECTS SENT TO LM', debug_info)
     self.assertIn('[0] LM RESPONSE', debug_info)
 
   def test_debug_modes(self):

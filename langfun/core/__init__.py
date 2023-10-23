@@ -91,6 +91,9 @@ from langfun.core.message import AIMessage
 from langfun.core.message import SystemMessage
 from langfun.core.message import MemoryRecord
 
+# Interface for modality.
+from langfun.core.modality import Modality
+
 # Interfaces for languge models.
 from langfun.core.language_model import LanguageModel
 from langfun.core.language_model import LMSample
