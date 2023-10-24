@@ -16,7 +16,22 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-importing-member
 
-from langfun.core.coding.python import *
+from langfun.core.coding.python.errors import CodeError
+
+from langfun.core.coding.python.permissions import CodePermission
+from langfun.core.coding.python.permissions import permission
+from langfun.core.coding.python.permissions import get_permission
+
+from langfun.core.coding.python.parsing import PythonCodeParser
+
+from langfun.core.coding.python.execution import context
+from langfun.core.coding.python.execution import get_context
+from langfun.core.coding.python.execution import sandbox_call
+from langfun.core.coding.python.execution import run
+from langfun.core.coding.python.execution import sandbox_run
+
+from langfun.core.coding.python.generation import PythonCode
+from langfun.core.coding.python.generation import PythonFunction
 
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order
