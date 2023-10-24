@@ -320,6 +320,11 @@ class StructureToStructure(Mapping):
   {{ type_definitions_title }}:
   {{ type_definitions_str(example.value) | indent(2, True) }}
   {%- endif %}
+  {%- if has_modalities(example.value.left) %}
+
+  {{ modality_refs_title }}:
+  {{ modality_refs_str(example.value.left) | indent(2, True) }}
+  {%- endif %}
 
   {{ output_value_title }}:
   {{ value_str(example.value.right) | indent(2, True) }}
@@ -332,6 +337,11 @@ class StructureToStructure(Mapping):
 
   {{ type_definitions_title }}:
   {{ type_definitions_str(input_value) | indent(2, True) }}
+  {%- endif %}
+  {%- if has_modalities(input_value) %}
+
+  {{ modality_refs_title }}:
+  {{ modality_refs_str(input_value) | indent(2, True) }}
   {%- endif %}
 
   {{ output_value_title }}:
@@ -357,6 +367,10 @@ class StructureToStructure(Mapping):
       str, 'The section title for type definitions.'
   ] = 'CLASS_DEFINITIONS'
 
+  modality_refs_title: Annotated[
+      str, 'The section title for modality objects.'
+  ] = 'MODALITY_REFS'
+
   input_value_title: Annotated[str, 'The section title for input value.']
   output_value_title: Annotated[str, 'The section title for output value.']
 
@@ -372,7 +386,26 @@ class StructureToStructure(Mapping):
 
   def value_str(self, value: Any) -> str:
     return schema_lib.value_repr('python').repr(
-        value, compact=False, verbose=True)
+        lf.ModalityRef.placehold(value), compact=False, verbose=True
+    )
+
+  def has_modalities(self, value: Any) -> bool:
+    """Returns true if the value has modalities."""
+    return pg.contains(value, type=lf.Modality)
+
+  def modalities(
+      self, value: Any, root_path: pg.KeyPath | None = None
+  ) -> dict[str, lf.Modality]:
+    return lf.Modality.from_value(value, root_path)
+
+  def modality_refs_str(self, value: Any) -> str:
+    with lf.modality.format_modality_as_ref(True):
+      return pg.format(
+          self.modalities(value),
+          compact=False,
+          verbose=False,
+          python_format=True,
+      )
 
   def missing_type_dependencies(self, value: Any) -> list[Type[Any]]:
     value_specs = tuple(
@@ -387,13 +420,29 @@ class StructureToStructure(Mapping):
 
   def _value_context(self):
     classes = schema_lib.class_dependencies(self.input_value)
-    return {cls.__name__: cls for cls in classes}
+    context = {cls.__name__: cls for cls in classes}
+    context['ModalityRef'] = lf.modality.ModalityRef
+    return context
+
+  def transform_input(self, lm_input: lf.Message) -> lf.Message:
+    # Find modalities to fill the input message.
+    modalities = self.modalities(self.input_value)
+    modalities.update(
+        self.modalities(self.examples, root_path=pg.KeyPath('examples'))
+    )
+    if modalities:
+      lm_input.metadata.update(pg.object_utils.canonicalize(modalities))
+    return lm_input
 
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
     try:
       result = schema_lib.value_repr('python').parse(
           lm_output.text, additional_context=self._value_context()
       )
+      # Try restore modality objects from the input value to output value.
+      modalities = self.modalities(self.input_value)
+      if modalities:
+        result.rebind(modalities)
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.RAISE_IF_HAS_ERROR:
         raise e

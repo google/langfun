@@ -143,6 +143,8 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
   @classmethod
   def from_value(cls, value: Union[str, 'Message']) -> 'Message':
     """Creates a message from a value or return value itself if a Message."""
+    if isinstance(value, modality.Modality):
+      return cls('{{object}}', object=value)
     if isinstance(value, Message):
       return value
     return cls(value)

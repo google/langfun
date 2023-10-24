@@ -18,6 +18,7 @@ import unittest
 
 import langfun.core as lf
 from langfun.core import coding
+from langfun.core import modalities
 from langfun.core.llms import fake
 from langfun.core.structured import completion
 from langfun.core.structured import mapping
@@ -388,6 +389,135 @@ class CompleteStructureTest(unittest.TestCase):
           ),
       )
       # pylint: enable=line-too-long
+
+  def test_invocation_with_modality(self):
+    class Animal(pg.Object):
+      image: modalities.Image
+      name: str
+
+    l = completion.CompleteStructure(
+        examples=[
+            mapping.MappingExample(
+                value=mapping.Pair(
+                    left=Animal.partial(
+                        modalities.Image.from_bytes(b'image_of_rabbit')
+                    ),
+                    right=Animal(
+                        modalities.Image.from_bytes(b'image_of_rabbit'),
+                        'rabbit',
+                    ),
+                )
+            )
+        ]
+    )
+    input_value = schema_lib.mark_missing(
+        Animal.partial(
+            modalities.Image.from_bytes(b'image_of_elephant'),
+        )
+    )
+    lm_input = l.render(input_value=input_value)
+    self.assertEqual(
+        lm_input.text,
+        inspect.cleandoc("""
+            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
+
+            INSTRUCTIONS:
+            1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
+            2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
+
+            INPUT_OBJECT:
+              ```python
+              Animal(
+                image=ModalityRef(
+                  name='image'
+                ),
+                name=MISSING(str)
+              )
+              ```
+
+            MODALITY_REFS:
+              {
+                'image': {{examples[0].value.left.image}}
+              }
+
+            OUTPUT_OBJECT:
+              ```python
+              Animal(
+                image=ModalityRef(
+                  name='image'
+                ),
+                name='rabbit'
+              )
+              ```
+
+
+            INPUT_OBJECT:
+              ```python
+              Animal(
+                image=ModalityRef(
+                  name='image'
+                ),
+                name=MISSING(str)
+              )
+              ```
+
+            MODALITY_REFS:
+              {
+                'image': {{image}}
+              }
+
+            OUTPUT_OBJECT:
+            """),
+    )
+    self.assertTrue(
+        pg.eq(
+            {
+                'examples': lm_input.get('examples'),
+                'image': lm_input.get('image'),
+            },
+            {
+                'examples': [
+                    {
+                        'value': {
+                            'left': {
+                                'image': modalities.Image.from_bytes(
+                                    b'image_of_rabbit'
+                                )
+                            },
+                            'right': {
+                                'image': modalities.Image.from_bytes(
+                                    b'image_of_rabbit'
+                                )
+                            },
+                        }
+                    }
+                ],
+                'image': modalities.Image.from_bytes(b'image_of_elephant'),
+            },
+        )
+    )
+    lm_output = l(
+        input_value=input_value,
+        lm=fake.StaticResponse(inspect.cleandoc("""
+            ```python
+            Animal(
+              image=ModalityRef(
+                name='image'
+              ),
+              name='elephant'
+            )
+            ```
+            """)),
+    )
+    self.assertTrue(
+        pg.eq(
+            lm_output.result,
+            Animal(
+                image=modalities.Image.from_bytes(b'image_of_elephant'),
+                name='elephant',
+            ),
+        )
+    )
 
   def test_returns_message(self):
     self.assertEqual(

@@ -93,6 +93,7 @@ from langfun.core.message import MemoryRecord
 
 # Interface for modality.
 from langfun.core.modality import Modality
+from langfun.core.modality import ModalityRef
 
 # Interfaces for languge models.
 from langfun.core.language_model import LanguageModel

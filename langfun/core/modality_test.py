@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tests for modality."""
+from typing import Any
 import unittest
 
 from langfun.core import modality
@@ -37,6 +38,20 @@ class ModalityTest(unittest.TestCase):
     self.assertEqual(str(v), "CustomModality(\n  content = 'a'\n)")
     with modality.format_modality_as_ref():
       self.assertEqual(str(v), '{{x.metadata.y}}')
+
+
+class ModalityRefTest(unittest.TestCase):
+
+  def test_placehold(self):
+    class A(pg.Object):
+      x: Any
+      y: Any
+
+    a = A(x=dict(z=CustomModality('a')), y=CustomModality('b'))
+    self.assertEqual(
+        modality.ModalityRef.placehold(a),
+        A(x=dict(z=modality.ModalityRef('x.z')), y=modality.ModalityRef('y')),
+    )
 
 
 if __name__ == '__main__':

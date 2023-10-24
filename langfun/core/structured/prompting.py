@@ -124,7 +124,7 @@ DEFAULT_QUERY_EXAMPLES: list[mapping.MappingExample] = [
 
 
 def query(
-    user_prompt: Union[str, lf.Template],
+    user_prompt: Union[str, lf.Template, lf.Modality],
     schema: Union[
         schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
     ],
@@ -167,8 +167,8 @@ def query(
     ```
 
   Args:
-    user_prompt: A `lf.Template` object or a string as the natural language
-      prompt from the user.
+    user_prompt: A str, a `lf.Template` object or a `lf.Modality` object (e.g.
+      `lf.Image`) as the prompt from the user.
     schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
     default: The default value if parsing failed. If not specified, error will
       be raised.

@@ -14,7 +14,7 @@
 """Interface for modality (e.g. Image, Video, etc.)."""
 
 import abc
-from typing import ContextManager
+from typing import Any, ContextManager
 from langfun.core import component
 import pyglove as pg
 
@@ -59,3 +59,57 @@ class Modality(component.Component):
     # Strip the metadata prefix under message.
     path = str(self.sym_path)
     return path[9:] if path.startswith('metadata.') else path
+
+  @classmethod
+  def from_value(
+      cls, value: pg.Symbolic, root_path: pg.KeyPath | None = None
+  ) -> dict[str, 'Modality']:
+    """Returns a dict of path to modality from a symbolic value."""
+    modalities = {}
+    root_path = root_path or pg.KeyPath()
+
+    def _visit(k, v, p):
+      del p
+      if isinstance(v, Modality):
+        modalities[str(root_path + k)] = v
+        return pg.TraverseAction.CONTINUE
+      return pg.TraverseAction.ENTER
+
+    pg.traverse(value, _visit)
+    return modalities
+
+
+class ModalityRef(pg.Object, pg.typing.CustomTyping):
+  """References of modality objects in a symbolic tree.
+
+  `ModalityRef` was introduced to placehold modality objects in a symbolic
+  tree, to prevent message from being chunked in the middle of a Python
+  structure.
+  """
+
+  name: str
+
+  def custom_apply(
+      self, path: pg.KeyPath, value_spec: pg.ValueSpec, *args, **kwargs
+  ) -> tuple[bool, Any]:
+    return (False, self)
+
+  @classmethod
+  def placehold(cls, value: pg.Symbolic) -> pg.Symbolic:
+    """Returns a copy of value by replacing modality objects with refs.
+
+    Args:
+      value: A symbolic value.
+
+    Returns:
+      A copy of value with all child `Modality` objects replaced with
+        `ModalityRef` objects.
+    """
+
+    def _placehold(k, v, p):
+      del k, p
+      if isinstance(v, Modality):
+        return ModalityRef(name=v.referred_name)
+      return v
+
+    return value.clone().rebind(_placehold, raise_on_no_change=False)

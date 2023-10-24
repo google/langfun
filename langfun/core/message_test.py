@@ -47,6 +47,19 @@ class MessageTest(unittest.TestCase):
     self.assertEqual(hash(m), hash(m.text))
     del d
 
+  def test_from_value(self):
+    self.assertTrue(
+        pg.eq(message.UserMessage.from_value('hi'), message.UserMessage('hi'))
+    )
+    self.assertTrue(
+        pg.eq(
+            message.UserMessage.from_value(CustomModality('foo')),
+            message.UserMessage('{{object}}', object=CustomModality('foo')),
+        )
+    )
+    m = message.UserMessage('hi')
+    self.assertIs(message.UserMessage.from_value(m), m)
+
   def test_source_tracking(self):
     m1 = message.UserMessage('hi')
     m1.tag('lm-input')

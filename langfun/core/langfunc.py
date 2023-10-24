@@ -14,7 +14,7 @@
 """LangFunc: Language-based functions."""
 
 import dataclasses
-from typing import Annotated
+from typing import Annotated, Type
 
 from langfun.core import component
 from langfun.core import language_model
@@ -256,8 +256,6 @@ class LangFunc(
         if lm_input is None:
           lm_input = self.render(**kwargs)
 
-        # Transform the input message.
-        lm_input = self.transform_input(lm_input)
         self._cached_lm_input = lm_input
 
         # Send rendered text to LM.
@@ -292,6 +290,25 @@ class LangFunc(
     finally:
       top = pg.object_utils.thread_local_pop(_TLS_LFUN_CALL_STACK, self)
       assert top is self, (top, self)
+
+  def render(
+      self,
+      *,
+      allow_partial: bool = False,
+      implicit: bool = False,
+      message_cls: Type[message_lib.Message] = message_lib.UserMessage,
+      **kwargs,
+  ) -> message_lib.Message:
+    lm_input = super().render(
+        allow_partial=allow_partial,
+        implicit=implicit,
+        message_cls=message_cls,
+        **kwargs,
+    )
+
+    with component.context(**kwargs):
+      with self.override(**kwargs):
+        return self.transform_input(lm_input)
 
   #
   # Input and output transforms.
