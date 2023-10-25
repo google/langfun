@@ -112,7 +112,7 @@ def run(
 def sandbox_call(
     func: Callable[..., Any],
     *args,
-    timeout: int | None = None,
+    timeout: float | None = None,
     **kwargs) -> Any:
   """Calls a function with sandboxing.
 
@@ -130,29 +130,37 @@ def sandbox_call(
     Exception: Exception raised from `func`.
   """
   def _call(q, *args, **kwargs):
+    # NOTE(daiyip): if `q` is closed by the main process when `q.put` is called
+    # on a subprocess, ValueError will be raised. This is okay since the main
+    # process is no longer waiting for the result, and the subprocess could
+    # recycled with non-zero error code, which does not affect the main
+    # process.
     try:
       q.put(pg.to_json_str(func(*args, **kwargs)))
     except Exception as e:  # pylint: disable=broad-exception-caught
       q.put(e)
 
   q = multiprocessing.Queue()
-  p = multiprocessing.Process(
-      target=_call, args=tuple([q] + list(args)), kwargs=kwargs)
-  p.start()
-  p.join(timeout=timeout)
-  if p.is_alive():
-    p.terminate()
-    raise TimeoutError(f'Execution time exceed {timeout} seconds.')
-  x = q.get()
-  if isinstance(x, Exception):
-    raise x
-  return pg.from_json_str(x)
+  try:
+    p = multiprocessing.Process(
+        target=_call, args=tuple([q] + list(args)), kwargs=kwargs)
+    p.start()
+    p.join(timeout=timeout)
+    if p.is_alive():
+      p.terminate()
+      raise TimeoutError(f'Execution time exceed {timeout} seconds.')
+    x = q.get()
+    if isinstance(x, Exception):
+      raise x
+    return pg.from_json_str(x)
+  finally:
+    q.close()
 
 
 def sandbox_run(
     code: str,
     perm: permissions.CodePermission | None = None,
-    timeout: int | None = None,
+    timeout: float | None = None,
     **kwargs,
 ) -> dict[str, Any]:
   """Run Python code with sandboxing.
@@ -171,4 +179,4 @@ def sandbox_run(
     TimeoutError: If the execution time exceeds the timeout.
     Exception: Exception  that are raised from the code.
   """
-  return sandbox_call(run, code, perm, time=timeout, **kwargs)
+  return sandbox_call(run, code, perm, timeout=timeout, **kwargs)
