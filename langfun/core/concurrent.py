@@ -379,6 +379,8 @@ def concurrent_map(
   Raises:
     Exception: Erros that are not in `silence_on_errors` or `retry_on_errors`,
       or retry on such errors has reached max attempts.
+    TimeoutError: Any item timed out while TimeoutError is not silenced via 
+      `silence_on_errors`.
   """
 
   if retry_on_errors:
@@ -400,61 +402,59 @@ def concurrent_map(
   executor = executor or concurrent.futures.ThreadPoolExecutor(
       max_workers=max_workers)
 
-  with executor:
-    future_to_job = {}
-    pending_futures = []
-    total = 0
-    for inputs in parallel_inputs:
-      job = Job(func, inputs)
-      future = executor.submit(
-          with_context_access(job),
-      )
-      pending_futures.append(future)
-      future_to_job[future] = job
-      total += 1
+  future_to_job = {}
+  pending_futures = []
+  total = 0
+  for inputs in parallel_inputs:
+    job = Job(func, inputs)
+    future = executor.submit(
+        with_context_access(job),
+    )
+    pending_futures.append(future)
+    future_to_job[future] = job
+    total += 1
 
-    progress = Progress(total=total)
-    progress_bar = tqdm.tqdm(total=total) if show_progress else None
+  progress = Progress(total=total)
+  progress_bar = tqdm.tqdm(total=total) if show_progress else None
 
-    def update_progress_bar(progress: Progress) -> None:
-      if progress_bar is not None:
-        status = status_fn(progress)
-        description = ', '.join([
-            f'{k}: {v}' for k, v in status.items()
-        ])
-        if description:
-          progress_bar.set_description(f'[{description}]')
+  def update_progress_bar(progress: Progress) -> None:
+    if progress_bar is not None:
+      status = status_fn(progress)
+      description = ', '.join([
+          f'{k}: {v}' for k, v in status.items()
+      ])
+      if description:
+        progress_bar.set_description(f'[{description}]')
 
-        postfix = {
-            'AvgDuration': '%.2f seconds' % progress.avg_duration
-        }
-        if progress.last_error is not None:
-          error_text = repr(progress.last_error)
-          if len(error_text) >= 64:
-            error_text = error_text[:64] + '...'
-          postfix['LastError'] = error_text
+      postfix = {
+          'AvgDuration': '%.2f seconds' % progress.avg_duration
+      }
+      if progress.last_error is not None:
+        error_text = repr(progress.last_error)
+        if len(error_text) >= 64:
+          error_text = error_text[:64] + '...'
+        postfix['LastError'] = error_text
 
-        progress_bar.set_postfix(postfix)
-        progress_bar.update(1)
+      progress_bar.set_postfix(postfix)
+      progress_bar.update(1)
 
+  try:
     if ordered:
-      for i, future in enumerate(pending_futures):
+      for future in pending_futures:
         job = future_to_job[future]
         wait_time = (timeout - job.elapse) if timeout else None
         try:
           _ = future.result(timeout=wait_time)
-          if job.error is not None:
-            if not (
-                silence_on_errors and isinstance(job.error, silence_on_errors)):
-              # Cancel remaining futures before raising the error.
-              for f in pending_futures[i + 1:]:
-                f.cancel()
-              raise job.error
         except concurrent.futures.TimeoutError:
           future.cancel()
           last_error = TimeoutError(
               f'Execution time ({job.elapse}) exceeds {timeout} seconds.')
           job.mark_canceled(last_error)
+
+        if job.error is not None and not (
+            silence_on_errors and isinstance(job.error, silence_on_errors)):
+          raise job.error   # pylint: disable=g-doc-exception
+
         yield job.arg, job.result, job.error
         progress.update(job)
         update_progress_bar(progress)
@@ -466,15 +466,9 @@ def concurrent_map(
               pending_futures, timeout=timeout):
             job = future_to_job[future]
             del future_to_job[future]
-            if job.error is not None:
-              if not (
-                  silence_on_errors and isinstance(job.error, silence_on_errors)
-              ):
-                # Cancel pending futures before raising the error.
-                for future in pending_futures:
-                  if future not in completed_batch:
-                    future.cancel()
-                raise job.error   # pylint: disable=g-doc-exception
+            if job.error is not None and not (
+                silence_on_errors and isinstance(job.error, silence_on_errors)):
+              raise job.error   # pylint: disable=g-doc-exception
             yield job.arg, job.result, job.error
             progress.update(job)
             update_progress_bar(progress)
@@ -497,14 +491,18 @@ def concurrent_map(
                 job.mark_canceled(
                     TimeoutError(f'Execution time ({job.elapse}) '
                                  f'exceeds {timeout} seconds.'))
+                if not (silence_on_errors
+                        and isinstance(job.error, silence_on_errors)):
+                  raise job.error  # pylint: disable=g-doc-exception
 
               yield job.arg, job.result, job.error
               progress.update(job)
               update_progress_bar(progress)
             else:
               remaining_futures.append(future)
-
         pending_futures = remaining_futures
-
+  finally:
     if progress_bar is not None:
       progress_bar.close()
+    # Do not wait threads to finish if they are timed out.
+    executor.shutdown(wait=False, cancel_futures=True)

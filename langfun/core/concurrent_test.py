@@ -365,6 +365,9 @@ class ConcurrentMapTest(unittest.TestCase):
             (4, pg.MISSING_VALUE),
         ],
     )
+    with self.assertRaises(TimeoutError):
+      next(concurrent.concurrent_map(
+          fun, [5, 1], timeout=1, silence_on_errors=None))
 
   def test_concurent_map_unordered_with_timeout_less_worker(self):
     def fun(x):
