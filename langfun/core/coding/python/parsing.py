@@ -209,7 +209,8 @@ class PythonCodeParser(lf.Component):
         code = code[pos:]
     else:
       # Maybe-code that resides not within a code markdown block.
-      code = code_text
+      # Adding '\n' makes inspect.cleandoc to make right adjustment.
+      code = '\n' + code_text
     return inspect.cleandoc(code).strip()
 
 

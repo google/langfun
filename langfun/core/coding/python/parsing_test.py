@@ -22,9 +22,11 @@ from langfun.core.coding.python import permissions
 
 class PythonCodeParserTest(unittest.TestCase):
 
-  def assert_clean(self, code: str, cleaned_code: str):
+  def assert_clean(self, code: str, cleaned_code: str, clean: bool = True):
+    if clean:
+      cleaned_code = inspect.cleandoc(cleaned_code)
     self.assertEqual(
-        parsing.PythonCodeParser().clean(code), inspect.cleandoc(cleaned_code)
+        parsing.PythonCodeParser().clean(code), cleaned_code
     )
 
   def test_clean(self):
@@ -34,11 +36,16 @@ class PythonCodeParserTest(unittest.TestCase):
         if x > 0:
           print(x)
         """,
+        'x = y + 1\nif x > 0:\n  print(x)',
+        clean=False
+    )
+    self.assert_clean(
         """
-        x = y + 1
-        if x > 0:
-          print(x)
-        """
+        def foo(x):
+          return x + 1
+        """,
+        'def foo(x):\n  return x + 1',
+        clean=False
     )
     self.assert_clean(
         """
