@@ -64,7 +64,7 @@ def eval_set(
       ],
       method=method,
       prompt='{{example.question}}',
-      groundtruth_field='groundtruth',
+      groundtruth=lambda x: x.groundtruth,
       answer_field='final_answer',
       schema_fn=schema_fn,
       lm=lm,

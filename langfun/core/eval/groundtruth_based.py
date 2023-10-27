@@ -15,7 +15,7 @@
 
 import io
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Callable
 import langfun.core as lf
 from langfun.core.eval import base
 import pyglove as pg
@@ -24,12 +24,11 @@ import pyglove as pg
 class GroundTruthMatch(base.Evaluation):
   """Ground-truth based evaluation."""
 
-  groundtruth_field: Annotated[
-      pg.KeyPath,
+  groundtruth: Annotated[
+      Callable[[Any], Any],
       (
-          'The path to access the groundtruth field from the root example '
-          'object. E.g. "target".'
-      ),
+          'A callable object that maps an input example to the groundtruth.'
+      )
   ]
 
   answer_field: Annotated[
@@ -91,7 +90,7 @@ class GroundTruthMatch(base.Evaluation):
     self._mismatches = []
 
   def audit(self, example: Any, output: Any) -> None:
-    groundtruth = self.groundtruth_field.query(example)
+    groundtruth = self.groundtruth(example)
     answer = self.answer_field.query(output)
     if self.match(answer, groundtruth):
       self._matches.append((example, output))
