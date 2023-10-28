@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import langfun.core as lf
+from langfun.core.eval import base
 from langfun.core.eval import groundtruth_based
 from langfun.core.llms import fake
 import pyglove as pg
@@ -56,12 +57,12 @@ def eval_set(
   return groundtruth_based.GroundTruthMatch(
       id=eval_id,
       root_dir=tmp_dir,
-      inputs=[
+      inputs=base.as_inputs([
           pg.Dict(question='Compute 1 + 1', groundtruth=2),
           pg.Dict(question='Compute 1 + 2', groundtruth=3),
           pg.Dict(question='Compute 1 + 3', groundtruth=4),
           pg.Dict(question='Compute 1 + 1', groundtruth=2),
-      ],
+      ]),
       method=method,
       prompt='{{example.question}}',
       groundtruth=lambda x: x.groundtruth,

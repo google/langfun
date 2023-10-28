@@ -383,11 +383,14 @@ class Suite(Evaluable):
 class Evaluation(Evaluable):
   """Base class for evaluation set."""
 
-  inputs: Annotated[
-      list[Any] | str,
+  inputs: pg.typing.Annotated[
+      pg.typing.Functor(),
       (
-          'A list of input object to evaluate or a path to the JSON serialized '
-          'input objects.'
+          'A functor that returns a list of user-defined objects as the input '
+          'examples. It could be inputs loaded from a JSON file via '
+          '`lf.eval.inputs_from(path)`, from a Python coded list via '
+          '`lf.eval.as_inputs(values)` or a user-defined functor that '
+          'generates input objects at runtime.'
       ),
   ]
 
@@ -489,9 +492,7 @@ class Evaluation(Evaluable):
   @functools.cached_property
   def examples(self):
     """Returns examples for evaluation."""
-    if isinstance(self.inputs, str):
-      return pg.load(self.inputs)
-    return self.inputs
+    return self.inputs()
 
   @property
   def num_examples(self) -> int:
@@ -647,7 +648,8 @@ class Evaluation(Evaluable):
     example = example or self.examples[0]
 
     # We make a copy to avoid pollute the state of current object.
-    copy = self.clone(override=dict(inputs=[example]))
+    copy = self.clone()
+    copy.__dict__['examples'] = [example]
 
     # We set the symbolic parent of the cloned to access contextual information
     # when needed.
@@ -881,6 +883,23 @@ class Evaluation(Evaluable):
       s.write(f'<td style="color:red;white-space:pre">{error_str}</td>')
       s.write('</tr>')
     s.write('</table></div>')
+
+
+@pg.functor()
+def inputs_from(path: str | list[str]) -> list[Any]:
+  """A functor that returns a list of user-defined objects as eval inputs."""
+  if isinstance(path, str):
+    return pg.load(path)
+  examples = []
+  for p in path:
+    examples.extend(pg.load(p))
+  return examples
+
+
+@pg.functor()
+def as_inputs(examples: list[Any]) -> list[Any]:
+  """User provided examples as eval inputs."""
+  return examples
 
 
 def load(eval_dir: str) -> Evaluation:

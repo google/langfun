@@ -68,10 +68,10 @@ def eval_set(
   return base.Evaluation(
       id=eval_id,
       root_dir=tmp_dir,
-      inputs=[
+      inputs=base.as_inputs([
           pg.Dict(question='Compute 1 + 1'),
           pg.Dict(question='Compute 1 + 2'),
-      ],
+      ]),
       method=method,
       prompt='{{example.question}}',
       completion_prompt_field='question',
@@ -294,10 +294,10 @@ class EvaluationTest(unittest.TestCase):
     s = base.Evaluation(
         id='search_space_test',
         root_dir=tempfile.gettempdir(),
-        inputs=[
+        inputs=base.as_inputs([
             pg.Dict(question='Compute 1 + 1'),
             pg.Dict(question='Compute 1 + 2'),
-        ],
+        ]),
         method='query',
         prompt=pg.oneof([
             lf.Template('{{example.question}}'),
@@ -447,6 +447,32 @@ class SuiteTest(unittest.TestCase):
             ),
         },
     )
+
+
+class InputsFrom(unittest.TestCase):
+  """Tests for inputs_from."""
+
+  def setUp(self):
+    super().setUp()
+    pg.symbolic.set_save_handler(pg.symbolic.default_save_handler)
+    pg.symbolic.set_load_handler(pg.symbolic.default_load_handler)
+
+  def test_inputs_from_a_single_file(self):
+    tmp_dir = tempfile.gettempdir()
+    path = os.path.join(tmp_dir, 'input_file.json')
+    pg.save([1, 2, 3], path)
+    self.assertEqual(base.inputs_from(path)(), [1, 2, 3])
+
+  def test_inputs_from_multiple_files(self):
+    tmp_dir = tempfile.gettempdir()
+    path1 = os.path.join(tmp_dir, 'input_file1.json')
+    pg.save([1, 2, 3], path1)
+    path2 = os.path.join(tmp_dir, 'input_file2.json')
+    pg.save([4, 5, 6], path2)
+    self.assertEqual(base.inputs_from([path1, path2])(), [1, 2, 3, 4, 5, 6])
+
+  def test_as_inputs(self):
+    self.assertEqual(base.as_inputs([1, 2, 3])(), [1, 2, 3])
 
 
 if __name__ == '__main__':

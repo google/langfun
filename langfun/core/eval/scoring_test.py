@@ -28,12 +28,23 @@ def float_list():
   return list[float]
 
 
+@pg.functor()
+def constrained_by_upperbound(upper_bound: int):
+  return [
+      (
+          'Give an example of three numbers (x, y, z) '
+          f'such that x + y + z <={upper_bound}',
+      ),
+      (
+          'Give an example of two numbers (x, y) '
+          f'such that x + y <={upper_bound}',
+      ),
+  ]
+
+
 class ConstraintFollowing(scoring.Scoring):
   id = 'constraint_following'
-  inputs = [
-      'Give an example of three numbers (x, y, z) such that x + y + z <=1',
-      'Give an example of two numbers (x, y) such that x + y <=1',
-  ]
+  inputs = constrained_by_upperbound(1)
   prompt = '{{example}}'
   method = 'query'
   schema_fn = float_list()
@@ -41,7 +52,7 @@ class ConstraintFollowing(scoring.Scoring):
   max_workers = 1
 
   def score(self, example, output):
-    return 1.0 if sum(output) <= 1 else 0.0
+    return 1.0 if sum(output) <= self.inputs.upper_bound else 0.0
 
 
 def eval_set(lm: lf.LanguageModel):
