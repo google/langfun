@@ -23,6 +23,7 @@ from langfun.core.eval.base import Suite
 from langfun.core.eval.base import load
 
 from langfun.core.eval.groundtruth_based import GroundTruthMatch
+from langfun.core.eval.scoring import Scoring
 
 
 # pylint: enable=g-bad-import-order

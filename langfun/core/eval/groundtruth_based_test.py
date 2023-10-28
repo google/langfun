@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for language model."""
+"""Tests for groundtruth matching."""
 
 import os
 import tempfile
@@ -124,25 +124,21 @@ class GroundTruthMatchTest(unittest.TestCase):
             )
         )
     )
-
     self.assertTrue(
         os.path.exists(
             os.path.join(s.dir, groundtruth_based.GroundTruthMatch.RESULT_JSON)
         )
     )
-
     self.assertTrue(
         os.path.exists(
             os.path.join(s.dir, groundtruth_based.GroundTruthMatch.CACHE_JSON)
         )
     )
-
     self.assertTrue(
         os.path.exists(
             os.path.join(s.dir, groundtruth_based.GroundTruthMatch.INDEX_HTML)
         )
     )
-
     self.assertTrue(
         os.path.exists(
             os.path.join(
@@ -150,13 +146,11 @@ class GroundTruthMatchTest(unittest.TestCase):
             )
         )
     )
-
     self.assertTrue(
         os.path.exists(
             os.path.join(s.dir, groundtruth_based.GroundTruthMatch.MATCHES_HTML)
         )
     )
-
     self.assertTrue(
         os.path.exists(
             os.path.join(
