@@ -14,8 +14,8 @@
 """Base classes for langfun evaluation."""
 
 import abc
-import base64
 import functools
+import hashlib
 import inspect
 import io
 import os
@@ -172,7 +172,7 @@ class Evaluable(lf.Component):
             end=end,
             save=save,
             debug=debug,
-            dryrun=dryrun,
+            dryrun=False,
             verbose=verbose,
             show_progress=show_progress,
             **kwargs,
@@ -228,14 +228,9 @@ class Evaluable(lf.Component):
     """Run the evaluate and fill `self.result`. Subclass to implement."""
 
   @property
-  def hash(self) -> str:
-    """A 8-byte base64 hash computed from experiment identity."""
-    return base64.b64encode(str(self._hash).encode())[:8].decode()
-
-  @property
   @abc.abstractmethod
-  def _hash(self) -> int:
-    """Returns the symbolic hash of current evaluable."""
+  def hash(self) -> str:
+    """A 8-byte MD5 hash computed from experiment identity."""
 
   @functools.cached_property
   def parent(self) -> Optional['Evaluable']:
@@ -303,6 +298,19 @@ class Evaluable(lf.Component):
         .header {font-weight: bold;}
         """)
 
+  def _render_navbar(self, s: io.StringIO) -> None:
+    current = self
+    links = []
+    while current is not None and current.index_link is not None:
+      links.insert(0, f'<a href="{current.index_link}">{current.id}</a>')
+      current = current.parent
+
+    for i, link in enumerate(links):
+      s.write(link)
+      if i != len(links) - 1:
+        # Add a right triangle symbol.
+        s.write(' &#9656 ')
+
   def _render_index_page(self, s: io.StringIO) -> None:
     self._render_result(s)
     if self.dryrun_output is not None:
@@ -336,7 +344,10 @@ class Evaluable(lf.Component):
 
   def _render_dryrun_output(self, s: io.StringIO) -> None:
     s.write('<h2> Dry Run </h2>')
-    for m in self.dryrun_output.trace():
+    self._render_message(self.dryrun_output, s)
+
+  def _render_message(self, message: lf.Message, s: io.StringIO) -> None:
+    for m in message.trace():
       if 'lm-input' in m.tags:
         text_color = 'green'
       elif 'lm-response' in m.tags:
@@ -367,11 +378,13 @@ class Suite(Evaluable):
 
   def _on_bound(self):
     super()._on_bound()
-    self.__dict__.pop('_hash', None)
+    self.__dict__.pop('hash', None)
 
   @functools.cached_property
-  def _hash(self) -> int:
-    return hash(tuple(sorted([c._hash for c in self.children])))  # pylint: disable=protected-access
+  def hash(self) -> str:
+    return hashlib.md5(
+        ' '.join(sorted([c.hash for c in self.children])).encode()
+    ).hexdigest()[:8]
 
   def _dryrun(self, *args, **kwargs) -> None:
     raise AssertionError('Shal not trigger.')
@@ -407,13 +420,15 @@ class Evaluation(Evaluable):
   ]
 
   schema_fn: pg.typing.Annotated[
-      pg.typing.Functor(),
+      pg.typing.Functor().noneable(),
       (
           'A functor that returns a type annotation that will be converted to '
           '`lf.Schema`, or a tuple of (annotation, fewshot examples). '
-          'For "call" method, the fewshot examples will be used for parsing, '
-          'while for "query" and "complete", the fewshot examples will be used '
-          'directly for prompting. Here are the example code on how the '
+          'For "call" method, it could be None, indicating that the raw '
+          'response from the LM will be used as the output, and the fewshot '
+          'examples will be used for parsing. For "query" and "complete", it '
+          'must be provided, and the fewshot examples will be used directly '
+          'for prompting. Here are the example code on how the '
           'functors should be defined:' + inspect.cleandoc("""
               ```
               @pg.functor()
@@ -469,10 +484,12 @@ class Evaluation(Evaluable):
   FAILURES_HTML = 'failures.html'
 
   @functools.cached_property
-  def _hash(self) -> int:
+  def hash(self) -> str:
     if self.is_deterministic:
-      return pg.hash(pg.format(self._identifiers(), compact=True))
-    return hash(tuple(sorted([c._hash for c in self.children])))  # pylint: disable=protected-access
+      identity = pg.format(self._identifiers(), compact=True)
+    else:
+      identity = ' '.join(sorted([c.hash for c in self.children]))
+    return hashlib.md5(identity.encode()).hexdigest()[:8]
 
   def _identifiers(self) -> dict[str, Any]:
     parsing_model = None
@@ -527,8 +544,11 @@ class Evaluation(Evaluable):
     return self.num_failures / self.num_completed
 
   @functools.cached_property
-  def schema(self) -> lf_structured.Schema:
+  def schema(self) -> lf_structured.Schema | None:
     """Schema."""
+    if self.schema_fn is None:
+      return None
+
     schema = self.schema_fn()
     if isinstance(schema, tuple):
       schema, fewshot_examples = schema
@@ -539,6 +559,9 @@ class Evaluation(Evaluable):
   @functools.cached_property
   def fewshot_examples(self) -> list[lf.structured.MappingExample] | None:
     """Fewshot examples."""
+    if self.schema_fn is None:
+      return None
+
     schema = self.schema_fn()
     fewshot_examples = None
     if isinstance(schema, tuple):
@@ -617,7 +640,10 @@ class Evaluation(Evaluable):
 
   def _on_bound(self):
     super()._on_bound()
-    self.__dict__.pop('_hash', None)
+    if self.method != 'call' and self.schema_fn is None:
+      raise ValueError(
+          f'`schema_fn` must be specified for method {self.method!r}')
+    self.__dict__.pop('hash', None)
     self.__dict__.pop('children', None)
     self.__dict__.pop('examples', None)
     self.__dict__.pop('schema', None)
@@ -664,8 +690,11 @@ class Evaluation(Evaluable):
       )
 
     with lf.use_settings(debug=debug):
-      output_message = copy.process(example, returns_message=True)
-      output = output_message.result
+      output_message = copy.process(example)
+      if self.schema is None:
+        output = output_message.text
+      else:
+        output = output_message.result
 
     if verbose:
       lf.console.write('')
@@ -676,7 +705,7 @@ class Evaluation(Evaluable):
       )
 
     # Audit the result.
-    copy.audit(example, output)
+    copy.audit(example, output, output_message)
     result = copy.summarize()
     if verbose:
       lf.console.write('')
@@ -706,7 +735,7 @@ class Evaluation(Evaluable):
     # Process examples.
     with lf.use_settings(debug=debug, cache=self.cache):
       self._reset()
-      for example, output, error in lf.concurrent_map(
+      for example, message, error in lf.concurrent_map(
           self.process,
           examples,
           max_workers=self.max_workers,
@@ -716,7 +745,8 @@ class Evaluation(Evaluable):
         if error is not None:
           self._failures.append((example, str(error)))
         else:
-          self.audit(example, output)
+          output = message.text if self.schema is None else message.result
+          self.audit(example, output, message)
         self._num_completed += 1
 
     # Save cache if needed.
@@ -732,7 +762,7 @@ class Evaluation(Evaluable):
           color='magenta',
       )
 
-  def process(self, example: Any, **kwargs) -> Any:
+  def process(self, example: Any, **kwargs) -> lf.Message:
     """Process an example and returns its output."""
     prompt = self.prompt.render(example=example).text
     if self.method == 'call':
@@ -742,6 +772,7 @@ class Evaluation(Evaluable):
           lm=self.lm,
           parsing_lm=self.parsing_lm,
           parsing_examples=self.fewshot_examples,
+          returns_message=True,
           **kwargs,
       )
     elif self.method == 'query':
@@ -750,6 +781,7 @@ class Evaluation(Evaluable):
           self.schema,
           lm=self.lm,
           examples=self.fewshot_examples,
+          returns_message=True,
           **kwargs,
       )
     else:
@@ -757,7 +789,8 @@ class Evaluation(Evaluable):
       assert isinstance(self.schema.spec, pg.typing.Object), self.schema
       input_value = self.schema.spec.cls.partial(prompt)
       return lf_structured.complete(
-          input_value, lm=self.lm, examples=self.fewshot_examples, **kwargs
+          input_value, lm=self.lm, examples=self.fewshot_examples,
+          returns_message=True, **kwargs
       )
 
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
@@ -803,8 +836,17 @@ class Evaluation(Evaluable):
     )
     return result
 
-  def audit(self, example: Any, output: Any) -> None:
-    """Audits the example against the output. Subclasses should override."""
+  def audit(self, example: Any, output: Any, message: lf.Message) -> None:
+    """Audits the example against the output. Subclasses should override.
+
+    Args:
+      example: The input object.
+      output: The output from LM. For `lf.call`, if `schema_fn` is not provided,
+        it will be the raw LM response string. Otherwise it will be the
+        structured output from the LM.
+      message: The entire message returned by the LM, which could be used to
+        trace the LM input, response and parsed structure.
+    """
 
   def save(self) -> None:
     """Save evaluation details."""
@@ -817,34 +859,41 @@ class Evaluation(Evaluable):
         file_format='txt',
     )
 
-  def _render_navbar(self, s: io.StringIO) -> None:
-    current = self
-    links = []
-    while current is not None and current.index_link is not None:
-      links.insert(0, f'<a href="{current.index_link}">{current.id}</a>')
-      current = current.parent
-
-    for i, link in enumerate(links):
-      s.write(link)
-      if i != len(links) - 1:
-        # Add a right triangle symbol.
-        s.write(' &#9656 ')
-
   def _render_result_header(self, s: io.StringIO) -> None:
     s.write('<td>Method</td>')
+    s.write('<td>Inputs</td>')
     s.write('<td>Model</td>')
     s.write('<td>Prompt</td>')
     s.write('<td>Schema</td>')
     s.write('<td>Failures</td>')
 
   def _render_result_row(self, s: io.StringIO) -> None:
-    s.write(f'<td style="color:{self._method_color}">lf.{self.method}</td>')
-    s.write(f'<td style="color:#494a5c">{self.lm.model_id}</td>')
-    s.write(f'<td style="color:darkgray">{self.prompt.template_str}</td>')
+    def display_value(v, p):
+      if isinstance(v, pg.hyper.OneOf):
+        if not p:
+          return v.candidates
+        return [getattr(c, p) for c in v.candidates]
+      return getattr(v, p) if p else v
+
+    s.write('<td style="color:{self._method_color}">'
+            f'{display_value(self.method, "")}</td>')
+    s.write('<td style="color:darkgray">'
+            f'{display_value(self.inputs, "")}</td>')
+    s.write('<td style="color:#494a5c">'
+            f'{display_value(self.lm, "model_id")}</td>')
+    s.write('<td style="color:darkgray">'
+            f'{display_value(self.prompt, "template_str")}</td>')
+
+    if isinstance(self.schema_fn, pg.hyper.OneOf):
+      title = '...'
+      schema_fn = self.schema_fn.candidates
+    else:
+      title = self.schema.schema_str('python') if self.schema else None
+      schema_fn = self.schema_fn
     s.write(
         '<td style="color:purple" '
-        f'title="{self.schema.schema_str("python")}">'
-        f'{self.schema_fn}</td>'
+        f'title="{title}">'
+        f'{schema_fn}</td>'
     )
     s.write(
         '<td><span style="color:orange">%s</span>%s</td>'

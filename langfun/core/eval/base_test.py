@@ -96,6 +96,8 @@ class EvaluationTest(unittest.TestCase):
 
     self.assertEqual(s.dir, os.path.join(s.root_dir, s.id))
     self.assertEqual(s.hash, s.clone().hash)
+    # Test persistent hash.
+    self.assertEqual(s.hash, '5224adae')
     self.assertEqual(
         s.hash, s.clone(override={'max_workers': 2, 'lm.timeout': 20}).hash
     )
@@ -164,12 +166,15 @@ class EvaluationTest(unittest.TestCase):
     )
 
   def test_bad_init(self):
+    with self.assertRaisesRegex(ValueError, '.*'):
+      eval_set('bad_init1', 'complete', None, lm=fake.StaticResponse('hi'))
+
     @pg.functor()
     def _bad_completion_schema():
       return int
 
     s = eval_set(
-        'bad_init1', 'complete',
+        'bad_init2', 'complete',
         schema_fn=_bad_completion_schema(), lm=fake.StaticResponse('hi'))
 
     with self.assertRaisesRegex(TypeError, '.*must be .*class.*'):
@@ -312,6 +317,8 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(
         s.children[0].dir, os.path.join(s.root_dir, s.children[0].id)
     )
+    # Test persistent hash.
+    self.assertEqual(s.hash, 'fc31a1c3')
 
     self.assertEqual(
         s.run(dryrun=False, verbose=False),
@@ -348,14 +355,18 @@ class EvaluationTest(unittest.TestCase):
     )
 
   def test_call(self):
+    lm = fake.StaticSequence(['two'])
+    s = eval_set('call_test1', 'call', schema_fn=None, lm=lm)
+    self.assertEqual(s.process(s.examples[0]).text, 'two')
+
     lm = fake.StaticSequence(['two', 'Solution(final_answer=2)'])
-    s = eval_set('call_test', 'call', schema_fn=answer_schema(), lm=lm)
-    self.assertEqual(s.process(s.examples[0]), Solution(2))
+    s = eval_set('call_test2', 'call', schema_fn=answer_schema(), lm=lm)
+    self.assertEqual(s.process(s.examples[0]).result, Solution(2))
 
   def test_query(self):
     lm = fake.StaticSequence(['Solution(final_answer=2)'])
     s = eval_set('query_test', 'query', schema_fn=answer_schema(), lm=lm)
-    self.assertEqual(s.process(s.examples[0]), Solution(2))
+    self.assertEqual(s.process(s.examples[0]).result, Solution(2))
 
     # Test query with fewshot examples.
     lm = fake.StaticSequence(['Solution(final_answer=2)'])
@@ -365,7 +376,7 @@ class EvaluationTest(unittest.TestCase):
         schema_fn=answer_schema_with_fewshot_examples(),
         lm=lm,
     )
-    m = s.process(s.examples[0], returns_message=True)
+    m = s.process(s.examples[0])
     self.assertIn('The result of one plus two', m.lm_input.text)
 
   def test_complete(self):
@@ -376,7 +387,8 @@ class EvaluationTest(unittest.TestCase):
         'complete_test', 'complete', schema_fn=complete_schema(), lm=lm
     )
     self.assertEqual(
-        s.process(s.examples[0]), SolutionForCompletion('Compute 1 + 1', 2)
+        s.process(s.examples[0]).result,
+        SolutionForCompletion('Compute 1 + 1', 2)
     )
 
     # Testing for using a query schema for completion.
@@ -396,7 +408,7 @@ class EvaluationTest(unittest.TestCase):
     s = eval_set(
         'complete_test2', 'complete', schema_fn=_answer_schema(), lm=lm
     )
-    self.assertEqual(s.process(s.examples[0]).answer, 2)
+    self.assertEqual(s.process(s.examples[0]).result.answer, 2)
 
 
 class SuiteTest(unittest.TestCase):
@@ -411,41 +423,79 @@ class SuiteTest(unittest.TestCase):
         'suite_run_test',
         [
             eval_set('run_test_1', 'query', schema_fn=answer_schema(), lm=lm),
-            eval_set('run_test_2', 'query', schema_fn=answer_schema(), lm=lm),
+            # A suite of search space. Two of the sub-experiments are identical,
+            # thus the result of run_test_2 would include only two keys.
+            eval_set('run_test_2',
+                     pg.oneof(['call', 'query']),
+                     schema_fn=pg.oneof([answer_schema(), answer_schema()]),
+                     lm=lm),
         ],
     )
+    # Test for persistent hash.
+    self.assertEqual(s.hash, '0fd6051a')
+    result = s.run(dryrun=False)
+    expected = {
+        s.children[0].id: dict(
+            experiment_setup=dict(
+                id=s.children[0].id,
+                dir=s.children[0].dir,
+                model='StaticSequence',
+                prompt_template='{{example.question}}',
+                method='query',
+                schema_fn='answer_schema()',
+            ),
+            cache_stats=dict(
+                use_cache=True, num_queries=2, num_hits=0, num_updates=2
+            ),
+            metrics=dict(total=2, failures=1, failure_rate=0.5),
+        ),
+        s.children[1].id: {
+            s.children[1].children[0].id: dict(
+                experiment_setup=dict(
+                    id=s.children[1].children[0].id,
+                    dir=s.children[1].children[0].dir,
+                    model='StaticSequence',
+                    prompt_template='{{example.question}}',
+                    method='call',
+                    schema_fn='answer_schema()'
+                ),
+                cache_stats=dict(
+                    use_cache=True,
+                    num_queries=4,
+                    num_hits=2,
+                    num_updates=2
+                ),
+                metrics=dict(
+                    total=2,
+                    failures=2,
+                    failure_rate=1.0
+                )
+            ),
+            s.children[1].children[2].id: dict(
+                experiment_setup=dict(
+                    id=s.children[1].children[2].id,
+                    dir=s.children[1].children[2].dir,
+                    model='StaticSequence',
+                    prompt_template='{{example.question}}',
+                    method='query',
+                    schema_fn='answer_schema()'
+                ),
+                cache_stats=dict(
+                    use_cache=True,
+                    num_queries=2,
+                    num_hits=2,
+                    num_updates=0
+                ),
+                metrics=dict(
+                    total=2,
+                    failures=1,
+                    failure_rate=0.5
+                )
+            )
+        }
+    }
     self.assertEqual(
-        s.run(),
-        {
-            s.children[0].id: dict(
-                experiment_setup=dict(
-                    id=s.children[0].id,
-                    dir=s.children[0].dir,
-                    model='StaticSequence',
-                    prompt_template='{{example.question}}',
-                    method='query',
-                    schema_fn='answer_schema()',
-                ),
-                cache_stats=dict(
-                    use_cache=True, num_queries=2, num_hits=0, num_updates=2
-                ),
-                metrics=dict(total=2, failures=1, failure_rate=0.5),
-            ),
-            s.children[1].id: dict(
-                experiment_setup=dict(
-                    id=s.children[1].id,
-                    dir=s.children[1].dir,
-                    model='StaticSequence',
-                    prompt_template='{{example.question}}',
-                    method='query',
-                    schema_fn='answer_schema()',
-                ),
-                cache_stats=dict(
-                    use_cache=True, num_queries=2, num_hits=0, num_updates=2
-                ),
-                metrics=dict(total=2, failures=1, failure_rate=0.5),
-            ),
-        },
+        result, expected
     )
 
 

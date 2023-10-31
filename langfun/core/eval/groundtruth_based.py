@@ -44,8 +44,8 @@ class GroundTruthMatch(base.Evaluation):
   MISMATCHES_HTML = 'mismatches.html'
 
   @property
-  def matches(self) -> list[tuple[Any, Any]]:
-    """Returns the matches examples and their output."""
+  def matches(self) -> list[tuple[Any, Any, lf.Message]]:
+    """Returns the matches examples, outputs and the output messages."""
     return self._matches
 
   @property
@@ -60,8 +60,8 @@ class GroundTruthMatch(base.Evaluation):
     return self.num_matches / self.num_completed
 
   @property
-  def mismatches(self) -> list[tuple[Any, Any]]:
-    """Returns the mismatches examples and their outputs."""
+  def mismatches(self) -> list[tuple[Any, Any, lf.Message]]:
+    """Returns the mismatches examples, outputs and output messages."""
     return self._mismatches
 
   @property
@@ -89,13 +89,13 @@ class GroundTruthMatch(base.Evaluation):
     self._matches = []
     self._mismatches = []
 
-  def audit(self, example: Any, output: Any) -> None:
+  def audit(self, example: Any, output: Any, message: lf.Message) -> None:
     groundtruth = self.groundtruth(example)
     answer = self.answer_field.query(output)
     if self.match(answer, groundtruth):
-      self._matches.append((example, output))
+      self._matches.append((example, output, message))
     else:
-      self._mismatches.append((example, output))
+      self._mismatches.append((example, output, message))
 
   def match(self, answer: Any, groundtruth: Any) -> bool:
     """Matches answer against the groundtruth. Subclasses can override."""
@@ -178,15 +178,21 @@ class GroundTruthMatch(base.Evaluation):
     s.write('<div style="white-space:pre">\n')
     s.write(
         '<table style="border: 1px solid;">'
-        '<tr class="header"><td>No.</td><td>Input</td><td>Output</td></tr>'
+        '<tr class="header">'
+        '<td>No.</td><td>Input</td><td>Output</td>'
+        '<td>Prompt/Response Chain</td>'
+        '</tr>'
     )
-    for i, (example, output) in enumerate(self.matches):
+    for i, (example, output, message) in enumerate(self.matches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
       input_str = pg.format(example, verbose=False)
       s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
       output_str = pg.format(output, verbose=False)
       s.write(f'<td style="color:blue;white-space:pre-wrap">{output_str}</td>')
+      s.write('<td>')
+      self._render_message(message, s)
+      s.write('</td>')
       s.write('</tr>')
     s.write('</table></div>')
 
@@ -196,10 +202,13 @@ class GroundTruthMatch(base.Evaluation):
     s.write('<div style="white-space:pre">\n')
     s.write(
         '<table style="border: 1px solid;">'
-        '<tr class="header"><td>No.</td><td>Input</td><td>Output</td></tr>'
+        '<tr class="header">'
+        '<td>No.</td><td>Input</td><td>Output</td>'
+        '<td>Prompt/Response Chain</td>'
+        '</tr>'
     )
 
-    for i, (example, output) in enumerate(self.mismatches):
+    for i, (example, output, message) in enumerate(self.mismatches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
       input_str = pg.format(example, verbose=False)
@@ -208,5 +217,8 @@ class GroundTruthMatch(base.Evaluation):
       s.write(
           f'<td style="color:magenta;white-space:pre-wrap">{output_str}</td>'
       )
+      s.write('<td>')
+      self._render_message(message, s)
+      s.write('</td>')
       s.write('</tr>')
     s.write('</table></div>')

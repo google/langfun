@@ -29,8 +29,8 @@ class Scoring(base.Evaluation):
   SCORED_HTML = 'scored.html'
 
   @property
-  def scored(self) -> list[tuple[Any, Any, float]]:
-    """Returns a list of (input example, structured output, score)."""
+  def scored(self) -> list[tuple[Any, Any, float, lf.Message]]:
+    """Returns a list of (example, structured output, score, output message)."""
     return self._scored
 
   @property
@@ -60,9 +60,9 @@ class Scoring(base.Evaluation):
     super()._reset()
     self._scored = []
 
-  def audit(self, example: Any, output: Any) -> None:
+  def audit(self, example: Any, output: Any, message: lf.Message) -> None:
     score = self.score(example, output)
-    self._scored.append((example, output, score))
+    self._scored.append((example, output, score, message))
 
   @abc.abstractmethod
   def score(self, example: Any, output: Any) -> float:
@@ -130,9 +130,10 @@ class Scoring(base.Evaluation):
         '<table style="border: 1px solid;">'
         '<tr class="header">'
         '<td>No.</td><td>Input</td><td>Output</td><td>Score</td>'
+        '<td>Prompt/Response Chain</td>'
         '</tr>'
     )
-    for i, (example, output, score) in enumerate(self.scored):
+    for i, (example, output, score, message) in enumerate(self.scored):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
       input_str = pg.format(example, verbose=False)
@@ -140,5 +141,8 @@ class Scoring(base.Evaluation):
       output_str = pg.format(output, verbose=False)
       s.write(f'<td style="color:blue;white-space:pre-wrap">{output_str}</td>')
       s.write(f'<td style="color:magenta;white-space:pre-wrap">{score}</td>')
+      s.write('<td>')
+      self._render_message(message, s)
+      s.write('</td>')
       s.write('</tr>')
     s.write('</table></div>')
