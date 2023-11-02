@@ -452,6 +452,14 @@ class Evaluation(Evaluable):
       ),
   ]
 
+  response_postprocess: Annotated[
+      Callable[[str], str] | None,
+      (
+          'A callback function to post process the text response before sending'
+          ' for parsing.'
+      ),
+  ] = None
+
   lm: Annotated[lf.LanguageModel, 'Language model to use for evaluation.']
 
   parsing_lm: Annotated[
@@ -772,6 +780,7 @@ class Evaluation(Evaluable):
           lm=self.lm,
           parsing_lm=self.parsing_lm,
           parsing_examples=self.fewshot_examples,
+          response_postprocess=self.response_postprocess,
           returns_message=True,
           **kwargs,
       )

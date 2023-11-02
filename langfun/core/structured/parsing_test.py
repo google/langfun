@@ -644,6 +644,22 @@ class CallTest(unittest.TestCase):
     with self.assertRaisesRegex(TypeError, '`prompt` should be .*'):
       parsing.call(1)
 
+  def test_call_with_response_postprocess(self):
+    target_str = '@TARGET_STR@'
+    random_str = '!RANDOM_STR!'
+    delimiter = '\n'
+
+    raw_response = target_str + delimiter + random_str
+    r = parsing.call(
+        'Compute 1 + 2',
+        int,
+        lm=fake.StaticSequence([raw_response, '3']),
+        returns_message=True,
+        response_postprocess=lambda x: x.split(delimiter)[0],
+    )
+    self.assertIn(target_str, str(r.lm_input))
+    self.assertNotIn(random_str, str(r.lm_input))
+
 
 if __name__ == '__main__':
   unittest.main()

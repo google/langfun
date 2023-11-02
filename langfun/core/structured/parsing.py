@@ -14,7 +14,7 @@
 """Natural language text to structured value."""
 
 import inspect
-from typing import Annotated, Any, Literal, Type, Union
+from typing import Annotated, Any, Callable, Literal, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -159,6 +159,7 @@ def call(
     *,
     parsing_lm: lf.LanguageModel | None = None,
     parsing_examples: list[mapping.MappingExample] | None = None,
+    response_postprocess: Callable[[str], str] | None = None,
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -194,6 +195,8 @@ def call(
       for prompting the LM will be used.
     parsing_examples: Examples for parsing the output. If None,
       `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
+    response_postprocess: A callback function to post process the text response
+      before sending for parsing.
     returns_message: If True, return a `lf.Message` object instead of its text
       or result.
     **kwargs: Keyword arguments. Including options that control the calling
@@ -218,6 +221,10 @@ def call(
     )
 
   lm_output = lfun(**kwargs)
+
+  if response_postprocess is not None:
+    lm_output.set('text', response_postprocess(lm_output.text))
+
   if schema is None:
     return lm_output if returns_message else lm_output.text
 
