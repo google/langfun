@@ -62,6 +62,7 @@ def eval_set(
     schema_fn,
     lm: lf.LanguageModel,
     use_cache: bool = True,
+    **kwargs,
 ):
   """Creates an evaluation object for testing."""
   tmp_dir = tempfile.gettempdir()
@@ -79,6 +80,7 @@ def eval_set(
       lm=lm,
       use_cache=use_cache,
       max_workers=1,
+      **kwargs
   )
 
 
@@ -199,7 +201,7 @@ class EvaluationTest(unittest.TestCase):
     lm = fake.StaticSequence([
         'Solution(final_answer=2)',
         '3',
-    ], debug=True)
+    ])
     s = eval_set('run_test', 'query', schema_fn=answer_schema(), lm=lm)
     self.assertEqual(
         s.run(dryrun=False),
@@ -240,7 +242,7 @@ class EvaluationTest(unittest.TestCase):
     lm = fake.StaticSequence([
         'Solution(final_answer=2)',
         '3',
-    ], debug=True)
+    ])
     s = eval_set(
         'run_without_save_test', 'query', schema_fn=answer_schema(), lm=lm)
     s.run(save=False, dryrun=False)
@@ -363,6 +365,13 @@ class EvaluationTest(unittest.TestCase):
     s = eval_set('call_test2', 'call', schema_fn=answer_schema(), lm=lm)
     self.assertEqual(s.process(s.examples[0]).result, Solution(2))
 
+    lm = fake.StaticSequence(['two\n1', 'Solution(final_answer=2)'])
+    s = eval_set(
+        'call_test3', 'call',
+        schema_fn=answer_schema(), lm=lm,
+        call_postprocess=lambda x: x.split('\n')[0])
+    self.assertEqual(s.process(s.examples[0]).lm_input.source.text, 'two')
+
   def test_query(self):
     lm = fake.StaticSequence(['Solution(final_answer=2)'])
     s = eval_set('query_test', 'query', schema_fn=answer_schema(), lm=lm)
@@ -403,7 +412,6 @@ class EvaluationTest(unittest.TestCase):
 
     lm = fake.StaticSequence(
         ["Solution2(question='Compute 1 + 1', answer=2)"],
-        debug=True,
     )
     s = eval_set(
         'complete_test2', 'complete', schema_fn=_answer_schema(), lm=lm

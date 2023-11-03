@@ -452,11 +452,11 @@ class Evaluation(Evaluable):
       ),
   ]
 
-  response_postprocess: Annotated[
+  call_postprocess: Annotated[
       Callable[[str], str] | None,
       (
-          'A callback function to post process the text response before sending'
-          ' for parsing.'
+          'A callable object to post process the text response before '
+          'parsing. Applicable only when `method` is set to \'call\'.'
       ),
   ] = None
 
@@ -780,7 +780,7 @@ class Evaluation(Evaluable):
           lm=self.lm,
           parsing_lm=self.parsing_lm,
           parsing_examples=self.fewshot_examples,
-          response_postprocess=self.response_postprocess,
+          response_postprocess=self.call_postprocess,
           returns_message=True,
           **kwargs,
       )
