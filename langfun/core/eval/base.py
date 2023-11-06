@@ -147,7 +147,7 @@ class Evaluable(lf.Component):
       end: int | None = None,
       save: bool = True,
       debug: bool | lf.LMDebugMode = False,
-      dryrun: bool = True,
+      dryrun: bool = False,
       verbose: bool = True,
       show_progress: bool = True,
       **kwargs,

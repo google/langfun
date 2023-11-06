@@ -204,7 +204,7 @@ class EvaluationTest(unittest.TestCase):
     ])
     s = eval_set('run_test', 'query', schema_fn=answer_schema(), lm=lm)
     self.assertEqual(
-        s.run(dryrun=False),
+        s.run(),
         dict(
             experiment_setup=dict(
                 id='run_test',
@@ -245,7 +245,7 @@ class EvaluationTest(unittest.TestCase):
     ])
     s = eval_set(
         'run_without_save_test', 'query', schema_fn=answer_schema(), lm=lm)
-    s.run(save=False, dryrun=False)
+    s.run(save=False)
 
     # Cache will always be saved
     self.assertTrue(
@@ -263,7 +263,7 @@ class EvaluationTest(unittest.TestCase):
   def test_load(self):
     lm = fake.StaticResponse('Solution(final_answer=2)')
     s = eval_set('loas_test', 'query', schema_fn=answer_schema(), lm=lm)
-    s.run()
+    s.run(dryrun=True)
     self.assertIsNotNone(s.result)
 
     s2 = base.load(s.dir)
@@ -276,7 +276,7 @@ class EvaluationTest(unittest.TestCase):
     lm = fake.StaticResponse('Solution(final_answer=2)')
     s = eval_set('run_filter_test', 'query', schema_fn=answer_schema(), lm=lm)
     self.assertEqual(
-        s.run(filter=lambda x: False),
+        s.run(filter=lambda x: False, dryrun=True),
         dict(
             experiment_setup=dict(
                 id='run_filter_test',
@@ -323,7 +323,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(s.hash, 'fc31a1c3')
 
     self.assertEqual(
-        s.run(dryrun=False, verbose=False),
+        s.run(verbose=False),
         {
             s.children[0].id: dict(
                 experiment_setup=dict(
@@ -441,7 +441,7 @@ class SuiteTest(unittest.TestCase):
     )
     # Test for persistent hash.
     self.assertEqual(s.hash, '0fd6051a')
-    result = s.run(dryrun=False)
+    result = s.run()
     expected = {
         s.children[0].id: dict(
             experiment_setup=dict(
