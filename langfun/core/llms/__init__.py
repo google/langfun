@@ -26,6 +26,8 @@ from langfun.core.llms.fake import StaticSequence
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
 
+from langfun.core.llms.openai import Gpt4Turbo
+from langfun.core.llms.openai import Gpt4TurboVision
 from langfun.core.llms.openai import Gpt4
 from langfun.core.llms.openai import Gpt4_0613
 from langfun.core.llms.openai import Gpt4_0314
@@ -34,6 +36,7 @@ from langfun.core.llms.openai import Gpt4_32K_0613
 from langfun.core.llms.openai import Gpt4_32K_0314
 
 from langfun.core.llms.openai import Gpt35Turbo
+from langfun.core.llms.openai import Gpt35Turbo_1106
 from langfun.core.llms.openai import Gpt35Turbo_0613
 from langfun.core.llms.openai import Gpt35Turbo_0301
 from langfun.core.llms.openai import Gpt35Turbo16K

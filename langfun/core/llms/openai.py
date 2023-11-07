@@ -18,6 +18,7 @@ import os
 from typing import Annotated, Any, Literal, cast
 
 import langfun.core as lf
+from langfun.core import modalities as lf_modalities
 import openai
 from openai import error as openai_error
 from openai import openai_object
@@ -44,6 +45,8 @@ class OpenAI(lf.LanguageModel):
 
   model: pg.typing.Annotated[
       Literal[
+          'gpt-4-1106-preview',       # Gpt4 Turbo.
+          'gpt-4-vision-preview',     # Gpt4 Turbo with Vision.
           'gpt-4',
           'gpt-4-0613',
           'gpt-4-0314',
@@ -51,12 +54,13 @@ class OpenAI(lf.LanguageModel):
           'gpt-4-32k-0613',
           'gpt-4-32k-0314',
           'gpt-3.5-turbo',
+          'gpt-3.5-turbo-1106',
           'gpt-3.5-turbo-0613',
           'gpt-3.5-turbo-0301',
           'gpt-3.5-turbo-16k',
           'gpt-3.5-turbo-16k-0613',
           'gpt-3.5-turbo-16k-0301',
-          'text-davinci-003',
+          'text-davinci-003',         # Gpt3.5
           'davinci',
           'curie',
           'babbage',
@@ -64,6 +68,11 @@ class OpenAI(lf.LanguageModel):
       ],
       'The name of the model to use.',
   ] = 'gpt-3.5-turbo'
+
+  multimodal: Annotated[
+      bool,
+      'Whether this model has multimodal support.'
+  ] = False
 
   api_key: Annotated[
       str | None,
@@ -176,10 +185,23 @@ class OpenAI(lf.LanguageModel):
   def _chat_complete_batch(
       self, prompts: list[lf.Message]
   ) -> list[LMSamplingResult]:
-    def _open_ai_chat_completion(prompt):
+    def _open_ai_chat_completion(prompt: lf.Message):
+      if self.multimodal:
+        content = []
+        for chunk in prompt.chunk():
+          if isinstance(chunk, str):
+            item = dict(type='text', text=chunk)
+          elif isinstance(chunk, lf_modalities.image.ImageFile):
+            item = dict(type='image_url', image_url=chunk.uri)
+          else:
+            raise ValueError(f'Unsupported modality object: {chunk!r}.')
+          content.append(item)
+      else:
+        content = prompt.text
+
       response = openai.ChatCompletion.create(
           # TODO(daiyip): support conversation history and system prompt.
-          messages=[{'role': 'user', 'content': prompt.text}],
+          messages=[{'role': 'user', 'content': content}],
           **self._get_request_args(self.sampling_options),
       )
       response = cast(openai_object.OpenAIObject, response)
@@ -212,6 +234,17 @@ class OpenAI(lf.LanguageModel):
 class Gpt4(OpenAI):
   """GPT-4."""
   model = 'gpt-4'
+
+
+class Gpt4Turbo(Gpt4):
+  """GPT-4 Turbo with 128K context window size. Knowledge up to 4-2023."""
+  model = 'gpt-4-1106-preview'
+
+
+class Gpt4TurboVision(Gpt4):
+  """GPT-4 Turbo with vision."""
+  model = 'gpt-4-vision-preview'
+  multimodal = True
 
 
 class Gpt4_0613(Gpt4):    # pylint:disable=invalid-name
@@ -249,13 +282,18 @@ class Gpt35Turbo(Gpt35):
   model = 'gpt-3.5-turbo'
 
 
+class Gpt35Turbo_1106(Gpt35Turbo):   # pylint:disable=invalid-name
+  """Gpt3.5 Turbo snapshot at 2023/11/06, with with 16K context window size."""
+  model = 'gpt-3.5-turbo-1106'
+
+
 class Gpt35Turbo_0613(Gpt35Turbo):   # pylint:disable=invalid-name
-  """Gtp 3.5 Turbo 0613."""
+  """Gpt3.5 Turbo snapshot at 2023/06/13, with 4K context window size."""
   model = 'gpt-3.5-turbo-0613'
 
 
 class Gpt35Turbo_0301(Gpt35Turbo):   # pylint:disable=invalid-name
-  """Gtp 3.5 Turbo 0301."""
+  """Gpt3.5 Turbo snapshot at 2023/03/01, with 4K context window size."""
   model = 'gpt-3.5-turbo-0301'
 
 

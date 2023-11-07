@@ -17,6 +17,7 @@ import unittest
 from unittest import mock
 
 import langfun.core as lf
+from langfun.core import modalities as lf_modalities
 from langfun.core.llms import openai
 import pyglove as pg
 
@@ -45,6 +46,25 @@ def mock_chat_completion_query(messages, *, n=1, **kwargs):
     choices.append(pg.Dict(
         message=pg.Dict(
             content=f'Sample {k} for message.'
+        )
+    ))
+  return pg.Dict(choices=choices, usage=openai.Usage(
+      prompt_tokens=100,
+      completion_tokens=100,
+      total_tokens=200,
+  ))
+
+
+def mock_chat_completion_query_vision(messages, *, n=1, **kwargs):
+  del kwargs
+  choices = []
+  urls = [
+      c['image_url'] for c in messages[0]['content'] if c['type'] == 'image_url'
+  ]
+  for k in range(n):
+    choices.append(pg.Dict(
+        message=pg.Dict(
+            content=f'Sample {k} for message: {"".join(urls)}'
         )
     ))
   return pg.Dict(choices=choices, usage=openai.Usage(
@@ -110,6 +130,21 @@ class OpenaiTest(unittest.TestCase):
       self.assertEqual(
           lm('hello', sampling_options=lf.LMSamplingOptions(n=2)),
           'Sample 0 for message.',
+      )
+
+  def test_call_chat_completion_vision(self):
+    with mock.patch('openai.ChatCompletion.create') as mock_chat_completion:
+      mock_chat_completion.side_effect = mock_chat_completion_query_vision
+      lm = openai.Gpt4TurboVision(api_key='test_key')
+      self.assertEqual(
+          lm(
+              lf.UserMessage(
+                  'hello {{image}}',
+                  image=lf_modalities.Image.from_uri('https://fake/image')
+              ),
+              sampling_options=lf.LMSamplingOptions(n=2)
+          ),
+          'Sample 0 for message: https://fake/image',
       )
 
   def test_sample_completion(self):
