@@ -336,11 +336,11 @@ class ConcurrentMapTest(unittest.TestCase):
         [
             (i, o)
             for i, o, _ in concurrent.concurrent_map(
-                fun, [1, 2, 3], ordered=True, timeout=1.5
+                fun, [-1, 2, 3], ordered=True, timeout=1.5
             )
         ],
         [
-            (1, pg.MISSING_VALUE),
+            (-1, pg.MISSING_VALUE),
             (2, 2),
             (3, 3),
         ],
@@ -396,12 +396,12 @@ class ConcurrentMapTest(unittest.TestCase):
       time.sleep(x)
       return x
 
-    self.assertEqual(
-        [
+    self.assertEqual(   # pylint: disable=g-generic-assert
+        sorted([
             (i, o) for i, o, _ in concurrent.concurrent_map(
                 fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
             )
-        ],
+        ], key=lambda x: x[0]),
         [
             (1, 1),
             (2, pg.MISSING_VALUE),
@@ -416,13 +416,13 @@ class ConcurrentMapTest(unittest.TestCase):
       time.sleep(x)
       return x
 
-    self.assertEqual(
-        [
+    self.assertEqual(  # pylint: disable=g-generic-assert
+        sorted([
             (i, o) for i, o, _ in concurrent.concurrent_map(
                 fun, [1, 2, 3], timeout=1.5, max_workers=1,
                 show_progress=True, status_fn=lambda p: dict(x=1, y=1)
             )
-        ],
+        ], key=lambda x: x[0]),
         [
             (1, 1),
             (2, pg.MISSING_VALUE),

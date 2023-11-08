@@ -16,8 +16,9 @@
 import concurrent.futures
 import dataclasses
 import random
+import threading
 import time
-from typing import Any, Callable, Iterable, Iterator, Sequence, Tuple, Type, Union
+from typing import Any, Callable, Iterable, Iterator, Literal, Sequence, Tuple, Type, Union
 
 from langfun.core import component
 import pyglove as pg
@@ -318,6 +319,106 @@ class Progress:
     self._total_duration += job.elapse
 
 
+class ProgressBar:
+  """Progress bars that can be updated in concurrent threads.
+
+  When progresses are reported during `lf.concurrent_map`, thread functions may
+  have child calls to `lf.concurrent_map`, which requires multiple progress bar
+  created/updated in multi-threads to be supported.
+
+  However, tqdm requires all progress bars to be created and updated in the
+  main thread. This class uses a queue system to communicate among the threads,
+  allowing bar installation/uninstallation/update to be called within non-main
+  thread.
+  """
+
+  @dataclasses.dataclass
+  class Settings:
+    """Progress bar settings."""
+    label: str | None
+    total: int
+    color: str | None = None
+
+  @dataclasses.dataclass
+  class Update:
+    """Progress bar update."""
+    bar_id: int
+    delta: int
+    postfix: dict[str, str] | None
+
+  def __init__(self):
+    self._progress_bars: dict[int, tqdm.tqdm] = {}
+    self._install_requests: list[tuple[int, ProgressBar.Settings]] = []
+    self._updates: list[ProgressBar.Update] = []
+    self._uninstall_requests: list[int] = []
+    self._lock = threading.Lock()
+
+  def install(
+      self,
+      label: str | None,
+      total: int,
+      color: str | None = None,
+      ) -> int:
+    """Installs a progress bar and returns a reference id."""
+    with self._lock:
+      settings = ProgressBar.Settings(label, total, color)
+      bar_id = id(settings)
+      self._install_requests.append((bar_id, settings))
+      return bar_id
+
+  def report(
+      self,
+      bar_id: int,
+      delta: int,
+      postfix: dict[str, str] | None
+      ) -> None:
+    """Report the progress for a label."""
+    with self._lock:
+      self._updates.append(
+          ProgressBar.Update(
+              bar_id=bar_id, delta=delta, postfix=postfix
+          )
+      )
+    self.update()
+
+  def uninstall(self, bar_id: int) -> None:
+    """Uninstalls a progress bar with the reference id returned by install."""
+    with self._lock:
+      self._uninstall_requests.append(bar_id)
+
+  def update(self) -> None:
+    """Update all progress bars when called within the main thread."""
+    if threading.current_thread() is not threading.main_thread():
+      return
+
+    with self._lock:
+      # Process install requests.
+      if self._install_requests:
+        for bar_id, settings in self._install_requests:
+          self._progress_bars[bar_id] = tqdm.tqdm(
+              total=settings.total, desc=settings.label, colour=settings.color)
+        self._install_requests.clear()
+
+      # Process updates.
+      if self._updates:
+        for update in self._updates:
+          if update.delta > 0:
+            bar = self._progress_bars[update.bar_id]
+            bar.update(update.delta)
+            bar.set_postfix(update.postfix)
+        self._updates.clear()
+
+      # Process uninstall requests.
+      if self._uninstall_requests:
+        for bar_id in self._uninstall_requests:
+          self._progress_bars.pop(bar_id, None)
+        self._uninstall_requests.clear()
+
+
+# A global progress manager.
+_progress_bar = ProgressBar()
+
+
 def concurrent_map(
     func: Callable[[Any], Any],
     parallel_inputs: Iterable[Any],
@@ -326,6 +427,11 @@ def concurrent_map(
     max_workers: int = 32,
     ordered: bool = False,
     show_progress: bool = False,
+    label: str | None = None,
+    color: Literal[
+        'red', 'blue', 'green', 'black', 'yellow',
+        'magenta', 'cyan', 'white', None
+    ] = None,
     status_fn: Callable[[Progress], dict[str, Any]] | None = None,
     timeout: int | None = None,
     silence_on_errors: Union[
@@ -352,6 +458,10 @@ def concurrent_map(
       the order of the elements in `parallel_inputs`. Otherwise, elements that
       are finished earlier will be delivered first.
     show_progress: If True, show progress on console.
+    label: An optional label for the progress bar. Applicable when
+      `show_progress` is set to True.
+    color: Color of the progress bar. Applicable when `show_progress` is set to
+      True.
     status_fn: An optional callable object that receives a
       `lf.concurrent.Progress` object and returns a dict of kv pairs as
       the status to include in the progress bar. Applicable only when
@@ -415,55 +525,59 @@ def concurrent_map(
     total += 1
 
   progress = Progress(total=total)
-  progress_bar = tqdm.tqdm(total=total) if show_progress else None
+  bar_id = _progress_bar.install(label, total, color) if show_progress else None
 
   def update_progress_bar(progress: Progress) -> None:
-    if progress_bar is not None:
+    if show_progress:
       status = status_fn(progress)
-      description = ', '.join([
-          f'{k}: {v}' for k, v in status.items()
-      ])
-      if description:
-        progress_bar.set_description(f'[{description}]')
-
-      postfix = {
+      status.update({
           'AvgDuration': '%.2f seconds' % progress.avg_duration
-      }
+      })
       if progress.last_error is not None:
         error_text = repr(progress.last_error)
         if len(error_text) >= 64:
           error_text = error_text[:64] + '...'
-        postfix['LastError'] = error_text
-
-      progress_bar.set_postfix(postfix)
-      progress_bar.update(1)
+        status['LastError'] = error_text
+      _progress_bar.report(bar_id, 1, status)
 
   try:
     if ordered:
       for future in pending_futures:
         job = future_to_job[future]
-        wait_time = (timeout - job.elapse) if timeout else None
-        try:
-          _ = future.result(timeout=wait_time)
-        except concurrent.futures.TimeoutError:
-          future.cancel()
-          last_error = TimeoutError(
-              f'Execution time ({job.elapse}) exceeds {timeout} seconds.')
-          job.mark_canceled(last_error)
+        completed = False
+        while True:
+          try:
+            _ = future.result(timeout=1)
+            completed = True
+          except concurrent.futures.TimeoutError:
+            if timeout and timeout < job.elapse:
+              future.cancel()
+              last_error = TimeoutError(
+                  f'Execution time ({job.elapse}) exceeds {timeout} seconds.')
+              job.mark_canceled(last_error)
+              completed = True
 
-        if job.error is not None and not (
-            silence_on_errors and isinstance(job.error, silence_on_errors)):
-          raise job.error   # pylint: disable=g-doc-exception
+          if completed:
+            if job.error is not None and not (
+                silence_on_errors and isinstance(job.error, silence_on_errors)):
+              raise job.error   # pylint: disable=g-doc-exception
 
-        yield job.arg, job.result, job.error
-        progress.update(job)
-        update_progress_bar(progress)
+            yield job.arg, job.result, job.error
+            progress.update(job)
+            update_progress_bar(progress)
+            _progress_bar.update()
+            break
+          else:
+            # There might be updates from other concurrent_map. So even there
+            # is no progress on current map, we still update the progress
+            # manager.
+            _progress_bar.update()
     else:
       while pending_futures:
         completed_batch = set()
         try:
           for future in concurrent.futures.as_completed(
-              pending_futures, timeout=timeout):
+              pending_futures, timeout=1):
             job = future_to_job[future]
             del future_to_job[future]
             if job.error is not None and not (
@@ -473,36 +587,35 @@ def concurrent_map(
             progress.update(job)
             update_progress_bar(progress)
             completed_batch.add(future)
+            _progress_bar.update()
         except concurrent.futures.TimeoutError:
           pass
 
         remaining_futures = []
+        for future in pending_futures:
+          if future in completed_batch:
+            continue
+          job = future_to_job[future]
+          if timeout and job.elapse > timeout:
+            if not future.done():
+              future.cancel()
+              job.mark_canceled(
+                  TimeoutError(f'Execution time ({job.elapse}) '
+                               f'exceeds {timeout} seconds.'))
+              if not (silence_on_errors
+                      and isinstance(job.error, silence_on_errors)):
+                raise job.error  # pylint: disable=g-doc-exception
 
-        # When timeout is None, all future shall be completed through the loop
-        # above.
-        if timeout is not None:
-          for future in pending_futures:
-            if future in completed_batch:
-              continue
-            job = future_to_job[future]
-            if job.elapse > timeout:
-              if not future.done():
-                future.cancel()
-                job.mark_canceled(
-                    TimeoutError(f'Execution time ({job.elapse}) '
-                                 f'exceeds {timeout} seconds.'))
-                if not (silence_on_errors
-                        and isinstance(job.error, silence_on_errors)):
-                  raise job.error  # pylint: disable=g-doc-exception
-
-              yield job.arg, job.result, job.error
-              progress.update(job)
-              update_progress_bar(progress)
-            else:
-              remaining_futures.append(future)
+            yield job.arg, job.result, job.error
+            progress.update(job)
+            update_progress_bar(progress)
+          else:
+            remaining_futures.append(future)
         pending_futures = remaining_futures
+        _progress_bar.update()
   finally:
-    if progress_bar is not None:
-      progress_bar.close()
+    if show_progress:
+      _progress_bar.uninstall(bar_id)
+
     # Do not wait threads to finish if they are timed out.
     executor.shutdown(wait=False, cancel_futures=True)
