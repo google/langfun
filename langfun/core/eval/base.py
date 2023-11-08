@@ -743,23 +743,25 @@ class Evaluation(Evaluable):
     # Process examples.
     with lf.use_settings(debug=debug, cache=self.cache):
       self._reset()
-      for example, message, error in lf.concurrent_map(
-          self.process,
-          examples,
-          max_workers=self.max_workers,
-          show_progress=show_progress,
-          status_fn=self._status,
-      ):
-        if error is not None:
-          self._failures.append((example, str(error)))
-        else:
-          output = message.text if self.schema is None else message.result
-          self.audit(example, output, message)
-        self._num_completed += 1
 
-    # Save cache if needed.
-    if self.dir and self.cache:
-      self.cache.save()
+      try:
+        for example, message, error in lf.concurrent_map(
+            self.process,
+            examples,
+            max_workers=self.max_workers,
+            show_progress=show_progress,
+            status_fn=self._status,
+        ):
+          if error is not None:
+            self._failures.append((example, str(error)))
+          else:
+            output = message.text if self.schema is None else message.result
+            self.audit(example, output, message)
+          self._num_completed += 1
+      finally:
+        # Save cache upon completion or interruption.
+        if self.dir and self.cache:
+          self.cache.save()
 
     # Summarize result.
     self._result = self.summarize()
