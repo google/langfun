@@ -45,14 +45,17 @@ class OpenAI(lf.LanguageModel):
 
   model: pg.typing.Annotated[
       Literal[
+          # GPT4 Turbo models.
           'gpt-4-1106-preview',       # Gpt4 Turbo.
           'gpt-4-vision-preview',     # Gpt4 Turbo with Vision.
+          # GPT4 models.
           'gpt-4',
           'gpt-4-0613',
           'gpt-4-0314',
           'gpt-4-32k',
           'gpt-4-32k-0613',
           'gpt-4-32k-0314',
+          # GPT3.5 Turbo models.
           'gpt-3.5-turbo',
           'gpt-3.5-turbo-1106',
           'gpt-3.5-turbo-0613',
@@ -60,11 +63,21 @@ class OpenAI(lf.LanguageModel):
           'gpt-3.5-turbo-16k',
           'gpt-3.5-turbo-16k-0613',
           'gpt-3.5-turbo-16k-0301',
-          'text-davinci-003',         # Gpt3.5
+          # GPT3.5 models.
+          'text-davinci-003',        # Gpt3.5, trained with RHLF.
+          'text-davinci-002',        # Trained with SFT but no RHLF.
+          'code-davinci-002',
+          # GPT3 instruction-tuned models.
+          'text-curie-001',
+          'text-babbage-001',
+          'text-ada-001',
           'davinci',
           'curie',
           'babbage',
           'ada',
+          # GPT3 base models without instruction tuning.
+          'babbage-002',
+          'davinci-002',
       ],
       'The name of the model to use.',
   ] = 'gpt-3.5-turbo'
