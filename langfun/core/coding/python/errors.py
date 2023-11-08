@@ -14,38 +14,74 @@
 """Python code errors."""
 
 import io
+import sys
 import textwrap
+import traceback
 import langfun.core as lf
 
 
 class CodeError(RuntimeError):
   """Python code error."""
 
-  def __init__(self, code: str, cause: Exception):
+  def __init__(
+      self,
+      code: str,
+      cause: Exception,
+      ):
     self.code = code
     self.cause = cause
 
-  def __str__(self):
-    r = io.StringIO()
-    r.write(
-        lf.colored(f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'))
+    # Figure out the starting and ending line numbers of the erratic code.
+    lineno = None
+    end_lineno = None
+    if isinstance(cause, SyntaxError):
+      lineno = cause.lineno
+      end_lineno = cause.end_lineno
+    elif not isinstance(cause, TimeoutError):
+      tb = sys.exc_info()[2]
+      frames = traceback.extract_tb(tb, limit=5)
+      for f in frames:
+        if not f.filename or f.filename == '<string>':
+          lineno = f.lineno
+          end_lineno = lineno
+          break
+    self.lineno = lineno
+    self.end_lineno = end_lineno
 
-    if isinstance(self.cause, SyntaxError):
+  def __str__(self):
+    return self.format(include_complete_code=True)
+
+  def code_lines(self, start_line: int, end_line: int):
+    """Returns code lines ."""
+    return '\n'.join(self.code.split('\n')[start_line:end_line])
+
+  def format(self, include_complete_code: bool = True):
+    """Formats the code error."""
+    r = io.StringIO()
+    error_message = str(self.cause).rstrip()
+    if 'line' not in error_message and self.lineno is not None:
+      error_message += f' (<unknown>, line {self.lineno})'
+    r.write(
+        lf.colored(
+            f'{self.cause.__class__.__name__}: {error_message}', 'magenta'))
+
+    if self.lineno is not None:
       r.write('\n\n')
       r.write(textwrap.indent(
-          lf.colored(self.cause.text, 'magenta'),
+          lf.colored(
+              self.code_lines(self.lineno - 1, self.end_lineno), 'magenta'),
           ' ' * 2
       ))
-      if not self.cause.text.endswith('\n'):
-        r.write('\n')
+      r.write('\n')
 
-    r.write('\n')
-    r.write(lf.colored('Generated Code:', 'red'))
-    r.write('\n\n')
-    r.write(lf.colored('  ```python\n', 'magenta'))
-    r.write(textwrap.indent(
-        lf.colored(self.code, 'magenta'),
-        ' ' * 2
-    ))
-    r.write(lf.colored('\n  ```\n', 'magenta'))
+    if include_complete_code:
+      r.write('\n')
+      r.write(lf.colored('[Generated Code]', 'green', styles=['bold']))
+      r.write('\n\n')
+      r.write(lf.colored('  ```python\n', 'green'))
+      r.write(textwrap.indent(
+          lf.colored(self.code, 'green'),
+          ' ' * 2
+      ))
+      r.write(lf.colored('\n  ```\n', 'green'))
     return r.getvalue()
