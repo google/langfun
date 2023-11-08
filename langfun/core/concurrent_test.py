@@ -161,6 +161,21 @@ class ConcurrentExecuteTest(unittest.TestCase):
     with component.context(y=2):
       self.assertEqual(concurrent.concurrent_execute(fun, [A(1), A(2)]), [2, 4])
 
+  def test_concurrent_execute_with_external_executor(self):
+    def fun(a):
+      return a.x * a.y
+
+    executor = futures.ThreadPoolExecutor(max_workers=2)
+    with component.context(y=2):
+      self.assertEqual(
+          concurrent.concurrent_execute(fun, [A(1), A(2)], executor=executor),
+          [2, 4],
+      )
+
+    # Making sure the executor could be reused.
+    with component.context(y=2):
+      self.assertEqual(concurrent.concurrent_execute(fun, [A(2), A(4)]), [4, 8])
+
 
 class ProgressTest(unittest.TestCase):
 
@@ -311,6 +326,36 @@ class ConcurrentMapTest(unittest.TestCase):
           ],
       )
 
+  def test_concurrent_map_with_external_executor(self):
+    def fun(x):
+      return x
+
+    executor = futures.ThreadPoolExecutor(max_workers=2)
+    self.assertEqual(
+        list(
+            concurrent.concurrent_map(
+                fun, [1, 2, 3], executor=executor, ordered=True
+            )
+        ),
+        [
+            (1, 1, None),
+            (2, 2, None),
+            (3, 3, None),
+        ],
+    )
+    self.assertEqual(
+        list(
+            concurrent.concurrent_map(
+                fun, [4, 5, 6], executor=executor, ordered=True
+            )
+        ),
+        [
+            (4, 4, None),
+            (5, 5, None),
+            (6, 6, None),
+        ],
+    )
+
   def test_concurrent_map_with_order_and_raise_on_errors(self):
     error = ValueError()
 
@@ -429,6 +474,26 @@ class ConcurrentMapTest(unittest.TestCase):
             (3, pg.MISSING_VALUE),
         ],
     )
+
+
+class ExecutorPoolTest(unittest.TestCase):
+
+  def test_pool(self):
+    pool = concurrent.ExecutorPool()
+    executor1 = futures.ThreadPoolExecutor()
+    self.assertIs(pool.executor_from(executor1), executor1)
+
+    executor2 = pool.executor_from('executor2', max_workers=1)
+    self.assertIsInstance(executor2, futures.ThreadPoolExecutor)
+    self.assertIs(pool.get('executor2'), executor2)
+    self.assertEqual(pool.resource_ids, ['executor2'])
+
+    executor3 = pool.executor_from(None, max_workers=1)
+    self.assertIsInstance(executor3, futures.ThreadPoolExecutor)
+    self.assertEqual(pool.resource_ids, ['executor2'])
+
+    with self.assertRaises(ValueError):
+      pool.executor_from(1)
 
 
 if __name__ == '__main__':

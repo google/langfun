@@ -169,6 +169,8 @@ def with_retry(
 def concurrent_execute(
     func: Callable[[Any], Any],
     parallel_inputs: list[Any],
+    *,
+    executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,
     retry_on_errors: Union[
         Type[Exception],
@@ -184,6 +186,10 @@ def concurrent_execute(
   Args:
     func: A user function.
     parallel_inputs: The inputs for `func` which will be processed in parallel.
+    executor: A thread pool executor or a resource ID string to pool work items.
+      When resource ID is used, a thread pool will be created and cached in a
+      executor pool for future reuse. If None, a new thread pool executor will
+      be created for current execution.
     max_workers: The max number of workers.
     retry_on_errors: A sequence of exception types or tuples of exception type
       and error messages (described in regular expression) as the desired
@@ -208,10 +214,15 @@ def concurrent_execute(
         exponential_backoff=exponential_backoff,
     )
 
-  with concurrent.futures.ThreadPoolExecutor(
-      max_workers=max_workers
-  ) as executor:
+  shutdown_after_finish = executor is None
+  executor = _executor_pool.executor_from(executor, max_workers=max_workers)
+
+  try:
     return list(executor.map(with_context_access(func), parallel_inputs))
+  finally:
+    if shutdown_after_finish:
+      # Do not wait threads to finish if they are timed out.
+      executor.shutdown(wait=False, cancel_futures=True)
 
 
 @dataclasses.dataclass
@@ -423,14 +434,21 @@ def concurrent_map(
     func: Callable[[Any], Any],
     parallel_inputs: Iterable[Any],
     *,
-    executor: concurrent.futures.ThreadPoolExecutor | None = None,
+    executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,
     ordered: bool = False,
     show_progress: bool = False,
     label: str | None = None,
     color: Literal[
-        'red', 'blue', 'green', 'black', 'yellow',
-        'magenta', 'cyan', 'white', None
+        'red',
+        'blue',
+        'green',
+        'black',
+        'yellow',
+        'magenta',
+        'cyan',
+        'white',
+        None,
     ] = None,
     status_fn: Callable[[Progress], dict[str, Any]] | None = None,
     timeout: int | None = None,
@@ -451,8 +469,10 @@ def concurrent_map(
   Args:
     func: A user function.
     parallel_inputs: The inputs for `func` which will be processed in parallel.
-    executor: Thread pool exeutor to pool work items. If None, a new thread pool
-      executor will be created for current execution.
+    executor: A thread pool executor or a resource ID string to pool work items.
+      When resource ID is used, a thread pool will be created and cached in a
+      executor pool for future reuse. If None, a new thread pool executor will
+      be created for current execution.
     max_workers: The max number of workers.
     ordered: If True, the returned iterator will emit (input, output, error) in
       the order of the elements in `parallel_inputs`. Otherwise, elements that
@@ -463,8 +483,8 @@ def concurrent_map(
     color: Color of the progress bar. Applicable when `show_progress` is set to
       True.
     status_fn: An optional callable object that receives a
-      `lf.concurrent.Progress` object and returns a dict of kv pairs as
-      the status to include in the progress bar. Applicable only when
+      `lf.concurrent.Progress` object and returns a dict of kv pairs as the
+      status to include in the progress bar. Applicable only when
       `show_progress` is set to True. If None, the default status_fn will be
       used, which outputs the success and failure rate.
     timeout: The timeout in seconds for processing each input. It is the total
@@ -489,7 +509,7 @@ def concurrent_map(
   Raises:
     Exception: Erros that are not in `silence_on_errors` or `retry_on_errors`,
       or retry on such errors has reached max attempts.
-    TimeoutError: Any item timed out while TimeoutError is not silenced via 
+    TimeoutError: Any item timed out while TimeoutError is not silenced via
       `silence_on_errors`.
   """
 
@@ -509,8 +529,8 @@ def concurrent_map(
           p.failure_rate * 100, p.failed, p.completed),
   })
 
-  executor = executor or concurrent.futures.ThreadPoolExecutor(
-      max_workers=max_workers)
+  shutdown_after_finish = executor is None
+  executor = _executor_pool.executor_from(executor, max_workers=max_workers)
 
   future_to_job = {}
   pending_futures = []
@@ -617,5 +637,52 @@ def concurrent_map(
     if show_progress:
       _progress_bar.uninstall(bar_id)
 
-    # Do not wait threads to finish if they are timed out.
-    executor.shutdown(wait=False, cancel_futures=True)
+    if shutdown_after_finish:
+      # Do not wait threads to finish if they are timed out.
+      executor.shutdown(wait=False, cancel_futures=True)
+
+
+class ExecutorPool:
+  """A pool of managed executors.
+
+  Managed executors are used for controlling the parallism of execution based
+  on resource id. This design is to honor overall rate limit of LMs globally
+  (with current process).
+  """
+
+  def __init__(self):
+    self._executors: dict[str, concurrent.futures.ThreadPoolExecutor] = {}
+
+  def get(
+      self, resource_id: str, max_workers: int | None = None
+  ) -> concurrent.futures.ThreadPoolExecutor:
+    """Gets or creates a thread pool executor associated with a resource id."""
+    executor = self._executors.get(resource_id)
+    if executor is None:
+      executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+      self._executors[resource_id] = executor
+    return executor
+
+  @property
+  def resource_ids(self) -> list[str]:
+    """Returns the resource ids for active executors."""
+    return list(self._executors.keys())
+
+  def executor_from(
+      self,
+      maybe_executor: Union[concurrent.futures.ThreadPoolExecutor, str, None],
+      max_workers: int | None = None,
+  ) -> concurrent.futures.ThreadPoolExecutor:
+    """Creates a thread pool executor."""
+    if isinstance(maybe_executor, concurrent.futures.ThreadPoolExecutor):
+      return maybe_executor
+    elif isinstance(maybe_executor, str):
+      return self.get(maybe_executor, max_workers)
+    elif maybe_executor is None:
+      return concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
+    else:
+      raise ValueError(f'Unsupported value: {maybe_executor}.')
+
+
+# The global executor pool based on resource IDs.
+_executor_pool = ExecutorPool()

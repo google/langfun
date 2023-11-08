@@ -239,6 +239,16 @@ class LanguageModel(component.Component):
     """Returns a string to identify the model."""
     return self.__class__.__name__
 
+  @property
+  def resource_id(self) -> str:
+    """Resource ID for performing request parallism control."""
+    return self.model_id
+
+  @property
+  def max_concurrency(self) -> int:
+    """Max concurrent requests."""
+    return 32
+
   def sample(
       self,
       prompts: list[str | message_lib.Message],

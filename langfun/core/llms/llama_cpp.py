@@ -67,10 +67,13 @@ class LlamaCppRemote(lf.LanguageModel):
         results.append(result)
       return results
 
-    return lf.with_retry(
+    return lf.concurrent_execute(
         _complete_fn,
+        [prompts],
+        executor=self.resource_id,
+        max_workers=self.max_concurrency,
         retry_on_errors=(),
         max_attempts=self.max_attempts,
         retry_interval=self.retry_interval,
         exponential_backoff=self.exponential_backoff,
-    )(prompts)
+    )[0]

@@ -15,7 +15,7 @@
 
 import collections
 import os
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, cast
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
@@ -39,46 +39,58 @@ class LMSamplingResult(lf.LMSamplingResult):
   usage: Usage | None = None
 
 
+SUPPORTED_MODELS_AND_SETTINGS = [
+    # Model name, max concurrent requests.
+    # The concurrent requests is estimated by TPM/RPM from
+    # https://platform.openai.com/account/limits
+    # GPT4 Turbo models.
+    ('gpt-4-1106-preview', 1),  # Gpt4 Turbo.
+    ('gpt-4-vision-preview', 1),  # Gpt4 Turbo with Vision.
+    # GPT4 models.
+    ('gpt-4', 4),
+    ('gpt-4-0613', 4),
+    ('gpt-4-0314', 4),
+    ('gpt-4-32k', 4),
+    ('gpt-4-32k-0613', 4),
+    ('gpt-4-32k-0314', 4),
+    # GPT3.5 Turbo models.
+    ('gpt-3.5-turbo', 16),
+    ('gpt-3.5-turbo-1106', 16),
+    ('gpt-3.5-turbo-0613', 16),
+    ('gpt-3.5-turbo-0301', 16),
+    ('gpt-3.5-turbo-16k', 16),
+    ('gpt-3.5-turbo-16k-0613', 16),
+    ('gpt-3.5-turbo-16k-0301', 16),
+    # GPT3.5 models.
+    ('text-davinci-003', 8),  # Gpt3.5, trained with RHLF.
+    ('text-davinci-002', 4),  # Trained with SFT but no RHLF.
+    ('code-davinci-002', 4),
+    # GPT3 instruction-tuned models.
+    ('text-curie-001', 4),
+    ('text-babbage-001', 4),
+    ('text-ada-001', 4),
+    ('davinci', 4),
+    ('curie', 4),
+    ('babbage', 4),
+    ('ada', 4),
+    # GPT3 base models without instruction tuning.
+    ('babbage-002', 4),
+    ('davinci-002', 4),
+]
+
+
+# Model concurreny setting.
+_MODEL_CONCURRENCY = {m[0]: m[1] for m in SUPPORTED_MODELS_AND_SETTINGS}
+
+
 @lf.use_init_args(['model'])
 class OpenAI(lf.LanguageModel):
   """OpenAI model."""
 
   model: pg.typing.Annotated[
-      Literal[
-          # GPT4 Turbo models.
-          'gpt-4-1106-preview',       # Gpt4 Turbo.
-          'gpt-4-vision-preview',     # Gpt4 Turbo with Vision.
-          # GPT4 models.
-          'gpt-4',
-          'gpt-4-0613',
-          'gpt-4-0314',
-          'gpt-4-32k',
-          'gpt-4-32k-0613',
-          'gpt-4-32k-0314',
-          # GPT3.5 Turbo models.
-          'gpt-3.5-turbo',
-          'gpt-3.5-turbo-1106',
-          'gpt-3.5-turbo-0613',
-          'gpt-3.5-turbo-0301',
-          'gpt-3.5-turbo-16k',
-          'gpt-3.5-turbo-16k-0613',
-          'gpt-3.5-turbo-16k-0301',
-          # GPT3.5 models.
-          'text-davinci-003',        # Gpt3.5, trained with RHLF.
-          'text-davinci-002',        # Trained with SFT but no RHLF.
-          'code-davinci-002',
-          # GPT3 instruction-tuned models.
-          'text-curie-001',
-          'text-babbage-001',
-          'text-ada-001',
-          'davinci',
-          'curie',
-          'babbage',
-          'ada',
-          # GPT3 base models without instruction tuning.
-          'babbage-002',
-          'davinci-002',
-      ],
+      pg.typing.Enum(
+          pg.MISSING_VALUE, [m[0] for m in SUPPORTED_MODELS_AND_SETTINGS]
+      ),
       'The name of the model to use.',
   ] = 'gpt-3.5-turbo'
 
@@ -121,6 +133,10 @@ class OpenAI(lf.LanguageModel):
   def model_id(self) -> str:
     """Returns a string to identify the model."""
     return f'OpenAI({self.model})'
+
+  @property
+  def max_concurrency(self) -> int:
+    return _MODEL_CONCURRENCY[self.model]
 
   @classmethod
   def dir(cls):
@@ -184,8 +200,11 @@ class OpenAI(lf.LanguageModel):
           for index in sorted(samples_by_index.keys())
       ]
 
-    return lf.with_retry(
+    return lf.concurrent_execute(
         _open_ai_completion,
+        [prompts],
+        executor=self.resource_id,
+        max_workers=self.max_concurrency,
         retry_on_errors=(
             openai_error.ServiceUnavailableError,
             openai_error.RateLimitError,
@@ -193,7 +212,7 @@ class OpenAI(lf.LanguageModel):
         max_attempts=self.max_attempts,
         retry_interval=self.retry_interval,
         exponential_backoff=self.exponential_backoff,
-    )(prompts)
+    )[0]
 
   def _chat_complete_batch(
       self, prompts: list[lf.Message]
@@ -233,7 +252,8 @@ class OpenAI(lf.LanguageModel):
     return lf.concurrent_execute(
         _open_ai_chat_completion,
         prompts,
-        max_workers=8,
+        executor=self.resource_id,
+        max_workers=self.max_concurrency,
         retry_on_errors=(
             openai_error.ServiceUnavailableError,
             openai_error.RateLimitError,

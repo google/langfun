@@ -81,6 +81,14 @@ class OpenaiTest(unittest.TestCase):
     self.assertEqual(
         openai.Gpt35(api_key='test_key').model_id, 'OpenAI(text-davinci-003)')
 
+  def test_resource_id(self):
+    self.assertEqual(
+        openai.Gpt35(api_key='test_key').resource_id, 'OpenAI(text-davinci-003)'
+    )
+
+  def test_max_concurrency(self):
+    self.assertEqual(openai.Gpt35(api_key='test_key').max_concurrency, 8)
+
   def test_get_request_args(self):
     self.assertEqual(
         openai.Gpt35(api_key='test_key', timeout=90.0)._get_request_args(
