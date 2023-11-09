@@ -71,6 +71,7 @@ class Scoring(base.Evaluation):
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     del progress
     return {
+        'Model': self.lm.model_id,
         'Average Score': {self.avg_score},
         'Scored': '%.2f%% (%d/%d)' % (
             self.score_rate * 100,

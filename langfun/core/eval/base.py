@@ -14,6 +14,8 @@
 """Base classes for langfun evaluation."""
 
 import abc
+import collections
+import dataclasses
 import functools
 import hashlib
 import inspect
@@ -72,6 +74,9 @@ class Evaluable(lf.Component):
     super()._on_bound()
     self._reset()
     self._dryrun_output = None
+    # Invalidate cached properties.
+    self.__dict__.pop('leaf_nodes', None)
+    self.__dict__.pop('nonleaf_nodes', None)
 
   def _reset(self):
     """Reset evaluation state."""
@@ -108,26 +113,29 @@ class Evaluable(lf.Component):
       **kwargs: Keyword arguments that will be passed through to leaf
         evaluations.
     """
-    filter = filter or (lambda x: True)
-    if not filter(self):
-      return None
-
-    # Dry run by sweeping derived evaluations if current evaluation
-    # is a space of evaluatons.
-    if self.children:
-      for i, child in enumerate(self.children):
+    if self.is_leaf:
+      self._dryrun(example=example, debug=debug, verbose=verbose, **kwargs)
+    else:
+      filter = filter or (lambda x: True)
+      for i, leaf in enumerate(self.leaf_nodes):
         if verbose and i > 0:
           lf.console.write('')
           lf.console.write('-' * 80)
 
-        lf.console.write(
-            f'#{i + 1} DRY-RUNNING {child.id}...',
-            color='green',
-            styles=['bold'],
-        )
-        child.dryrun(example=example, debug=debug, verbose=verbose)
-    else:
-      self._dryrun(example=example, debug=debug, verbose=verbose, **kwargs)
+        if filter(leaf):
+          lf.console.write(
+              f'#{i + 1} DRY-RUNNING {leaf.id}...',
+              color='green',
+              styles=['bold'],
+          )
+          leaf.dryrun(
+              example=example, debug=debug, verbose=verbose, **kwargs)
+        elif verbose:
+          lf.console.write(
+              f'SKIPPING #{i + 1} {leaf.id} BY FILTER.',
+              color='yellow',
+              styles=['bold'],
+          )
 
   @abc.abstractmethod
   def _dryrun(
@@ -135,9 +143,34 @@ class Evaluable(lf.Component):
       *,
       example: Any,
       debug: bool | lf.LMDebugMode,
-      verbose: bool,
+      verbose: bool
   ) -> None:
     """Dry run on a single input and fill the `dryrun_output`."""
+
+  @property
+  def is_leaf(self) -> bool:
+    return isinstance(self, Evaluation) and not self.children
+
+  @functools.cached_property
+  def leaf_nodes(self) -> list['Evaluation']:
+    """Returns the leaf nodes for evaluation."""
+    if isinstance(self, Evaluation) and not self.children:
+      return [self]
+
+    nodes = []
+    for child in self.children:
+      nodes.extend(child.leaf_nodes)
+    return nodes
+
+  @functools.cached_property
+  def nonleaf_nodes(self) -> list['Evaluable']:
+    """Returns the non-leaf nodes."""
+    nodes = []
+    for child in self.children:
+      nodes.extend(child.nonleaf_nodes)
+    if not self.is_leaf:
+      nodes.append(self)
+    return nodes
 
   def run(
       self,
@@ -148,64 +181,93 @@ class Evaluable(lf.Component):
       save: bool = True,
       debug: bool | lf.LMDebugMode = False,
       dryrun: bool = False,
-      verbose: bool = True,
-      show_progress: bool = True,
+      verbose: bool = False,
+      show_progress: bool | int = True,
+      label: str | None = None,
+      from_root: bool = True,
       **kwargs,
   ) -> pg.Dict:
     """Run the evaluation, which fills and returns the result."""
-    filter = filter or (lambda x: True)
-    if not filter(self):
-      lf.console.write(
-          f'SKIPPED {self.id} BY FILTER.',
-          color='yellow',
-          styles=['bold'],
-      )
-      return self.summarize()
-
     if dryrun:
-      self.dryrun(verbose=False, debug=debug, filter=filter)
+      self.dryrun(filter=filter, verbose=False, debug=debug)
 
-    if self.children:
-      def _run_child(sub_eval):
-        return sub_eval.run(
-            start=start,
-            end=end,
-            save=save,
-            debug=debug,
-            dryrun=False,
-            verbose=verbose,
-            show_progress=show_progress,
-            **kwargs,
-        )
-
-      result = pg.Dict()
-      for i, child in enumerate(self.children):
-        if i > 0:
-          lf.console.write('')
-          if verbose:
-            lf.console.write('-' * 80)
-
-        lf.console.write(
-            f'#{i + 1} RUNNING {child.id}...',
-            color='cyan',
-            styles=['bold'],
-        )
-        lf.console.write(child.format(hide_default_values=True), color='blue')
-        child_result = _run_child(child)
-        result[child.id] = child_result
-      self._result = result
-    else:
+    if self.is_leaf:
       self._run(
           start=start,
           end=end,
           debug=debug,
+          dryrun=dryrun,
           verbose=verbose,
           show_progress=show_progress,
+          label=label,
           **kwargs,
       )
+      if save and self.dir:
+        self.save()
+    else:
+      def _run_group(arg: tuple[int, list[_LeafNode]]) -> None:
+        overview_bar, leaf_group = arg
+        for leaf in leaf_group:
+          if leaf.enabled:
+            leaf.node.run(
+                start=start,
+                end=end,
+                save=save,
+                debug=debug,
+                dryrun=False,
+                verbose=verbose,
+                show_progress=leaf.progress_bar,
+                from_root=False,
+                **kwargs,
+            )
+          lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
+          lf.concurrent.ProgressBar.report(overview_bar, 1, {
+              'LastCompleted': leaf.node.id
+          })
 
-    if save and self.dir:
-      self.save()
+      # NOTE(daiyip): Run leaf nodes grouped by model resource id. This allows
+      # evaluations using the same resource to run sequentially, which favors
+      # completing evaluations over running evaluations sparsely.
+      filter = filter or (lambda x: True)
+      leaf_nodes: list[_LeafNode] = []
+      leaf_groups: dict[str, list[_LeafNode]] = collections.defaultdict(list)
+
+      for i, leaf in enumerate(self.leaf_nodes):
+        node = _LeafNode(index=i + 1, node=leaf, enabled=filter(leaf))
+        leaf_groups[leaf.lm.resource_id].append(node)
+        leaf_nodes.append(node)
+
+      if leaf_groups:
+        # Install progress bars.
+        overview_bar = lf.concurrent.ProgressBar.install(
+            'All', len(self.leaf_nodes), color='Blue')
+        for leaf in leaf_nodes:
+          leaf.progress_bar = lf.concurrent.ProgressBar.install(
+              f'[#{leaf.index} - {leaf.node.id}]',
+              total=leaf.node.num_examples if leaf.enabled else 0,
+              color='cyan' if leaf.enabled else 'yellow',
+              postfix=None if leaf.enabled else {'SKIPPED': 'YES'})
+
+        # Run leaf groups in parallel.
+        try:
+          for _, _, _ in lf.concurrent_map(
+              _run_group,
+              [(overview_bar, group) for group in leaf_groups.values()],
+              silence_on_errors=None,
+              max_workers=len(leaf_groups)):
+            pass
+        finally:
+          # for leaf in leaf_nodes:
+          #   lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
+          lf.concurrent.ProgressBar.uninstall(overview_bar)
+
+      # Save results for non-leaf nodes.
+      for node in self.nonleaf_nodes:
+        node._result = {c.id: c.result for c in node.children}  # pylint: disable=protected-access
+        if save and self.dir:
+          node.save()
+
+    if from_root and save and self.dir:
       lf.console.write(
           f'({self.index_link})',
           color='magenta',
@@ -222,7 +284,8 @@ class Evaluable(lf.Component):
       debug: bool | lf.LMDebugMode,
       dryrun: bool,
       verbose: bool,
-      show_progress: bool,
+      show_progress: bool | int,
+      label: str | None,
       **kwargs,
   ) -> None:
     """Run the evaluate and fill `self.result`. Subclass to implement."""
@@ -368,6 +431,15 @@ class Evaluable(lf.Component):
         s.write(pg.format(m.result))
         s.write('</div>')
       s.write('</div>')
+
+
+@dataclasses.dataclass
+class _LeafNode:
+  """Information for leaf node execution."""
+  index: int
+  node: 'Evaluation'
+  enabled: bool = True
+  progress_bar: int | None = None
 
 
 @pg.use_init_args(['id', 'children'])
@@ -732,7 +804,8 @@ class Evaluation(Evaluable):
       end: int | None,
       debug: bool | lf.LMDebugMode,
       verbose: bool,
-      show_progress: bool,
+      show_progress: bool | int,
+      label: str | None,
       **kwargs,
   ) -> None:
     # Setup examples.
@@ -806,6 +879,7 @@ class Evaluation(Evaluable):
 
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     return {
+        'Model': self.lm.model_id,
         'Succeeded': '%.2f%% (%d/%d)' % (
             progress.success_rate * 100,
             progress.succeeded,

@@ -185,7 +185,7 @@ class EvaluationTest(unittest.TestCase):
   def test_dryrun(self):
     lm = fake.StaticResponse('Solution(final_answer=2)')
     s = eval_set('dryrun_test', 'query', schema_fn=answer_schema(), lm=lm)
-    s.dryrun()
+    s.dryrun(verbose=True)
     self.assertEqual(
         s.dryrun_output,
         lf.AIMessage(
@@ -274,23 +274,28 @@ class EvaluationTest(unittest.TestCase):
 
   def test_run_with_filter(self):
     lm = fake.StaticResponse('Solution(final_answer=2)')
-    s = eval_set('run_filter_test', 'query', schema_fn=answer_schema(), lm=lm)
+    s = eval_set(
+        'run_filter_test', pg.oneof(['call', 'query']),
+        schema_fn=answer_schema(), lm=lm)
     self.assertEqual(
-        s.run(filter=lambda x: False, dryrun=True),
-        dict(
-            experiment_setup=dict(
-                id='run_filter_test',
-                dir=s.dir,
-                model='StaticResponse',
-                prompt_template='{{example.question}}',
-                method='query',
-                schema_fn='answer_schema()',
-            ),
-            cache_stats=dict(
-                use_cache=False,
-            ),
-            metrics=dict(total=0, failures=0, failure_rate=0.0),
-        ),
+        s.run(filter=lambda x: x.method == 'query', dryrun=True),
+        {
+            s.children[0].id: None,
+            s.children[1].id: dict(
+                experiment_setup=dict(
+                    id=s.children[1].id,
+                    dir=s.children[1].dir,
+                    model='StaticResponse',
+                    prompt_template='{{example.question}}',
+                    method='query',
+                    schema_fn='answer_schema()',
+                ),
+                cache_stats=dict(
+                    use_cache=True, num_queries=2, num_hits=0, num_updates=2
+                ),
+                metrics=dict(total=2, failures=0, failure_rate=0.0),
+            )
+        },
     )
 
   def test_search_space(self):
@@ -323,7 +328,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(s.hash, 'fc31a1c3')
 
     self.assertEqual(
-        s.run(verbose=False),
+        s.run(verbose=True),
         {
             s.children[0].id: dict(
                 experiment_setup=dict(
