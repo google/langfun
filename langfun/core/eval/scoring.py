@@ -85,6 +85,20 @@ class Scoring(base.Evaluation):
         ),
     }
 
+  def _completion_status(self) -> str:
+    return (
+        'COMPLETED: AvgScore=%f Scored=%.2f%% (%d/%d) '
+        'Failures=%.2f%% (%d/%d)'
+        ) % (
+            self.avg_score,
+            self.score_rate * 100,
+            self.num_scored,
+            self.num_completed,
+            self.failure_rate * 100,
+            self.num_failures,
+            self.num_completed,
+        )
+
   def summarize(self) -> pg.Dict:
     result = super().summarize()
     result.metrics.update(

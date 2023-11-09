@@ -245,7 +245,7 @@ class EvaluationTest(unittest.TestCase):
     ])
     s = eval_set(
         'run_without_save_test', 'query', schema_fn=answer_schema(), lm=lm)
-    s.run(save=False)
+    s.run(save=False, show_progress=False)
 
     # Cache will always be saved
     self.assertTrue(

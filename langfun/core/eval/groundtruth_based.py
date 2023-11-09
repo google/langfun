@@ -122,6 +122,22 @@ class GroundTruthMatch(base.Evaluation):
         ),
     }
 
+  def _completion_status(self) -> str:
+    return (
+        'COMPLETED: Matches=%.2f%% (%d/%d) Mismatches=%.2f%% (%d/%d) '
+        'Failures=%.2f%% (%d/%d)'
+        ) % (
+            self.match_rate * 100,
+            self.num_matches,
+            self.num_completed,
+            self.mismatch_rate * 100,
+            self.num_mismatches,
+            self.num_completed,
+            self.failure_rate * 100,
+            self.num_failures,
+            self.num_completed,
+        )
+
   def summarize(self) -> pg.Dict:
     result = super().summarize()
     result.metrics.update(

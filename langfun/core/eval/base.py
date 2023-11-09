@@ -192,18 +192,38 @@ class Evaluable(lf.Component):
       self.dryrun(filter=filter, verbose=False, debug=debug)
 
     if self.is_leaf:
+      if isinstance(show_progress, bool):
+        if show_progress:
+          progress_bar = lf.concurrent.ProgressBar.install(
+              label=label, total=self.num_examples, color='blue')
+        else:
+          progress_bar = None
+      else:
+        progress_bar = show_progress
+
       self._run(
           start=start,
           end=end,
           debug=debug,
           dryrun=dryrun,
           verbose=verbose,
-          show_progress=show_progress,
+          progress_bar=progress_bar,
           label=label,
           **kwargs,
       )
       if save and self.dir:
+        if show_progress:
+          lf.concurrent.ProgressBar.report(
+              progress_bar, postfix='SAVING RESULTS...', color='yellow')
+
+        # Save evaluation results.
         self.save()
+
+        if show_progress:
+          lf.concurrent.ProgressBar.report(
+              progress_bar,
+              postfix=self._completion_status(),
+              color='lightgreen')
     else:
       def _run_group(arg: tuple[int, list[_LeafNode]]) -> None:
         overview_bar, leaf_group = arg
@@ -220,6 +240,7 @@ class Evaluable(lf.Component):
                 from_root=False,
                 **kwargs,
             )
+          # Signal sub-eval complete by setting the color green.
           lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
           lf.concurrent.ProgressBar.report(overview_bar, 1, {
               'LastCompleted': leaf.node.id
@@ -246,7 +267,7 @@ class Evaluable(lf.Component):
               f'[#{leaf.index} - {leaf.node.id}]',
               total=leaf.node.num_examples if leaf.enabled else 0,
               color='cyan' if leaf.enabled else 'yellow',
-              postfix=None if leaf.enabled else {'SKIPPED': 'YES'})
+              postfix=None if leaf.enabled else 'SKIPPED.')
 
         # Run leaf groups in parallel.
         try:
@@ -256,16 +277,28 @@ class Evaluable(lf.Component):
               silence_on_errors=None,
               max_workers=len(leaf_groups)):
             pass
+
+          # Save results for non-leaf nodes.
+          lf.concurrent.ProgressBar.report(
+              overview_bar,
+              postfix='SAVING RESULTS...',
+              color='yellow')
+
+          for node in self.nonleaf_nodes:
+            node._result = {c.id: c.result for c in node.children}  # pylint: disable=protected-access
+            if save and self.dir:
+              node.save()
+
+          # Signal all task completed by making the bar green.
+          lf.concurrent.ProgressBar.report(
+              overview_bar,
+              postfix='COMPLETED',
+              color='green')
+
         finally:
           # for leaf in leaf_nodes:
           #   lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
           lf.concurrent.ProgressBar.uninstall(overview_bar)
-
-      # Save results for non-leaf nodes.
-      for node in self.nonleaf_nodes:
-        node._result = {c.id: c.result for c in node.children}  # pylint: disable=protected-access
-        if save and self.dir:
-          node.save()
 
     if from_root and save and self.dir:
       lf.console.write(
@@ -284,11 +317,15 @@ class Evaluable(lf.Component):
       debug: bool | lf.LMDebugMode,
       dryrun: bool,
       verbose: bool,
-      show_progress: bool | int,
+      progress_bar: int | None,
       label: str | None,
       **kwargs,
   ) -> None:
     """Run the evaluate and fill `self.result`. Subclass to implement."""
+
+  @abc.abstractmethod
+  def _completion_status(self) -> str:
+    """Returns the status for progress bar when evaluation completes."""
 
   @property
   @abc.abstractmethod
@@ -463,6 +500,9 @@ class Suite(Evaluable):
 
   def _run(self, *args, **kwargs) -> None:
     raise AssertionError('Shall not trigger.')
+
+  def _completion_status(self) -> str:
+    return 'COMPLETED'
 
 
 class Evaluation(Evaluable):
@@ -804,7 +844,7 @@ class Evaluation(Evaluable):
       end: int | None,
       debug: bool | lf.LMDebugMode,
       verbose: bool,
-      show_progress: bool | int,
+      progress_bar: int | None,
       label: str | None,
       **kwargs,
   ) -> None:
@@ -822,7 +862,7 @@ class Evaluation(Evaluable):
             self.process,
             examples,
             max_workers=self.max_workers,
-            show_progress=show_progress,
+            show_progress=progress_bar or False,
             status_fn=self._status,
         ):
           if error is not None:
@@ -891,6 +931,16 @@ class Evaluation(Evaluable):
             progress.completed,
         ),
     }
+
+  def _completion_status(self) -> str:
+    return 'COMPLETED: Successes=%.2f%% (%d/%d) Failures=%.2f%% (%d/%d)' % (
+        (1 - self.failure_rate) * 100,
+        self.num_completed - self.num_failures,
+        self.num_completed,
+        self.failure_rate * 100,
+        self.num_failures,
+        self.num_completed,
+    )
 
   def summarize(self) -> pg.Dict:
     """Summarizes the evaluation result."""

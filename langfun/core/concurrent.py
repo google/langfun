@@ -356,7 +356,8 @@ class ProgressBar:
     """Progress bar update."""
     bar_id: int
     delta: int
-    postfix: dict[str, str] | None
+    postfix: Union[dict[str, str], str, None] = None
+    color: str | None = None
 
   _progress_bars: dict[int, tqdm.tqdm] = {}
   _install_requests: list[tuple[int, Settings]] = []
@@ -383,17 +384,20 @@ class ProgressBar:
   def report(
       cls,
       bar_id: int,
-      delta: int,
-      postfix: dict[str, str] | None
+      delta: int = 0,
+      postfix: Union[dict[str, str], str, None] = None,
+      color: str | None = None,
+      update: bool = True,
       ) -> None:
     """Report the progress for a label."""
     with cls._lock:
       cls._updates.append(
           ProgressBar.Update(
-              bar_id=bar_id, delta=delta, postfix=postfix
+              bar_id=bar_id, delta=delta, postfix=postfix, color=color,
           )
       )
-    cls.update()
+    if update:
+      cls.update()
 
   @classmethod
   def uninstall(cls, bar_id: int) -> None:
@@ -420,12 +424,27 @@ class ProgressBar:
 
       # Process updates.
       if cls._updates:
+        updated = set()
         for update in cls._updates:
           bar = cls._progress_bars[update.bar_id]
           if update.delta > 0:
             bar.update(update.delta)
-          bar.set_postfix(update.postfix)
+
+          if isinstance(update.postfix, str):
+            bar.set_postfix_str(update.postfix, refresh=False)
+          elif isinstance(update.postfix, dict):
+            bar.set_postfix(update.postfix, refresh=False)
+          elif update.postfix is not None:
+            raise ValueError(f'Unsupported postfix: {update.postfix}')
+
+          if update.color is not None:
+            bar.colour = update.color
+          updated.add(bar)
         cls._updates.clear()
+
+        # Refresh each updated bar just once.
+        for bar in updated:
+          bar.refresh()
 
       # Process uninstall requests.
       if cls._uninstall_requests:
