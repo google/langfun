@@ -15,6 +15,8 @@
 
 import collections
 from concurrent import futures
+import contextlib
+import io
 import time
 import unittest
 from langfun.core import component
@@ -169,12 +171,12 @@ class ConcurrentExecuteTest(unittest.TestCase):
     with component.context(y=2):
       self.assertEqual(
           concurrent.concurrent_execute(fun, [A(1), A(2)], executor=executor),
-          [2, 4],
-      )
+          [2, 4])
 
     # Making sure the executor could be reused.
     with component.context(y=2):
-      self.assertEqual(concurrent.concurrent_execute(fun, [A(2), A(4)]), [4, 8])
+      self.assertEqual(
+          concurrent.concurrent_execute(fun, [A(2), A(4)]), [4, 8])
 
 
 class ProgressTest(unittest.TestCase):
@@ -219,6 +221,24 @@ class ProgressTest(unittest.TestCase):
     self.assertEqual(p.failure_rate, 0.5)
     self.assertIs(p.job, job2)
     self.assertIs(p.last_error, job2.error)
+
+
+class ProgressBarTest(unittest.TestCase):
+
+  def test_multithread_support(self):
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      bar_id = concurrent.ProgressBar.install(None, 5)
+      def fun(x):
+        del x
+        concurrent.ProgressBar.report(bar_id, 1, postfix=None)
+
+      for _ in concurrent.concurrent_execute(fun, range(5)):
+        concurrent.ProgressBar.update()
+      concurrent.ProgressBar.uninstall(bar_id)
+    output_str = string_io.getvalue()
+    self.assertIn('100%', output_str)
+    self.assertIn('5/5', output_str)
 
 
 class ConcurrentMapTest(unittest.TestCase):
@@ -332,11 +352,8 @@ class ConcurrentMapTest(unittest.TestCase):
 
     executor = futures.ThreadPoolExecutor(max_workers=2)
     self.assertEqual(
-        list(
-            concurrent.concurrent_map(
-                fun, [1, 2, 3], executor=executor, ordered=True
-            )
-        ),
+        list(concurrent.concurrent_map(
+            fun, [1, 2, 3], executor=executor, ordered=True)),
         [
             (1, 1, None),
             (2, 2, None),
@@ -344,11 +361,8 @@ class ConcurrentMapTest(unittest.TestCase):
         ],
     )
     self.assertEqual(
-        list(
-            concurrent.concurrent_map(
-                fun, [4, 5, 6], executor=executor, ordered=True
-            )
-        ),
+        list(concurrent.concurrent_map(
+            fun, [4, 5, 6], executor=executor, ordered=True)),
         [
             (4, 4, None),
             (5, 5, None),
@@ -441,18 +455,22 @@ class ConcurrentMapTest(unittest.TestCase):
       time.sleep(x)
       return x
 
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      output = sorted([
+          (i, o) for i, o, _ in concurrent.concurrent_map(
+              fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
+          )
+      ], key=lambda x: x[0])
     self.assertEqual(   # pylint: disable=g-generic-assert
-        sorted([
-            (i, o) for i, o, _ in concurrent.concurrent_map(
-                fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
-            )
-        ], key=lambda x: x[0]),
+        output,
         [
             (1, 1),
             (2, pg.MISSING_VALUE),
             (3, pg.MISSING_VALUE),
         ],
     )
+    self.assertIn('100%', string_io.getvalue())
 
   def test_concurrent_map_with_showing_progress_and_status_fn(self):
     def fun(x):
@@ -461,19 +479,26 @@ class ConcurrentMapTest(unittest.TestCase):
       time.sleep(x)
       return x
 
+    bar_id = concurrent.ProgressBar.install(None, 3)
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      output = sorted([
+          (i, o) for i, o, _ in concurrent.concurrent_map(
+              fun, [1, 2, 3], timeout=1.5, max_workers=1,
+              show_progress=bar_id, status_fn=lambda p: dict(x=1, y=1)
+          )
+      ], key=lambda x: x[0])
+
     self.assertEqual(  # pylint: disable=g-generic-assert
-        sorted([
-            (i, o) for i, o, _ in concurrent.concurrent_map(
-                fun, [1, 2, 3], timeout=1.5, max_workers=1,
-                show_progress=True, status_fn=lambda p: dict(x=1, y=1)
-            )
-        ], key=lambda x: x[0]),
+        output,
         [
             (1, 1),
             (2, pg.MISSING_VALUE),
             (3, pg.MISSING_VALUE),
         ],
     )
+    self.assertIn('100%', string_io.getvalue())
+    concurrent.ProgressBar.uninstall(bar_id)
 
 
 class ExecutorPoolTest(unittest.TestCase):

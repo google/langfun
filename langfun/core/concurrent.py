@@ -349,6 +349,7 @@ class ProgressBar:
     label: str | None
     total: int
     color: str | None = None
+    postfix: dict[str, str] | None = None
 
   @dataclasses.dataclass
   class Update:
@@ -357,77 +358,80 @@ class ProgressBar:
     delta: int
     postfix: dict[str, str] | None
 
-  def __init__(self):
-    self._progress_bars: dict[int, tqdm.tqdm] = {}
-    self._install_requests: list[tuple[int, ProgressBar.Settings]] = []
-    self._updates: list[ProgressBar.Update] = []
-    self._uninstall_requests: list[int] = []
-    self._lock = threading.Lock()
+  _progress_bars: dict[int, tqdm.tqdm] = {}
+  _install_requests: list[tuple[int, Settings]] = []
+  _updates: list[Update] = []
+  _uninstall_requests: list[int] = []
+  _lock = threading.Lock()
 
+  @classmethod
   def install(
-      self,
+      cls,
       label: str | None,
       total: int,
       color: str | None = None,
+      postfix: dict[str, str] | None = None,
       ) -> int:
     """Installs a progress bar and returns a reference id."""
-    with self._lock:
-      settings = ProgressBar.Settings(label, total, color)
+    with cls._lock:
+      settings = ProgressBar.Settings(label, total, color, postfix)
       bar_id = id(settings)
-      self._install_requests.append((bar_id, settings))
+      cls._install_requests.append((bar_id, settings))
       return bar_id
 
+  @classmethod
   def report(
-      self,
+      cls,
       bar_id: int,
       delta: int,
       postfix: dict[str, str] | None
       ) -> None:
     """Report the progress for a label."""
-    with self._lock:
-      self._updates.append(
+    with cls._lock:
+      cls._updates.append(
           ProgressBar.Update(
               bar_id=bar_id, delta=delta, postfix=postfix
           )
       )
-    self.update()
+    cls.update()
 
-  def uninstall(self, bar_id: int) -> None:
+  @classmethod
+  def uninstall(cls, bar_id: int) -> None:
     """Uninstalls a progress bar with the reference id returned by install."""
-    with self._lock:
-      self._uninstall_requests.append(bar_id)
+    with cls._lock:
+      cls._uninstall_requests.append(bar_id)
 
-  def update(self) -> None:
+  @classmethod
+  def update(cls) -> None:
     """Update all progress bars when called within the main thread."""
     if threading.current_thread() is not threading.main_thread():
       return
 
-    with self._lock:
+    with cls._lock:
       # Process install requests.
-      if self._install_requests:
-        for bar_id, settings in self._install_requests:
-          self._progress_bars[bar_id] = tqdm.tqdm(
-              total=settings.total, desc=settings.label, colour=settings.color)
-        self._install_requests.clear()
+      if cls._install_requests:
+        for bar_id, settings in cls._install_requests:
+          cls._progress_bars[bar_id] = tqdm.tqdm(
+              total=settings.total,
+              desc=settings.label,
+              colour=settings.color,
+              postfix=settings.postfix)
+        cls._install_requests.clear()
 
       # Process updates.
-      if self._updates:
-        for update in self._updates:
+      if cls._updates:
+        for update in cls._updates:
+          bar = cls._progress_bars[update.bar_id]
           if update.delta > 0:
-            bar = self._progress_bars[update.bar_id]
             bar.update(update.delta)
-            bar.set_postfix(update.postfix)
-        self._updates.clear()
+          bar.set_postfix(update.postfix)
+        cls._updates.clear()
 
       # Process uninstall requests.
-      if self._uninstall_requests:
-        for bar_id in self._uninstall_requests:
-          self._progress_bars.pop(bar_id, None)
-        self._uninstall_requests.clear()
-
-
-# A global progress manager.
-_progress_bar = ProgressBar()
+      if cls._uninstall_requests:
+        for bar_id in cls._uninstall_requests:
+          cls._progress_bars.pop(bar_id, None)
+        cls._uninstall_requests.clear()
 
 
 def concurrent_map(
@@ -437,7 +441,7 @@ def concurrent_map(
     executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,
     ordered: bool = False,
-    show_progress: bool = False,
+    show_progress: bool | int = False,
     label: str | None = None,
     color: Literal[
         'red',
@@ -477,16 +481,20 @@ def concurrent_map(
     ordered: If True, the returned iterator will emit (input, output, error) in
       the order of the elements in `parallel_inputs`. Otherwise, elements that
       are finished earlier will be delivered first.
-    show_progress: If True, show progress on console.
+    show_progress: A boolean or an integer as the bar id returned from
+      `lf.concurrent.ProgressBar.install`. If True, a bar will be created on the
+      fly showing the progress of the execution. If False, no progress bar will
+      be shown. If a bar id, the progress update will be associated with the
+      bar.
     label: An optional label for the progress bar. Applicable when
       `show_progress` is set to True.
     color: Color of the progress bar. Applicable when `show_progress` is set to
-      True.
+      True or a bar id.
     status_fn: An optional callable object that receives a
       `lf.concurrent.Progress` object and returns a dict of kv pairs as the
       status to include in the progress bar. Applicable only when
-      `show_progress` is set to True. If None, the default status_fn will be
-      used, which outputs the success and failure rate.
+      `show_progress` is set to True or a bar id. If None, the default status_fn
+      will be used, which outputs the success and failure rate.
     timeout: The timeout in seconds for processing each input. It is the total
       processing time for each input, even multiple retries take place. If None,
       there is no timeout.
@@ -544,8 +552,15 @@ def concurrent_map(
     future_to_job[future] = job
     total += 1
 
+  # Setup progress bar.
   progress = Progress(total=total)
-  bar_id = _progress_bar.install(label, total, color) if show_progress else None
+  if isinstance(show_progress, bool):
+    external_bar = False
+    bar_id = ProgressBar.install(label, total, color) if show_progress else None
+  else:
+    bar_id = show_progress
+    external_bar = True
+    show_progress = True
 
   def update_progress_bar(progress: Progress) -> None:
     if show_progress:
@@ -558,7 +573,7 @@ def concurrent_map(
         if len(error_text) >= 64:
           error_text = error_text[:64] + '...'
         status['LastError'] = error_text
-      _progress_bar.report(bar_id, 1, status)
+      ProgressBar.report(bar_id, 1, status)
 
   try:
     if ordered:
@@ -585,13 +600,13 @@ def concurrent_map(
             yield job.arg, job.result, job.error
             progress.update(job)
             update_progress_bar(progress)
-            _progress_bar.update()
+            ProgressBar.update()
             break
           else:
             # There might be updates from other concurrent_map. So even there
             # is no progress on current map, we still update the progress
             # manager.
-            _progress_bar.update()
+            ProgressBar.update()
     else:
       while pending_futures:
         completed_batch = set()
@@ -607,7 +622,7 @@ def concurrent_map(
             progress.update(job)
             update_progress_bar(progress)
             completed_batch.add(future)
-            _progress_bar.update()
+            ProgressBar.update()
         except concurrent.futures.TimeoutError:
           pass
 
@@ -632,10 +647,10 @@ def concurrent_map(
           else:
             remaining_futures.append(future)
         pending_futures = remaining_futures
-        _progress_bar.update()
+        ProgressBar.update()
   finally:
-    if show_progress:
-      _progress_bar.uninstall(bar_id)
+    if show_progress and not external_bar:
+      ProgressBar.uninstall(bar_id)
 
     if shutdown_after_finish:
       # Do not wait threads to finish if they are timed out.
