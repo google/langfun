@@ -20,7 +20,7 @@ import textwrap
 import typing
 from typing import Any, Literal, Sequence, Type, Union
 import langfun.core as lf
-from langfun.core import coding as lf_coding
+from langfun.core.coding.python import execution
 import pyglove as pg
 
 
@@ -570,8 +570,8 @@ def structure_from_python(code: str, **symbols) -> Any:
   }
   if symbols:
     context.update(symbols)
-  with lf_coding.context(**context):
-    return lf_coding.run(code)['__result__']
+  with execution.context(**context):
+    return execution.run(code)['__result__']
 
 
 class JsonError(Exception):

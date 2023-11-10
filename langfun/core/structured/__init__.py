@@ -76,6 +76,8 @@ from langfun.core.structured.prompting import DEFAULT_QUERY_EXAMPLES
 from langfun.core.structured.completion import DEFAULT_COMPLETE_EXAMPLES
 from langfun.core.structured.description import DEFAULT_DESCRIBE_EXAMPLES
 
+from langfun.core.structured.completion import completion_example
+
 # Default examples.
 
 

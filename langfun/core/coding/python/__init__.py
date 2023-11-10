@@ -33,5 +33,10 @@ from langfun.core.coding.python.execution import sandbox_run
 from langfun.core.coding.python.generation import PythonCode
 from langfun.core.coding.python.generation import PythonFunction
 
+from langfun.core.coding.python.correction import correct
+from langfun.core.coding.python.correction import CodeCorrection
+from langfun.core.coding.python.correction import CodeWithError
+from langfun.core.coding.python.correction import DEFAULT_CODE_CORRECTION_EXAMPLES
+
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order

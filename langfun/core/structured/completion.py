@@ -57,17 +57,20 @@ class _Country(pg.Object):
   population: int
 
 
+def completion_example(left: Any, right: Any) -> mapping.MappingExample:
+  """Makes a mapping example for completion."""
+  return mapping.MappingExample(value=mapping.Pair(left=left, right=right))
+
+
 DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
-    mapping.MappingExample(
-        value=mapping.Pair(
-            left=_Country.partial(name='United States of America'),
-            right=_Country(
-                name='United States of America',
-                founding_date=_Date(year=1776, month=7, day=4),
-                continent='North America',
-                population=33_000_000,
-            ),
-        )
+    completion_example(
+        _Country.partial(name='United States of America'),
+        _Country(
+            name='United States of America',
+            founding_date=_Date(year=1776, month=7, day=4),
+            continent='North America',
+            population=33_000_000,
+        ),
     ),
 ]
 
