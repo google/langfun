@@ -231,10 +231,10 @@ class ProgressBarTest(unittest.TestCase):
       bar_id = concurrent.ProgressBar.install(None, 5)
       def fun(x):
         del x
-        concurrent.ProgressBar.report(bar_id, 1, postfix=None)
+        concurrent.ProgressBar.update(bar_id, 1, postfix=None)
 
       for _ in concurrent.concurrent_execute(fun, range(5)):
-        concurrent.ProgressBar.update()
+        concurrent.ProgressBar.refresh()
       concurrent.ProgressBar.uninstall(bar_id)
     output_str = string_io.getvalue()
     print(output_str)
@@ -245,18 +245,18 @@ class ProgressBarTest(unittest.TestCase):
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
       bar_id = concurrent.ProgressBar.install(None, 4)
-      concurrent.ProgressBar.report(bar_id, 1, postfix=None)
+      concurrent.ProgressBar.update(bar_id, 1, postfix=None)
       self.assertIn('1/4', string_io.getvalue())
-      concurrent.ProgressBar.report(bar_id, 1, postfix='hello')
+      concurrent.ProgressBar.update(bar_id, 1, postfix='hello')
       self.assertIn('2/4', string_io.getvalue())
       self.assertIn('hello', string_io.getvalue())
-      concurrent.ProgressBar.report(bar_id, color='lightgreen')
+      concurrent.ProgressBar.update(bar_id, color='lightgreen')
       self.assertIn('2/4', string_io.getvalue())
-      concurrent.ProgressBar.report(bar_id, 2, postfix=dict(x=1))
+      concurrent.ProgressBar.update(bar_id, 2, postfix=dict(x=1))
       self.assertIn('4/4', string_io.getvalue())
       self.assertIn('x=1', string_io.getvalue())
       with self.assertRaisesRegex(ValueError, 'Unsupported postfix'):
-        concurrent.ProgressBar.report(bar_id, 0, postfix=1)
+        concurrent.ProgressBar.update(bar_id, 0, postfix=1)
       concurrent.ProgressBar.uninstall(bar_id)
 
 

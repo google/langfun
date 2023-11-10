@@ -213,14 +213,14 @@ class Evaluable(lf.Component):
       )
       if save and self.dir:
         if show_progress:
-          lf.concurrent.ProgressBar.report(
+          lf.concurrent.ProgressBar.update(
               progress_bar, postfix='SAVING RESULTS...', color='yellow')
 
         # Save evaluation results.
         self.save()
 
         if show_progress:
-          lf.concurrent.ProgressBar.report(
+          lf.concurrent.ProgressBar.update(
               progress_bar,
               postfix=self._completion_status(),
               color='lightgreen')
@@ -242,7 +242,7 @@ class Evaluable(lf.Component):
             )
           # Signal sub-eval complete by setting the color green.
           lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
-          lf.concurrent.ProgressBar.report(overview_bar, 1, {
+          lf.concurrent.ProgressBar.update(overview_bar, 1, {
               'LastCompleted': leaf.node.id
           })
 
@@ -279,7 +279,7 @@ class Evaluable(lf.Component):
             pass
 
           # Save results for non-leaf nodes.
-          lf.concurrent.ProgressBar.report(
+          lf.concurrent.ProgressBar.update(
               overview_bar,
               postfix='SAVING RESULTS...',
               color='yellow')
@@ -290,7 +290,7 @@ class Evaluable(lf.Component):
               node.save()
 
           # Signal all task completed by making the bar green.
-          lf.concurrent.ProgressBar.report(
+          lf.concurrent.ProgressBar.update(
               overview_bar,
               postfix='COMPLETED',
               color='green')

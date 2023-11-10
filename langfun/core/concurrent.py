@@ -13,6 +13,7 @@
 # limitations under the License.
 """Utility library for handling concurrency in langfun."""
 
+import collections
 import concurrent.futures
 import dataclasses
 import random
@@ -361,7 +362,7 @@ class ProgressBar:
 
   _progress_bars: dict[int, tqdm.tqdm] = {}
   _install_requests: list[tuple[int, Settings]] = []
-  _updates: list[Update] = []
+  _updates: collections.deque[Update] = collections.deque()
   _uninstall_requests: list[int] = []
   _lock = threading.Lock()
 
@@ -381,13 +382,13 @@ class ProgressBar:
       return bar_id
 
   @classmethod
-  def report(
+  def update(
       cls,
       bar_id: int,
       delta: int = 0,
       postfix: Union[dict[str, str], str, None] = None,
       color: str | None = None,
-      update: bool = True,
+      refresh: bool = True,
       ) -> None:
     """Report the progress for a label."""
     with cls._lock:
@@ -396,8 +397,8 @@ class ProgressBar:
               bar_id=bar_id, delta=delta, postfix=postfix, color=color,
           )
       )
-    if update:
-      cls.update()
+    if refresh:
+      cls.refresh()
 
   @classmethod
   def uninstall(cls, bar_id: int) -> None:
@@ -406,7 +407,7 @@ class ProgressBar:
       cls._uninstall_requests.append(bar_id)
 
   @classmethod
-  def update(cls) -> None:
+  def refresh(cls) -> None:
     """Update all progress bars when called within the main thread."""
     if threading.current_thread() is not threading.main_thread():
       return
@@ -423,28 +424,27 @@ class ProgressBar:
         cls._install_requests.clear()
 
       # Process updates.
-      if cls._updates:
-        updated = set()
-        for update in cls._updates:
-          bar = cls._progress_bars[update.bar_id]
-          if update.delta > 0:
-            bar.update(update.delta)
+      updated_bars = set()
+      while cls._updates:
+        update = cls._updates.popleft()
+        bar = cls._progress_bars[update.bar_id]
+        if update.delta > 0:
+          bar.update(update.delta)
 
-          if isinstance(update.postfix, str):
-            bar.set_postfix_str(update.postfix, refresh=False)
-          elif isinstance(update.postfix, dict):
-            bar.set_postfix(update.postfix, refresh=False)
-          elif update.postfix is not None:
-            raise ValueError(f'Unsupported postfix: {update.postfix}')
+        if isinstance(update.postfix, str):
+          bar.set_postfix_str(update.postfix, refresh=False)
+        elif isinstance(update.postfix, dict):
+          bar.set_postfix(update.postfix, refresh=False)
+        elif update.postfix is not None:
+          raise ValueError(f'Unsupported postfix: {update.postfix}')
 
-          if update.color is not None:
-            bar.colour = update.color
-          updated.add(bar)
-        cls._updates.clear()
+        if update.color is not None:
+          bar.colour = update.color
+        updated_bars.add(bar)
 
-        # Refresh each updated bar just once.
-        for bar in updated:
-          bar.refresh()
+      # Refresh each updated bar just once.
+      for bar in updated_bars:
+        bar.refresh()
 
       # Process uninstall requests.
       if cls._uninstall_requests:
@@ -592,7 +592,7 @@ def concurrent_map(
         if len(error_text) >= 64:
           error_text = error_text[:64] + '...'
         status['LastError'] = error_text
-      ProgressBar.report(bar_id, 1, status)
+      ProgressBar.update(bar_id, delta=1, postfix=status)
 
   try:
     if ordered:
@@ -619,13 +619,13 @@ def concurrent_map(
             yield job.arg, job.result, job.error
             progress.update(job)
             update_progress_bar(progress)
-            ProgressBar.update()
+            ProgressBar.refresh()
             break
           else:
             # There might be updates from other concurrent_map. So even there
             # is no progress on current map, we still update the progress
             # manager.
-            ProgressBar.update()
+            ProgressBar.refresh()
     else:
       while pending_futures:
         completed_batch = set()
@@ -641,7 +641,7 @@ def concurrent_map(
             progress.update(job)
             update_progress_bar(progress)
             completed_batch.add(future)
-            ProgressBar.update()
+            ProgressBar.refresh()
         except concurrent.futures.TimeoutError:
           pass
 
@@ -666,7 +666,7 @@ def concurrent_map(
           else:
             remaining_futures.append(future)
         pending_futures = remaining_futures
-        ProgressBar.update()
+        ProgressBar.refresh()
   finally:
     if show_progress and not external_bar:
       ProgressBar.uninstall(bar_id)
