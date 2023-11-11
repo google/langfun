@@ -15,7 +15,6 @@
 
 import inspect
 import time
-from typing import Any
 import unittest
 from langfun.core.coding.python import errors
 from langfun.core.coding.python import execution
@@ -23,43 +22,48 @@ from langfun.core.coding.python import permissions
 import pyglove as pg
 
 
-class RunTest(unittest.TestCase):
-
-  def assert_run(
-      self,
-      code: str,
-      expected_result: dict[str, Any],
-      **kwargs):
-    self.assertEqual(
-        execution.run(
-            code, permission=permissions.CodePermission.ALL, **kwargs
-        ),
-        expected_result,
-    )
+class EvaluateTest(unittest.TestCase):
 
   def test_with_context(self):
     with execution.context(x=1, y=0):
       with execution.context(x=2, z=2):
-        self.assert_run(
-            """
-            p = x + y + z
-            """,
+        self.assertEqual(
+            execution.evaluate(
+                """
+                p = x + y + z
+                """,
+                # Override value from the context.
+                global_vars=dict(z=3),
+                outputs_intermediate=True,
+            ),
             dict(p=2 + 0 + 3, __result__=2 + 0 + 3),
-            z=3  # Override value from the context.
         )
 
   def test_basics(self):
-    self.assert_run(
-        """
-        x = 1
-        y = x + 1
-        z = x + y
-        """,
-        dict(x=1, y=2, z=3, __result__=3)
+    self.assertEqual(
+        execution.evaluate(
+            """
+            x = 1
+            y = x + 1
+            z = x + y
+            """,
+            outputs_intermediate=True,
+        ),
+        dict(x=1, y=2, z=3, __result__=3),
+    )
+    self.assertEqual(
+        execution.evaluate(
+            """
+            x = 1
+            y = x + 1
+            z = x + y
+            """,
+        ),
+        3,
     )
 
   def test_class_def(self):
-    ret = execution.run(
+    ret = execution.evaluate(
         """
         class A(pg.Object):
           x: int
@@ -67,27 +71,29 @@ class RunTest(unittest.TestCase):
           def __call__(self):
             return self.x + self.y
         """,
-        permissions.CodePermission.ALL,
-        pg=pg,
+        permission=permissions.CodePermission.ALL,
+        global_vars=dict(pg=pg),
+        outputs_intermediate=True,
     )
     self.assertEqual(list(ret.keys()), ['A', '__result__'])
     self.assertTrue(issubclass(ret['A'], pg.Object))
     self.assertIs(ret['__result__'], ret['A'])
 
   def test_function_def(self):
-    ret = execution.run(
+    ret = execution.evaluate(
         """
         def foo(x, y):
           return x + y
         """,
-        permissions.CodePermission.ALL,
+        permission=permissions.CodePermission.ALL,
+        outputs_intermediate=True,
     )
     self.assertEqual(list(ret.keys()), ['foo', '__result__'])
     self.assertTrue(inspect.isfunction(ret['foo']))
     self.assertIs(ret['__result__'], ret['foo'])
 
   def test_complex(self):
-    ret = execution.run(
+    ret = execution.evaluate(
         """
         class A(pg.Object):
           x: int
@@ -100,8 +106,9 @@ class RunTest(unittest.TestCase):
         k = A(1, 2)
         k(foo(3, 4))
         """,
-        permissions.CodePermission.ALL,
-        pg=pg,
+        permission=permissions.CodePermission.ALL,
+        global_vars=dict(pg=pg),
+        outputs_intermediate=True,
     )
     self.assertEqual(list(ret.keys()), ['A', 'foo', 'k', '__result__'])
     self.assertTrue(issubclass(ret['A'], pg.Object))
@@ -113,15 +120,17 @@ class RunTest(unittest.TestCase):
     with self.assertRaisesRegex(
         errors.CodeError, 'NameError: name .* is not defined'
     ):
-      execution.run(
+      execution.evaluate(
           """
           x = 1
           y = x + z
           """,
-          permissions.CodePermission.ALL,
+          permission=permissions.CodePermission.ALL,
       )
     with self.assertRaisesRegex(errors.CodeError, 'ValueError'):
-      execution.run('raise ValueError()', permissions.CodePermission.ALL)
+      execution.evaluate(
+          'raise ValueError()', permission=permissions.CodePermission.ALL
+      )
 
 
 class Foo(pg.Object):
@@ -129,7 +138,7 @@ class Foo(pg.Object):
   y: int
 
 
-class SandboxTest(unittest.TestCase):
+class SandboxCallTest(unittest.TestCase):
 
   def test_basics(self):
     def f(x, y):
@@ -159,15 +168,96 @@ class SandboxTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       execution.sandbox_call(f, 0)
 
-  def test_sandbox_run(self):
-    code = inspect.cleandoc("""
-        x = Foo(1, 2)
-        y = Foo(2, 3)
-        """)
+
+class CallTest(unittest.TestCase):
+
+  def test_call_without_sandboxing(self):
+    def foo(x, y):
+      return x + y
+
     self.assertEqual(
-        execution.sandbox_run(code, Foo=Foo),
-        {'x': Foo(1, 2), 'y': Foo(2, 3), '__result__': Foo(2, 3)},
+        execution.call(foo, 1, y=2, sandbox=False),
+        3
     )
+
+  def test_call_with_sandboxing(self):
+    def foo(x, y):
+      return x + y
+
+    self.assertEqual(
+        execution.call(foo, 1, y=2, sandbox=True),
+        3
+    )
+
+    def make_cls():
+      class A(pg.Object):
+        x: str
+      return A
+
+    with self.assertRaises(errors.SerializationError):
+      execution.call(make_cls, sandbox=True)
+
+  def test_call_with_automatic_sandboxing(self):
+    def foo(x, y):
+      return x + y
+
+    self.assertEqual(
+        execution.call(foo, 1, y=2),
+        3
+    )
+
+    def make_cls():
+      class A(pg.Object):
+        x: str
+      return A
+
+    self.assertTrue(inspect.isclass(execution.call(make_cls)))
+
+
+class RunTest(unittest.TestCase):
+
+  def test_run_without_sandboxing(self):
+    self.assertEqual(
+        execution.run(
+            'x + y',
+            global_vars=dict(x=1, y=2),
+            sandbox=False,
+        ),
+        3,
+    )
+
+  def test_run_with_sandboxing(self):
+    self.assertEqual(
+        execution.run(
+            'x + y',
+            global_vars=dict(x=1, y=2),
+            sandbox=True,
+        ),
+        3,
+    )
+
+  def test_run_with_automatic_sandboxing(self):
+    self.assertEqual(
+        execution.run(
+            'x + y',
+            global_vars=dict(x=1, y=2),
+        ),
+        3,
+    )
+
+    r = execution.run(
+        inspect.cleandoc("""
+            def foo(x, y):
+              return x + y
+
+            class A(pg.Object):
+              x: str
+            """),
+        global_vars=dict(pg=pg),
+        outputs_intermediate=True,
+    )
+    self.assertTrue(inspect.isfunction(r['foo']))
+    self.assertTrue(inspect.isclass(r['A']))
 
 
 if __name__ == '__main__':
