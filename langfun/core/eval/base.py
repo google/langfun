@@ -223,7 +223,7 @@ class Evaluable(lf.Component):
           lf.concurrent.ProgressBar.update(
               progress_bar,
               postfix=self._completion_status(),
-              color='lightgreen')
+              color='green')
     else:
       def _run_group(arg: tuple[int, list[_LeafNode]]) -> None:
         overview_bar, leaf_group = arg

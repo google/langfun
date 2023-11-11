@@ -85,3 +85,24 @@ class CodeError(RuntimeError):
       ))
       r.write(lf.colored('\n  ```\n', 'green'))
     return r.getvalue()
+
+
+class SerializationError(RuntimeError):
+  """Object serialization error."""
+
+  def __init__(self, message: str | None, cause: Exception):
+    self.message = message
+    self.cause = cause
+
+  def __str__(self):
+    r = io.StringIO()
+    cause_message = str(self.cause).rstrip()
+    if self.message:
+      r.write(lf.colored(self.message, 'magenta'))
+      r.write('\n\n')
+    r.write(
+        lf.colored(
+            f'{self.cause.__class__.__name__}: {cause_message}', 'magenta'
+        )
+    )
+    return r.getvalue()

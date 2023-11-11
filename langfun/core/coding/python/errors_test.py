@@ -27,7 +27,7 @@ def code_error(code: str) -> errors.CodeError | None:
     return e
 
 
-class ErrorsTest(unittest.TestCase):
+class CodeErrorsTest(unittest.TestCase):
 
   def test_format(self):
     e = code_error(
@@ -84,6 +84,15 @@ class ErrorsTest(unittest.TestCase):
         raise ValueError()
         """
     )
+
+
+class SerializationErrorTest(unittest.TestCase):
+
+  def test_str(self):
+    e = errors.SerializationError(
+        'Output cannot be serialized.', ValueError('abc'))
+    self.assertIn('Output cannot be serialized', str(e))
+    self.assertIn('ValueError: abc', str(e))
 
 
 if __name__ == '__main__':

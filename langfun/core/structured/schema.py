@@ -570,8 +570,8 @@ def structure_from_python(code: str, **symbols) -> Any:
   }
   if symbols:
     context.update(symbols)
-  with execution.context(**context):
-    return execution.run(code)['__result__']
+  # We are creating objects here, so we execute the code without a sandbox.
+  return execution.run(code, global_vars=context, sandbox=False)
 
 
 class JsonError(Exception):
