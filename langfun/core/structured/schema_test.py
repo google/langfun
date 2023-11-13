@@ -17,6 +17,7 @@ import inspect
 import typing
 import unittest
 
+from langfun.core.llms import fake
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
@@ -544,6 +545,33 @@ class ValuePythonReprTest(unittest.TestCase):
     self.assertEqual(
         schema_lib.ValuePythonRepr().parse(
             "A(foo=[Foo(x=1), Foo(x=2)], y='bar')", schema_lib.Schema(A)
+        ),
+        A([Foo(1), Foo(2)], y='bar'),
+    )
+
+  def test_parse_with_correction(self):
+    class Foo(pg.Object):
+      x: int
+
+    class A(pg.Object):
+      foo: list[Foo]
+      y: str | None
+
+    self.assertEqual(
+        schema_lib.ValuePythonRepr().parse(
+            "A(foo=[Foo(x=1), Foo(x=2)], y='bar'",
+            schema_lib.Schema(A),
+            autofix=1,
+            autofix_lm=fake.StaticResponse(inspect.cleandoc("""
+                    CodeCorrection(
+                        latest_code=CodeWithError(
+                            code='A(foo=[Foo(x=1), Foo(x=2)], y=\\\'bar\\\'',
+                            error='SyntaxError: incomplete input (<unknown> line 1)\\n  A(foo=[Foo(x=1), Foo(x=2)], y=\\\'bar\\\''
+                        ),
+                        correction_history=[],
+                        corrected_code='A(foo=[Foo(x=1), Foo(x=2)], y=\\\'bar\\\')',
+                    )
+                    """)),
         ),
         A([Foo(1), Foo(2)], y='bar'),
     )

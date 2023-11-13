@@ -519,6 +519,32 @@ class CompleteStructureTest(unittest.TestCase):
         )
     )
 
+  def test_autofix(self):
+    class Solution(pg.Object):
+      question: str
+      answer: int
+
+    lm = fake.StaticSequence(
+        [
+            "Solution(question='Compute 1 + 1', answer=2",
+            inspect.cleandoc("""
+            CodeCorrection(
+                latest_code=CodeWithError(
+                    code='Solution(question=\\\'Compute 1 + 1\\\', answer=2',
+                    error='SyntaxError: incomplete input (<unknown> line 1)\\n: Solution(question=\\\'Compute 1 + 1\\\', answer=2'
+                ),
+                correction_history=[],
+                corrected_code='Solution(question=\\\'Compute 1 + 1\\\', answer=2)',
+            )
+            """),
+        ],
+        debug=True,
+    )
+    self.assertEqual(
+        completion.complete(Solution.partial('Compute 1 + 1'), lm=lm),
+        Solution(question='Compute 1 + 1', answer=2),
+    )
+
   def test_returns_message(self):
     self.assertEqual(
         completion.complete(
@@ -554,7 +580,7 @@ class CompleteStructureTest(unittest.TestCase):
           coding.CodeError,
           'Expect .* but encountered .*',
       ):
-        completion.complete(Activity.partial())
+        completion.complete(Activity.partial(), autofix=0)
 
   def test_default(self):
     with lf.context(

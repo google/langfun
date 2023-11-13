@@ -20,7 +20,7 @@ import textwrap
 import typing
 from typing import Any, Literal, Sequence, Type, Union
 import langfun.core as lf
-from langfun.core.coding.python import execution
+from langfun.core.coding.python import correction
 import pyglove as pg
 
 
@@ -129,6 +129,7 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
     """Parse a LM generated text into a structured value."""
     value = value_repr(protocol).parse(text, self, **kwargs)
 
+    # TODO(daiyip): support autofix for schema error.
     try:
       return self.spec.apply(value)
     except Exception as e:
@@ -543,20 +544,34 @@ class ValuePythonRepr(ValueRepr):
       schema: Schema | None = None,
       *,
       additional_context: dict[str, Type[Any]] | None = None,
+      autofix=0,
+      autofix_lm: lf.LanguageModel = lf.contextual(),
       **kwargs,
   ) -> Any:
     """Parse a Python string into a structured object."""
     del kwargs
-    context = additional_context or {}
+    global_vars = additional_context or {}
     if schema is not None:
       dependencies = schema.class_dependencies()
-      context.update({d.__name__: d for d in dependencies})
-    return structure_from_python(text, **context)
+      global_vars.update({d.__name__: d for d in dependencies})
+    return structure_from_python(
+        text,
+        global_vars=global_vars,
+        autofix=autofix,
+        autofix_lm=autofix_lm,
+    )
 
 
-def structure_from_python(code: str, **symbols) -> Any:
+def structure_from_python(
+    code: str,
+    *,
+    global_vars: dict[str, Any] | None = None,
+    autofix=0,
+    autofix_lm: lf.LanguageModel = lf.contextual(),
+) -> Any:
   """Evaluates structure from Python code with access to symbols."""
-  context = {
+  global_vars = global_vars or {}
+  global_vars.update({
       'pg': pg,
       'Any': typing.Any,
       'List': typing.List,
@@ -567,11 +582,15 @@ def structure_from_python(code: str, **symbols) -> Any:
       'Union': typing.Union,
       # Special value markers.
       'UNKNOWN': UNKNOWN,
-  }
-  if symbols:
-    context.update(symbols)
+  })
   # We are creating objects here, so we execute the code without a sandbox.
-  return execution.run(code, global_vars=context, sandbox=False)
+  return correction.run_with_correction(
+      code,
+      global_vars=global_vars,
+      sandbox=False,
+      max_attempts=autofix,
+      lm=autofix_lm,
+  )
 
 
 class JsonError(Exception):

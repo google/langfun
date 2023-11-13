@@ -130,7 +130,10 @@ def query(
     ],
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
+    lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    autofix: int = 3,
+    autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
     returns_message: bool = False,
     **kwargs,
@@ -172,25 +175,45 @@ def query(
     schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
     default: The default value if parsing failed. If not specified, error will
       be raised.
+    lm: The language model to use. If not specified, the language model from
+      `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    autofix: Number of attempts to auto fix the generated code. If 0, autofix is
+      disabled. Auto-fix is not supported for 'json' protocol.
+    autofix_lm: The language model to use for autofix. If not specified, the
+      `autofix_lm` from `lf.context` context manager will be used. Otherwise it
+      will use `lm`.
     protocol: The protocol for schema/value representation. Applicable values
       are 'json' and 'python'. By default `python` will be used.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the
-      `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
-      specifying the language model for structured parsing.
+      `lf.structured.NaturalLanguageToStructureed` transform.
 
   Returns:
     The result based on the schema.
   """
+  # Autofix is not supported for JSON yet.
+  if protocol == 'json':
+    autofix = 0
+
   if examples is None:
     examples = DEFAULT_QUERY_EXAMPLES
+
   t = _query_structure_cls(protocol)(schema, default=default, examples=examples)
   if isinstance(user_prompt, lf.Template):
     user_prompt = user_prompt.render(**kwargs)
   user_prompt = lf.UserMessage.from_value(user_prompt)
-  with t.override(**kwargs):
+
+  context = dict(autofix=autofix)
+  if lm is not None:
+    context['lm'] = lm
+  autofix_lm = autofix_lm or lm
+  if autofix_lm is not None:
+    context['autofix_lm'] = autofix_lm
+  context.update(kwargs)
+
+  with t.override(**context):
     output = t(user_prompt=user_prompt)
   return output if returns_message else output.result

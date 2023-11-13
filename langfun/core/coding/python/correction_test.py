@@ -21,7 +21,67 @@ from langfun.core.coding.python import errors
 from langfun.core.llms import fake
 
 
-class CorrectionTest(unittest.TestCase):
+class RunWithCorrectionTest(unittest.TestCase):
+
+  def test_run_with_correction(self):
+    result = correction.run_with_correction(
+        inspect.cleandoc("""
+            x = 1,
+            y = x + 2
+             z = x + y
+            """),
+        lm=fake.StaticSequence([
+            inspect.cleandoc("""
+                CodeCorrection(
+                    latest_code=CodeWithError(
+                        code='x = 1,\\ny = x + 2\\n z = x + y',
+                        error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
+                    ),
+                    correction_history=[],
+                    corrected_code='x = 1,\\ny = x + 2\\nz = x + y',
+                )
+                """),
+            inspect.cleandoc("""
+                CodeCorrection(
+                    latest_code=CodeWithError(
+                        code='x = 1\\ny = x + 2\\n z = x + y',
+                        error='TypeError: can only concatenate tuple (not "int") to tuple (<unknown>, line 2)\\n  y = x + 2'
+                    ),
+                    correction_history=[
+                        CodeWithError(
+                            code='x = 1,\\ny = x + 2\\n z = x + y',
+                            error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
+                        )
+                    ],
+                    corrected_code='x = 1\\ny = x + 2\\nz = x + y',
+                )
+                """),
+        ]),
+    )
+    self.assertEqual(result, 4)
+
+  def test_run_without_correction(self):
+    result = correction.run_with_correction(
+        inspect.cleandoc("""
+            x = 1
+            y = x + 2
+            z = x + y
+            """),
+        max_attempts=0,
+    )
+    self.assertEqual(result, 4)
+    with self.assertRaises(errors.CodeError):
+      correction.run_with_correction(
+          inspect.cleandoc("""
+            x = 1,
+            y = x + 2
+            z = x + y
+            """),
+          max_attempts=0,
+      )
+
+
+class CorrectTest(unittest.TestCase):
 
   def test_correct(self):
     corrected = correction.correct(
@@ -59,6 +119,12 @@ class CorrectionTest(unittest.TestCase):
         ]),
     )
     self.assertEqual(corrected, 'x = 1\ny = x + 2\nz = x + y')
+
+  def test_correct_good_code(self):
+    self.assertEqual(
+        correction.correct('x + y + z', global_vars=dict(x=0, y=1, z=2)),
+        'x + y + z',
+    )
 
   def test_correct_reaching_limit(self):
     with self.assertRaisesRegex(

@@ -17,7 +17,7 @@ import inspect
 from typing import Any
 import langfun.core as lf
 from langfun.core.coding.python import errors
-from langfun.core.coding.python import generation
+from langfun.core.coding.python import execution
 import pyglove as pg
 
 
@@ -36,58 +36,74 @@ class CodeCorrection(pg.Object):
   corrected_code: str
 
 
-def correct(
+def run_with_correction(
     code: str,
     error: str | None = None,
     *,
+    global_vars: dict[str, Any] | None = None,
     lm: lf.LanguageModel = lf.contextual(),
     examples: list[CodeCorrection] | None = None,
-    sandbox: bool = True,
-    timeout: int | None = 5,
-    global_vars: dict[str, Any] | None = None,
     max_attempts: int = 5,
-) -> str:
+    sandbox: bool | None = None,
+    timeout: int | None = 5,
+    returns_code: bool = False,
+) -> Any | tuple[Any, str]:
   """Correct code with a language model via self-play.
 
   Args:
-    code: Problematic source code to correct.
-    error: Error message for source code. If None, code will be executed once to
-      get the error message.
+    code: The source code that may or may not be problematic.
+    error: An optional initial error for `code` when it's problematic, usually
+      caught from elsewhere when it ran. If None, code will be executed once to
+      verify if its good and obtain a feedback error message.
+    global_vars: A dict of str to value as the global variables that could be
+      accessed within the corrected code.
     lm: Language model to be used. If not specified, it will try to use the `lm`
       under `lf.context`.
     examples: Code correction examples to use.
-    sandbox: If True, run the corrected code within a sandbox.
+    max_attempts: Max number of attempts for the correction.
+    sandbox: If True, run code in sandbox; If False, run code in current
+      process. If None, run in sandbox first, if the output could not be
+      serialized and pass to current process, run the code again in current
+      process.
     timeout: The timeout for running the corrected code. If None, there is no
       timeout. Applicable only when sandbox is set to True.
-    global_vars: A dict of str to value as the global variables that could be
-      accessed within the corrected code.
-    max_attempts: Max number of attempts for the correction.
+    returns_code: If True, the return value is a tuple of (result, final code).
+      Otherwise the return value is the result only.
 
   Returns:
-    The corrected source code.
+    Run result if `returns_code` is set to False (default), otherwise a tuple
+      of (result, final code str).
 
   Raises:
     `lf.CodeError`: If code cannot be corrected after `max_attempts`.
   """
   # Delay import at runtime to avoid circular depenency.
-  from langfun.core.structured import completion  # pylint: disable=g-import-not-at-top
+  # pylint: disable=g-import-not-at-top
+  from langfun.core.structured import completion  # pytype: disable=import-error
+  # pylint: enable=g-import-not-at-top
 
-  def error_from_code(code: str) -> str | None:
+  if max_attempts == 0:
+    result = execution.run(
+        code, global_vars=global_vars, sandbox=sandbox, timeout=timeout
+    )
+    return (result, code) if returns_code else result
+
+  def result_and_error(code: str) -> tuple[Any, str | None]:
     try:
-      _ = generation.PythonCode(code)(
-          sandbox=sandbox, timeout=timeout, global_vars=global_vars
+      result = execution.run(
+          code,
+          global_vars=global_vars,
+          sandbox=sandbox,
+          timeout=timeout,
       )
-      return None
-    except errors.CodeError as e:
-      error = lf.text_formatting.decolored(
-          e.format(include_complete_code=False)
-      )
+      return (result, None)
     except Exception as e:  # pylint: disable=broad-exception-caught
-      error = f"Encountered {e.__class__.__name__}: {e}"
-    return error
+      return (None, _error_feedback_str(e))
 
   if error is None:
-    error = error_from_code(code)
+    result, error = result_and_error(code)
+    if error is None:
+      return (result, code) if returns_code else result
 
   examples = examples or DEFAULT_CODE_CORRECTION_EXAMPLES
   examples = [  # pylint: disable=g-complex-comprehension
@@ -103,16 +119,80 @@ def correct(
     correction = CodeCorrection.partial(
         CodeWithError(code=code, error=error), history
     )
-    correction = completion.complete(correction, lm=lm, examples=examples)
+    # Disable autofix for code correction to avoid recursion.
+    correction = completion.complete(
+        correction, lm=lm, examples=examples, autofix=0
+    )
     history.append(CodeWithError(code=code, error=error))
 
     code = correction.corrected_code
-    error = error_from_code(code)
+    result, error = result_and_error(code)
     if error is None:
-      return code
+      return (result, code) if returns_code else result
+
   raise errors.CodeError(
       code, RuntimeError(f"Cannot correct code after {max_attempts} attempts.")
   )
+
+
+def correct(
+    code: str,
+    error: str | None = None,
+    *,
+    global_vars: dict[str, Any] | None = None,
+    lm: lf.LanguageModel = lf.contextual(),
+    examples: list[CodeCorrection] | None = None,
+    max_attempts: int = 5,
+    sandbox: bool | None = None,
+    timeout: int | None = 5,
+) -> str:
+  """Correct code with a language model via self-play.
+
+  Args:
+    code: The source code that may or may not be problematic.
+    error: An optional initial error for `code` when it's problematic, usually
+      caught from elsewhere when it ran. If None, code will be executed once to
+      verify if its good and obtain a feedback error message.
+    global_vars: A dict of str to value as the global variables that could be
+      accessed within the corrected code.
+    lm: Language model to be used. If not specified, it will try to use the `lm`
+      under `lf.context`.
+    examples: Code correction examples to use.
+    max_attempts: Max number of attempts for the correction.
+    sandbox: If True, run code in sandbox; If False, run code in current
+      process. If None, run in sandbox first, if the output could not be
+      serialized and pass to current process, run the code again in current
+      process.
+    timeout: The timeout for running the corrected code. If None, there is no
+      timeout. Applicable only when sandbox is set to True.
+
+  Returns:
+    The final correct code if corrections are successful.
+
+  Raises:
+    `lf.CodeError`: If code cannot be corrected after `max_attempts`.
+  """
+  return run_with_correction(
+      code,
+      error=error,
+      global_vars=global_vars,
+      lm=lm,
+      examples=examples,
+      max_attempts=max_attempts,
+      sandbox=sandbox,
+      timeout=timeout,
+      returns_code=True,
+  )[1]
+
+
+def _error_feedback_str(error: Exception) -> str:
+  """Returns the error str for feedback."""
+  if isinstance(error, errors.CodeError):
+    return lf.text_formatting.decolored(
+        error.format(include_complete_code=False)
+    )
+  else:
+    return f"Encountered {error.__class__.__name__}: {error}"
 
 
 DEFAULT_CODE_CORRECTION_EXAMPLES = [

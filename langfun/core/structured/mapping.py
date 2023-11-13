@@ -178,6 +178,18 @@ class NaturalLanguageToStructure(Mapping):
       ),
   ] = lf.RAISE_IF_HAS_ERROR
 
+  autofix: Annotated[
+      int,
+      (
+          'Max attempts for LLM-based code correction. '
+          'If 0 (default), there is no automatic correction.'
+      ),
+  ] = 3
+
+  autofix_lm: Annotated[
+      lf.LanguageModel, 'Language model used for code correction.'
+  ] = lf.contextual(default=None)
+
   preamble: Annotated[
       lf.LangFunc,
       'Preamble used for natural language-to-structure mapping.',
@@ -226,7 +238,10 @@ class NaturalLanguageToStructure(Mapping):
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
     try:
       lm_output.result = self.schema.parse(
-          lm_output.text, protocol=self.protocol
+          lm_output.text,
+          protocol=self.protocol,
+          autofix=self.autofix,
+          autofix_lm=self.autofix_lm or self.lm,
       )
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.RAISE_IF_HAS_ERROR:
@@ -350,6 +365,18 @@ class StructureToStructure(Mapping):
       pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
   ] = lf.contextual()
 
+  autofix: Annotated[
+      int,
+      (
+          'Max attempts for LLM-based code correction. '
+          'If 0 (default), there is no automatic correction.'
+      ),
+  ] = 3
+
+  autofix_lm: Annotated[
+      lf.LanguageModel, 'Language model used for code correction.'
+  ] = lf.contextual(default=None)
+
   default: Annotated[
       Any,
       (
@@ -437,7 +464,10 @@ class StructureToStructure(Mapping):
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
     try:
       result = schema_lib.value_repr('python').parse(
-          lm_output.text, additional_context=self._value_context()
+          lm_output.text,
+          additional_context=self._value_context(),
+          autofix=self.autofix,
+          autofix_lm=self.autofix_lm or self.lm,
       )
       # Try restore modality objects from the input value to output value.
       modalities = self.modalities(self.input_value)

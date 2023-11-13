@@ -593,6 +593,23 @@ class Evaluation(Evaluable):
       )
   ] = None
 
+  autofix: Annotated[
+      int,
+      (
+          'The number of attempts for auto fix, which allows LLMs to correct '
+          'generated code for the output structure. If 0, autofix will be '
+          'disabled.'
+      ),
+  ] = 3
+
+  autofix_lm: Annotated[
+      lf.LanguageModel | None,
+      (
+          'Language model for autofix. If None, `lm` will also be used for '
+          'autofix.'
+      ),
+  ] = None
+
   use_cache: Annotated[bool, 'If True, LM cache will be enabled.'] = True
 
   max_workers: Annotated[
@@ -896,6 +913,8 @@ class Evaluation(Evaluable):
           parsing_lm=self.parsing_lm,
           parsing_examples=self.fewshot_examples,
           response_postprocess=self.call_postprocess,
+          autofix=self.autofix,
+          autofix_lm=self.autofix_lm,
           returns_message=True,
           **kwargs,
       )
@@ -905,6 +924,8 @@ class Evaluation(Evaluable):
           self.schema,
           lm=self.lm,
           examples=self.fewshot_examples,
+          autofix=self.autofix,
+          autofix_lm=self.autofix_lm,
           returns_message=True,
           **kwargs,
       )
@@ -913,8 +934,13 @@ class Evaluation(Evaluable):
       assert isinstance(self.schema.spec, pg.typing.Object), self.schema
       input_value = self.schema.spec.cls.partial(prompt)
       return lf_structured.complete(
-          input_value, lm=self.lm, examples=self.fewshot_examples,
-          returns_message=True, **kwargs
+          input_value,
+          lm=self.lm,
+          examples=self.fewshot_examples,
+          autofix=self.autofix,
+          autofix_lm=self.autofix_lm,
+          returns_message=True,
+          **kwargs,
       )
 
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:

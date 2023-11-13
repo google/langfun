@@ -249,6 +249,22 @@ class ParseStructurePythonTest(unittest.TestCase):
       ):
         parsing.parse('three', int)
 
+  def test_autofix(self):
+    lm = fake.StaticSequence([
+        '=3',
+        inspect.cleandoc("""
+            CodeCorrection(
+                latest_code=CodeWithError(
+                    code='=3',
+                    error='SyntaxError: invalid syntax (<unknown> line 1)\\n: =3'
+                ),
+                correction_history=[],
+                corrected_code='3',
+            )
+            """),
+    ])
+    self.assertEqual(parsing.parse('three', int, lm=lm), 3)
+
   def test_parse(self):
     lm = fake.StaticResponse('1')
     self.assertEqual(parsing.parse('the answer is 1', int, lm=lm), 1)
@@ -639,6 +655,26 @@ class CallTest(unittest.TestCase):
         ),
         3,
     )
+
+  def test_call_with_autofix(self):
+    lm = fake.StaticSequence(
+        [
+            'three',
+            '=3',
+            inspect.cleandoc("""
+            CodeCorrection(
+                latest_code=CodeWithError(
+                    code='=3',
+                    error='SyntaxError: invalid syntax (<unknown> line 1)\\n: =3'
+                ),
+                correction_history=[],
+                corrected_code='3',
+            )
+            """),
+        ],
+        debug=True,
+    )
+    self.assertEqual(parsing.call('what is one plus two?', int, lm=lm), 3)
 
   def test_bad_call(self):
     with self.assertRaisesRegex(TypeError, '`prompt` should be .*'):

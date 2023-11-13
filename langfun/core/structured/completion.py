@@ -79,7 +79,10 @@ def complete(
     input_value: pg.Symbolic,
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
+    lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    autofix: int = 3,
+    autofix_lm: lf.LanguageModel | None = None,
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -118,13 +121,19 @@ def complete(
     input_value: A symbolic value that may contain missing values.
     default: The default value if parsing failed. If not specified, error will
       be raised.
+    lm: The language model to use. If not specified, the language model from
+      `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    autofix: Number of attempts to auto fix the generated code. If 0, autofix is
+      disabled.
+    autofix_lm: The language model to use for autofix. If not specified, the
+      `autofix_lm` from `lf.context` context manager will be used. Otherwise it
+      will use `lm`.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the
-      `lf.structured.NaturalLanguageToStructureed` transform, e.g. `lm` for
-      specifying the language model for structured parsing.
+      `lf.structured.NaturalLanguageToStructureed` transform.
 
   Returns:
     The result based on the schema.
@@ -132,6 +141,15 @@ def complete(
   if examples is None:
     examples = DEFAULT_COMPLETE_EXAMPLES
   t = CompleteStructure(default=default, examples=examples)
-  with t.override(**kwargs):
+
+  context = dict(autofix=autofix)
+  if lm is not None:
+    context['lm'] = lm
+  autofix_lm = autofix_lm or lm
+  if autofix_lm is not None:
+    context['autofix_lm'] = autofix_lm
+  context.update(kwargs)
+
+  with t.override(**context):
     output = t(input_value=schema_lib.mark_missing(input_value))
   return output if returns_message else output.result

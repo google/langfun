@@ -80,7 +80,10 @@ def parse(
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
     user_prompt: str | None = None,
+    lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    autofix: int = 3,
+    autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
     returns_message: bool = False,
     **kwargs,
@@ -127,18 +130,29 @@ def parse(
       be raised.
     user_prompt: An optional user prompt as the description or ask for the
       message, which provide more context for parsing.
+    lm: The language model to use. If not specified, the language model from
+      `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    autofix: Number of attempts to auto fix the generated code. If 0, autofix is
+      disabled. Auto-fix is not supported for 'json' protocol.
+    autofix_lm: The language model to use for autofix. If not specified, the
+      `autofix_lm` from `lf.context` context manager will be used. Otherwise it
+      will use `lm`.
     protocol: The protocol for schema/value representation. Applicable values
       are 'json' and 'python'. By default 'python' will be used.`
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the `lf.structured.ParseStructure`
-      transform, e.g. `lm` for specifying the language model.
+      transform.
 
   Returns:
     The parsed result based on the schema.
   """
+  # Autofix is not supported for JSON yet.
+  if protocol == 'json':
+    autofix = 0
+
   if examples is None:
     examples = DEFAULT_PARSE_EXAMPLES
 
@@ -147,7 +161,17 @@ def parse(
 
   if message.source is None and user_prompt is not None:
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
-  output = t(input_message=message, **kwargs)
+
+  # Setting up context.
+  context = dict(autofix=autofix)
+  if lm is not None:
+    context['lm'] = lm
+  autofix_lm = autofix_lm or lm
+  if autofix_lm is not None:
+    context['autofix_lm'] = autofix_lm
+  context.update(kwargs)
+
+  output = t(input_message=message, **context)
   return output if returns_message else output.result
 
 
@@ -157,9 +181,13 @@ def call(
         None, schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
     ] = None,
     *,
+    lm: lf.LanguageModel | None = None,
     parsing_lm: lf.LanguageModel | None = None,
     parsing_examples: list[mapping.MappingExample] | None = None,
+    autofix: int = 3,
+    autofix_lm: lf.LanguageModel | None = None,
     response_postprocess: Callable[[str], str] | None = None,
+    protocol: schema_lib.SchemaProtocol = 'python',
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -191,12 +219,21 @@ def call(
     schema: Type annotations for return type. If None, the raw LM response will
       be returned (str). Otherwise, the response will be parsed based on the
       return type.
+    lm: Language model used to prompt to get a natural language-based response.
+      If not specified, `lm` from `lf.context` context manager will be used.
     parsing_lm: Language model that will be used for parsing. If None, the `lm`
       for prompting the LM will be used.
     parsing_examples: Examples for parsing the output. If None,
       `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
+    autofix: Number of attempts to auto fix the generated code. If 0, autofix is
+      disabled. Auto-fix is not supported for 'json' protocol.
+    autofix_lm: The language model to use for autofix. If not specified, the
+      `autofix_lm` from `lf.context` context manager will be used. Otherwise it
+      will use `parsing_lm`.
     response_postprocess: A callback function to post process the text response
       before sending for parsing.
+    protocol: The protocol for schema/value representation. Applicable values
+      are 'json' and 'python'. By default 'python' will be used.`
     returns_message: If True, return a `lf.Message` object instead of its text
       or result.
     **kwargs: Keyword arguments. Including options that control the calling
@@ -220,7 +257,12 @@ def call(
         f'Encountered {prompt!r}.'
     )
 
-  lm_output = lfun(**kwargs)
+  # Call `lm` for natural response.
+  call_kwargs = dict(kwargs)
+  if lm is not None:
+    call_kwargs['lm'] = lm
+
+  lm_output = lfun(**call_kwargs)
 
   if response_postprocess is not None:
     lm_output.set('text', response_postprocess(lm_output.text))
@@ -228,13 +270,21 @@ def call(
   if schema is None:
     return lm_output if returns_message else lm_output.text
 
+  # Call `parsing_lm` for structured parsing.
   parse_kwargs = dict(kwargs)
+  parsing_lm = parsing_lm or lm
   if parsing_lm is not None:
     parse_kwargs['lm'] = parsing_lm
   if parsing_examples is not None:
     parse_kwargs['examples'] = parsing_examples
   return parse(
-      lm_output, schema, returns_message=returns_message, **parse_kwargs
+      lm_output,
+      schema,
+      autofix=autofix,
+      autofix_lm=autofix_lm,
+      protocol=protocol,
+      returns_message=returns_message,
+      **parse_kwargs,
   )
 
 

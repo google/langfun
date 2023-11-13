@@ -16,6 +16,7 @@
 import inspect
 from typing import Any, Literal
 
+import langfun.core as lf
 from langfun.core.structured import mapping
 import pyglove as pg
 
@@ -37,6 +38,7 @@ def describe(
     value: Any,
     context: str | None = None,
     *,
+    lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
     **kwargs,
 ) -> str:
@@ -87,18 +89,21 @@ def describe(
   Args:
     value: A structured value to be mapped.
     context: The context information for describing the structured value.
+    lm: The language model to use. If not specified, the language model from
+      `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
-    **kwargs: Keyword arguments passed to the `lf.structured.DescribeStructure`,
-      e.g. `lm` for specifying the language model.
+    **kwargs: Keyword arguments passed to the `lf.structured.DescribeStructure`.
 
   Returns:
     The parsed result based on the schema.
   """
   if examples is None:
     examples = DEFAULT_DESCRIBE_EXAMPLES
-  return DescribeStructure(examples, **kwargs)(
-      input_value=value, nl_context=context
+  if lm is not None:
+    kwargs['lm'] = lm
+  return DescribeStructure(examples)(
+      input_value=value, nl_context=context, **kwargs
   ).text
 
 

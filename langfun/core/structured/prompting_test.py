@@ -183,7 +183,23 @@ class QueryStructurePythonTest(unittest.TestCase):
           coding.CodeError,
           'name .* is not defined',
       ):
-        prompting.query('Compute 1 + 2', int)
+        prompting.query('Compute 1 + 2', int, autofix=0)
+
+  def test_autofix(self):
+    lm = fake.StaticSequence([
+        '=1',
+        inspect.cleandoc("""
+            CodeCorrection(
+                latest_code=CodeWithError(
+                    code='=1',
+                    error='SyntaxError: invalid syntax (<unknown> line 1)\\n: =1'
+                ),
+                correction_history=[],
+                corrected_code='1',
+            )
+            """),
+    ])
+    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
 
   def test_query(self):
     lm = fake.StaticSequence(['1'])
