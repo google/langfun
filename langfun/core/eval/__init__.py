@@ -26,7 +26,7 @@ from langfun.core.eval.base import load
 from langfun.core.eval.base import inputs_from
 from langfun.core.eval.base import as_inputs
 
-from langfun.core.eval.groundtruth_based import GroundTruthMatch
+from langfun.core.eval.matching import Matching
 from langfun.core.eval.scoring import Scoring
 
 

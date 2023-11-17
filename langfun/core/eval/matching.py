@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Ground-truth based matching."""
+"""Match-based evaluation."""
 
 import io
 import os
@@ -21,8 +21,8 @@ from langfun.core.eval import base
 import pyglove as pg
 
 
-class GroundTruthMatch(base.Evaluation):
-  """Ground-truth based evaluation."""
+class Matching(base.Evaluation):
+  """Base class for matching-based evaluation."""
 
   groundtruth: Annotated[
       Callable[[Any], Any],
@@ -78,11 +78,11 @@ class GroundTruthMatch(base.Evaluation):
   @property
   def matches_link(self) -> str:
     """Returns the matches page."""
-    return self.link(os.path.join(self.dir, GroundTruthMatch.MATCHES_HTML))
+    return self.link(os.path.join(self.dir, Matching.MATCHES_HTML))
 
   @property
   def mismatches_link(self) -> str:
-    return self.link(os.path.join(self.dir, GroundTruthMatch.MISMATCHES_HTML))
+    return self.link(os.path.join(self.dir, Matching.MISMATCHES_HTML))
 
   def _reset(self) -> None:
     super()._reset()
@@ -154,14 +154,14 @@ class GroundTruthMatch(base.Evaluation):
     # Save matches.
     pg.save(
         self._html([self._render_result, self._render_matches]),
-        os.path.join(self.dir, GroundTruthMatch.MATCHES_HTML),
+        os.path.join(self.dir, Matching.MATCHES_HTML),
         file_format='txt',
     )
 
     # Save mismatches.
     pg.save(
         self._html([self._render_result, self._render_mismatches]),
-        os.path.join(self.dir, GroundTruthMatch.MISMATCHES_HTML),
+        os.path.join(self.dir, Matching.MISMATCHES_HTML),
         file_format='txt',
     )
 

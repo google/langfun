@@ -19,7 +19,7 @@ import unittest
 
 import langfun.core as lf
 from langfun.core.eval import base
-from langfun.core.eval import groundtruth_based
+from langfun.core.eval import matching
 from langfun.core.llms import fake
 import pyglove as pg
 
@@ -54,7 +54,7 @@ def eval_set(
 ):
   """Creates an evaluation object for testing."""
   tmp_dir = tempfile.gettempdir()
-  return groundtruth_based.GroundTruthMatch(
+  return matching.Matching(
       id=eval_id,
       root_dir=tmp_dir,
       inputs=base.as_inputs([
@@ -74,8 +74,8 @@ def eval_set(
   )
 
 
-class GroundTruthMatchTest(unittest.TestCase):
-  """GroundTruthMatch test."""
+class MatchingTest(unittest.TestCase):
+  """Matching test."""
 
   def setUp(self):
     super().setUp()
@@ -121,41 +121,41 @@ class GroundTruthMatchTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, groundtruth_based.GroundTruthMatch.EXPERIMENT_JSON
+                s.dir, matching.Matching.EXPERIMENT_JSON
             )
         )
     )
     self.assertTrue(
         os.path.exists(
-            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.RESULT_JSON)
+            os.path.join(s.dir, matching.Matching.RESULT_JSON)
         )
     )
     self.assertTrue(
         os.path.exists(
-            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.CACHE_JSON)
+            os.path.join(s.dir, matching.Matching.CACHE_JSON)
         )
     )
     self.assertTrue(
         os.path.exists(
-            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.INDEX_HTML)
+            os.path.join(s.dir, matching.Matching.INDEX_HTML)
         )
     )
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, groundtruth_based.GroundTruthMatch.FAILURES_HTML
+                s.dir, matching.Matching.FAILURES_HTML
             )
         )
     )
     self.assertTrue(
         os.path.exists(
-            os.path.join(s.dir, groundtruth_based.GroundTruthMatch.MATCHES_HTML)
+            os.path.join(s.dir, matching.Matching.MATCHES_HTML)
         )
     )
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, groundtruth_based.GroundTruthMatch.MISMATCHES_HTML
+                s.dir, matching.Matching.MISMATCHES_HTML
             )
         )
     )
