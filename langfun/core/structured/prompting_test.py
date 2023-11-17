@@ -45,7 +45,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render(user_prompt=m).text,
         inspect.cleandoc("""
-            Please respond to USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
+            Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
             USER_REQUEST:
               Compute 12 / 6 + 2.
@@ -70,7 +70,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
-            Please respond to USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
+            Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
             USER_REQUEST:
               What is the answer of 1 plus 1?
@@ -237,7 +237,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render(user_prompt=m).text,
         inspect.cleandoc("""
-            Please respond to USER_REQUEST with JSON according to SCHEMA:
+            Please respond to the last USER_REQUEST with JSON according to SCHEMA:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
@@ -266,7 +266,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
-            Please respond to USER_REQUEST with JSON according to SCHEMA:
+            Please respond to the last USER_REQUEST with JSON according to SCHEMA:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.

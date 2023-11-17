@@ -48,7 +48,7 @@ class QueryStructureJson(QueryStructure):
   """Query a structured value using JSON as the protocol."""
 
   preamble = """
-      Please respond to {{ nl_context_title }} with {{ value_title}} according to {{ schema_title }}:
+      Please respond to the last {{ nl_context_title }} with {{ value_title}} according to {{ schema_title }}:
 
       INSTRUCTIONS:
         1. If the schema has `_type`, carry it over to the JSON output.
@@ -64,7 +64,7 @@ class QueryStructurePython(QueryStructure):
   """Query a structured value using Python as the protocol."""
 
   preamble = """
-      Please respond to {{ nl_context_title }} with {{ value_title }} according to {{ schema_title }}.
+      Please respond to the last {{ nl_context_title }} with {{ value_title }} according to {{ schema_title }}.
       """
   protocol = 'python'
   schema_title = 'RESULT_TYPE'
