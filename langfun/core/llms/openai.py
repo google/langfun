@@ -14,6 +14,7 @@
 """Language models from OpenAI."""
 
 import collections
+import functools
 import os
 from typing import Annotated, Any, cast
 
@@ -118,16 +119,21 @@ class OpenAI(lf.LanguageModel):
 
   def _on_bound(self):
     super()._on_bound()
+    self.__dict__.pop('_api_initialized', None)
+
+  @functools.cached_property
+  def _api_initialized(self):
     api_key = self.api_key or os.environ.get('OPENAI_API_KEY', None)
     if not api_key:
       raise ValueError(
-          'Please specify `api_key` or set environment variable '
-          '`OPENAI_API_KEY` with your OpenAI API key.'
+          'Please specify `api_key` during `__init__` or set environment '
+          'variable `OPENAI_API_KEY` with your OpenAI API key.'
       )
     openai.api_key = api_key
     org = self.organization or os.environ.get('OPENAI_ORGANIZATION', None)
     if org:
       openai.organization = org
+    return True
 
   @property
   def model_id(self) -> str:
@@ -167,6 +173,7 @@ class OpenAI(lf.LanguageModel):
     return args
 
   def _sample(self, prompts: list[lf.Message]) -> list[LMSamplingResult]:
+    assert self._api_initialized
     if self.is_chat_model:
       return self._chat_complete_batch(prompts)
     else:
