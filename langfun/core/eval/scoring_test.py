@@ -118,6 +118,21 @@ class ScoringTest(unittest.TestCase):
     )
     self.assertTrue(
         os.path.exists(
+            os.path.join(s.dir, scoring.Scoring.RESULT_JSON)
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, scoring.Scoring.FAILURES_JSON)
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, scoring.Scoring.SCORED_JSON)
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
             os.path.join(s.dir, scoring.Scoring.INDEX_HTML)
         )
     )

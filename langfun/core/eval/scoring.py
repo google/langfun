@@ -26,6 +26,7 @@ class Scoring(base.Evaluation):
   """Base class of evaluations by scoring."""
 
   # CONSTANTS.
+  SCORED_JSON = 'scored.json'
   SCORED_HTML = 'scored.html'
 
   @property
@@ -111,7 +112,20 @@ class Scoring(base.Evaluation):
   def save(self) -> None:  # pylint: disable=redefined-builtin
     super().save()
 
+    def force_dict(v):
+      return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
+
     # Save scored.
+    pg.save(
+        [
+            # We force the output to be dict as its type may be defined
+            # within functors which could be deserialized.
+            pg.Dict(input=input, output=force_dict(output), score=score)
+            for input, output, score, _ in self.scored
+        ],
+        os.path.join(self.dir, Scoring.SCORED_JSON),
+    )
+
     pg.save(
         self._html([self._render_result, self._render_scored]),
         os.path.join(self.dir, Scoring.SCORED_HTML),

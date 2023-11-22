@@ -40,6 +40,9 @@ class Matching(base.Evaluation):
   ]
 
   # CONSTANTS.
+  MATCHES_JSON = 'matches.json'
+  MISMATCHES_JSON = 'mismatches.json'
+
   MATCHES_HTML = 'matches.html'
   MISMATCHES_HTML = 'mismatches.html'
 
@@ -151,7 +154,19 @@ class Matching(base.Evaluation):
   def save(self) -> None:  # pylint: disable=redefined-builtin
     super().save()
 
+    def force_dict(v):
+      return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
+
     # Save matches.
+    pg.save(
+        [
+            # We force the output to be dict as its type may be defined
+            # within functors which could be deserialized.
+            pg.Dict(input=input, output=force_dict(output))
+            for input, output, _ in self.matches
+        ],
+        os.path.join(self.dir, Matching.MATCHES_JSON),
+    )
     pg.save(
         self._html([self._render_result, self._render_matches]),
         os.path.join(self.dir, Matching.MATCHES_HTML),
@@ -159,6 +174,15 @@ class Matching(base.Evaluation):
     )
 
     # Save mismatches.
+    pg.save(
+        [
+            # We force the output to be dict as its type may be defined
+            # within functors which could be deserialized.
+            pg.Dict(input=input, output=force_dict(output))
+            for input, output, _ in self.mismatches
+        ],
+        os.path.join(self.dir, Matching.MISMATCHES_JSON),
+    )
     pg.save(
         self._html([self._render_result, self._render_mismatches]),
         os.path.join(self.dir, Matching.MISMATCHES_HTML),

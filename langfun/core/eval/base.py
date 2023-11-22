@@ -34,6 +34,7 @@ class Evaluable(lf.Component):
 
   EXPERIMENT_JSON = 'experiment.json'
   RESULT_JSON = 'result.json'
+  FAILURES_JSON = 'failures.json'
   INDEX_HTML = 'index.html'
 
   id: Annotated[
@@ -1014,6 +1015,13 @@ class Evaluation(Evaluable):
     super().save()
 
     # Save failures.
+    pg.save(
+        [
+            pg.Dict(input=input, error=lf.text_formatting.decolored(str(error)))
+            for input, error in self.failures
+        ],
+        os.path.join(self.dir, Evaluation.FAILURES_JSON),
+    )
     pg.save(
         self._html([self._render_result, self._render_failures]),
         os.path.join(self.dir, Evaluation.FAILURES_HTML),
