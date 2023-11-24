@@ -459,7 +459,7 @@ def concurrent_map(
     *,
     executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,
-    ordered: bool = False,
+    ordered: bool = True,
     show_progress: bool | int = False,
     label: str | None = None,
     color: Literal[

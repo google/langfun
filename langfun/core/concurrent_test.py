@@ -342,7 +342,7 @@ class ConcurrentMapTest(unittest.TestCase):
 
     with component.context(y=2):
       self.assertEqual(
-          list(concurrent.concurrent_map(fun, [1, 2, 3])),
+          list(concurrent.concurrent_map(fun, [1, 2, 3], ordered=False)),
           [
               (3, 3, None),
               (2, 2, None),
@@ -433,7 +433,7 @@ class ConcurrentMapTest(unittest.TestCase):
         [
             (i, o)
             for i, o, _ in concurrent.concurrent_map(
-                fun, [5, 2, 1, 4], timeout=3
+                fun, [5, 2, 1, 4], timeout=3, ordered=False
             )
         ],
         [
@@ -456,7 +456,7 @@ class ConcurrentMapTest(unittest.TestCase):
         [
             (i, o)
             for i, o, _ in concurrent.concurrent_map(
-                fun, [5, 2, 1, 6], timeout=3, max_workers=1
+                fun, [5, 2, 1, 6], timeout=3, max_workers=1, ordered=False
             )
         ],
         [
