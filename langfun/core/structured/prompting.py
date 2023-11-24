@@ -13,7 +13,7 @@
 # limitations under the License.
 """Natural language text to structured value."""
 
-from typing import Annotated, Any, Literal, Type, Union
+from typing import Annotated, Any, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -82,43 +82,15 @@ def _query_structure_cls(
     raise ValueError(f'Unknown protocol: {protocol!r}.')
 
 
-class _Country(pg.Object):
-  """A example dataclass for structured parsing."""
-  name: str
-  continents: list[Literal[
-      'Africa',
-      'Asia',
-      'Europe',
-      'Oceania',
-      'North America',
-      'South America'
-  ]]
-  num_states: int
-  neighbor_countries: list[str]
-  population: int
-  capital: str | None
-  president: str | None
+class _Answer(pg.Object):
+  final_answer: int
 
 
 DEFAULT_QUERY_EXAMPLES: list[mapping.MappingExample] = [
     mapping.MappingExample(
-        nl_context='Brief introduction of the U.S.A.',
-        schema=_Country,
-        value=_Country(
-            name='The United States of America',
-            continents=['North America'],
-            num_states=50,
-            neighbor_countries=[
-                'Canada',
-                'Mexico',
-                'Bahamas',
-                'Cuba',
-                'Russia',
-            ],
-            population=333000000,
-            capital='Washington, D.C',
-            president=None,
-        ),
+        nl_context='1 + 1 =',
+        schema=_Answer,
+        value=_Answer(final_answer=2),
     ),
 ]
 

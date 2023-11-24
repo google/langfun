@@ -13,7 +13,7 @@
 # limitations under the License.
 """Structure-to-structure mappings."""
 
-from typing import Any, Literal
+from typing import Any
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -40,21 +40,9 @@ class CompleteStructure(mapping.StructureToStructure):
   output_value_title = 'OUTPUT_OBJECT'
 
 
-class _Date(pg.Object):
-  year: int
-  month: int
-  day: int
-
-
-class _Country(pg.Object):
-  """Country."""
-
-  name: str
-  founding_date: _Date
-  continent: Literal[
-      'Africa', 'Asia', 'Europe', 'Oceania', 'North America', 'South America'
-  ]
-  population: int
+class _Answer(pg.Object):
+  question: str
+  answer: int
 
 
 def completion_example(left: Any, right: Any) -> mapping.MappingExample:
@@ -64,13 +52,8 @@ def completion_example(left: Any, right: Any) -> mapping.MappingExample:
 
 DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
     completion_example(
-        _Country.partial(name='United States of America'),
-        _Country(
-            name='United States of America',
-            founding_date=_Date(year=1776, month=7, day=4),
-            continent='North America',
-            population=33_000_000,
-        ),
+        _Answer.partial(question='1 + 1 ='),
+        _Answer(question='1 + 1 =', answer=2),
     ),
 ]
 

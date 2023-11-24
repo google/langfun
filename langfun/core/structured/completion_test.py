@@ -182,6 +182,7 @@ class CompleteStructureTest(unittest.TestCase):
             ],
         )
     )
+
     self.assertEqual(
         l.render(input_value=input_value).text,
         inspect.cleandoc("""
@@ -193,33 +194,17 @@ class CompleteStructureTest(unittest.TestCase):
 
             INPUT_OBJECT:
               ```python
-              _Country(
-                name='United States of America',
-                founding_date=MISSING(_Date),
-                continent=MISSING(Literal['Africa', 'Asia', 'Europe', 'Oceania', 'North America', 'South America']),
-                population=MISSING(int)
+              _Answer(
+                question='1 + 1 =',
+                answer=MISSING(int)
               )
-              ```
-
-            CLASS_DEFINITIONS:
-              ```python
-              class _Date:
-                year: int
-                month: int
-                day: int
               ```
 
             OUTPUT_OBJECT:
               ```python
-              _Country(
-                name='United States of America',
-                founding_date=_Date(
-                  year=1776,
-                  month=7,
-                  day=4
-                ),
-                continent='North America',
-                population=33000000
+              _Answer(
+                question='1 + 1 =',
+                answer=2
               )
               ```
 
