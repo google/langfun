@@ -47,6 +47,27 @@ class QueryStructurePythonTest(unittest.TestCase):
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
+            INSTRUCTIONS:
+              1. Only response the required RESULT_OBJECT as illustrated by the given example.
+              2. Don't add any comments in the response.
+              3. RESULT_OBJECT must restrictly follow the RESULT_TYPE.
+
+            USER_REQUEST:
+              1 + 1 =
+
+            RESULT_TYPE:
+              Answer
+
+              ```python
+              class Answer:
+                final_answer: int
+              ```
+
+            RESULT_OBJECT:
+              ```python
+              Answer(final_answer=2)
+              ```
+
             USER_REQUEST:
               Compute 12 / 6 + 2.
 
@@ -71,6 +92,27 @@ class QueryStructurePythonTest(unittest.TestCase):
         l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
+
+            INSTRUCTIONS:
+              1. Only response the required RESULT_OBJECT as illustrated by the given example.
+              2. Don't add any comments in the response.
+              3. RESULT_OBJECT must restrictly follow the RESULT_TYPE.
+
+            USER_REQUEST:
+              1 + 1 =
+
+            RESULT_TYPE:
+              Answer
+
+              ```python
+              class Answer:
+                final_answer: int
+              ```
+
+            RESULT_OBJECT:
+              ```python
+              Answer(final_answer=2)
+              ```
 
             USER_REQUEST:
               What is the answer of 1 plus 1?
@@ -244,6 +286,15 @@ class QueryStructureJsonTest(unittest.TestCase):
               2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
 
             USER_REQUEST:
+              1 + 1 =
+
+            SCHEMA:
+              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
+
+            JSON:
+              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
+
+            USER_REQUEST:
               Compute 12 / 6 + 2.
 
             SCHEMA:
@@ -271,6 +322,15 @@ class QueryStructureJsonTest(unittest.TestCase):
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
               2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
+
+            USER_REQUEST:
+              1 + 1 =
+
+            SCHEMA:
+              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
+
+            JSON:
+              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
 
             USER_REQUEST:
               What is the answer of 1 plus 1?

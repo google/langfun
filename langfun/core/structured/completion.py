@@ -24,38 +24,45 @@ import pyglove as pg
 class CompleteStructure(mapping.StructureToStructure):
   """Complete structure by filling the missing fields."""
 
-  preamble = lf.LangFunc("""
+  input_value_title = 'INPUT_OBJECT'
+  output_value_title = 'OUTPUT_OBJECT'
+
+  preamble = lf.LangFunc(
+      """
       Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
       INSTRUCTIONS:
       1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
       2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
-      """)
+
+      {{input_value_title}}:
+        ```python
+        Answer(
+          question='1 + 1 =',
+          answer=MISSING(int)
+        )
+        ```
+
+      {{output_value_title}}:
+        ```python
+        Answer(
+          question='1 + 1 =',
+          answer=2
+        )
+        ```
+      """,
+      input_value_title=input_value_title,
+      output_value_title=output_value_title,
+  )
 
   # NOTE(daiyip): Set the input path of the transform to root, so this transform
   # could access the input via the `message.result` field.
   input_path = ''
 
-  input_value_title = 'INPUT_OBJECT'
-  output_value_title = 'OUTPUT_OBJECT'
-
-
-class _Answer(pg.Object):
-  question: str
-  answer: int
-
 
 def completion_example(left: Any, right: Any) -> mapping.MappingExample:
   """Makes a mapping example for completion."""
   return mapping.MappingExample(value=mapping.Pair(left=left, right=right))
-
-
-DEFAULT_COMPLETE_EXAMPLES: list[mapping.MappingExample] = [
-    completion_example(
-        _Answer.partial(question='1 + 1 ='),
-        _Answer(question='1 + 1 =', answer=2),
-    ),
-]
 
 
 def complete(
@@ -121,8 +128,6 @@ def complete(
   Returns:
     The result based on the schema.
   """
-  if examples is None:
-    examples = DEFAULT_COMPLETE_EXAMPLES
   t = CompleteStructure(default=default, examples=examples)
 
   context = dict(autofix=autofix)

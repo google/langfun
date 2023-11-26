@@ -69,6 +69,22 @@ class CompleteStructureTest(unittest.TestCase):
 
             INPUT_OBJECT:
               ```python
+              Answer(
+                question='1 + 1 =',
+                answer=MISSING(int)
+              )
+              ```
+
+            OUTPUT_OBJECT:
+              ```python
+              Answer(
+                question='1 + 1 =',
+                answer=2
+              )
+              ```
+
+            INPUT_OBJECT:
+              ```python
               TripPlan(
                 place='San Francisco',
                 itineraries=[
@@ -127,6 +143,22 @@ class CompleteStructureTest(unittest.TestCase):
 
             INPUT_OBJECT:
               ```python
+              Answer(
+                question='1 + 1 =',
+                answer=MISSING(int)
+              )
+              ```
+
+            OUTPUT_OBJECT:
+              ```python
+              Answer(
+                question='1 + 1 =',
+                answer=2
+              )
+              ```
+
+            INPUT_OBJECT:
+              ```python
               TripPlan(
                 place='San Francisco',
                 itineraries=[
@@ -169,9 +201,7 @@ class CompleteStructureTest(unittest.TestCase):
     )
 
   def test_render_with_examples(self):
-    l = completion.CompleteStructure(
-        examples=completion.DEFAULT_COMPLETE_EXAMPLES
-    )
+    l = completion.CompleteStructure()
     input_value = schema_lib.mark_missing(
         TripPlan.partial(
             place='San Francisco',
@@ -182,68 +212,65 @@ class CompleteStructureTest(unittest.TestCase):
             ],
         )
     )
-
     self.assertEqual(
         l.render(input_value=input_value).text,
         inspect.cleandoc("""
-            Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
+          Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
-            INSTRUCTIONS:
-            1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
-            2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
+          INSTRUCTIONS:
+          1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
+          2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
 
-            INPUT_OBJECT:
-              ```python
-              _Answer(
-                question='1 + 1 =',
-                answer=MISSING(int)
-              )
-              ```
+          INPUT_OBJECT:
+            ```python
+            Answer(
+              question='1 + 1 =',
+              answer=MISSING(int)
+            )
+            ```
 
-            OUTPUT_OBJECT:
-              ```python
-              _Answer(
-                question='1 + 1 =',
-                answer=2
-              )
-              ```
+          OUTPUT_OBJECT:
+            ```python
+            Answer(
+              question='1 + 1 =',
+              answer=2
+            )
+            ```
 
+          INPUT_OBJECT:
+            ```python
+            TripPlan(
+              place='San Francisco',
+              itineraries=[
+                Itinerary(
+                  day=1,
+                  # Type of itinerary.
+                  type=MISSING(Literal['daytime', 'nighttime']),
+                  activities=MISSING(list[Activity])
+                ),
+                Itinerary(
+                  day=2,
+                  # Type of itinerary.
+                  type=MISSING(Literal['daytime', 'nighttime']),
+                  activities=MISSING(list[Activity])
+                ),
+                Itinerary(
+                  day=3,
+                  # Type of itinerary.
+                  type=MISSING(Literal['daytime', 'nighttime']),
+                  activities=MISSING(list[Activity])
+                )
+              ]
+            )
+            ```
 
-            INPUT_OBJECT:
-              ```python
-              TripPlan(
-                place='San Francisco',
-                itineraries=[
-                  Itinerary(
-                    day=1,
-                    # Type of itinerary.
-                    type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity])
-                  ),
-                  Itinerary(
-                    day=2,
-                    # Type of itinerary.
-                    type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity])
-                  ),
-                  Itinerary(
-                    day=3,
-                    # Type of itinerary.
-                    type=MISSING(Literal['daytime', 'nighttime']),
-                    activities=MISSING(list[Activity])
-                  )
-                ]
-              )
-              ```
+          CLASS_DEFINITIONS:
+            ```python
+            class Activity:
+              description: str
+            ```
 
-            CLASS_DEFINITIONS:
-              ```python
-              class Activity:
-                description: str
-              ```
-
-            OUTPUT_OBJECT:
-            """),
+          OUTPUT_OBJECT:"""),
     )
 
   def test_invocation(self):
@@ -409,6 +436,22 @@ class CompleteStructureTest(unittest.TestCase):
             INSTRUCTIONS:
             1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
             2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
+
+            INPUT_OBJECT:
+              ```python
+              Answer(
+                question='1 + 1 =',
+                answer=MISSING(int)
+              )
+              ```
+
+            OUTPUT_OBJECT:
+              ```python
+              Answer(
+                question='1 + 1 =',
+                answer=2
+              )
+              ```
 
             INPUT_OBJECT:
               ```python

@@ -18,7 +18,6 @@ from typing import Annotated, Any, Type, Union
 import langfun.core as lf
 from langfun.core.structured import mapping
 from langfun.core.structured import schema as schema_lib
-import pyglove as pg
 
 
 @lf.use_init_args(['schema', 'default', 'examples'])
@@ -53,6 +52,15 @@ class QueryStructureJson(QueryStructure):
       INSTRUCTIONS:
         1. If the schema has `_type`, carry it over to the JSON output.
         2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
+
+      {{ nl_context_title }}:
+        1 + 1 =
+
+      {{ schema_title }}:
+        {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
+
+      {{ value_title}}:
+        {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
       """
 
   protocol = 'json'
@@ -65,6 +73,27 @@ class QueryStructurePython(QueryStructure):
 
   preamble = """
       Please respond to the last {{ nl_context_title }} with {{ value_title }} according to {{ schema_title }}.
+
+      INSTRUCTIONS:
+        1. Only response the required {{ value_title }} as illustrated by the given example.
+        2. Don't add any comments in the response.
+        3. {{ value_title }} must restrictly follow the {{ schema_title }}.
+
+      {{ nl_context_title }}:
+        1 + 1 =
+
+      {{ schema_title }}:
+        Answer
+
+        ```python
+        class Answer:
+          final_answer: int
+        ```
+
+      {{ value_title }}:
+        ```python
+        Answer(final_answer=2)
+        ```
       """
   protocol = 'python'
   schema_title = 'RESULT_TYPE'
@@ -80,19 +109,6 @@ def _query_structure_cls(
     return QueryStructurePython
   else:
     raise ValueError(f'Unknown protocol: {protocol!r}.')
-
-
-class _Answer(pg.Object):
-  final_answer: int
-
-
-DEFAULT_QUERY_EXAMPLES: list[mapping.MappingExample] = [
-    mapping.MappingExample(
-        nl_context='1 + 1 =',
-        schema=_Answer,
-        value=_Answer(final_answer=2),
-    ),
-]
 
 
 def query(
@@ -169,9 +185,6 @@ def query(
   # Autofix is not supported for JSON yet.
   if protocol == 'json':
     autofix = 0
-
-  if examples is None:
-    examples = DEFAULT_QUERY_EXAMPLES
 
   t = _query_structure_cls(protocol)(schema, default=default, examples=examples)
   if isinstance(user_prompt, lf.Template):
