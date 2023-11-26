@@ -256,8 +256,8 @@ def class_dependencies(
 
       # Check subclasses if available.
       if include_subclasses:
-        for _, cls in pg.object_utils.registered_types():
-          if issubclass(cls, vs.cls) and cls not in dependencies:
+        for cls in vs.cls.__subclasses__():
+          if cls not in dependencies:
             _fill_dependencies(pg.typing.Object(cls), include_subclasses=True)
 
     if isinstance(vs, pg.typing.List):
