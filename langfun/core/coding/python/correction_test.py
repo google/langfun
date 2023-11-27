@@ -155,6 +155,29 @@ class CorrectTest(unittest.TestCase):
           max_attempts=1,
       )
 
+  def test_correct_with_completion_error(self):
+    with self.assertRaisesRegex(
+        errors.CodeError, 'Cannot correct code after 1 attempts'
+    ):
+      correction.correct(
+          inspect.cleandoc("""
+              x = 1,
+              y = x + 2
+              z = x + y
+              """),
+          (
+              'IndentationError: unexpected indent (<unknown>, line 3)\n'
+              '  z = x + y'
+          ),
+          lm=fake.StaticSequence([
+              inspect.cleandoc("""
+                  CodeCorrection(
+                      corrected_code='x = 1,\\ny = x + 2\\nz = x + y',
+                  )
+                  """),
+          ]),
+      )
+
 
 if __name__ == '__main__':
   unittest.main()

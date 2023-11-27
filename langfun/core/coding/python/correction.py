@@ -115,23 +115,35 @@ def run_with_correction(
   ]
 
   history = []
+  num_attempts = 0
   for _ in range(max_attempts):
     correction = CodeCorrection.partial(
         CodeWithError(code=code, error=error), history
     )
-    # Disable autofix for code correction to avoid recursion.
-    correction = completion.complete(
-        correction, lm=lm, examples=examples, autofix=0
-    )
-    history.append(CodeWithError(code=code, error=error))
+    num_attempts += 1
 
+    # Catch completion error when the LM could not formulate a completion
+    # structure.
+    try:
+      # Disable autofix for code correction to avoid recursion.
+      correction = completion.complete(
+          correction, lm=lm, examples=examples, autofix=0
+      )
+    except errors.CodeError:
+      break
+
+    history.append(CodeWithError(code=code, error=error))
     code = correction.corrected_code
     result, error = result_and_error(code)
     if error is None:
       return (result, code) if returns_code else result
 
   raise errors.CodeError(
-      code, RuntimeError(f"Cannot correct code after {max_attempts} attempts.")
+      code,
+      RuntimeError(
+          f"Cannot correct code after {num_attempts} attempts. "
+          f"Last error: {error}."
+      ),
   )
 
 
