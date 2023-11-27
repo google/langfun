@@ -1,6 +1,6 @@
 jinja2>=3.1.2
 openai==0.27.2
-pyglove>=0.4.4.dev20231017
+pyglove>=0.4.4.dev20231127
 requests>=2.31.0
 termcolor==1.1.0
 tqdm>=4.64.1
