@@ -77,7 +77,7 @@ class QueryStructurePython(QueryStructure):
       INSTRUCTIONS:
         1. Only response the required {{ value_title }} as illustrated by the given example.
         2. Don't add any comments in the response.
-        3. {{ value_title }} must restrictly follow the {{ schema_title }}.
+        3. {{ value_title }} must strictly follow the {{ schema_title }}.
 
       {{ nl_context_title }}:
         1 + 1 =

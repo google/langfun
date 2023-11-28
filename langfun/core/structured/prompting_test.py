@@ -50,7 +50,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             INSTRUCTIONS:
               1. Only response the required RESULT_OBJECT as illustrated by the given example.
               2. Don't add any comments in the response.
-              3. RESULT_OBJECT must restrictly follow the RESULT_TYPE.
+              3. RESULT_OBJECT must strictly follow the RESULT_TYPE.
 
             USER_REQUEST:
               1 + 1 =
@@ -96,7 +96,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             INSTRUCTIONS:
               1. Only response the required RESULT_OBJECT as illustrated by the given example.
               2. Don't add any comments in the response.
-              3. RESULT_OBJECT must restrictly follow the RESULT_TYPE.
+              3. RESULT_OBJECT must strictly follow the RESULT_TYPE.
 
             USER_REQUEST:
               1 + 1 =
