@@ -125,21 +125,24 @@ class Matching(base.Evaluation):
         ),
     }
 
-  def _completion_status(self) -> str:
+  def _completion_status(self, run_status: str) -> str:
+    assert self.result is not None
+    m = self.result.metrics
     return (
-        'COMPLETED: Matches=%.2f%% (%d/%d) Mismatches=%.2f%% (%d/%d) '
+        'COMPLETED(%s): Matches=%.2f%% (%d/%d) Mismatches=%.2f%% (%d/%d) '
         'Failures=%.2f%% (%d/%d)'
-        ) % (
-            self.match_rate * 100,
-            self.num_matches,
-            self.num_completed,
-            self.mismatch_rate * 100,
-            self.num_mismatches,
-            self.num_completed,
-            self.failure_rate * 100,
-            self.num_failures,
-            self.num_completed,
-        )
+    ) % (
+        run_status,
+        m.match_rate * 100,
+        m.num_matches,
+        m.total,
+        m.mismatch_rate * 100,
+        m.num_mismatches,
+        m.total,
+        m.failure_rate * 100,
+        m.failures,
+        m.total,
+    )
 
   def summarize(self) -> pg.Dict:
     result = super().summarize()
@@ -151,43 +154,49 @@ class Matching(base.Evaluation):
     )
     return result
 
-  def save(self) -> None:  # pylint: disable=redefined-builtin
-    super().save()
+  def save(
+      self, definition: bool = True, result: bool = True, report: bool = True
+  ) -> None:
+    super().save(definition, result, report)
 
-    def force_dict(v):
-      return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
+    if result:
 
-    # Save matches.
-    pg.save(
-        [
-            # We force the output to be dict as its type may be defined
-            # within functors which could be deserialized.
-            pg.Dict(input=input, output=force_dict(output))
-            for input, output, _ in self.matches
-        ],
-        os.path.join(self.dir, Matching.MATCHES_JSON),
-    )
-    pg.save(
-        self._html([self._render_result, self._render_matches]),
-        os.path.join(self.dir, Matching.MATCHES_HTML),
-        file_format='txt',
-    )
+      def force_dict(v):
+        return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
 
-    # Save mismatches.
-    pg.save(
-        [
-            # We force the output to be dict as its type may be defined
-            # within functors which could be deserialized.
-            pg.Dict(input=input, output=force_dict(output))
-            for input, output, _ in self.mismatches
-        ],
-        os.path.join(self.dir, Matching.MISMATCHES_JSON),
-    )
-    pg.save(
-        self._html([self._render_result, self._render_mismatches]),
-        os.path.join(self.dir, Matching.MISMATCHES_HTML),
-        file_format='txt',
-    )
+      # Save matches.
+      pg.save(
+          [
+              # We force the output to be dict as its type may be defined
+              # within functors which could be deserialized.
+              pg.Dict(input=input, output=force_dict(output))
+              for input, output, _ in self.matches
+          ],
+          os.path.join(self.dir, Matching.MATCHES_JSON),
+      )
+
+      # Save mismatches.
+      pg.save(
+          [
+              # We force the output to be dict as its type may be defined
+              # within functors which could be deserialized.
+              pg.Dict(input=input, output=force_dict(output))
+              for input, output, _ in self.mismatches
+          ],
+          os.path.join(self.dir, Matching.MISMATCHES_JSON),
+      )
+
+    if report:
+      pg.save(
+          self._html([self._render_result, self._render_matches]),
+          os.path.join(self.dir, Matching.MATCHES_HTML),
+          file_format='txt',
+      )
+      pg.save(
+          self._html([self._render_result, self._render_mismatches]),
+          os.path.join(self.dir, Matching.MISMATCHES_HTML),
+          file_format='txt',
+      )
 
   def _render_result_header(self, s: io.StringIO):
     super()._render_result_header(s)
@@ -212,6 +221,32 @@ class Matching(base.Evaluation):
             % (self.matches_link, self.num_matches, self.num_completed),
         )
     )
+
+  def _render_metric(self, s: io.StringIO) -> None:
+    """Renders metrics in HTML."""
+    assert self.result is not None
+    m = self.result.metrics
+    s.write(
+        '<a title="Matches (%d/%d)" href="%s" style="color:green">%s</a>'
+        % (
+            m.num_matches,
+            m.total,
+            self.matches_link,
+            '%.2f%% ' % (m.match_rate * 100),
+        )
+    )
+    s.write(' | ')
+    s.write(
+        '<a title="Mismatches (%d/%d)" href="%s" style="color:orange">%s</a>'
+        % (
+            m.num_mismatches,
+            m.total,
+            self.mismatches_link,
+            '%.2f%% ' % (m.mismatch_rate * 100),
+        )
+    )
+    s.write(' | ')
+    super()._render_metric(s)
 
   def _render_matches(self, s: io.StringIO) -> None:
     """Formats the matched cases into html."""

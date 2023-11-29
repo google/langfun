@@ -86,19 +86,22 @@ class Scoring(base.Evaluation):
         ),
     }
 
-  def _completion_status(self) -> str:
+  def _completion_status(self, run_status: str) -> str:
+    assert self.result is not None
+    m = self.result.metrics
     return (
-        'COMPLETED: AvgScore=%f Scored=%.2f%% (%d/%d) '
+        'COMPLETED(%s): AvgScore=%f Scored=%.2f%% (%d/%d) '
         'Failures=%.2f%% (%d/%d)'
-        ) % (
-            self.avg_score,
-            self.score_rate * 100,
-            self.num_scored,
-            self.num_completed,
-            self.failure_rate * 100,
-            self.num_failures,
-            self.num_completed,
-        )
+    ) % (
+        run_status,
+        m.avg_score,
+        m.score_rate * 100,
+        m.num_scored,
+        m.total,
+        m.failure_rate * 100,
+        m.failures,
+        m.total,
+    )
 
   def summarize(self) -> pg.Dict:
     result = super().summarize()
@@ -109,28 +112,33 @@ class Scoring(base.Evaluation):
     )
     return result
 
-  def save(self) -> None:  # pylint: disable=redefined-builtin
-    super().save()
+  def save(
+      self, definition: bool = True, result: bool = True, report: bool = True
+  ) -> None:
+    super().save(definition, result, report)
 
-    def force_dict(v):
-      return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
+    if result:
 
-    # Save scored.
-    pg.save(
-        [
-            # We force the output to be dict as its type may be defined
-            # within functors which could be deserialized.
-            pg.Dict(input=input, output=force_dict(output), score=score)
-            for input, output, score, _ in self.scored
-        ],
-        os.path.join(self.dir, Scoring.SCORED_JSON),
-    )
+      def force_dict(v):
+        return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
 
-    pg.save(
-        self._html([self._render_result, self._render_scored]),
-        os.path.join(self.dir, Scoring.SCORED_HTML),
-        file_format='txt',
-    )
+      # Save scored.
+      pg.save(
+          [
+              # We force the output to be dict as its type may be defined
+              # within functors which could be deserialized.
+              pg.Dict(input=input, output=force_dict(output), score=score)
+              for input, output, score, _ in self.scored
+          ],
+          os.path.join(self.dir, Scoring.SCORED_JSON),
+      )
+
+    if report:
+      pg.save(
+          self._html([self._render_result, self._render_scored]),
+          os.path.join(self.dir, Scoring.SCORED_HTML),
+          file_format='txt',
+      )
 
   def _render_result_header(self, s: io.StringIO):
     super()._render_result_header(s)
@@ -150,6 +158,22 @@ class Scoring(base.Evaluation):
             % (self.scored_link, self.num_scored, self.num_completed),
         )
     )
+
+  def _render_metric(self, s: io.StringIO) -> None:
+    """Renders metrics in HTML."""
+    assert self.result is not None
+    m = self.result.metrics
+    s.write(
+        '<a title="Average score (%d/%d)" href="%s" style="color:green">%s</a>'
+        % (
+            m.num_scored,
+            m.total,
+            self.scored_link,
+            '%.2f%%' % (m.score_rate * 100),
+        )
+    )
+    s.write(' | ')
+    super()._render_metric(s)
 
   def _render_scored(self, s: io.StringIO) -> None:
     """Formats the matched cases into html."""

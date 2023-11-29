@@ -169,7 +169,7 @@ def with_retry(
 
 def concurrent_execute(
     func: Callable[[Any], Any],
-    parallel_inputs: list[Any],
+    parallel_inputs: Iterable[Any],
     *,
     executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,

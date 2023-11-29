@@ -90,8 +90,9 @@ class MatchingTest(unittest.TestCase):
     ])
 
     s = eval_set('match_run_test', 'query', schema_fn=answer_schema(), lm=lm)
+    s.run()
     self.assertEqual(
-        s.run(),
+        s.result,
         dict(
             experiment_setup=dict(
                 id='match_run_test',
@@ -153,6 +154,9 @@ class MatchingTest(unittest.TestCase):
                 s.dir, matching.Matching.FAILURES_JSON
             )
         )
+    )
+    self.assertTrue(
+        os.path.exists(os.path.join(s.root_dir, matching.Matching.SUMMARY_HTML))
     )
     self.assertTrue(
         os.path.exists(

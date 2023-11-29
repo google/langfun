@@ -21,7 +21,10 @@ import hashlib
 import inspect
 import io
 import os
-from typing import Annotated, Any, Callable, Literal, Optional
+import re
+import threading
+import time
+from typing import Annotated, Any, Callable, Iterator, Literal, Optional, Sequence, Type, Union
 
 import langfun.core as lf
 from langfun.core.llms.cache import in_memory
@@ -36,6 +39,7 @@ class Evaluable(lf.Component):
   RESULT_JSON = 'result.json'
   FAILURES_JSON = 'failures.json'
   INDEX_HTML = 'index.html'
+  SUMMARY_HTML = 'summary.html'
 
   id: Annotated[
       str,
@@ -70,6 +74,17 @@ class Evaluable(lf.Component):
     if self.dir is None:
       return None
     return self.link(os.path.join(self.dir, Evaluable.INDEX_HTML))
+
+  def summary(self, pivot_field: str = 'lm') -> 'Summary':
+    """Returns a summary for all child evaluations.."""
+    return Summary([pg.Ref(x) for x in self.leaf_nodes], pivot_field)
+
+  @property
+  def summary_link(self) -> str | None:
+    """Returns the summary page."""
+    if self.root_dir is None:
+      return None
+    return self.link(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
 
   def _on_bound(self):
     super()._on_bound()
@@ -179,18 +194,24 @@ class Evaluable(lf.Component):
       filter: Callable[['Evaluable'], bool] | None = None,  # pylint: disable=redefined-builtin
       start: int = 0,
       end: int | None = None,
+      rerun: bool = False,
       save: bool = True,
       debug: bool | lf.LMDebugMode = False,
       dryrun: bool = False,
       verbose: bool = False,
       show_progress: bool | int = True,
       label: str | None = None,
+      summary: bool = True,
+      pivot_field: str = 'lm',
       from_root: bool = True,
       **kwargs,
-  ) -> pg.Dict:
+  ) -> Union['Summary', pg.Dict]:
     """Run the evaluation, which fills and returns the result."""
     if dryrun:
       self.dryrun(filter=filter, verbose=False, debug=debug)
+
+    summary = self.summary(pivot_field) if from_root and summary else None
+    should_save = bool(save and self.dir)
 
     if self.is_leaf:
       if isinstance(show_progress, bool):
@@ -202,30 +223,60 @@ class Evaluable(lf.Component):
       else:
         progress_bar = show_progress
 
-      self._run(
-          start=start,
-          end=end,
-          debug=debug,
-          dryrun=dryrun,
-          verbose=verbose,
-          progress_bar=progress_bar,
-          label=label,
-          **kwargs,
-      )
-      if save and self.dir:
+      run_status = 'FIRST_RUN'
+      if self.dir and pg.io.path_exists(
+          os.path.join(self.dir, Evaluable.EXPERIMENT_JSON)
+      ):
         if show_progress:
           lf.concurrent.ProgressBar.update(
-              progress_bar, postfix='SAVING RESULTS...', color='yellow')
+              progress_bar, postfix='LOADING SAVED RESULTS...', color='yellow'
+          )
+        if self.try_load_result():
+          run_status = 'CACHED'
 
-        # Save evaluation results.
-        self.save()
+      if rerun and self.result:
+        self._result = None
+        run_status = 'RERUN'
 
+      if self.result:
         if show_progress:
           lf.concurrent.ProgressBar.update(
-              progress_bar,
-              postfix=self._completion_status(),
-              color='green')
+              progress_bar, delta=self.num_examples
+          )
+      else:
+        self._run(
+            start=start,
+            end=end,
+            debug=debug,
+            dryrun=dryrun,
+            verbose=verbose,
+            progress_bar=progress_bar,
+            label=label,
+            **kwargs,
+        )
+
+        if should_save:
+          if show_progress:
+            lf.concurrent.ProgressBar.update(
+                progress_bar, postfix='SAVING RESULTS...', color='yellow'
+            )
+
+          # Save evaluation results.
+          self.save()
+
+          # Save summary if present.
+          if summary:
+            summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
+
+      if show_progress:
+        lf.concurrent.ProgressBar.update(
+            progress_bar,
+            postfix=self._completion_status(run_status),
+            color='green',
+        )
     else:
+      assert from_root
+      summary_lock = threading.Lock()
       def _run_group(arg: tuple[int, list[_LeafNode]]) -> None:
         overview_bar, leaf_group = arg
         for leaf in leaf_group:
@@ -233,14 +284,22 @@ class Evaluable(lf.Component):
             leaf.node.run(
                 start=start,
                 end=end,
+                rerun=rerun,
                 save=save,
                 debug=debug,
                 dryrun=False,
                 verbose=verbose,
                 show_progress=leaf.progress_bar,
+                summary=False,
                 from_root=False,
                 **kwargs,
             )
+            if should_save and summary:
+              with summary_lock:
+                summary.save(
+                    os.path.join(self.root_dir, Evaluable.SUMMARY_HTML)
+                )
+
           # Signal sub-eval complete by setting the color green.
           lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
           lf.concurrent.ProgressBar.update(overview_bar, 1, {
@@ -287,8 +346,21 @@ class Evaluable(lf.Component):
 
           for node in self.nonleaf_nodes:
             node._result = {c.id: c.result for c in node.children}  # pylint: disable=protected-access
-            if save and self.dir:
-              node.save()
+            if should_save:
+              node.save(result=False, report=False)
+
+          if should_save and summary:
+            lf.concurrent.ProgressBar.update(
+                overview_bar, postfix='FINALIZING SUMMARY...'
+            )
+
+            summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
+
+            lf.console.write(
+                f'({self.summary_link})',
+                color='magenta',
+                styles=['underline'],
+            )
 
           # Signal all task completed by making the bar green.
           lf.concurrent.ProgressBar.update(
@@ -300,14 +372,7 @@ class Evaluable(lf.Component):
           # for leaf in leaf_nodes:
           #   lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
           lf.concurrent.ProgressBar.uninstall(overview_bar)
-
-    if from_root and save and self.dir:
-      lf.console.write(
-          f'({self.index_link})',
-          color='magenta',
-          styles=['underline'],
-      )
-    return self.result
+    return summary or self.result
 
   @abc.abstractmethod
   def _run(
@@ -325,7 +390,7 @@ class Evaluable(lf.Component):
     """Run the evaluate and fill `self.result`. Subclass to implement."""
 
   @abc.abstractmethod
-  def _completion_status(self) -> str:
+  def _completion_status(self, run_status: str) -> str:
     """Returns the status for progress bar when evaluation completes."""
 
   @property
@@ -349,23 +414,16 @@ class Evaluable(lf.Component):
     with pg.catch_errors(FileNotFoundError):
       self._result = pg.load(os.path.join(self.dir, Evaluation.RESULT_JSON))
 
-  def save(self):
+  def save(
+      self, definition: bool = True, result: bool = True, report: bool = True
+  ) -> None:
     # Save experiment definition.
-    pg.save(self, os.path.join(self.dir, Evaluable.EXPERIMENT_JSON))
+    if definition:
+      pg.save(self, os.path.join(self.dir, Evaluable.EXPERIMENT_JSON))
 
     # Save evaluation result.
-    pg.save(self.result, os.path.join(self.dir, Evaluation.RESULT_JSON))
-
-    # Save index page.
-    pg.save(
-        self._html(
-            [self._render_index_page],
-            include_def=True,
-            include_cache_stats=True,
-        ),
-        os.path.join(self.dir, Evaluable.INDEX_HTML),
-        file_format='txt',
-    )
+    if result:
+      pg.save(self.result, os.path.join(self.dir, Evaluation.RESULT_JSON))
 
   def _html(
       self,
@@ -400,17 +458,16 @@ class Evaluable(lf.Component):
         """)
 
   def _render_navbar(self, s: io.StringIO) -> None:
-    current = self
-    links = []
-    while current is not None and current.index_link is not None:
-      links.insert(0, f'<a href="{current.index_link}">{current.id}</a>')
-      current = current.parent
-
+    links = [
+        f'<a href="{self.summary_link}">Summary</a>',
+        f'<a href="{self.index_link}">{self.id}</a>',
+    ]
     for i, link in enumerate(links):
       s.write(link)
       if i != len(links) - 1:
         # Add a right triangle symbol.
         s.write(' &#9656 ')
+    s.write(f' [<a href="{self.link(self.dir)}">Directory</a>]')
 
   def _render_index_page(self, s: io.StringIO) -> None:
     self._render_result(s)
@@ -470,6 +527,31 @@ class Evaluable(lf.Component):
         s.write('</div>')
       s.write('</div>')
 
+  @classmethod
+  def from_dir(
+      cls, maybe_dir: str, load_result: bool = True
+  ) -> Optional['Evaluable']:
+    exp_json = os.path.join(maybe_dir, Evaluable.EXPERIMENT_JSON)
+    if not pg.io.path_exists(exp_json):
+      return None
+
+    experiment: Evaluable = pg.load(exp_json)
+    experiment.rebind(
+        root_dir=os.path.abspath(os.path.join(maybe_dir, os.path.pardir))
+    )
+    if load_result:
+      experiment.try_load_result()
+    return experiment
+
+  def try_load_result(self) -> bool:
+    """Try load result."""
+    if self.result is None:
+      result_json = os.path.join(self.dir, Evaluable.RESULT_JSON)
+      if pg.io.path_exists(result_json):
+        self._result = pg.load(result_json)
+        return True
+    return False
+
 
 @dataclasses.dataclass
 class _LeafNode:
@@ -502,8 +584,8 @@ class Suite(Evaluable):
   def _run(self, *args, **kwargs) -> None:
     raise AssertionError('Shall not trigger.')
 
-  def _completion_status(self) -> str:
-    return 'COMPLETED'
+  def _completion_status(self, run_status: str) -> str:
+    return f'COMPLETED({run_status})'
 
 
 class Evaluation(Evaluable):
@@ -959,14 +1041,17 @@ class Evaluation(Evaluable):
         ),
     }
 
-  def _completion_status(self) -> str:
-    return 'COMPLETED: Successes=%.2f%% (%d/%d) Failures=%.2f%% (%d/%d)' % (
-        (1 - self.failure_rate) * 100,
-        self.num_completed - self.num_failures,
-        self.num_completed,
-        self.failure_rate * 100,
-        self.num_failures,
-        self.num_completed,
+  def _completion_status(self, run_status: str) -> str:
+    assert self.result is not None
+    m = self.result.metrics
+    return 'COMPLETED(%s): Successes=%.2f%% (%d/%d) Failures=%.2f%% (%d/%d)' % (
+        run_status,
+        (1 - m.failure_rate) * 100,
+        m.total - m.failures,
+        m.total,
+        m.failure_rate * 100,
+        m.failures,
+        m.total,
     )
 
   def summarize(self) -> pg.Dict:
@@ -998,6 +1083,43 @@ class Evaluation(Evaluable):
     )
     return result
 
+  def summarize_html(self) -> str:
+    s = io.StringIO()
+    definition = self.format(compact=False, hide_default_values=True).replace(
+        '"', '&quot;'
+    )
+    s.write('<div>')
+    s.write('<table><tr><td>')
+    if self.result is None:
+      s.write(f'<a target="_blank" title="{definition}" ')
+      s.write(f'href="{self.link(self.dir)}">{self.hash}</a>')
+      s.write('</td></tr>')
+      s.write('<tr><td>')
+      s.write('<span style="color: gray">(IN-PROGRESS...)</span>')
+    else:
+      s.write(f'<a target="_blank" title="{definition}" ')
+      s.write(f'href="{self.index_link}">{self.hash}</a>')
+      s.write('</td></tr>')
+      s.write('<tr><td>')
+      self._render_metric(s)
+    s.write('</td></tr></table>')
+    s.write('</div>')
+    return s.getvalue()
+
+  def _render_metric(self, s: io.StringIO) -> None:
+    """Renders metrics in HTML."""
+    assert self.result is not None
+    m = self.result.metrics
+    s.write(
+        '<a title="Failures (%d/%d)" href="%s" style="color:red">%s</a>'
+        % (
+            m.failures,
+            m.total,
+            self.failures_link,
+            '%.2f%% ' % (m.failure_rate * 100),
+        )
+    )
+
   def audit(self, example: Any, output: Any, message: lf.Message) -> None:
     """Audits the example against the output. Subclasses should override.
 
@@ -1010,23 +1132,39 @@ class Evaluation(Evaluable):
         trace the LM input, response and parsed structure.
     """
 
-  def save(self) -> None:
+  def save(
+      self, definition: bool = True, result: bool = True, report: bool = True
+  ) -> None:
     """Save evaluation details."""
-    super().save()
+    super().save(definition, result, report)
 
-    # Save failures.
-    pg.save(
-        [
-            pg.Dict(input=input, error=lf.text_formatting.decolored(str(error)))
-            for input, error in self.failures
-        ],
-        os.path.join(self.dir, Evaluation.FAILURES_JSON),
-    )
-    pg.save(
-        self._html([self._render_result, self._render_failures]),
-        os.path.join(self.dir, Evaluation.FAILURES_HTML),
-        file_format='txt',
-    )
+    if report:
+      # Save index page.
+      pg.save(
+          self._html(
+              [self._render_index_page],
+              include_def=True,
+              include_cache_stats=True,
+          ),
+          os.path.join(self.dir, Evaluable.INDEX_HTML),
+          file_format='txt',
+      )
+
+      # Save failures.
+      pg.save(
+          [
+              pg.Dict(
+                  input=input, error=lf.text_formatting.decolored(str(error))
+              )
+              for input, error in self.failures
+          ],
+          os.path.join(self.dir, Evaluation.FAILURES_JSON),
+      )
+      pg.save(
+          self._html([self._render_result, self._render_failures]),
+          os.path.join(self.dir, Evaluation.FAILURES_HTML),
+          file_format='txt',
+      )
 
   def _render_result_header(self, s: io.StringIO) -> None:
     s.write('<td>Method</td>')
@@ -1123,3 +1261,419 @@ def as_inputs(examples: list[Any]) -> list[Any]:
 def load(eval_dir: str) -> Evaluation:
   """Loads evaluation from a directory."""
   return pg.load(os.path.join(eval_dir, Evaluable.EXPERIMENT_JSON))
+
+
+#
+# Continuous summarization for evaluations.
+#
+
+
+class Summary(pg.Object):
+  """Summary for a list of evaluations."""
+
+  evaluations: Annotated[
+      list[Evaluation], 'Evaluations included in current summary.'
+  ]
+
+  pivot_field: Annotated[
+      str, 'Filed name for pivoting the table for summary.'
+  ] = 'lm'
+
+  def tasks(self) -> list[Type[Evaluation]]:
+    """All tasks in the summary."""
+    return list(set([e.__class__ for e in self.evaluations]))
+
+  def __len__(self):
+    return len(self.evaluations)
+
+  @property
+  def all_completed(self) -> bool:
+    """Returns True if all evaluations are completed."""
+    return all(e.result is not None for e in self.evaluations)
+
+  def select(
+      self,
+      task: Type[Evaluation] | tuple[Type[Evaluation], ...] = Evaluation,
+      lm: Union[
+          lf.LanguageModel,
+          Type[lf.LanguageModel],
+          tuple[lf.LanguageModel | Type[lf.LanguageModel], ...],
+      ] = lf.LanguageModel,
+      method: Union[str, tuple[str], None] = None,
+      schema_fn: Union[pg.Functor, tuple[pg.Functor], None] = None,
+      completed: bool | None = None,
+      pivot_field: str | None = None,
+  ) -> 'Summary':
+    """Creates a summary by selecting evaluations with conditions."""
+
+    def _match_lm(lm, evaluation):
+      if isinstance(lm, lf.LanguageModel):
+        return evaluation.lm.model_id == lm.model_id
+      elif inspect.isclass(lm) and issubclass(lm, lf.LanguageModel):
+        return isinstance(evaluation.lm, lm)
+      elif isinstance(lm, tuple):
+        return any(_match_lm(x, evaluation) for x in lm)
+      return False
+
+    def _match_method(method, evaluation):
+      if method is None:
+        return True
+      if isinstance(method, str):
+        return method == evaluation.method
+      elif isinstance(method, tuple):
+        return evaluation.method in method
+      return False
+
+    def _match_schema(schema_fn, evaluation):
+      if schema_fn is None:
+        return True
+      if isinstance(schema_fn, pg.Functor):
+        return pg.eq(schema_fn, evaluation.schema_fn)
+      elif isinstance(schema_fn, tuple):
+        return any(_match_schema(x, evaluation) for x in schema_fn)
+      return False
+
+    def _match_completed(completed, evaluation):
+      if completed is None:
+        return True
+      elif completed:
+        return evaluation.result is not None
+      else:
+        return evaluation.result is None
+
+    selected = [
+        pg.Ref(e)
+        for e in self.evaluations
+        if (
+            isinstance(e, task)
+            and _match_lm(lm, e)
+            and _match_method(method, e)
+            and _match_schema(schema_fn, e)
+            and _match_completed(completed, e)
+        )
+    ]
+    return Summary(
+        evaluations=selected, pivot_field=pivot_field or self.pivot_field
+    )
+
+  class Table(pg.Object):
+    """A pivot table for view evaluations."""
+
+    class Row(pg.Object):
+      descriptor: dict[str, Any]
+      data: list[Evaluation | None]
+
+    rows: list[Row]
+    cols: list[Any]  # Present values for the pivot field.
+    pivot_field: str
+    descriptor_keys: list[str]
+
+    def html(self) -> str:
+      fv = lambda x: pg.format(x, verbose=False, hide_default_values=True)
+      s = io.StringIO()
+      s.write('<table style="border:1px solid;">')
+      s.write('<tr style="font-weight: bold;">')
+      for h in self.descriptor_keys:
+        s.write(f'<td style="padding: 5px">{h}</td>')
+      for c in self.cols:
+        s.write(f'<td style="padding: 5px">{self.pivot_field}={fv(c)}</td>')
+      s.write('</tr>')
+      for i, row in enumerate(self.rows):
+        bgcolor = 'white' if i % 2 == 1 else '#EEEEEE'
+        s.write(f'<tr style="background-color: {bgcolor}">')
+        for k in self.descriptor_keys:
+          v = row.descriptor.get(k)
+          s.write(f'<td style="padding: 5px">{fv(v)}</td>')
+        for e in row.data:
+          s.write('<td style="padding: 5px;">')
+          if e is None:
+            s.write('<span style="color: gray">N/A<span>')
+          else:
+            s.write(e.summarize_html())
+          s.write('</td>')
+        s.write('</tr>')
+      s.write('</table>')
+      return s.getvalue()
+
+    def _repr_html_(self) -> str:
+      return self.html()
+
+    @classmethod
+    def from_evaluations(
+        cls, evaluations: list['Summary.Entry'], pivot_field: str = 'lm'
+    ) -> 'Summary.Table':
+      """Creates a table from a list of evaluations."""
+
+      # Introduce a container for enabling symbolic comparison/hashing
+      # for langfun components which disable symbolic comparison by default.
+      class SymbolicComparable(pg.Object):
+        value: Any
+
+        def __lt__(self, other) -> bool:
+          return pg.lt(self.value, other.value)
+
+        def __gt__(self, other) -> bool:
+          return pg.gt(self.value, other.value)
+
+      # Figuring out the values for pivot field as columns.
+      cols = set()
+      nonpivot_values = collections.defaultdict(set)
+      for e in evaluations:
+        for k, v in e.sym_init_args.items():
+          if pivot_field == k:
+            cols.add(SymbolicComparable(v))
+          elif k not in ('id', 'groundtruth'):
+            nonpivot_values[k].add(SymbolicComparable(v))
+
+      cols = sorted(cols)
+
+      # Figure out the row descriptor keys by looking at fields whose values
+      # have differences.
+      descriptor_keys = set()
+      for k, v in nonpivot_values.items():
+        if len(v) > 1:
+          descriptor_keys.add(k)
+
+      descriptor_keys = sorted(descriptor_keys)
+      groups = collections.defaultdict(dict)
+      for e in evaluations:
+        descriptor_values = tuple(
+            [SymbolicComparable(e.sym_inferred(k)) for k in descriptor_keys]
+        )
+        groups[descriptor_values][
+            SymbolicComparable(e.sym_inferred(pivot_field))
+        ] = pg.Ref(e)
+      rows = []
+      for descriptor_values, pivoted_evaluations in groups.items():
+        descriptor = {
+            k: v.value for k, v in zip(descriptor_keys, descriptor_values)
+        }
+        data = pg.List([pivoted_evaluations.get(c) for c in cols])
+        rows.append(Summary.Table.Row(descriptor=descriptor, data=data))
+      return cls(
+          cols=[c.value for c in cols],
+          rows=rows,
+          pivot_field=pivot_field,
+          descriptor_keys=list(descriptor_keys),
+      )
+
+  def html(self, pivot_field: str | None = None) -> str:
+    """Renders the summary in HTML."""
+    pivot_field = pivot_field or self.pivot_field
+    s = io.StringIO()
+    s.write('<html><body>')
+    for task in self.tasks():
+      s.write('<div>')
+      s.write(f'<h2>{task.__name__}</h2>')
+      table = Summary.Table.from_evaluations(
+          self.select(task=task).evaluations, pivot_field
+      )
+      s.write(table.html())
+      s.write('</div>')
+    s.write('</body></html>')
+    return s.getvalue()
+
+  def _repr_html_(self) -> str:
+    return self.html()
+
+  def save(self, file: str, pivot_field: str | None = None) -> None:
+    pg.save(self.html(pivot_field), file, file_format='txt')
+
+  @classmethod
+  def from_dirs(
+      cls,
+      root_dir: str | Sequence[str],
+      filter: Union[str, Sequence[str], None] = None,  # pylint: disable=redefined-builtin
+  ) -> 'Summary':
+    """Creates a summary from one or more root directories."""
+    return cls(
+        [
+            x
+            for x in lf.concurrent_execute(
+                Evaluable.from_dir,
+                [
+                    os.path.join(root_dir, i)
+                    for i in _iter_dirs(root_dir, filter)
+                ],
+            )
+            if x is not None and x.is_leaf
+        ]
+    )
+
+  class MonitorResult:
+    """Async result for monitored summary."""
+
+    def __init__(self, context, thread):
+      self._context = context
+      self._thread = thread
+
+    @property
+    def summary(self) -> Optional['Summary']:
+      """Returns the most recent summary."""
+      return self._context.summary
+
+    @property
+    def completed(self) -> bool:
+      """Returns True if all evaluations have result."""
+      return self._context.completed
+
+    def stop(self) -> 'Summary':
+      """Signal and wait the monitor thread to stop."""
+      self._context.stopping = True
+      return self.join()
+
+    def join(self) -> 'Summary':
+      """Waits the monitor thread to complete."""
+      self._thread.join()
+      summary = self.summary
+      assert summary is not None
+      return summary
+
+  @classmethod
+  def monitor_async(
+      cls,
+      root_dir: str | Sequence[str],
+      save_as: str | None = None,
+      filter: Union[str, Sequence[str], None] = None,  # pylint: disable=redefined-builtin
+      pivot_field: str = 'lm',
+      expect_new_dirs: bool = False,
+      scan_interval: int = 60,
+      refresh_when_stop: bool = True,
+  ) -> MonitorResult:
+    """Monitor one or more root directories and save summary in period."""
+    context = pg.Dict(stopping=False, completed=False, summary=None)
+
+    def _monitor():
+      dir_to_eval = {}
+
+      def load_evaluation(maybe_dir):
+        e = dir_to_eval.get(maybe_dir)
+        updated = False
+        if not e:
+          e = Evaluable.from_dir(maybe_dir, load_result=False)
+          dir_to_eval[maybe_dir] = e
+          updated = True
+
+        if e and e.is_leaf:
+          updated = e.try_load_result()
+        return updated
+
+      def refresh_summary():
+        updated = any(
+            lf.concurrent_execute(load_evaluation, _iter_dirs(root_dir, filter))
+        )
+        evaluations = [
+            pg.Ref(e) for e in dir_to_eval.values() if e and e.is_leaf
+        ]
+        context.summary = Summary(
+            evaluations=evaluations, pivot_field=pivot_field
+        )
+        if updated:
+          if lf.console.under_notebook():
+            lf.console.display(context.summary, clear=True)
+          if save_as:
+            context.summary.save(save_as)
+        return context.summary.all_completed
+
+      while not context.stopping:
+        completed = refresh_summary()
+        if not expect_new_dirs and completed:
+          context.completed = True
+          break
+
+        # Be responsive to stopping signal.
+        idle_start = time.time()
+        while time.time() - idle_start < scan_interval:
+          if context.stopping:
+            break
+          time.sleep(1)
+
+      if context.stopping and refresh_when_stop:
+        refresh_summary()
+
+    thread = threading.Thread(target=_monitor)
+    thread.start()
+    return Summary.MonitorResult(context, thread)
+
+  @classmethod
+  def monitor(
+      cls,
+      root_dir: str | Sequence[str],
+      save_as: str | None = None,
+      filter: Union[str, Sequence[str], None] = None,  # pylint: disable=redefined-builtin
+      pivot_field: str = 'lm',
+      expect_new_dirs: bool = False,
+  ) -> 'Summary':
+    result = cls.monitor_async(
+        root_dir,
+        save_as,
+        filter,
+        pivot_field=pivot_field,
+        expect_new_dirs=expect_new_dirs,
+    )
+    return result.join()
+
+
+def _iter_dirs(
+    root_dir: str | Sequence[str],
+    filter: Union[str, Sequence[str], None] = None,  # pylint: disable=redefined-builtin
+) -> Iterator[str]:
+  """Itererate sub-entries of one or more directories."""
+  root_dirs = [root_dir] if isinstance(root_dir, str) else root_dir
+  if filter is None:
+    filters = []
+  elif isinstance(filter, str):
+    filters = [re.compile(filter)]
+  else:
+    filters = [re.compile(f) for f in filter]
+
+  def accepts(entry):
+    if not filters:
+      return True
+    for f in filters:
+      if f.match(entry):
+        return True
+    return False
+
+  for root_dir in root_dirs:
+    for entry in pg.io.listdir(root_dir):
+      if accepts(entry):
+        yield os.path.join(root_dir, entry)
+
+
+def monitor(
+    root_dir: str | Sequence[str],
+    save_as: str | None = None,
+    filter: Union[str, Sequence[str], None] = None,  # pylint: disable=redefined-builtin
+    pivot_field: str = 'lm',
+    expect_new_dirs: bool = False,
+) -> Summary:
+  """Monitor one or more root directories for summary."""
+  return Summary.monitor(
+      root_dir,
+      save_as,
+      filter,
+      pivot_field=pivot_field,
+      expect_new_dirs=expect_new_dirs,
+  )
+
+
+def monitor_async(
+    root_dir: str | Sequence[str],
+    save_as: str | None = None,
+    filter: Union[str, Sequence[str], None] = None,  # pylint: disable=redefined-builtin
+    pivot_field: str = 'lm',
+    expect_new_dirs: bool = False,
+    scan_interval: int = 60,
+    refresh_when_stop: bool = True,
+) -> Summary.MonitorResult:
+  """Asynchronorsly monitor one or more root directories for summary."""
+  return Summary.monitor_async(
+      root_dir,
+      save_as,
+      filter,
+      pivot_field=pivot_field,
+      expect_new_dirs=expect_new_dirs,
+      scan_interval=scan_interval,
+      refresh_when_stop=refresh_when_stop,
+  )

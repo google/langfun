@@ -203,8 +203,9 @@ class EvaluationTest(unittest.TestCase):
         '3',
     ])
     s = eval_set('run_test', 'query', schema_fn=answer_schema(), lm=lm)
+    s.run()
     self.assertEqual(
-        s.run(),
+        s.result,
         dict(
             experiment_setup=dict(
                 id='run_test',
@@ -212,20 +213,13 @@ class EvaluationTest(unittest.TestCase):
                 model='StaticSequence',
                 prompt_template='{{example.question}}',
                 method='query',
-                schema_fn='answer_schema()'
+                schema_fn='answer_schema()',
             ),
             cache_stats=dict(
-                use_cache=True,
-                num_queries=2,
-                num_hits=0,
-                num_updates=2
+                use_cache=True, num_queries=2, num_hits=0, num_updates=2
             ),
-            metrics=dict(
-                total=2,
-                failures=1,
-                failure_rate=0.5
-            )
-        )
+            metrics=dict(total=2, failures=1, failure_rate=0.5),
+        ),
     )
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.EXPERIMENT_JSON)))
@@ -233,6 +227,9 @@ class EvaluationTest(unittest.TestCase):
         os.path.exists(os.path.join(s.dir, base.Evaluation.RESULT_JSON)))
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.CACHE_JSON)))
+    self.assertTrue(
+        os.path.exists(os.path.join(s.root_dir, base.Evaluation.SUMMARY_HTML))
+    )
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.INDEX_HTML)))
     self.assertTrue(
@@ -250,7 +247,6 @@ class EvaluationTest(unittest.TestCase):
     # Cache will always be saved
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.CACHE_JSON)))
-
     self.assertFalse(
         os.path.exists(os.path.join(s.dir, base.Evaluation.EXPERIMENT_JSON)))
     self.assertFalse(
@@ -278,7 +274,7 @@ class EvaluationTest(unittest.TestCase):
         'run_filter_test', pg.oneof(['call', 'query']),
         schema_fn=answer_schema(), lm=lm)
     self.assertEqual(
-        s.run(filter=lambda x: x.method == 'query', dryrun=True),
+        s.run(filter=lambda x: x.method == 'query', dryrun=True, summary=False),
         {
             s.children[0].id: None,
             s.children[1].id: dict(
@@ -327,8 +323,11 @@ class EvaluationTest(unittest.TestCase):
     # Test persistent hash.
     self.assertEqual(s.hash, 'fc31a1c3')
 
+    summary = s.run(verbose=True)
+    self.assertEqual(len(summary.evaluations), 2)
+
     self.assertEqual(
-        s.run(verbose=True),
+        s.result,
         {
             s.children[0].id: dict(
                 experiment_setup=dict(
@@ -446,7 +445,7 @@ class SuiteTest(unittest.TestCase):
     )
     # Test for persistent hash.
     self.assertEqual(s.hash, '0fd6051a')
-    result = s.run()
+    s.run()
     expected = {
         s.children[0].id: dict(
             experiment_setup=dict(
@@ -463,53 +462,44 @@ class SuiteTest(unittest.TestCase):
             metrics=dict(total=2, failures=1, failure_rate=0.5),
         ),
         s.children[1].id: {
-            s.children[1].children[0].id: dict(
+            s.children[1]
+            .children[0]
+            .id: dict(
                 experiment_setup=dict(
                     id=s.children[1].children[0].id,
                     dir=s.children[1].children[0].dir,
                     model='StaticSequence',
                     prompt_template='{{example.question}}',
                     method='call',
-                    schema_fn='answer_schema()'
+                    schema_fn='answer_schema()',
                 ),
                 cache_stats=dict(
-                    use_cache=True,
-                    num_queries=4,
-                    num_hits=2,
-                    num_updates=2
+                    use_cache=True, num_queries=3, num_hits=0, num_updates=2
                 ),
-                metrics=dict(
-                    total=2,
-                    failures=2,
-                    failure_rate=1.0
-                )
+                metrics=dict(total=2, failures=2, failure_rate=1.0),
             ),
-            s.children[1].children[2].id: dict(
+            s.children[1]
+            .children[2]
+            .id: dict(
                 experiment_setup=dict(
                     id=s.children[1].children[2].id,
                     dir=s.children[1].children[2].dir,
                     model='StaticSequence',
                     prompt_template='{{example.question}}',
                     method='query',
-                    schema_fn='answer_schema()'
+                    schema_fn='answer_schema()',
                 ),
                 cache_stats=dict(
                     use_cache=True,
                     num_queries=2,
-                    num_hits=2,
-                    num_updates=0
+                    num_hits=0,
+                    num_updates=2,
                 ),
-                metrics=dict(
-                    total=2,
-                    failures=1,
-                    failure_rate=0.5
-                )
-            )
-        }
+                metrics=dict(total=2, failures=1, failure_rate=0.5),
+            ),
+        },
     }
-    self.assertEqual(
-        result, expected
-    )
+    self.assertEqual(s.result, expected)
 
 
 class InputsFrom(unittest.TestCase):
@@ -536,6 +526,147 @@ class InputsFrom(unittest.TestCase):
 
   def test_as_inputs(self):
     self.assertEqual(base.as_inputs([1, 2, 3])(), [1, 2, 3])
+
+
+class TaskA(base.Evaluation):
+  pass
+
+
+class TaskB(base.Evaluation):
+  pass
+
+
+class SummaryTest(unittest.TestCase):
+
+  def _eval_set(self, root_dir):
+    return base.Suite(id='select_test', children=[
+        TaskA(
+            id='task_a',
+            inputs=base.as_inputs([
+                pg.Dict(question='Compute 1 + 1'),
+            ]),
+            method=pg.oneof(['query', 'call']),
+            prompt=pg.oneof([
+                lf.Template('{{example.question}}'),
+                lf.Template('Hello {{example.question}}'),
+            ]),
+            schema_fn=pg.oneof([
+                answer_schema(),
+                answer_schema_with_fewshot_examples(),
+            ]),
+            lm=pg.oneof([
+                fake.StaticSequence(['3']),
+                fake.StaticResponse('2'),
+            ]),
+            use_cache=True,
+            max_workers=1,
+        ),
+        TaskB(
+            id='task_b',
+            inputs=base.as_inputs([
+                pg.Dict(question='Compute 1 + 1'),
+            ]),
+            method=pg.oneof(['query', 'call']),
+            prompt=pg.oneof([
+                lf.Template('{{example.question}}'),
+            ]),
+            schema_fn=pg.oneof([
+                answer_schema(),
+            ]),
+            lm=pg.oneof([
+                fake.StaticSequence(['3']),
+                fake.StaticResponse('2'),
+            ]),
+            use_cache=True,
+            max_workers=1,
+        ),
+    ], root_dir=root_dir)
+
+  def test_select(self):
+    summary = self._eval_set(None).summary()
+    self.assertEqual(len(summary), 2 * 2 * 2 * 2 + 2 * 1 * 1 * 2)
+
+    # Select on task.
+    self.assertEqual(len(summary.select(TaskA)), 2 * 2 * 2 * 2)
+    self.assertEqual(len(summary.select(TaskB)), 2 * 1 * 1 * 2)
+
+    # Select on LM.
+    self.assertEqual(
+        len(summary.select(lm=fake.StaticResponse)),
+        2 * 2 * 2 * 1 + 2 * 1 * 1 * 1
+    )
+    self.assertEqual(
+        len(summary.select(lm=fake.StaticSequence(['3']))),
+        2 * 2 * 2 * 1 + 2 * 1 * 1 * 1
+    )
+    self.assertEqual(
+        len(summary.select(lm=(fake.StaticSequence, fake.StaticResponse))),
+        2 * 2 * 2 * 2 + 2 * 1 * 1 * 2
+    )
+
+    # Select on method.
+    self.assertEqual(
+        len(summary.select(method='call')),
+        2 * 2 * 2 * 1 + 2 * 1 * 1 * 1
+    )
+    self.assertEqual(
+        len(summary.select(method=('call', 'query'))),
+        2 * 2 * 2 * 2 + 2 * 1 * 1 * 2
+    )
+
+    # Select on schema.
+    self.assertEqual(
+        len(summary.select(schema_fn=answer_schema())),
+        2 * 2 * 2 * 1 + 2 * 1 * 1 * 2
+    )
+    self.assertEqual(
+        len(summary.select(schema_fn=answer_schema_with_fewshot_examples())),
+        2 * 2 * 2 * 1
+    )
+    self.assertEqual(
+        len(summary.select(
+            schema_fn=(
+                answer_schema(), answer_schema_with_fewshot_examples()))),
+        2 * 2 * 2 * 2 + 2 * 1 * 1 * 2
+    )
+
+    # Select on completed.
+    self.assertEqual(len(summary.select(completed=True)), 0)
+    self.assertEqual(
+        len(summary.select(completed=False)), 2 * 2 * 2 * 2 + 2 * 1 * 1 * 2)
+
+  def test_from_dirs(self):
+    root_dir = os.path.join(tempfile.gettempdir(), 'from_dirs_test')
+    s = self._eval_set(root_dir)
+    s.run()
+    self.assertEqual(
+        len(base.Summary.from_dirs(root_dir)), 2 * 2 * 2 * 2 + 2 * 1 * 1 * 2
+    )
+    self.assertEqual(
+        len(base.Summary.from_dirs(root_dir, 'task_b')), 2 * 1 * 1 * 2
+    )
+    self.assertEqual(
+        len(base.Summary.from_dirs(root_dir, ('task_a'))), 2 * 2 * 2 * 2
+    )
+
+  def test_monitor(self):
+    root_dir = os.path.join(tempfile.gettempdir(), 'monitor_test')
+    s = self._eval_set(root_dir)
+    s.run(summary=False)
+    summary_file = os.path.join(root_dir, 'my_summary.html')
+    summary = base.monitor(root_dir, summary_file)
+    self.assertTrue(all(e.result for e in summary.evaluations))
+    self.assertTrue(pg.io.path_exists(summary_file))
+
+  def test_monitor_async(self):
+    root_dir = os.path.join(tempfile.gettempdir(), 'monitor_async_test')
+    pg.io.mkdirs(root_dir)
+    summary_file = os.path.join(root_dir, 'my_summary.html')
+    r = base.monitor_async(root_dir, summary_file, expect_new_dirs=True)
+    self._eval_set(root_dir).run(summary=False)
+    summary = r.stop()
+    self.assertTrue(all(e.result for e in summary.evaluations))
+    self.assertTrue(pg.io.path_exists(summary_file))
 
 
 if __name__ == '__main__':

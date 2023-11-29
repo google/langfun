@@ -77,8 +77,9 @@ class ScoringTest(unittest.TestCase):
 
     s = eval_set(lm=lm)
     self.assertEqual(s.avg_score, 0.0)
+    s.run()
     self.assertEqual(
-        s.run(),
+        s.result,
         dict(
             experiment_setup=dict(
                 id='constraint_following',
@@ -130,6 +131,9 @@ class ScoringTest(unittest.TestCase):
         os.path.exists(
             os.path.join(s.dir, scoring.Scoring.SCORED_JSON)
         )
+    )
+    self.assertTrue(
+        os.path.exists(os.path.join(s.root_dir, scoring.Scoring.SUMMARY_HTML))
     )
     self.assertTrue(
         os.path.exists(

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Console utilities."""
 
+import sys
 from typing import Any
 from langfun.core.text_formatting import colored
 
@@ -45,3 +46,28 @@ def write(
 
   # Print body.
   print(colored(str(value), color=color, background=background, styles=styles))
+
+
+try:
+  _notebook = sys.modules['IPython'].display
+except Exception:  # pylint: disable=broad-except
+  _notebook = None
+
+
+def under_notebook() -> bool:
+  """Returns True if current process runs under notebook."""
+  return bool(_notebook)
+
+
+def display(value: Any, clear: bool = False) -> None:  # pylint: disable=redefined-outer-name
+  """Displays object in current notebook cell."""
+  if _notebook is not None:
+    if clear:
+      _notebook.clear_output()
+    _notebook.display(value)
+
+
+def clear() -> None:
+  """Clears output from current notebook cell."""
+  if _notebook is not None:
+    _notebook.clear_output()
