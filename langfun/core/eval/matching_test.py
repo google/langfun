@@ -15,6 +15,7 @@
 
 import os
 import tempfile
+from typing import Any
 import unittest
 
 import langfun.core as lf
@@ -26,6 +27,8 @@ import pyglove as pg
 
 # We put class definitions outside the functors just to make it easier
 # to refer to them in test.
+
+
 class Solution(pg.Object):
   final_answer: int
 
@@ -45,6 +48,15 @@ def complete_schema():
   return SolutionForCompletion
 
 
+class MyTask(matching.Matching):
+
+  def groundtruth(self, example: Any) -> Any:
+    return example.groundtruth
+
+  def answer(self, output: Any) -> Any:
+    return output.final_answer
+
+
 def eval_set(
     eval_id: str,
     method: str,
@@ -54,7 +66,7 @@ def eval_set(
 ):
   """Creates an evaluation object for testing."""
   tmp_dir = tempfile.gettempdir()
-  return matching.Matching(
+  return MyTask(
       id=eval_id,
       root_dir=tmp_dir,
       inputs=base.as_inputs([
@@ -65,8 +77,6 @@ def eval_set(
       ]),
       method=method,
       prompt='{{example.question}}',
-      groundtruth=lambda x: x.groundtruth,
-      answer_field='final_answer',
       schema_fn=schema_fn,
       lm=lm,
       use_cache=use_cache,

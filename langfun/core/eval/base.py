@@ -434,20 +434,26 @@ class Evaluable(lf.Component):
     s = io.StringIO()
     s.write('<html><head><style>')
     self._render_styles(s)
-    s.write('</style></head><body>')
-    s.write(f'<h1 style="color:blue;background-color:#DDDDDD">{self.id}</h1>')
+    s.write(
+        '</style></head><body>'
+        f'<h1 style="color:blue;background-color:#DDDDDD">{self.id}</h1>'
+    )
     self._render_navbar(s)
     for builder in body_builders:
       builder(s)
     if include_def:
-      s.write('<h2> Definition </h2>')
-      s.write('<div style="white-space:pre;padding:10px;color:#3254a8;')
-      eval_def = self.format()
-      s.write(f'background-color:#EEEEEE">{eval_def}</div>')
+      s.write(
+          '<h2> Definition </h2>'
+          '<div style="white-space:pre;padding:10px;color:#3254a8;'
+          'background-color:#EEEEEE">'
+          f'{self.format(compact=False)}</div>'
+      )
     if include_cache_stats and self.is_deterministic:
-      s.write('<h2> Cache Stats </h2>')
-      s.write('<div style="white-space:pre;padding:10px;color:#3254a8;')
-      s.write(f'background-color:#EEEEEE">{self.result.cache_stats}</div>')
+      s.write(
+          '<h2> Cache Stats </h2>'
+          '<div style="white-space:pre;padding:10px;color:#3254a8;'
+          f'background-color:#EEEEEE">{self.result.cache_stats}</div>'
+      )
     s.write('</body></html>')
     return s.getvalue()
 
@@ -475,8 +481,10 @@ class Evaluable(lf.Component):
       self._render_dryrun_output(s)
 
   def _render_result(self, s: io.StringIO) -> None:
-    s.write('<h2> Result </h2>')
-    s.write('<table style="border:1px solid;"><tr class="header">')
+    s.write(
+        '<h2> Result </h2>'
+        '<table style="border:1px solid;"><tr class="header">'
+    )
     if self.children:
       s.write('<td>ID</td>')
 
@@ -484,8 +492,10 @@ class Evaluable(lf.Component):
     s.write('<tr>')
     if self.children:
       for c in self.children:
-        s.write('<tr>')
-        s.write(f'<td><a href={c.index_link}>{c.id}</a></td>')
+        s.write(
+            '<tr>'
+            f'<td><a href={c.index_link}>{c.id}</a></td>'
+        )
         c._render_result_row(s)  # pylint: disable=protected-access
         s.write('</tr>')
     else:
@@ -647,14 +657,6 @@ class Evaluation(Evaluable):
       ),
   ]
 
-  call_postprocess: Annotated[
-      Callable[[str], str] | None,
-      (
-          'A callable object to post process the text response before '
-          'parsing. Applicable only when `method` is set to \'call\'.'
-      ),
-  ] = None
-
   lm: Annotated[lf.LanguageModel, 'Language model to use for evaluation.']
 
   parsing_lm: Annotated[
@@ -683,7 +685,7 @@ class Evaluation(Evaluable):
           'generated code for the output structure. If 0, autofix will be '
           'disabled.'
       ),
-  ] = 3
+  ] = 0
 
   autofix_lm: Annotated[
       lf.LanguageModel | None,
@@ -691,6 +693,11 @@ class Evaluation(Evaluable):
           'Language model for autofix. If None, `lm` will also be used for '
           'autofix.'
       ),
+  ] = None
+
+  additional_args: Annotated[
+      dict[str, Any] | None,
+      'Additional kwargs that will be passed to `self.process`'
   ] = None
 
   use_cache: Annotated[bool, 'If True, LM cache will be enabled.'] = True
@@ -910,7 +917,7 @@ class Evaluation(Evaluable):
       )
 
     with lf.use_settings(debug=debug):
-      output_message = copy.process(example)
+      output_message = copy.process(example, **(self.additional_args or {}))
       if self.schema is None:
         output = output_message.text
       else:
@@ -957,9 +964,12 @@ class Evaluation(Evaluable):
     with lf.use_settings(debug=debug, cache=self.cache):
       self._reset()
 
+      def _process(example: Any):
+        return self.process(example, **(self.additional_args or {}))
+
       try:
         for example, message, error in lf.concurrent_map(
-            self.process,
+            _process,
             examples,
             max_workers=self.max_workers,
             show_progress=progress_bar or False,
@@ -984,6 +994,10 @@ class Evaluation(Evaluable):
           title=f'RESULT ON {self.id}',
           color='magenta',
       )
+
+  def call_postprocess(self, lm_response: str) -> str:
+    """Post-process for `lf.call`. Subclass can override."""
+    return lm_response
 
   def process(self, example: Any, **kwargs) -> lf.Message:
     """Process an example and returns its output."""
@@ -1085,25 +1099,23 @@ class Evaluation(Evaluable):
 
   def summarize_html(self) -> str:
     s = io.StringIO()
-    definition = self.format(compact=False, hide_default_values=True).replace(
-        '"', '&quot;'
-    )
-    s.write('<div>')
-    s.write('<table><tr><td>')
+    definition = _html_repr(self, compact=False, escape=True)
+    s.write('<div><table><tr><td>')
     if self.result is None:
-      s.write(f'<a target="_blank" title="{definition}" ')
-      s.write(f'href="{self.link(self.dir)}">{self.hash}</a>')
-      s.write('</td></tr>')
-      s.write('<tr><td>')
-      s.write('<span style="color: gray">(IN-PROGRESS...)</span>')
+      s.write(
+          f'<a target="_blank" title="{definition}" '
+          f'href="{self.link(self.dir)}">{self.hash}</a>'
+          '</td></tr><tr><td>'
+          '<span style="color: gray">(IN-PROGRESS...)</span>'
+      )
     else:
-      s.write(f'<a target="_blank" title="{definition}" ')
-      s.write(f'href="{self.index_link}">{self.hash}</a>')
-      s.write('</td></tr>')
-      s.write('<tr><td>')
+      s.write(
+          f'<a target="_blank" title="{definition}" '
+          f'href="{self.index_link}">{self.hash}</a>'
+          '</td></tr><tr><td>'
+      )
       self._render_metric(s)
-    s.write('</td></tr></table>')
-    s.write('</div>')
+    s.write('</td></tr></table></div>')
     return s.getvalue()
 
   def _render_metric(self, s: io.StringIO) -> None:
@@ -1167,41 +1179,40 @@ class Evaluation(Evaluable):
       )
 
   def _render_result_header(self, s: io.StringIO) -> None:
-    s.write('<td>Method</td>')
-    s.write('<td>Inputs</td>')
-    s.write('<td>Model</td>')
-    s.write('<td>Prompt</td>')
-    s.write('<td>Schema</td>')
-    s.write('<td>Failures</td>')
+    s.write(
+        '<td>Method</td>'
+        '<td>Inputs</td>'
+        '<td>Model</td>'
+        '<td>Prompt</td>'
+        '<td>Schema</td>'
+        '<td>Additional Args</td>'
+        '<td>Failures</td>'
+    )
 
   def _render_result_row(self, s: io.StringIO) -> None:
-    def display_value(v, p):
-      if isinstance(v, pg.hyper.OneOf):
-        if not p:
-          return v.candidates
-        return [getattr(c, p) for c in v.candidates]
-      return getattr(v, p) if p else v
-
-    s.write('<td style="color:{self._method_color}">'
-            f'{display_value(self.method, "")}</td>')
-    s.write('<td style="color:darkgray">'
-            f'{display_value(self.inputs, "")}</td>')
-    s.write('<td style="color:#494a5c">'
-            f'{display_value(self.lm, "model_id")}</td>')
-    s.write('<td style="color:darkgray">'
-            f'{display_value(self.prompt, "template_str")}</td>')
-
-    if isinstance(self.schema_fn, pg.hyper.OneOf):
-      title = '...'
-      schema_fn = self.schema_fn.candidates
-    else:
-      title = self.schema.schema_str('python') if self.schema else None
-      schema_fn = self.schema_fn
+    s.write(
+        f'<td style="color:{self._method_color}">{self.method}</td>'
+        f'<td style="color:darkgray">{_html_repr(self.inputs)}</td>'
+        f'<td style="color:#494a5c">{_html_repr(self.lm)}</td>'
+    )
+    # Prompt.
+    prompt_title = _html_repr(self.prompt.template_str, escape=True)
+    s.write(
+        f'<td title="{prompt_title}"'
+        f'style="color:darkgray">{_html_repr(self.prompt)}</td>'
+    )
+    # Schema.
+    schema_title = self.schema.schema_str('python') if self.schema else None
     s.write(
         '<td style="color:purple" '
-        f'title="{title}">'
-        f'{schema_fn}</td>'
+        f'title="{schema_title}">'
+        f'{_html_repr(self.schema_fn)}</td>'
     )
+    s.write(
+        '<td style="color:purple" '
+        f'{_html_repr(self.additional_args, compact=False)}</td>'
+    )
+    # Failures.
     s.write(
         '<td><span style="color:orange">%s</span>%s</td>'
         % (
@@ -1223,9 +1234,9 @@ class Evaluation(Evaluable):
 
   def _render_failures(self, s: io.StringIO) -> None:
     """Formats the failed cases into html."""
-    s.write('<h2> Failed Cases </h2>')
-    s.write('<div style="white-space:pre">\n')
     s.write(
+        '<h2> Failed Cases </h2>'
+        '<div style="white-space:pre">\n'
         '<table style="border:1px solid">'
         '<tr class="header"><td>No.</td><td>Input</td><td>Error</td></tr>'
     )
@@ -1369,21 +1380,23 @@ class Summary(pg.Object):
     descriptor_keys: list[str]
 
     def html(self) -> str:
-      fv = lambda x: pg.format(x, verbose=False, hide_default_values=True)
       s = io.StringIO()
       s.write('<table style="border:1px solid;">')
       s.write('<tr style="font-weight: bold;">')
       for h in self.descriptor_keys:
         s.write(f'<td style="padding: 5px">{h}</td>')
       for c in self.cols:
-        s.write(f'<td style="padding: 5px">{self.pivot_field}={fv(c)}</td>')
+        s.write(
+            f'<td style="padding: 5px">{self.pivot_field}={_html_repr(c)}</td>')
       s.write('</tr>')
       for i, row in enumerate(self.rows):
         bgcolor = 'white' if i % 2 == 1 else '#EEEEEE'
         s.write(f'<tr style="background-color: {bgcolor}">')
+
         for k in self.descriptor_keys:
           v = row.descriptor.get(k)
-          s.write(f'<td style="padding: 5px">{fv(v)}</td>')
+          s.write(f'<td style="padding: 5px">{_html_repr(v)}</td>')
+
         for e in row.data:
           s.write('<td style="padding: 5px;">')
           if e is None:
@@ -1612,6 +1625,17 @@ class Summary(pg.Object):
         expect_new_dirs=expect_new_dirs,
     )
     return result.join()
+
+
+def _html_repr(value: Any, compact: bool = True, escape: bool = False) -> str:
+  """Formats prompt in HTML."""
+  if type(value) is lf.Template:  # pylint: disable=unidiomatic-typecheck
+    return repr(value.template_str)
+  s = pg.format(
+      value, compact=compact, verbose=False, hide_default_values=True)
+  if escape:
+    s = s.replace('"', '&quot;')
+  return s
 
 
 def _iter_dirs(

@@ -15,6 +15,7 @@
 
 import os
 import tempfile
+from typing import Type
 import unittest
 
 import langfun.core as lf
@@ -62,11 +63,12 @@ def eval_set(
     schema_fn,
     lm: lf.LanguageModel,
     use_cache: bool = True,
+    cls: Type[base.Evaluation] = base.Evaluation,
     **kwargs,
 ):
   """Creates an evaluation object for testing."""
   tmp_dir = tempfile.gettempdir()
-  return base.Evaluation(
+  return cls(
       id=eval_id,
       root_dir=tmp_dir,
       inputs=base.as_inputs([
@@ -370,10 +372,15 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(s.process(s.examples[0]).result, Solution(2))
 
     lm = fake.StaticSequence(['two\n1', 'Solution(final_answer=2)'])
+
+    class CallWithPostProcess(base.Evaluation):
+      def call_postprocess(self, lm_response):
+        return lm_response.split('\n')[0]
+
     s = eval_set(
         'call_test3', 'call',
-        schema_fn=answer_schema(), lm=lm,
-        call_postprocess=lambda x: x.split('\n')[0])
+        schema_fn=answer_schema(), lm=lm, cls=CallWithPostProcess,
+    )
     self.assertEqual(s.process(s.examples[0]).lm_input.source.text, 'two')
 
   def test_query(self):

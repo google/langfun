@@ -13,9 +13,10 @@
 # limitations under the License.
 """Match-based evaluation."""
 
+import abc
 import io
 import os
-from typing import Annotated, Any, Callable
+from typing import Any
 import langfun.core as lf
 from langfun.core.eval import base
 import pyglove as pg
@@ -24,27 +25,20 @@ import pyglove as pg
 class Matching(base.Evaluation):
   """Base class for matching-based evaluation."""
 
-  groundtruth: Annotated[
-      Callable[[Any], Any],
-      (
-          'A callable object that maps an input example to the groundtruth.'
-      )
-  ]
-
-  answer_field: Annotated[
-      pg.KeyPath,
-      (
-          'The path to access the answer field from the output object. '
-          'E.g. "final_answer".'
-      ),
-  ]
-
   # CONSTANTS.
   MATCHES_JSON = 'matches.json'
   MISMATCHES_JSON = 'mismatches.json'
 
   MATCHES_HTML = 'matches.html'
   MISMATCHES_HTML = 'mismatches.html'
+
+  @abc.abstractmethod
+  def groundtruth(self, example: Any) -> Any:
+    """Returns the groundtruth from an input example."""
+
+  @abc.abstractmethod
+  def answer(self, output: Any) -> Any:
+    """Returns the answer from the structure output."""
 
   @property
   def matches(self) -> list[tuple[Any, Any, lf.Message]]:
@@ -94,7 +88,7 @@ class Matching(base.Evaluation):
 
   def audit(self, example: Any, output: Any, message: lf.Message) -> None:
     groundtruth = self.groundtruth(example)
-    answer = self.answer_field.query(output)
+    answer = self.answer(output)
     if self.match(answer, groundtruth):
       self._matches.append((example, output, message))
     else:
