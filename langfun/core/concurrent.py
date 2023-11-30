@@ -427,7 +427,11 @@ class ProgressBar:
       updated_bars = set()
       while cls._updates:
         update = cls._updates.popleft()
-        bar = cls._progress_bars[update.bar_id]
+        bar = cls._progress_bars.get(update.bar_id)
+        # Processing of updates may be delayed, in such case the bar might
+        # be already uninstalled from a different thread.
+        if bar is None:
+          continue
         if update.delta > 0:
           bar.update(update.delta)
 
