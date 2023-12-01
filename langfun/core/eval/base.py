@@ -723,14 +723,17 @@ class Evaluation(Evaluable):
     if self.method == 'call':
       parsing_model = self.parsing_lm or self.lm
     return {
+        'task': self.__class__.__name__,
         'model': self.lm.model_id,
         'parsing_model': getattr(parsing_model, 'model_id', None),
         'sampling_options': self.lm.sampling_options,
         'inputs': self.inputs,
-        'prompt': self.prompt.template_str,
-        'fewshot_examples': self.fewshot_examples,
+        'prompt': self.prompt,
         'method': self.method,
         'schema_fn': self.schema_fn,
+        # Make unspecified additional_args (None) and empty additional_args
+        # ({}) to produce the same hash.
+        'additional_args': self.additional_args or {},
     }
 
   @functools.cached_property
@@ -777,10 +780,11 @@ class Evaluation(Evaluable):
       return None
 
     schema = self.schema_fn()
+    fewshot_examples = None
     if isinstance(schema, tuple):
       schema, fewshot_examples = schema
-      self.__dict__['fewshot_examples'] = (
-          self._maybe_adjust_examples_for_completion(fewshot_examples))
+    self.__dict__['fewshot_examples'] = (
+        self._maybe_adjust_examples_for_completion(fewshot_examples))
     return self._formalize_schema(schema)
 
   @functools.cached_property
