@@ -53,7 +53,7 @@ class MyTask(matching.Matching):
   def groundtruth(self, example: Any) -> Any:
     return example.groundtruth
 
-  def answer(self, output: Any) -> Any:
+  def answer(self, output: Any, example: Any) -> Any:
     return output.final_answer
 
 

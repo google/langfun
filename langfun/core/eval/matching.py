@@ -37,7 +37,7 @@ class Matching(base.Evaluation):
     """Returns the groundtruth from an input example."""
 
   @abc.abstractmethod
-  def answer(self, output: Any) -> Any:
+  def answer(self, output: Any, example: Any) -> Any:
     """Returns the answer from the structure output."""
 
   @property
@@ -88,7 +88,7 @@ class Matching(base.Evaluation):
 
   def audit(self, example: Any, output: Any, message: lf.Message) -> None:
     groundtruth = self.groundtruth(example)
-    answer = self.answer(output)
+    answer = self.answer(output, example)
     if self.match(answer, groundtruth):
       self._matches.append((example, output, message))
     else:
