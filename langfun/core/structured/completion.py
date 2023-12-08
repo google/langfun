@@ -59,6 +59,25 @@ class CompleteStructure(mapping.StructureToStructure):
   # could access the input via the `message.result` field.
   input_path = ''
 
+  def _value_context(self):
+    context = super()._value_context()
+    # NOTE(daiyip): since `lf.complete` could have fields of Any type, which
+    # could be user provided objects. For LLMs to restores these objects, we
+    # need to expose their types to the code evaluation context.
+    context.update(self._input_value_dependencies())
+    return context
+
+  def _input_value_dependencies(self) -> dict[str, Any]:
+    """Returns the class dependencies from input value."""
+    context = {}
+    def _visit(k, v, p):
+      del k, p
+      if isinstance(v, pg.Object):
+        cls = v.__class__
+        context[cls.__name__] = cls
+    pg.traverse(self.input_value, _visit)
+    return context
+
 
 def completion_example(left: Any, right: Any) -> mapping.MappingExample:
   """Makes a mapping example for completion."""
