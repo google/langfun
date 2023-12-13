@@ -283,11 +283,15 @@ class Template(
                   )
               inputs[var_name] = var_value
 
-            # Natural language formattable objects will be returned in natural
-            # language when they are directly returned as rendering elements in
-            # the template.
-            with modality.format_modality_as_ref():
-              rendered_text = self._template.render(**inputs)
+            # Enable Python format for builtin types during template rendering,
+            # versus the default PyGlove format (e.g. [0: 'abc'] for list).
+            # User-defined classes may have their own format.
+            with pg.object_utils.str_format(python_format=True):
+              # Natural language formattable objects will be returned in natural
+              # language when they are directly returned as rendering elements
+              # in the template.
+              with modality.format_modality_as_ref():
+                rendered_text = self._template.render(**inputs)
 
         if self.clean:
           rendered_text = rendered_text.strip()
