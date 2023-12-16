@@ -170,6 +170,8 @@ class OpenAI(lf.LanguageModel):
 
     if options.top_p is not None:
       args['top_p'] = options.top_p
+    if options.stop:
+      args['stop'] = options.stop
     return args
 
   def _sample(self, prompts: list[lf.Message]) -> list[LMSamplingResult]:

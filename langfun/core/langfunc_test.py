@@ -73,11 +73,11 @@ class LangFuncCallTest(unittest.TestCase):
     print(repr(l))
     self.assertEqual(
         repr(l),
-        "LangFunc(template_str='Hello', clean=True, "
-        'lm=ExcitedEchoer(sampling_options=LMSamplingOptions(temperature=0.0, '
-        'max_tokens=1024, n=1, top_k=40, top_p=None, random_seed=None), '
-        'cache=None, timeout=120.0, max_attempts=5, retry_interval=(5, 60), '
-        'exponential_backoff=True, debug=False))',
+        "LangFunc(template_str='Hello', clean=True,"
+        ' lm=ExcitedEchoer(sampling_options=LMSamplingOptions(temperature=0.0,'
+        ' max_tokens=1024, n=1, top_k=40, top_p=None, stop=None,'
+        ' random_seed=None), cache=None, timeout=120.0, max_attempts=5,'
+        ' retry_interval=(5, 60), exponential_backoff=True, debug=False))',
     )
 
     l = LangFunc('Hello')

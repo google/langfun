@@ -80,6 +80,15 @@ class LMSamplingOptions(component.Component):
           '`top_p` but not both.'
       ),
   ] = None
+  stop: Annotated[
+      list[str] | None,
+      (
+          'A list of stop sequences that prevent LLMs from outputting '
+          'more tokens. For example, when `stop` is set to ["User:", "Model:"] '
+          'LLMs will stop to emit more tokens when `User:` or '
+          '`Model:` is reached.'
+      ),
+  ] = None
   random_seed: Annotated[
       int | None, 'A fixed random seed used during model inference.'
   ] = None

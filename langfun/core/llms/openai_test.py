@@ -109,9 +109,8 @@ class OpenaiTest(unittest.TestCase):
     )
     self.assertEqual(
         openai.Gpt4(api_key='test_key')._get_request_args(
-            lf.LMSamplingOptions(
-                temperature=1.0,
-                n=1)),
+            lf.LMSamplingOptions(temperature=1.0, stop=['\n'], n=1)
+        ),
         dict(
             model='gpt-4',
             n=1,
@@ -119,7 +118,8 @@ class OpenaiTest(unittest.TestCase):
             max_tokens=1024,
             stream=False,
             timeout=120.0,
-        )
+            stop=['\n'],
+        ),
     )
 
   def test_call_completion(self):
