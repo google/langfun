@@ -141,6 +141,7 @@ class PythonCode(pg.Object):
 class PythonFunction(pg.Object):
   """Generated Python function via source code."""
   name: str
+  description: str | None = None
   args: dict[str, str]
   returns: str
   source: Annotated[
