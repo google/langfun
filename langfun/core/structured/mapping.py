@@ -84,6 +84,11 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       return ''
     return self.schema.schema_str(protocol, **kwargs)
 
+  @property
+  def has_value(self) -> bool:
+    """Returns True if structured value is provided."""
+    return self.value != schema_lib.MISSING
+
   def value_str(
       self, protocol: schema_lib.SchemaProtocol = 'json', **kwargs
   ) -> str:
@@ -115,305 +120,118 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
 
 
 class Mapping(lf.LangFunc):
-  """Base class for mapping."""
-
-  examples: Annotated[
-      list[MappingExample] | None,
-      'Fewshot examples for improving the quality of mapping.'
-  ] = lf.contextual(default=None)
-
-
-class NaturalLanguageToStructure(Mapping):
-  """LangFunc for converting natural language text to structured value.
+  """Base class for mapping.
 
   {{ preamble }}
 
   {% if examples -%}
   {% for example in examples -%}
-  {%- if example.nl_context -%}
-  {{ nl_context_title}}:
-  {{ example.nl_context | indent(2, True)}}
-
-  {% endif -%}
-  {%- if example.nl_text -%}
-  {{ nl_text_title }}:
-  {{ example.nl_text | indent(2, True) }}
-
-  {% endif -%}
-  {{ schema_title }}:
-  {{ example.schema_str(protocol) | indent(2, True) }}
-
-  {{ value_title }}:
-  {{ example.value_str(protocol) | indent(2, True) }}
+  {{ demo_mapping(example) }}
 
   {% endfor %}
   {% endif -%}
-  {% if nl_context -%}
-  {{ nl_context_title }}:
-  {{ nl_context | indent(2, True)}}
-
-  {% endif -%}
-  {% if nl_text -%}
-  {{ nl_text_title }}:
-  {{ nl_text | indent(2, True) }}
-
-  {% endif -%}
-  {{ schema_title }}:
-  {{ schema.schema_str(protocol) | indent(2, True) }}
-
-  {{ value_title }}:
+  {{ demo_mapping(mapping_request) }}
   """
 
-  schema: pg.typing.Annotated[
-      # Automatic conversion from annotation to schema.
-      schema_lib.schema_spec(),
-      'A `lf.structured.Schema` that constrains the structured value.',
+  preamble: Annotated[
+      lf.Template,
+      'Preamble used as mapping instructions.',
   ]
 
-  default: Annotated[
-      Any,
+  mapping_template: Annotated[
+      lf.Template | None,
       (
-          'The default value to use if parsing failed. '
-          'If unspecified, error will be raisen.'
+          'Template for demonstrating current mapping based on a '
+          'MappingExample object. When the output of the mapping example is '
+          'absent, the demonstration represents a mapping request.'
       ),
-  ] = lf.RAISE_IF_HAS_ERROR
+  ] = None
+
+  examples: Annotated[
+      list[MappingExample] | None,
+      'Fewshot examples for improving the quality of mapping.',
+  ] = lf.contextual(default=None)
+
+  protocol: Annotated[
+      schema_lib.SchemaProtocol,
+      'The protocol for representing the schema and value.',
+  ] = 'python'
 
   autofix: Annotated[
       int,
       (
           'Max attempts for LLM-based code correction. '
-          'If 0 (default), there is no automatic correction.'
+          'If 0 (default), there is no automatic correction. '
+          'This flag is effective only when the output needs to be structured.'
       ),
   ] = 3
 
   autofix_lm: Annotated[
-      lf.LanguageModel, 'Language model used for code correction.'
+      lf.LanguageModel,
+      (
+          'Language model used for code correction. '
+          'If None, `lm` will be used. This flag is effective only when the '
+          'output needs to be structured.'
+      ),
   ] = lf.contextual(default=None)
 
-  preamble: Annotated[
-      lf.LangFunc,
-      'Preamble used for natural language-to-structure mapping.',
-  ]
-
-  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
-      'USER_REQUEST'
-  )
-
-  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
-      'LM_RESPONSE'
-  )
-
-  schema_title: Annotated[str, 'The section title for schema.']
-
-  value_title: Annotated[str, 'The section title for schema.']
-
-  protocol: Annotated[
-      schema_lib.SchemaProtocol,
-      'The protocol for representing the schema and value.',
-  ]
+  default: Annotated[
+      Any,
+      (
+          'The default value to use if the LM response is not a valid code '
+          'based on the schema (after autofix). '
+          'If unspecified, error will be raisen.'
+      ),
+  ] = lf.RAISE_IF_HAS_ERROR
 
   @property
   @abc.abstractmethod
-  def nl_context(self) -> str | None:
-    """Returns the natural language context for obtaining the response.
+  def mapping_request(self) -> MappingExample:
+    """Returns a MappingExample as the mapping request."""
 
-    Returns:
-      The natural language context (prompt) for obtaining the response (either
-      in natural language or directly to structured protocol). If None,
-      `nl_text`
-      must be provided.
-    """
+  def demo_mapping(self, example: MappingExample) -> str:
+    """Demonstrates mapping based on the example."""
+    assert self.mapping_template is not None
+    return self.mapping_template.render(example=example)
 
-  @property
-  @abc.abstractmethod
-  def nl_text(self) -> str | None:
-    """Returns the natural language text to map.
+  def globals(self) -> dict[str, Any]:
+    """Gets additional symbol definitions besides schema as globals."""
+    return {'ModalityRef': lf.modality.ModalityRef}
 
-    Returns:
-      The natural language text (in LM response) to map to object. If None,
-      the LM directly outputs structured protocol instead of natural language.
-      If None, `nl_context` must be provided.
-    """
+  def postprocess_result(self, result: Any) -> Any:
+    """Post process structured output."""
+    return result
 
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
+    """Transforms LM response into structure if schema is present."""
+    schema = self.mapping_request.schema
+    if schema is None:
+      return lm_output
+
     try:
-      lm_output.result = self.schema.parse(
+      result = schema.parse(
           lm_output.text,
           protocol=self.protocol,
+          additional_context=self.globals(),
           autofix=self.autofix,
           autofix_lm=self.autofix_lm or self.lm,
       )
+      lm_output.result = self.postprocess_result(result)
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.RAISE_IF_HAS_ERROR:
         raise e
       lm_output.result = self.default
     return lm_output
 
+  #
+  # Helper methods.
+  #
 
-class StructureToNaturalLanguage(Mapping):
-  """LangFunc for converting a structured value to natural language.
-
-  {{ preamble }}
-
-  {% if examples -%}
-  {% for example in examples -%}
-  {%- if example.nl_context -%}
-  {{ nl_context_title}}:
-  {{ example.nl_context | indent(2, True)}}
-
-  {% endif -%}
-  {{ value_title}}:
-  {{ value_str(example.value) | indent(2, True) }}
-
-  {{ nl_text_title }}:
-  {{ example.nl_text | indent(2, True) }}
-
-  {% endfor %}
-  {% endif -%}
-  {% if nl_context -%}
-  {{ nl_context_title }}:
-  {{ nl_context | indent(2, True)}}
-
-  {% endif -%}
-  {{ value_title }}:
-  {{ value_str(input_value) | indent(2, True) }}
-
-  {{ nl_text_title }}:
-  """
-
-  input_value: Annotated[
-      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
-  ] = lf.contextual()
-
-  nl_context: Annotated[
-      str | None, 'The natural language context for describing the object.'
-  ] = lf.contextual(default=None)
-
-  preamble: Annotated[
-      lf.LangFunc, 'Preamble used for zeroshot natural language mapping.'
-  ]
-
-  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
-      'CONTEXT_FOR_DESCRIPTION'
-  )
-
-  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
-      'NATURAL_LANGUAGE_TEXT'
-  )
-
-  value_title: Annotated[str, 'The section title for schema.'] = 'PYTHON_OBJECT'
-
-  def value_str(self, value: Any) -> str:
+  def value_str(self, value: Any, markdown: bool = True) -> str:
+    if self.has_modalities(value):
+      value = lf.ModalityRef.placehold(value)
     return schema_lib.value_repr('python').repr(
-        value, markdown=False, compact=False
-    )
-
-
-class Pair(pg.Object):
-  """Value pair used for expressing structure-to-structure mapping."""
-
-  left: pg.typing.Annotated[
-      pg.typing.Any(transform=schema_lib.mark_missing), 'The left-side value.'
-  ]
-  right: pg.typing.Annotated[
-      pg.typing.Any(transform=schema_lib.mark_missing), 'The right-side value.'
-  ]
-
-
-class StructureToStructure(Mapping):
-  """Base class for structure-to-structure mapping.
-
-  {{ preamble }}
-
-  {% if examples -%}
-  {% for example in examples -%}
-  {{ input_value_title }}:
-  {{ value_str(example.value.left) | indent(2, True) }}
-
-  {%- if missing_type_dependencies(example.value) %}
-
-  {{ type_definitions_title }}:
-  {{ type_definitions_str(example.value) | indent(2, True) }}
-  {%- endif %}
-  {%- if has_modalities(example.value.left) %}
-
-  {{ modality_refs_title }}:
-  {{ modality_refs_str(example.value.left) | indent(2, True) }}
-  {%- endif %}
-
-  {{ output_value_title }}:
-  {{ value_str(example.value.right) | indent(2, True) }}
-
-  {% endfor %}
-  {% endif -%}
-  {{ input_value_title }}:
-  {{ value_str(input_value) | indent(2, True) }}
-  {%- if missing_type_dependencies(input_value) %}
-
-  {{ type_definitions_title }}:
-  {{ type_definitions_str(input_value) | indent(2, True) }}
-  {%- endif %}
-  {%- if has_modalities(input_value) %}
-
-  {{ modality_refs_title }}:
-  {{ modality_refs_str(input_value) | indent(2, True) }}
-  {%- endif %}
-
-  {{ output_value_title }}:
-  """
-  input_value: Annotated[
-      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
-  ] = lf.contextual()
-
-  autofix: Annotated[
-      int,
-      (
-          'Max attempts for LLM-based code correction. '
-          'If 0 (default), there is no automatic correction.'
-      ),
-  ] = 3
-
-  autofix_lm: Annotated[
-      lf.LanguageModel, 'Language model used for code correction.'
-  ] = lf.contextual(default=None)
-
-  default: Annotated[
-      Any,
-      (
-          'The default value to use if mapping failed. '
-          'If unspecified, error will be raisen.'
-      ),
-  ] = lf.RAISE_IF_HAS_ERROR
-
-  preamble: Annotated[
-      lf.LangFunc,
-      'Preamble used for structure-to-structure mapping.',
-  ]
-
-  type_definitions_title: Annotated[
-      str, 'The section title for type definitions.'
-  ] = 'CLASS_DEFINITIONS'
-
-  modality_refs_title: Annotated[
-      str, 'The section title for modality objects.'
-  ] = 'MODALITY_REFS'
-
-  input_value_title: Annotated[str, 'The section title for input value.']
-  output_value_title: Annotated[str, 'The section title for output value.']
-
-  def _on_bound(self):
-    super()._on_bound()
-    if self.examples:
-      for example in self.examples:
-        if not isinstance(example.value, Pair):
-          raise ValueError(
-              'The value of example must be a `lf.structured.Pair` object. '
-              f'Encountered: { example.value }.'
-          )
-
-  def value_str(self, value: Any) -> str:
-    return schema_lib.value_repr('python').repr(
-        lf.ModalityRef.placehold(value), compact=False, verbose=True
+        value, compact=False, verbose=True, markdown=markdown
     )
 
   def has_modalities(self, value: Any) -> bool:
@@ -445,10 +263,167 @@ class StructureToStructure(Mapping):
         self.missing_type_dependencies(value), markdown=True
     )
 
-  def _value_context(self):
+
+class NaturalLanguageToStructure(Mapping):
+  """LangFunc for converting natural language text to structured value."""
+
+  mapping_template = lf.Template("""
+      {%- if example.nl_context -%}
+      {{ nl_context_title}}:
+      {{ example.nl_context | indent(2, True)}}
+
+      {% endif -%}
+      {%- if example.nl_text -%}
+      {{ nl_text_title }}:
+      {{ example.nl_text | indent(2, True) }}
+
+      {% endif -%}
+      {{ schema_title }}:
+      {{ example.schema_str(protocol) | indent(2, True) }}
+
+      {{ value_title }}:
+      {%- if example.has_value %}
+      {{ example.value_str(protocol) | indent(2, True) }}
+      {% endif -%}
+      """)
+
+  schema: pg.typing.Annotated[
+      # Automatic conversion from annotation to schema.
+      schema_lib.schema_spec(),
+      'A `lf.structured.Schema` that constrains the structured value.',
+  ]
+
+  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
+      'USER_REQUEST'
+  )
+
+  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
+      'LM_RESPONSE'
+  )
+
+  schema_title: Annotated[str, 'The section title for schema.']
+
+  value_title: Annotated[str, 'The section title for schema.']
+
+  protocol: Annotated[
+      schema_lib.SchemaProtocol,
+      'The protocol for representing the schema and value.',
+  ]
+
+  @property
+  def mapping_request(self) -> MappingExample:
+    """Mapping request."""
+    return MappingExample(
+        nl_context=self.nl_context,
+        nl_text=self.nl_text,
+        schema=pg.Ref(self.schema),
+    )
+
+  @property
+  @abc.abstractmethod
+  def nl_context(self) -> str | None:
+    """Returns the natural language context for obtaining the response.
+
+    Returns:
+      The natural language context (prompt) for obtaining the response (either
+      in natural language or directly to structured protocol). If None,
+      `nl_text` must be provided.
+    """
+
+  @property
+  @abc.abstractmethod
+  def nl_text(self) -> str | None:
+    """Returns the natural language text to map.
+
+    Returns:
+      The natural language text (in LM response) to map to object. If None,
+      the LM directly outputs structured protocol instead of natural language.
+      If None, `nl_context` must be provided.
+    """
+
+
+class StructureToNaturalLanguage(Mapping):
+  """LangFunc for converting a structured value to natural language."""
+
+  mapping_template = lf.Template("""
+      {%- if example.nl_context -%}
+      {{ nl_context_title}}:
+      {{ example.nl_context | indent(2, True)}}
+
+      {% endif -%}
+      {{ value_title}}:
+      {{ value_str(example.value, markdown=False) | indent(2, True) }}
+
+      {{ nl_text_title }}:
+      {%- if example.nl_text %}
+      {{ example.nl_text | indent(2, True) }}
+      {% endif -%}
+      """)
+
+  input_value: Annotated[
+      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
+  ] = lf.contextual()
+
+  nl_context: Annotated[
+      str | None, 'The natural language context for describing the object.'
+  ] = lf.contextual(default=None)
+
+  nl_context_title: Annotated[str, 'The section title for nl_context.'] = (
+      'CONTEXT_FOR_DESCRIPTION'
+  )
+
+  nl_text_title: Annotated[str, 'The section title for nl_text.'] = (
+      'NATURAL_LANGUAGE_TEXT'
+  )
+
+  value_title: Annotated[str, 'The section title for schema.'] = 'PYTHON_OBJECT'
+
+  @property
+  def mapping_request(self) -> MappingExample:
+    return MappingExample(
+        nl_context=self.nl_context,
+        value=pg.Ref(self.input_value),
+    )
+
+
+class Pair(pg.Object):
+  """Value pair used for expressing structure-to-structure mapping."""
+
+  left: pg.typing.Annotated[
+      pg.typing.Any(transform=schema_lib.mark_missing), 'The left-side value.'
+  ]
+  right: pg.typing.Annotated[
+      pg.typing.Any(transform=schema_lib.mark_missing), 'The right-side value.'
+  ]
+
+  @property
+  def has_right(self) -> bool:
+    """Returns True if the right value is present."""
+    return self.right != schema_lib.MISSING
+
+
+class StructureToStructure(Mapping):
+  """Base class for structure-to-structure mapping."""
+
+  input_value: Annotated[
+      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
+  ] = lf.contextual()
+
+  type_definitions_title: Annotated[
+      str, 'The section title for type definitions.'
+  ] = 'CLASS_DEFINITIONS'
+
+  modality_refs_title: Annotated[
+      str, 'The section title for modality objects.'
+  ] = 'MODALITY_REFS'
+
+  input_value_title: Annotated[str, 'The section title for input value.']
+  output_value_title: Annotated[str, 'The section title for output value.']
+
+  def globals(self):
+    context = super().globals()
     classes = schema_lib.class_dependencies(self.input_value)
-    context = {cls.__name__: cls for cls in classes}
-    context['ModalityRef'] = lf.modality.ModalityRef
+    context.update({cls.__name__: cls for cls in classes})
     return context
 
   def transform_input(self, lm_input: lf.Message) -> lf.Message:
@@ -461,21 +436,10 @@ class StructureToStructure(Mapping):
       lm_input.metadata.update(pg.object_utils.canonicalize(modalities))
     return lm_input
 
-  def transform_output(self, lm_output: lf.Message) -> lf.Message:
-    try:
-      result = schema_lib.value_repr('python').parse(
-          lm_output.text,
-          additional_context=self._value_context(),
-          autofix=self.autofix,
-          autofix_lm=self.autofix_lm or self.lm,
-      )
-      # Try restore modality objects from the input value to output value.
-      modalities = self.modalities(self.input_value)
-      if modalities:
-        result.rebind(modalities)
-    except Exception as e:  # pylint: disable=broad-exception-caught
-      if self.default == lf.RAISE_IF_HAS_ERROR:
-        raise e
-      result = self.default
-    lm_output.result = result
-    return lm_output
+  def postprocess_result(self, result: Any) -> Any:
+    """Postprocess result."""
+    # Try restore modality objects from the input value to output value.
+    modalities = self.modalities(self.input_value)
+    if modalities:
+      result.rebind(modalities)
+    return result

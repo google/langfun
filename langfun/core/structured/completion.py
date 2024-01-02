@@ -24,6 +24,48 @@ import pyglove as pg
 class CompleteStructure(mapping.StructureToStructure):
   """Complete structure by filling the missing fields."""
 
+  mapping_template = lf.Template("""
+      {{ input_value_title }}:
+      {{ value_str(example.value.left) | indent(2, True) }}
+
+      {%- if missing_type_dependencies(example.value.left) %}
+
+      {{ type_definitions_title }}:
+      {{ type_definitions_str(example.value.left) | indent(2, True) }}
+      {%- endif %}
+      {%- if has_modalities(example.value.left) %}
+
+      {{ modality_refs_title }}:
+      {{ modality_refs_str(example.value.left) | indent(2, True) }}
+      {%- endif %}
+
+      {{ output_value_title }}:
+      {%- if example.value.has_right %}
+      {{ value_str(example.value.right) | indent(2, True) }}
+      {% endif -%}
+      """)
+
+  @property
+  def mapping_request(self) -> mapping.MappingExample:
+    return mapping.MappingExample(
+        nl_context=None,
+        nl_text=None,
+        schema=self.input_value.__class__,
+        value=mapping.Pair(
+            left=pg.Ref(self.input_value), right=schema_lib.MISSING
+        ),
+    )
+
+  def _on_bound(self):
+    super()._on_bound()
+    if self.examples:
+      for example in self.examples:
+        if not isinstance(example.value, mapping.Pair):
+          raise ValueError(
+              'The value of example must be a `lf.structured.Pair` object. '
+              f'Encountered: { example.value }.'
+          )
+
   input_value_title = 'INPUT_OBJECT'
   output_value_title = 'OUTPUT_OBJECT'
 
@@ -59,8 +101,8 @@ class CompleteStructure(mapping.StructureToStructure):
   # could access the input via the `message.result` field.
   input_path = ''
 
-  def _value_context(self):
-    context = super()._value_context()
+  def globals(self):
+    context = super().globals()
     # NOTE(daiyip): since `lf.complete` could have fields of Any type, which
     # could be user provided objects. For LLMs to restores these objects, we
     # need to expose their types to the code evaluation context.
