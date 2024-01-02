@@ -47,7 +47,10 @@ class ParseStructurePythonTest(unittest.TestCase):
         l.render(input_message=m).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
-            Both RESULT_TYPE and RESULT_OBJECT are described in Python.
+
+            INSTRUCTIONS:
+            1. Both RESULT_TYPE and RESULT_OBJECT are described in Python.
+            2. RESULT_OBJECT must be created solely based on the information provided in LM_RESPONSE.
 
             USER_REQUEST:
               Compute 12 / 6 + 2.
@@ -70,7 +73,10 @@ class ParseStructurePythonTest(unittest.TestCase):
         l.render(input_message=m).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
-            Both RESULT_TYPE and RESULT_OBJECT are described in Python.
+
+            INSTRUCTIONS:
+            1. Both RESULT_TYPE and RESULT_OBJECT are described in Python.
+            2. RESULT_OBJECT must be created solely based on the information provided in LM_RESPONSE.
 
             LM_RESPONSE:
               12 / 6 + 2 = 4
@@ -98,7 +104,10 @@ class ParseStructurePythonTest(unittest.TestCase):
         l.render(input_message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
-            Both RESULT_TYPE and RESULT_OBJECT are described in Python.
+
+            INSTRUCTIONS:
+            1. Both RESULT_TYPE and RESULT_OBJECT are described in Python.
+            2. RESULT_OBJECT must be created solely based on the information provided in LM_RESPONSE.
 
             USER_REQUEST:
               What is the answer of 1 plus 1?

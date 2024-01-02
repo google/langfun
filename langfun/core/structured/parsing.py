@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Natural language text to structured value."""
-
-import inspect
-from typing import Annotated, Any, Callable, Literal, Type, Union
+from typing import Annotated, Any, Callable, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -64,7 +62,10 @@ class ParseStructurePython(ParseStructure):
 
   preamble = """
       Please help translate the last {{ nl_text_title }} into {{ value_title}} based on {{ schema_title }}.
-      Both {{ schema_title }} and {{ value_title }} are described in Python.
+
+      INSTRUCTIONS:
+      1. Both {{ schema_title }} and {{ value_title }} are described in Python.
+      2. {{ value_title }} must be created solely based on the information provided in {{ nl_text_title }}.
       """
 
   protocol = 'python'
@@ -125,6 +126,7 @@ def parse(
 
   Args:
     message: A `lf.Message` object  or a string as the natural language input.
+      It provides the complete context for the parsing.
     schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
     default: The default value if parsing failed. If not specified, error will
       be raised.
@@ -299,49 +301,15 @@ def _parse_structure_cls(
     raise ValueError(f'Unknown protocol: {protocol!r}.')
 
 
-class _Country(pg.Object):
-  """A example dataclass for structured parsing."""
-  name: str
-  continents: list[Literal[
-      'Africa',
-      'Asia',
-      'Europe',
-      'Oceania',
-      'North America',
-      'South America'
-  ]]
-  num_states: int
-  neighbor_countries: list[str]
-  population: int
-  capital: str | None
-  president: str | None
+class _AdditionResults(pg.Object):
+  one_plus_one_equals: int | None
+  two_plus_two_equals: int | None
 
 
 DEFAULT_PARSE_EXAMPLES: list[mapping.MappingExample] = [
     mapping.MappingExample(
-        nl_text=inspect.cleandoc("""
-            The United States of America is a country primarily located in North America
-            consisting of fifty states, a federal district, five major unincorporated territories,
-            nine Minor Outlying Islands, and 326 Indian reservations. It shares land borders
-            with Canada to its north and with Mexico to its south and has maritime borders
-            with the Bahamas, Cuba, Russia, and other nations. With a population of over 333
-            million. The national capital of the United States is Washington, D.C.
-            """),
-        schema=_Country,
-        value=_Country(
-            name='The United States of America',
-            continents=['North America'],
-            num_states=50,
-            neighbor_countries=[
-                'Canada',
-                'Mexico',
-                'Bahamas',
-                'Cuba',
-                'Russia',
-            ],
-            population=333000000,
-            capital='Washington, D.C',
-            president=None,
-        ),
+        nl_text='Two plus two equals four. Three plus three equals six.',
+        schema=_AdditionResults,
+        value=_AdditionResults(one_plus_one_equals=None, two_plus_two_equals=4),
     ),
 ]
