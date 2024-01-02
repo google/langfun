@@ -84,7 +84,7 @@ def evaluate(
 
   # Parse the code str.
   code, code_block = parsing.PythonCodeParser().parse(code, permission)
-  global_vars, local_vars = ctx, {}
+  global_vars, orig_global_vars = ctx, ctx.copy()
 
   if hasattr(code_block.body[-1], 'value'):
     last_expr = code_block.body.pop()  # pytype: disable=attribute-error
@@ -98,26 +98,43 @@ def evaluate(
 
     try:
       # Execute the lines before the last expression.
-      exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
+      # NOTE(daiyip): Only a `globals` dict is specified here, which will also
+      # be used to output intermediate values by `exec`. We do not specify a
+      # separate `locals` dict here, for - "If exec gets two separate objects as
+      # globals and locals, the code will be executed as if it were embedded in
+      # a class definition." - as the Python document explains. The outcome is
+      # that new functions defined in the code block could not be called by
+      # other newly defined functions.
+      # Refer to https://stackoverflow.com/questions/
+      # 73940751/why-cant-i-call-a-function-from-another-function-using-exec
+      # for more details.
+      exec(compile(code_block, '', mode='exec'), global_vars)  # pylint: disable=exec-used
 
       # Evaluate the last expression.
       result = eval(  # pylint: disable=eval-used
-          compile(last_expr, '', mode='eval'), global_vars, local_vars)
+          compile(last_expr, '', mode='eval'), global_vars
+      )
     except Exception as e:
       raise errors.CodeError(code, e) from e
 
     for result_var in result_vars:
-      local_vars[result_var] = result
+      global_vars[result_var] = result
   else:
     try:
-      exec(compile(code_block, '', mode='exec'), global_vars, local_vars)  # pylint: disable=exec-used
+      exec(compile(code_block, '', mode='exec'), global_vars)  # pylint: disable=exec-used
     except Exception as e:
       raise errors.CodeError(code, e) from e
-    local_vars[RESULT_KEY] = list(local_vars.values())[-1]
+    global_vars[RESULT_KEY] = list(global_vars.values())[-1]
 
   if outputs_intermediate:
-    return local_vars
-  return local_vars[RESULT_KEY]
+    outputs = {}
+    for k, v in global_vars.items():
+      if k == '__builtins__':
+        continue
+      if k not in orig_global_vars or v is not orig_global_vars[k]:
+        outputs[k] = v
+    return outputs
+  return global_vars[RESULT_KEY]
 
 
 def sandbox_call(
@@ -264,4 +281,3 @@ def run(
       evaluate, code=code, global_vars=global_vars, permission=permission,
       outputs_intermediate=outputs_intermediate,
       sandbox=sandbox, timeout=timeout)
-

@@ -84,13 +84,34 @@ class EvaluateTest(unittest.TestCase):
         """
         def foo(x, y):
           return x + y
+
+        def bar(z):
+          return z + foo(z, z)
         """,
         permission=permissions.CodePermission.ALL,
         outputs_intermediate=True,
     )
-    self.assertEqual(list(ret.keys()), ['foo', '__result__'])
+    self.assertEqual(list(ret.keys()), ['foo', 'bar', '__result__'])
     self.assertTrue(inspect.isfunction(ret['foo']))
-    self.assertIs(ret['__result__'], ret['foo'])
+    self.assertTrue(inspect.isfunction(ret['bar']))
+    self.assertIs(ret['__result__'], ret['bar'])
+
+  def test_function_def_and_call(self):
+    ret = execution.evaluate(
+        """
+        def foo(x, y):
+          return x + y
+
+        def bar(z):
+          return z + foo(z, z)
+
+        bar(1)
+        """,
+        permission=permissions.CodePermission.ALL,
+        outputs_intermediate=True,
+    )
+    self.assertEqual(list(ret.keys()), ['foo', 'bar', '__result__'])
+    self.assertEqual(ret['__result__'], 3)
 
   def test_complex(self):
     ret = execution.evaluate(
