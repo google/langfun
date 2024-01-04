@@ -43,7 +43,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     m = lf.AIMessage('Compute 12 / 6 + 2.')
 
     self.assertEqual(
-        l.render(user_prompt=m).text,
+        l.render(input=m).text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
@@ -82,14 +82,16 @@ class QueryStructurePythonTest(unittest.TestCase):
     l = prompting.QueryStructurePython(
         int,
         examples=[
-            mapping.MappingExample('What is the answer of 1 plus 1?', None, 2),
             mapping.MappingExample(
-                'Compute the value of 3 + (2 * 6).', None, 15
+                input='What is the answer of 1 plus 1?', output=2
+            ),
+            mapping.MappingExample(
+                input='Compute the value of 3 + (2 * 6).', output=15
             ),
         ],
     )
     self.assertEqual(
-        l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(input=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
@@ -193,11 +195,11 @@ class QueryStructurePythonTest(unittest.TestCase):
           [Itinerary],
           examples=[
               mapping.MappingExample(
-                  nl_context=inspect.cleandoc("""
+                  input=inspect.cleandoc("""
                       Find the alternatives of expressing \"feeling great\".
                       """),
                   schema={'expression': str, 'words': list[str]},
-                  value={
+                  output={
                       'expression': 'feeling great',
                       'words': [
                           'Ecstatic',
@@ -210,7 +212,7 @@ class QueryStructurePythonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(user_prompt=lm_input)
+      r = l(input=lm_input)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
@@ -277,7 +279,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     m = lf.AIMessage('Compute 12 / 6 + 2.')
 
     self.assertEqual(
-        l.render(user_prompt=m).text,
+        l.render(input=m).text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with JSON according to SCHEMA:
 
@@ -308,14 +310,12 @@ class QueryStructureJsonTest(unittest.TestCase):
     l = prompting.QueryStructureJson(
         int,
         examples=[
-            mapping.MappingExample('What is the answer of 1 plus 1?', None, 2),
-            mapping.MappingExample(
-                'Compute the value of 3 + (2 * 6).', None, 15
-            ),
+            mapping.MappingExample('What is the answer of 1 plus 1?', 2),
+            mapping.MappingExample('Compute the value of 3 + (2 * 6).', 15),
         ],
     )
     self.assertEqual(
-        l.render(user_prompt=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(input=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with JSON according to SCHEMA:
 
@@ -445,11 +445,11 @@ class QueryStructureJsonTest(unittest.TestCase):
           [Itinerary],
           examples=[
               mapping.MappingExample(
-                  nl_context=inspect.cleandoc("""
+                  input=inspect.cleandoc("""
                       Find the alternatives of expressing \"feeling great\".
                       """),
                   schema={'expression': str, 'words': list[str]},
-                  value={
+                  output={
                       'expression': 'feeling great',
                       'words': [
                           'Ecstatic',
@@ -462,7 +462,7 @@ class QueryStructureJsonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(user_prompt=lm_input)
+      r = l(input=lm_input)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)

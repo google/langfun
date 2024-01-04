@@ -39,17 +39,17 @@ class DescribeStructureTest(unittest.TestCase):
     l = description_lib.DescribeStructure(
         examples=[
             mapping.MappingExample(
-                nl_context='Compute 1 + 2',
-                nl_text='The result of 1 + 2 is 3',
-                value=3,
+                context='Compute 1 + 2',
+                input=3,
+                output='The result of 1 + 2 is 3',
             ),
             mapping.MappingExample(
-                nl_context='Best activity to do in New York city.',
-                nl_text=(
+                context='Best activity to do in New York city.',
+                input=Activity('Visit Broadway threatres for shows'),
+                output=(
                     'The best thing to do in New York city is to watch shows '
                     'in Broadway threatres.'
                 ),
-                value=Activity('Visit Broadway threatres for shows'),
             ),
         ]
     )
@@ -65,7 +65,7 @@ class DescribeStructureTest(unittest.TestCase):
     )
 
     self.assertEqual(
-        l.render(input_value=value, nl_context='1 day itinerary to SF').text,
+        l.render(input=value, context='1 day itinerary to SF').text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -77,7 +77,9 @@ class DescribeStructureTest(unittest.TestCase):
               Compute 1 + 2
 
             PYTHON_OBJECT:
+              ```python
               3
+              ```
 
             NATURAL_LANGUAGE_TEXT:
               The result of 1 + 2 is 3
@@ -86,9 +88,11 @@ class DescribeStructureTest(unittest.TestCase):
               Best activity to do in New York city.
 
             PYTHON_OBJECT:
+              ```python
               Activity(
                 description='Visit Broadway threatres for shows'
               )
+              ```
 
             NATURAL_LANGUAGE_TEXT:
               The best thing to do in New York city is to watch shows in Broadway threatres.
@@ -98,6 +102,7 @@ class DescribeStructureTest(unittest.TestCase):
               1 day itinerary to SF
 
             PYTHON_OBJECT:
+              ```python
               Itinerary(
                 day=1,
                 type='daytime',
@@ -114,6 +119,7 @@ class DescribeStructureTest(unittest.TestCase):
                 ],
                 hotel=None
               )
+              ```
 
             NATURAL_LANGUAGE_TEXT:
             """),
@@ -132,7 +138,7 @@ class DescribeStructureTest(unittest.TestCase):
         hotel=None,
     )
     self.assertEqual(
-        l.render(input_value=value, nl_context='1 day itinerary to SF').text,
+        l.render(input=value, context='1 day itinerary to SF').text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -144,6 +150,7 @@ class DescribeStructureTest(unittest.TestCase):
               1 day itinerary to SF
 
             PYTHON_OBJECT:
+              ```python
               Itinerary(
                 day=1,
                 type='daytime',
@@ -160,6 +167,7 @@ class DescribeStructureTest(unittest.TestCase):
                 ],
                 hotel=None
               )
+              ```
 
             NATURAL_LANGUAGE_TEXT:
             """),
@@ -179,7 +187,7 @@ class DescribeStructureTest(unittest.TestCase):
     )
 
     self.assertEqual(
-        l.render(input_value=value).text,
+        l.render(input=value).text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -188,6 +196,7 @@ class DescribeStructureTest(unittest.TestCase):
               2. If a field in the object has None as its value, do not mention it.
 
             PYTHON_OBJECT:
+              ```python
               Itinerary(
                 day=1,
                 type='daytime',
@@ -204,6 +213,7 @@ class DescribeStructureTest(unittest.TestCase):
                 ],
                 hotel=None
               )
+              ```
 
             NATURAL_LANGUAGE_TEXT:
             """),

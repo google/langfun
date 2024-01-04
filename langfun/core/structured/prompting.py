@@ -11,75 +11,66 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Natural language text to structured value."""
+"""Symbolic query."""
 
-from typing import Annotated, Any, Type, Union
+from typing import Any, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
 from langfun.core.structured import schema as schema_lib
+import pyglove as pg
 
 
 @lf.use_init_args(['schema', 'default', 'examples'])
-class QueryStructure(mapping.NaturalLanguageToStructure):
+class QueryStructure(mapping.Mapping):
   """Query an object out from a natural language text."""
 
-  user_prompt: Annotated[
-      lf.Message, 'Natural language prompt from the user to query the LM.'
-  ] = lf.contextual()
+  context_title = 'CONTEXT'
+  input_title = 'USER_REQUEST'
 
-  def transform_input(self, lm_input: lf.Message) -> lf.Message:
-    lm_input.source = self.user_prompt
-    return lm_input
-
-  @property
-  def nl_context(self) -> str:
-    """Returns the user request."""
-    return self.user_prompt.text
-
-  @property
-  def nl_text(self) -> None:
-    """Returns the LM response."""
-    return None
+  # Mark schema as required.
+  schema: pg.typing.Annotated[
+      schema_lib.schema_spec(), 'Required schema for parsing.'
+  ]
 
 
 class QueryStructureJson(QueryStructure):
   """Query a structured value using JSON as the protocol."""
 
   preamble = """
-      Please respond to the last {{ nl_context_title }} with {{ value_title}} according to {{ schema_title }}:
+      Please respond to the last {{ input_title }} with {{ output_title}} according to {{ schema_title }}:
 
       INSTRUCTIONS:
         1. If the schema has `_type`, carry it over to the JSON output.
         2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
 
-      {{ nl_context_title }}:
+      {{ input_title }}:
         1 + 1 =
 
       {{ schema_title }}:
         {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
 
-      {{ value_title}}:
+      {{ output_title}}:
         {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
       """
 
   protocol = 'json'
   schema_title = 'SCHEMA'
-  value_title = 'JSON'
+  output_title = 'JSON'
 
 
 class QueryStructurePython(QueryStructure):
   """Query a structured value using Python as the protocol."""
 
   preamble = """
-      Please respond to the last {{ nl_context_title }} with {{ value_title }} according to {{ schema_title }}.
+      Please respond to the last {{ input_title }} with {{ output_title }} according to {{ schema_title }}.
 
       INSTRUCTIONS:
-        1. Only response the required {{ value_title }} as illustrated by the given example.
+        1. Only response the required {{ output_title }} as illustrated by the given example.
         2. Don't add any comments in the response.
-        3. {{ value_title }} must strictly follow the {{ schema_title }}.
+        3. {{ output_title }} must strictly follow the {{ schema_title }}.
 
-      {{ nl_context_title }}:
+      {{ input_title }}:
         1 + 1 =
 
       {{ schema_title }}:
@@ -90,14 +81,14 @@ class QueryStructurePython(QueryStructure):
           final_answer: int
         ```
 
-      {{ value_title }}:
+      {{ output_title }}:
         ```python
         Answer(final_answer=2)
         ```
       """
   protocol = 'python'
   schema_title = 'RESULT_TYPE'
-  value_title = 'RESULT_OBJECT'
+  output_title = 'RESULT_OBJECT'
 
 
 def _query_structure_cls(
@@ -112,7 +103,7 @@ def _query_structure_cls(
 
 
 def query(
-    user_prompt: Union[str, lf.Template, lf.Modality],
+    prompt: Union[str, lf.Template, pg.Symbolic],
     schema: Union[
         schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
     ],
@@ -158,8 +149,8 @@ def query(
     ```
 
   Args:
-    user_prompt: A str, a `lf.Template` object or a `lf.Modality` object (e.g.
-      `lf.Image`) as the prompt from the user.
+    prompt: A str or a `lf.Template` object as natural language input, or a 
+      `pg.Symbolic` object as structured input as prompt to LLM.
     schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
     default: The default value if parsing failed. If not specified, error will
       be raised.
@@ -187,18 +178,20 @@ def query(
     autofix = 0
 
   t = _query_structure_cls(protocol)(schema, default=default, examples=examples)
-  if isinstance(user_prompt, lf.Template):
-    user_prompt = user_prompt.render(**kwargs)
-  user_prompt = lf.UserMessage.from_value(user_prompt)
+  if isinstance(prompt, lf.Template):
+    prompt = prompt.render(**kwargs)
 
-  context = dict(autofix=autofix)
+  if isinstance(prompt, (str, lf.Message)):
+    prompt = lf.UserMessage.from_value(prompt)
+
+  call_context = dict(autofix=autofix)
   if lm is not None:
-    context['lm'] = lm
+    call_context['lm'] = lm
   autofix_lm = autofix_lm or lm
   if autofix_lm is not None:
-    context['autofix_lm'] = autofix_lm
-  context.update(kwargs)
+    call_context['autofix_lm'] = autofix_lm
+  call_context.update(kwargs)
 
-  with t.override(**context):
-    output = t(user_prompt=user_prompt)
+  with t.override(**call_context):
+    output = t(input=prompt)
   return output if returns_message else output.result

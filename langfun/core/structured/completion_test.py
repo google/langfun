@@ -59,7 +59,7 @@ class CompleteStructureTest(unittest.TestCase):
         )
     )
     self.assertEqual(
-        l.render(input_value=input_value).text,
+        l.render(input=input_value).text,
         inspect.cleandoc("""
             Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
@@ -133,7 +133,7 @@ class CompleteStructureTest(unittest.TestCase):
         )
     )
     self.assertEqual(
-        l.render(input_value=input_value).text,
+        l.render(input=input_value).text,
         inspect.cleandoc("""
             Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
@@ -213,7 +213,7 @@ class CompleteStructureTest(unittest.TestCase):
         )
     )
     self.assertEqual(
-        l.render(input_value=input_value).text,
+        l.render(input=input_value).text,
         inspect.cleandoc("""
           Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
@@ -410,15 +410,13 @@ class CompleteStructureTest(unittest.TestCase):
     l = completion.CompleteStructure(
         examples=[
             mapping.MappingExample(
-                value=mapping.Pair(
-                    left=Animal.partial(
-                        modalities.Image.from_bytes(b'image_of_rabbit')
-                    ),
-                    right=Animal(
-                        modalities.Image.from_bytes(b'image_of_rabbit'),
-                        'rabbit',
-                    ),
-                )
+                input=Animal.partial(
+                    modalities.Image.from_bytes(b'image_of_rabbit')
+                ),
+                output=Animal(
+                    modalities.Image.from_bytes(b'image_of_rabbit'),
+                    'rabbit',
+                ),
             )
         ]
     )
@@ -427,7 +425,8 @@ class CompleteStructureTest(unittest.TestCase):
             modalities.Image.from_bytes(b'image_of_elephant'),
         )
     )
-    lm_input = l.render(input_value=input_value)
+    lm_input = l.render(input=input_value)
+    self.maxDiff = None
     self.assertEqual(
         lm_input.text,
         inspect.cleandoc("""
@@ -463,9 +462,9 @@ class CompleteStructureTest(unittest.TestCase):
               )
               ```
 
-            MODALITY_REFS:
+            MODALITY_REFERENCES:
               {
-                'image': {{examples[0].value.left.image}}
+                'image': {{examples[0].input.image}}
               }
 
             OUTPUT_OBJECT:
@@ -489,7 +488,7 @@ class CompleteStructureTest(unittest.TestCase):
               )
               ```
 
-            MODALITY_REFS:
+            MODALITY_REFERENCES:
               {
                 'image': {{image}}
               }
@@ -504,28 +503,20 @@ class CompleteStructureTest(unittest.TestCase):
                 'image': lm_input.get('image'),
             },
             {
-                'examples': [
-                    {
-                        'value': {
-                            'left': {
-                                'image': modalities.Image.from_bytes(
-                                    b'image_of_rabbit'
-                                )
-                            },
-                            'right': {
-                                'image': modalities.Image.from_bytes(
-                                    b'image_of_rabbit'
-                                )
-                            },
-                        }
-                    }
-                ],
+                'examples': [{
+                    'input': {
+                        'image': modalities.Image.from_bytes(b'image_of_rabbit')
+                    },
+                    'output': {
+                        'image': modalities.Image.from_bytes(b'image_of_rabbit')
+                    },
+                }],
                 'image': modalities.Image.from_bytes(b'image_of_elephant'),
             },
         )
     )
     lm_output = l(
-        input_value=input_value,
+        input=input_value,
         lm=fake.StaticResponse(inspect.cleandoc("""
             ```python
             Animal(
@@ -595,9 +586,11 @@ class CompleteStructureTest(unittest.TestCase):
     with self.assertRaises(IndexError):
       completion.complete(Activity.partial(), lm=lm)
 
-  def test_bad_init(self):
-    with self.assertRaisesRegex(ValueError, '.*must be.*Pair'):
-      completion.CompleteStructure(examples=[mapping.MappingExample(value=1)])
+  def test_bad_call(self):
+    with self.assertRaisesRegex(
+        ValueError, '.*must contain a least .* missing'
+    ):
+      completion.complete(Activity('foo'), lm=fake.StaticResponse(''))
 
   def test_bad_transform(self):
     with lf.context(

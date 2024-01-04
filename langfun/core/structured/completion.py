@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Structure-to-structure mappings."""
+"""Symbolic completion."""
 
-from typing import Any
+from typing import Annotated, Any, Type
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -21,53 +21,37 @@ from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
-class CompleteStructure(mapping.StructureToStructure):
+class CompleteStructure(mapping.Mapping):
   """Complete structure by filling the missing fields."""
 
+  input: Annotated[
+      pg.Symbolic, 'A symbolic object with `lf.MISSING` values to complete.'
+  ] = lf.contextual()
+
   mapping_template = lf.Template("""
-      {{ input_value_title }}:
-      {{ value_str(example.value.left) | indent(2, True) }}
+      {{ input_title }}:
+      {{ example.input_repr() | indent(2, True) }}
 
-      {%- if missing_type_dependencies(example.value.left) %}
+      {%- if missing_type_dependencies(example.input) %}
 
-      {{ type_definitions_title }}:
-      {{ type_definitions_str(example.value.left) | indent(2, True) }}
+      {{ schema_title }}:
+      {{ class_defs_repr(example.input) | indent(2, True) }}
       {%- endif %}
-      {%- if has_modalities(example.value.left) %}
+      {%- if has_modalities(example.input) %}
 
       {{ modality_refs_title }}:
-      {{ modality_refs_str(example.value.left) | indent(2, True) }}
+      {{ modality_refs_repr(example.input) | indent(2, True) }}
       {%- endif %}
 
-      {{ output_value_title }}:
-      {%- if example.value.has_right %}
-      {{ value_str(example.value.right) | indent(2, True) }}
+      {{ output_title }}:
+      {%- if example.has_output %}
+      {{ example.output_repr() | indent(2, True) }}
       {% endif -%}
       """)
 
-  @property
-  def mapping_request(self) -> mapping.MappingExample:
-    return mapping.MappingExample(
-        nl_context=None,
-        nl_text=None,
-        schema=self.input_value.__class__,
-        value=mapping.Pair(
-            left=pg.Ref(self.input_value), right=schema_lib.MISSING
-        ),
-    )
-
-  def _on_bound(self):
-    super()._on_bound()
-    if self.examples:
-      for example in self.examples:
-        if not isinstance(example.value, mapping.Pair):
-          raise ValueError(
-              'The value of example must be a `lf.structured.Pair` object. '
-              f'Encountered: { example.value }.'
-          )
-
-  input_value_title = 'INPUT_OBJECT'
-  output_value_title = 'OUTPUT_OBJECT'
+  input_title = 'INPUT_OBJECT'
+  output_title = 'OUTPUT_OBJECT'
+  schema_title = 'CLASS_DEFINITIONS'
 
   preamble = lf.LangFunc(
       """
@@ -77,7 +61,7 @@ class CompleteStructure(mapping.StructureToStructure):
       1. Each MISSING field contains a Python annotation, please fill the value based on the annotation.
       2. Classes for the MISSING fields are defined under CLASS_DEFINITIONS.
 
-      {{input_value_title}}:
+      {{input_title}}:
         ```python
         Answer(
           question='1 + 1 =',
@@ -85,7 +69,7 @@ class CompleteStructure(mapping.StructureToStructure):
         )
         ```
 
-      {{output_value_title}}:
+      {{output_title}}:
         ```python
         Answer(
           question='1 + 1 =',
@@ -93,16 +77,62 @@ class CompleteStructure(mapping.StructureToStructure):
         )
         ```
       """,
-      input_value_title=input_value_title,
-      output_value_title=output_value_title,
+      input_title=input_title,
+      output_title=output_title,
   )
 
-  # NOTE(daiyip): Set the input path of the transform to root, so this transform
-  # could access the input via the `message.result` field.
-  input_path = ''
+  @property
+  def mapping_request(self) -> mapping.MappingExample:
+    """Returns a MappingExample as the mapping request."""
+    return mapping.MappingExample(
+        input=pg.Ref(self.input),
+        # Use the schema of input object.
+        schema=pg.Ref(schema_lib.Schema.from_value(self.input.__class__)),
+        context=self.context,
+    )
+
+  def transform_input(self, lm_input: lf.Message) -> lf.Message:
+    if not pg.contains(self.input, type=schema_lib.Missing):
+      raise ValueError(
+          'The input of `lf.complete` must contain a least one '
+          f'missing value. Encountered: {self.input}.'
+      )
+
+    # Find modalities to fill the input message.
+    modalities = self.modalities(self.input)
+    modalities.update(
+        self.modalities(self.examples, root_path=pg.KeyPath('examples'))
+    )
+    if modalities:
+      lm_input.metadata.update(pg.object_utils.canonicalize(modalities))
+    return lm_input
+
+  def missing_type_dependencies(self, value: Any) -> list[Type[Any]]:
+    value_specs = tuple(
+        [v.value_spec for v in schema_lib.Missing.find_missing(value).values()]
+    )
+    return schema_lib.class_dependencies(value_specs, include_subclasses=True)
+
+  def class_defs_repr(self, value: Any) -> str | None:
+    return schema_lib.class_definitions(
+        self.missing_type_dependencies(value), markdown=True
+    )
+
+  def postprocess_result(self, result: Any) -> Any:
+    """Postprocess result."""
+    # Try restore modality objects from the input value to output value.
+    modalities = self.modalities(self.input)
+    if modalities:
+      result.rebind(modalities)
+    return result
 
   def globals(self):
     context = super().globals()
+
+    # Add class dependencies from the input value to the globals.
+    classes = schema_lib.class_dependencies(self.input)
+    context.update({cls.__name__: cls for cls in classes})
+
     # NOTE(daiyip): since `lf.complete` could have fields of Any type, which
     # could be user provided objects. For LLMs to restores these objects, we
     # need to expose their types to the code evaluation context.
@@ -117,13 +147,8 @@ class CompleteStructure(mapping.StructureToStructure):
       if isinstance(v, pg.Object):
         cls = v.__class__
         context[cls.__name__] = cls
-    pg.traverse(self.input_value, _visit)
+    pg.traverse(self.input, _visit)
     return context
-
-
-def completion_example(left: Any, right: Any) -> mapping.MappingExample:
-  """Makes a mapping example for completion."""
-  return mapping.MappingExample(value=mapping.Pair(left=left, right=right))
 
 
 def complete(
@@ -200,5 +225,5 @@ def complete(
   context.update(kwargs)
 
   with t.override(**context):
-    output = t(input_value=schema_lib.mark_missing(input_value))
+    output = t(input=schema_lib.mark_missing(input_value))
   return output if returns_message else output.result

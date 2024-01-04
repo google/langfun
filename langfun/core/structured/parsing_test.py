@@ -41,10 +41,8 @@ class ParseStructurePythonTest(unittest.TestCase):
   def test_render_no_examples(self):
     l = parsing.ParseStructurePython(int)
     m = lf.AIMessage('12 / 6 + 2 = 4')
-    m.source = lf.UserMessage('Compute 12 / 6 + 2.', tags=['lm-input'])
-
     self.assertEqual(
-        l.render(input_message=m).text,
+        l.render(input=m, context='Compute 12 / 6 + 2.').text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
 
@@ -70,7 +68,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     m = lf.AIMessage('12 / 6 + 2 = 4')
 
     self.assertEqual(
-        l.render(input_message=m).text,
+        l.render(input=m).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
 
@@ -93,15 +91,19 @@ class ParseStructurePythonTest(unittest.TestCase):
         int,
         examples=[
             mapping.MappingExample(
-                'What is the answer of 1 plus 1?', '1 + 1 = 2', 2
+                context='What is the answer of 1 plus 1?',
+                input='1 + 1 = 2',
+                output=2,
             ),
             mapping.MappingExample(
-                'Compute the value of 3 + (2 * 6).', 'fifteen', 15
+                context='Compute the value of 3 + (2 * 6).',
+                input='fifteen',
+                output=15,
             ),
         ],
     )
     self.assertEqual(
-        l.render(input_message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(input=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please help translate the last LM_RESPONSE into RESULT_OBJECT based on RESULT_TYPE.
 
@@ -216,10 +218,10 @@ class ParseStructurePythonTest(unittest.TestCase):
           [Itinerary],
           examples=[
               mapping.MappingExample(
-                  nl_context=inspect.cleandoc("""
+                  context=inspect.cleandoc("""
                       Find the alternatives of expressing \"feeling great\".
                       """),
-                  nl_text=inspect.cleandoc("""
+                  input=inspect.cleandoc("""
                       Here are some words for expressing \"feeling great\".
                       * Ecstatic
                       * Delighted
@@ -227,7 +229,7 @@ class ParseStructurePythonTest(unittest.TestCase):
                       * Enjoyable
                       * Fantastic"""),
                   schema={'expression': str, 'words': list[str]},
-                  value={
+                  output={
                       'expression': 'feeling great',
                       'words': [
                           'Ecstatic',
@@ -241,7 +243,7 @@ class ParseStructurePythonTest(unittest.TestCase):
           ],
       )
       m = lf.LangFunc(lm_input)()
-      r = l(input_message=m)
+      r = l(input=m)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
@@ -300,10 +302,8 @@ class ParseStructureJsonTest(unittest.TestCase):
   def test_render_no_examples(self):
     l = parsing.ParseStructureJson(int)
     m = lf.AIMessage('12 / 6 + 2 = 4')
-    m.source = lf.UserMessage('Compute 12 / 6 + 2.', tags=['lm-input'])
-
     self.assertEqual(
-        l.render(input_message=m).text,
+        l.render(input=m, context='Compute 12 / 6 + 2.').text,
         inspect.cleandoc("""
             Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -329,7 +329,7 @@ class ParseStructureJsonTest(unittest.TestCase):
     m = lf.AIMessage('12 / 6 + 2 = 4')
 
     self.assertEqual(
-        l.render(input_message=m).text,
+        l.render(input=m).text,
         inspect.cleandoc("""
             Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -352,15 +352,19 @@ class ParseStructureJsonTest(unittest.TestCase):
         int,
         examples=[
             mapping.MappingExample(
-                'What is the answer of 1 plus 1?', '1 + 1 = 2', 2
+                context='What is the answer of 1 plus 1?',
+                input='1 + 1 = 2',
+                output=2,
             ),
             mapping.MappingExample(
-                'Compute the value of 3 + (2 * 6).', 'fifteen', 15
+                context='Compute the value of 3 + (2 * 6).',
+                input='fifteen',
+                output=15,
             ),
         ],
     )
     self.assertEqual(
-        l.render(input_message=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render(input=lf.AIMessage('Compute 12 / 6 + 2.')).text,
         inspect.cleandoc("""
             Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -509,10 +513,10 @@ class ParseStructureJsonTest(unittest.TestCase):
           [Itinerary],
           examples=[
               mapping.MappingExample(
-                  nl_context=inspect.cleandoc("""
+                  context=inspect.cleandoc("""
                       Find the alternatives of expressing \"feeling great\".
                       """),
-                  nl_text=inspect.cleandoc("""
+                  input=inspect.cleandoc("""
                       Here are some words for expressing \"feeling great\".
                       * Ecstatic
                       * Delighted
@@ -520,7 +524,7 @@ class ParseStructureJsonTest(unittest.TestCase):
                       * Enjoyable
                       * Fantastic"""),
                   schema={'expression': str, 'words': list[str]},
-                  value={
+                  output={
                       'expression': 'feeling great',
                       'words': [
                           'Ecstatic',
@@ -533,7 +537,7 @@ class ParseStructureJsonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(input_message=message)
+      r = l(input=message)
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
@@ -655,12 +659,12 @@ class CallTest(unittest.TestCase):
             parsing_lm=fake.StaticSequence(['3']),
             parsing_examples=[
                 mapping.MappingExample(
-                    nl_context='Multiple four and five',
-                    nl_text='twenty',
+                    context='Multiple four and five',
+                    input='twenty',
                     schema=int,
-                    value=20
+                    output=20,
                 )
-            ]
+            ],
         ),
         3,
     )

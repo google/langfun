@@ -40,8 +40,8 @@ class BasicTest(unittest.TestCase):
   def test_render_output(self):
     l = Template('Hello {{x}}', x=[1])
     self.assertIsNone(l.render_output)
-    self.assertEqual(l.render(), 'Hello [\n  1\n]')
-    self.assertEqual(l.render_output, 'Hello [\n  1\n]')
+    self.assertEqual(l.render(), 'Hello [1]')
+    self.assertEqual(l.render_output, 'Hello [1]')
 
   def test_str(self):
     self.assertEqual(str(Template('Hello')), 'Hello')

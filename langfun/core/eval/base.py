@@ -634,7 +634,8 @@ class Evaluation(Evaluable):
           'examples will be used for parsing. For "query" and "complete", it '
           'must be provided, and the fewshot examples will be used directly '
           'for prompting. Here are the example code on how the '
-          'functors should be defined:' + inspect.cleandoc("""
+          'functors should be defined:'
+          + inspect.cleandoc("""
               ```
               @pg.functor()
               def solution():
@@ -648,9 +649,9 @@ class Evaluation(Evaluable):
                   final_answer: int
                 return Solution, [
                     lf.structured.MappingExample(
-                        nl_text='Compute 1 + 2',
-                        schema=Solution,
-                        value=Solution(3))
+                        input='Compute 1 + 2',
+                        output=Solution(3),
+                        schema=Solution)
                 ]
               ```
               """)
@@ -832,16 +833,13 @@ class Evaluation(Evaluable):
 
     completion_examples = []
     for ex in fewshot_examples:
-      if ex.nl_context is not None:
-        init_args = dict(ex.value.sym_init_args)
-        example_cls = ex.value.__class__
-        self._maybe_adjust_schema_for_completion(example_cls)
-        ex = lf.structured.MappingExample(
-            value=lf.structured.mapping.Pair(
-                left=example_cls.partial(ex.nl_context),
-                right=example_cls(ex.nl_context, **init_args),
-            )
-        )
+      example_cls = ex.output.__class__
+      self._maybe_adjust_schema_for_completion(example_cls)
+      ex = lf.structured.MappingExample(
+          context=ex.context,
+          input=example_cls.partial(ex.input),
+          output=example_cls(ex.input, **ex.output.sym_init_args),
+      )
       completion_examples.append(ex)
     return completion_examples
 

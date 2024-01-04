@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Natural language text to structured value."""
-from typing import Annotated, Any, Callable, Type, Union
+"""Symbolic parsing."""
+from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -21,24 +21,19 @@ import pyglove as pg
 
 
 @lf.use_init_args(['schema', 'default', 'examples'])
-class ParseStructure(mapping.NaturalLanguageToStructure):
+class ParseStructure(mapping.Mapping):
   """Parse an object out from a natural language text."""
 
-  input_message: Annotated[lf.Message, 'The input message.'] = lf.contextual()
+  context_title = 'USER_REQUEST'
+  input_title = 'LM_RESPONSE'
 
-  def transform_input(self, lm_input: lf.Message) -> lf.Message:
-    lm_input.source = self.input_message
-    return lm_input
+  # Require input to be message.
+  input: lf.Message = lf.contextual()
 
-  @property
-  def nl_context(self) -> str | None:
-    """Returns the user request."""
-    return getattr(self.input_message.lm_input, 'text', None)
-
-  @property
-  def nl_text(self) -> str:
-    """Returns the LM response."""
-    return self.input_message.text
+  # Mark schema as required.
+  schema: pg.typing.Annotated[
+      schema_lib.schema_spec(), 'Required schema for parsing.'
+  ]
 
 
 class ParseStructureJson(ParseStructure):
@@ -54,23 +49,23 @@ class ParseStructureJson(ParseStructure):
 
   protocol = 'json'
   schema_title = 'SCHEMA'
-  value_title = 'JSON'
+  output_title = 'JSON'
 
 
 class ParseStructurePython(ParseStructure):
   """Parse an object out from a NL text using Python as the protocol."""
 
   preamble = """
-      Please help translate the last {{ nl_text_title }} into {{ value_title}} based on {{ schema_title }}.
+      Please help translate the last {{ input_title }} into {{ output_title}} based on {{ schema_title }}.
 
       INSTRUCTIONS:
-      1. Both {{ schema_title }} and {{ value_title }} are described in Python.
-      2. {{ value_title }} must be created solely based on the information provided in {{ nl_text_title }}.
+      1. Both {{ schema_title }} and {{ output_title }} are described in Python.
+      2. {{ output_title }} must be created solely based on the information provided in {{ input_title }}.
       """
 
   protocol = 'python'
   schema_title = 'RESULT_TYPE'
-  value_title = 'RESULT_OBJECT'
+  output_title = 'RESULT_OBJECT'
 
 
 def parse(
@@ -155,25 +150,28 @@ def parse(
   if protocol == 'json':
     autofix = 0
 
+  message = lf.AIMessage.from_value(message)
+  if message.source is None and user_prompt is not None:
+    message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
+  context = getattr(message.lm_input, 'text', None)
+
   if examples is None:
     examples = DEFAULT_PARSE_EXAMPLES
 
-  t = _parse_structure_cls(protocol)(schema, default=default, examples=examples)
-  message = lf.AIMessage.from_value(message)
-
-  if message.source is None and user_prompt is not None:
-    message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
+  t = _parse_structure_cls(protocol)(
+      schema=schema, context=context, default=default, examples=examples
+  )
 
   # Setting up context.
-  context = dict(autofix=autofix)
+  call_context = dict(autofix=autofix)
   if lm is not None:
-    context['lm'] = lm
+    call_context['lm'] = lm
   autofix_lm = autofix_lm or lm
   if autofix_lm is not None:
-    context['autofix_lm'] = autofix_lm
-  context.update(kwargs)
+    call_context['autofix_lm'] = autofix_lm
+  call_context.update(kwargs)
 
-  output = t(input_message=message, **context)
+  output = t(input=message, **call_context)
   return output if returns_message else output.result
 
 
@@ -308,8 +306,10 @@ class _AdditionResults(pg.Object):
 
 DEFAULT_PARSE_EXAMPLES: list[mapping.MappingExample] = [
     mapping.MappingExample(
-        nl_text='Two plus two equals four. Three plus three equals six.',
+        input='Two plus two equals four. Three plus three equals six.',
         schema=_AdditionResults,
-        value=_AdditionResults(one_plus_one_equals=None, two_plus_two_equals=4),
+        output=_AdditionResults(
+            one_plus_one_equals=None, two_plus_two_equals=4
+        ),
     ),
 ]

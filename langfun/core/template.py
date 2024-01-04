@@ -286,7 +286,12 @@ class Template(
             # Enable Python format for builtin types during template rendering,
             # versus the default PyGlove format (e.g. [0: 'abc'] for list).
             # User-defined classes may have their own format.
-            with pg.object_utils.str_format(python_format=True):
+            with pg.object_utils.str_format(
+                # Use compact (single-line) Python format (vs. PyGlove format)
+                # for non-natural-language-formattable symbolic objects.
+                compact=True,
+                python_format=True,
+            ):
               # Natural language formattable objects will be returned in natural
               # language when they are directly returned as rendering elements
               # in the template.
@@ -299,7 +304,11 @@ class Template(
         # Fill the variables for rendering the template as metadata.
         message = message_cls(
             text=rendered_text,
-            metadata={k: pg.Ref(v) for k, v in inputs.items()},
+            metadata={
+                k: pg.Ref(v)
+                for k, v in inputs.items()
+                if not inspect.ismethod(v)
+            },
         )
 
         # Tag input as rendered message.

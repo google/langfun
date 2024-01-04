@@ -45,9 +45,9 @@ def answer_schema():
 def answer_schema_with_fewshot_examples():
   return Solution, [
       lf_structured.MappingExample(
-          nl_text='The result of one plus two',
+          input='The result of one plus two',
+          output=Solution(3),
           schema=Solution,
-          value=Solution(3)
       )
   ]
 
@@ -120,10 +120,11 @@ class EvaluationTest(unittest.TestCase):
             s.fewshot_examples,
             [
                 lf_structured.MappingExample(
-                    nl_text='The result of one plus two',
+                    input='The result of one plus two',
+                    output=Solution(3),
                     schema=Solution,
-                    value=Solution(3))
-            ]
+                )
+            ],
         )
     )
 
@@ -137,9 +138,9 @@ class EvaluationTest(unittest.TestCase):
 
       return Solution1, [
           lf.structured.MappingExample(
-              nl_context='The result of one plus two',
+              input='The result of one plus two',
+              output=Solution1(3),
               schema=Solution1,
-              value=Solution1(3)
           )
       ]
 
@@ -159,13 +160,12 @@ class EvaluationTest(unittest.TestCase):
             fewshot_examples,
             [
                 lf.structured.MappingExample(
-                    value=lf.structured.mapping.Pair(
-                        left=solution_cls.partial(
-                            question='The result of one plus two'),
-                        right=solution_cls('The result of one plus two', 3),
-                    )
+                    input=solution_cls.partial(
+                        question='The result of one plus two'
+                    ),
+                    output=solution_cls('The result of one plus two', 3),
                 )
-            ]
+            ],
         )
     )
 

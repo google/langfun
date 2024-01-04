@@ -107,7 +107,7 @@ def run_with_correction(
 
   examples = examples or DEFAULT_CODE_CORRECTION_EXAMPLES
   examples = [  # pylint: disable=g-complex-comprehension
-      completion.completion_example(
+      completion.mapping.MappingExample(
           CodeCorrection.partial(ex.latest_code, ex.correction_history),
           ex,
       )

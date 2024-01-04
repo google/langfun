@@ -47,11 +47,6 @@ from langfun.core.structured.schema import value_repr
 from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingExample
 
-# Mappings of between different forms of content.
-from langfun.core.structured.mapping import NaturalLanguageToStructure
-from langfun.core.structured.mapping import StructureToNaturalLanguage
-from langfun.core.structured.mapping import StructureToStructure
-
 from langfun.core.structured.parsing import ParseStructure
 from langfun.core.structured.parsing import ParseStructureJson
 from langfun.core.structured.parsing import ParseStructurePython
@@ -73,8 +68,6 @@ from langfun.core.structured.completion import complete
 # them.
 from langfun.core.structured.parsing import DEFAULT_PARSE_EXAMPLES
 from langfun.core.structured.description import DEFAULT_DESCRIBE_EXAMPLES
-
-from langfun.core.structured.completion import completion_example
 
 # Default examples.
 

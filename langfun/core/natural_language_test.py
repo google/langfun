@@ -16,6 +16,7 @@ import unittest
 
 from langfun.core import component
 from langfun.core import natural_language as nl
+import pyglove as pg
 
 
 class NaturalLanguageFormattableTest(unittest.TestCase):
@@ -31,6 +32,8 @@ class NaturalLanguageFormattableTest(unittest.TestCase):
 
     a = A(1, 'abc')
     self.assertEqual(repr(a), 'A(x=1, y=\'abc\')')
+    with pg.object_utils.repr_format(natural_language=True):
+      self.assertEqual(repr(a), "A simple object with 1 and 'abc'.")
     self.assertEqual(str(a), "A simple object with 1 and 'abc'.")
 
 

@@ -26,16 +26,13 @@ class NaturalLanguageFormattable(pg.Formattable):
 
   def format(
       self,
-      compact: bool = False,
-      verbose: bool = True,
-      root_indent: int = 0,
+      *args,
+      natural_language: bool = False,
       **kwargs
   ) -> str:
-    if compact:
-      # For `repr(x)`, which returns the symbolic representation of
-      # current object.
-      return super().format(compact, verbose, root_indent, **kwargs)
-    else:
-      # For `str(x)`, which returns the natural language representation of
-      # current object.
+    if natural_language:
       return self.natural_language_format()
+    return super().format(*args, **kwargs)
+
+  def __str__(self):
+    return self.natural_language_format()
