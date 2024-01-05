@@ -354,6 +354,17 @@ def class_definition(cls, strict: bool = False) -> str:
   else:
     out.write(f'class {cls.__name__}:\n')
 
+  if cls.__doc__:
+    doc_lines = cls.__doc__.strip().split('\n')
+    if len(doc_lines) == 1:
+      out.write(f'  """{cls.__doc__}"""\n')
+    else:
+      out.write('  """')
+      for line in doc_lines:
+        out.write(line)
+        out.write('\n')
+      out.write('  """\n')
+
   if schema.fields:
     for key, field in schema.items():
       if not isinstance(key, pg.typing.ConstStrKey):
@@ -361,10 +372,14 @@ def class_definition(cls, strict: bool = False) -> str:
             'Variable-length keyword arguments is not supported in '
             f'structured parsing or query. Encountered: {field}'
         )
-      out.write(f'  {field.key}: {annotation(field.value, strict=strict)}')
+      # Write field doc string as comments before the field definition.
       if field.description:
-        description = field.description.replace('\n', ' ')
-        out.write(f'  # {description}')
+        for line in field.description.split('\n'):
+          if line:
+            out.write('  # ')
+            out.write(line)
+            out.write('\n')
+      out.write(f'  {field.key}: {annotation(field.value, strict=strict)}')
       out.write('\n')
   else:
     out.write('  pass\n')

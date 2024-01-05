@@ -27,6 +27,8 @@ class Activity(pg.Object):
 
 
 class Itinerary(pg.Object):
+  """A travel itinerary for a day."""
+
   day: pg.typing.Int[1, None]
   type: pg.typing.Enum['daytime', 'nighttime']
   activities: list[Activity]
@@ -34,6 +36,16 @@ class Itinerary(pg.Object):
       pg.typing.Str['.*Hotel'] | None,
       'Hotel to stay if applicable.'
   ]
+
+
+class PlaceOfInterest(pg.Object):
+  """The name of a place of interest.
+
+  A place of interest is a place that people ususally visit during their
+  travels.
+  """
+
+  name: str
 
 
 Itinerary.__serialization_key__ = 'Itinerary'
@@ -395,10 +407,24 @@ class SchemaPythonReprTest(unittest.TestCase):
         schema_lib.class_definition(Itinerary),
         inspect.cleandoc("""
             class Itinerary:
+              \"\"\"A travel itinerary for a day.\"\"\"
               day: int(min=1)
               type: Literal['daytime', 'nighttime']
               activities: list[Activity]
-              hotel: str(regex='.*Hotel') | None  # Hotel to stay if applicable.
+              # Hotel to stay if applicable.
+              hotel: str(regex='.*Hotel') | None
+            """) + '\n',
+    )
+    self.assertEqual(
+        schema_lib.class_definition(PlaceOfInterest),
+        inspect.cleandoc("""
+            class PlaceOfInterest:
+              \"\"\"The name of a place of interest.
+
+              A place of interest is a place that people ususally visit during their
+              travels.
+              \"\"\"
+              name: str
             """) + '\n',
     )
 
