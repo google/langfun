@@ -288,7 +288,9 @@ class Template(
             # User-defined classes may have their own format.
             with pg.object_utils.str_format(
                 # Use compact (single-line) Python format (vs. PyGlove format)
+                # quoted with markdown notions (e.g. `Foo(1)`)
                 # for non-natural-language-formattable symbolic objects.
+                markdown=True,
                 compact=True,
                 python_format=True,
             ):
