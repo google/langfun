@@ -21,12 +21,12 @@ import pyglove as pg
 
 
 class PythonCode(pg.Object):
-  """Symbolic class for Python code."""
+  """Symbolic class for Python code.
 
-  source: Annotated[
-      str,
-      'Source code.'
-  ]
+  The source code will be directly passed into eval() for execution. The value
+  of the last expression of the source will be returned.
+  """
+  source: Annotated[str, 'Source code.']
 
   _TLS_AUTO_RUN = '__auto_run__'
 
@@ -135,18 +135,21 @@ class PythonCode(pg.Object):
         global_vars=global_vars,
         sandbox=sandbox,
         timeout=timeout,
-        outputs_intermediate=True)
+        outputs_intermediate=True,
+    )
 
 
 class PythonFunction(pg.Object):
-  """Generated Python function via source code."""
+  """Generated Python function via source code.
+
+  The source code will be directly passed into eval() for execution and the
+  output of the function will be returned.
+  """
+
   name: str
   args: dict[str, str]
   returns: str
-  source: Annotated[
-      str,
-      'Source code for the Python function. '
-  ]
+  source: Annotated[str, 'Source code for the Python function. ']
 
   def _on_bound(self):
     super()._on_bound()
