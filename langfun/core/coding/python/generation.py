@@ -130,13 +130,25 @@ class PythonCode(pg.Object):
       TimeoutError: If `sandbox` is True and timeout has reached.
       Exception: Any errors that the source code has raised.
     """
-    return execution.run(
+    all_vars = execution.run(
         self.source,
         global_vars=global_vars,
         sandbox=sandbox,
         timeout=timeout,
         outputs_intermediate=True,
     )
+    # Remove global_vars from all_vars.
+    if global_vars:
+      for k, v in global_vars.items():
+        if k in all_vars and all_vars[k] == v:
+          del all_vars[k]
+
+    # Remove all functions and __result__ from the results.
+    results = {}
+    for k, v in all_vars.items():
+      if not callable(v) and k != '__result__':
+        results[k] = v
+    return results
 
 
 class PythonFunction(pg.Object):
