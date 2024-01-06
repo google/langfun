@@ -103,10 +103,10 @@ def _query_structure_cls(
 
 
 def query(
-    prompt: Union[str, lf.Template, pg.Symbolic],
+    prompt: Union[str, pg.Symbolic],
     schema: Union[
-        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
-    ],
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
+    ] = None,
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
     lm: lf.LanguageModel | None = None,
@@ -149,9 +149,10 @@ def query(
     ```
 
   Args:
-    prompt: A str or a `lf.Template` object as natural language input, or a 
+    prompt: A str (may contain {{}} as template) as natural language input, or a 
       `pg.Symbolic` object as structured input as prompt to LLM.
-    schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
+    schema: A type annotation as the schema for output object. If str (default),
+      the response will be a str in natural language.
     default: The default value if parsing failed. If not specified, error will
       be raised.
     lm: The language model to use. If not specified, the language model from
@@ -173,25 +174,36 @@ def query(
   Returns:
     The result based on the schema.
   """
+  call_context = dict(kwargs)
+  if lm is not None:
+    call_context['lm'] = lm
+
+  if schema in (None, str):
+    # Query with natural language output.
+    l = lf.LangFunc.from_value(prompt)
+    output = l(**call_context)
+    return output if returns_message else output.text
+
+  # Query with structured output.
+  if isinstance(prompt, str):
+    prompt = lf.Template(prompt)
+
+  if isinstance(prompt, lf.Template):
+    prompt = prompt.render(**kwargs)
+
+  t = _query_structure_cls(protocol)(
+      schema, default=default, examples=examples)
+
   # Autofix is not supported for JSON yet.
   if protocol == 'json':
     autofix = 0
 
-  t = _query_structure_cls(protocol)(schema, default=default, examples=examples)
-  if isinstance(prompt, lf.Template):
-    prompt = prompt.render(**kwargs)
-
-  if isinstance(prompt, (str, lf.Message)):
-    prompt = lf.UserMessage.from_value(prompt)
-
-  call_context = dict(autofix=autofix)
-  if lm is not None:
-    call_context['lm'] = lm
+  call_context['autofix'] = autofix
   autofix_lm = autofix_lm or lm
   if autofix_lm is not None:
     call_context['autofix_lm'] = autofix_lm
-  call_context.update(kwargs)
 
   with t.override(**call_context):
     output = t(input=prompt)
+
   return output if returns_message else output.result

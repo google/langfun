@@ -246,16 +246,7 @@ def call(
   if isinstance(prompt, str):
     prompt = lf.Template(prompt)
 
-  if isinstance(prompt, lf.LangFunc):
-    lfun = prompt
-  elif isinstance(prompt, lf.Template):
-    lfun = lf.LangFunc(prompt.template_str)
-    lfun.sym_setparent(prompt)
-  else:
-    raise TypeError(
-        '`prompt` should be a string or an `lf.Template` object. '
-        f'Encountered {prompt!r}.'
-    )
+  lfun = lf.LangFunc.from_value(prompt)
 
   # Call `lm` for natural response.
   call_kwargs = dict(kwargs)
@@ -267,7 +258,7 @@ def call(
   if response_postprocess is not None:
     lm_output.set('text', response_postprocess(lm_output.text))
 
-  if schema is None:
+  if schema in (str, None):
     return lm_output if returns_message else lm_output.text
 
   # Call `parsing_lm` for structured parsing.

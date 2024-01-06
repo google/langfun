@@ -690,7 +690,7 @@ class CallTest(unittest.TestCase):
     self.assertEqual(parsing.call('what is one plus two?', int, lm=lm), 3)
 
   def test_bad_call(self):
-    with self.assertRaisesRegex(TypeError, '`prompt` should be .*'):
+    with self.assertRaisesRegex(TypeError, 'Unsupported input'):
       parsing.call(1)
 
   def test_call_with_response_postprocess(self):

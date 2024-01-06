@@ -270,6 +270,20 @@ class QueryStructurePythonTest(unittest.TestCase):
         ),
         1,
     )
+    self.assertEqual(
+        prompting.query(
+            'what is {{x}} + {{y}}', int, x=1, y=0, lm=lm.clone()
+        ),
+        1,
+    )
+    self.assertEqual(
+        prompting.query(
+            'what is {{x}} + {{y}}', x=1, y=0, lm=fake.StaticResponse(
+                'The answer is one.'
+            )
+        ),
+        'The answer is one.'
+    )
 
 
 class QueryStructureJsonTest(unittest.TestCase):

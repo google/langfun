@@ -18,6 +18,7 @@ from langfun.core import component
 from langfun.core import language_model
 from langfun.core import message
 from langfun.core import subscription
+from langfun.core import template as template_lib
 from langfun.core.langfunc import LangFunc
 from langfun.core.langfunc import LangFuncCallEvent
 from langfun.core.llms import fake
@@ -48,6 +49,23 @@ class BasicTest(unittest.TestCase):
       self.assertEqual(l(), 'Hello!!!')
       self.assertEqual(l.lm_input, 'Hello')
       self.assertEqual(l.lm_output, 'Hello!!!')
+
+  def test_from_value(self):
+    l1 = LangFunc.from_value('Hello')
+    self.assertEqual(l1.template_str, 'Hello')
+
+    l2 = LangFunc.from_value(l1)
+    self.assertIs(l2, l1)
+
+    c = template_lib.Template(
+        '{{x}} + {{l}}',
+        x=1,
+        l=template_lib.Template('{{x}} + {{y}}', y=2))
+    l3 = LangFunc.from_value(c.l)
+    self.assertEqual(l3.render(), '1 + 2')
+
+    with self.assertRaisesRegex(TypeError, 'Unsupported input type'):
+      LangFunc.from_value(1)
 
 
 class LangFuncCallTest(unittest.TestCase):
