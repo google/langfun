@@ -243,17 +243,8 @@ def call(
   Returns:
     A string if `returns` is None or an instance of the return type.
   """
-  if isinstance(prompt, str):
-    prompt = lf.Template(prompt)
-
-  lfun = lf.LangFunc.from_value(prompt)
-
   # Call `lm` for natural response.
-  call_kwargs = dict(kwargs)
-  if lm is not None:
-    call_kwargs['lm'] = lm
-
-  lm_output = lfun(**call_kwargs)
+  lm_output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)
 
   if response_postprocess is not None:
     lm_output.set('text', response_postprocess(lm_output.text))
@@ -262,20 +253,16 @@ def call(
     return lm_output if returns_message else lm_output.text
 
   # Call `parsing_lm` for structured parsing.
-  parse_kwargs = dict(kwargs)
-  parsing_lm = parsing_lm or lm
-  if parsing_lm is not None:
-    parse_kwargs['lm'] = parsing_lm
-  if parsing_examples is not None:
-    parse_kwargs['examples'] = parsing_examples
   return parse(
       lm_output,
       schema,
+      examples=parsing_examples,
+      lm=parsing_lm or lm,
       autofix=autofix,
-      autofix_lm=autofix_lm,
+      autofix_lm=autofix_lm or lm,
       protocol=protocol,
       returns_message=returns_message,
-      **parse_kwargs,
+      **kwargs,
   )
 
 

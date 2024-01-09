@@ -74,6 +74,10 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
   ) -> str:
     if isinstance(value, str):
       return value
+    if isinstance(value, lf.Modality):
+      with lf.modality.format_modality_as_ref():
+        return str(value)
+
     # Placehold modalities if they are present.
     if pg.contains(value, type=lf.Modality):
       value = lf.ModalityRef.placehold(value)
@@ -150,7 +154,7 @@ class Mapping(lf.LangFunc):
           'subclass) as natural language input, or other symbolic object '
           'as structured input.'
       ),
-  ] = lf.contextual()
+  ]
 
   context: Annotated[
       str | None, 'The mapping context. A string as natural language '
@@ -202,7 +206,7 @@ class Mapping(lf.LangFunc):
       {{ input_title }}:
       {{ example.input_repr(protocol, compact=False) | indent(2, True) }}
 
-      {% if has_modalities(example.input) -%}
+      {% if has_modality_refs(example.input) -%}
       {{ modality_refs_title }}:
       {{ modality_refs_repr(example.input) | indent(2, True) }}
 
@@ -279,6 +283,10 @@ class Mapping(lf.LangFunc):
   #
 
   def transform_input(self, lm_input: lf.Message) -> lf.Message:
+    # Find modalities to fill the input message.
+    lm_input.metadata.update(
+        examples=pg.Ref(self.examples), input=pg.Ref(self.input)
+    )
     if isinstance(self.input, lf.Message):
       lm_input.source = self.input
     return lm_input
@@ -316,14 +324,14 @@ class Mapping(lf.LangFunc):
   # Helper methods for handling modalities.
   #
 
-  def has_modalities(self, value: Any) -> bool:
+  def has_modality_refs(self, value: Any) -> bool:
     """Returns true if the value has modalities."""
-    return pg.contains(value, type=lf.Modality)
+    return not isinstance(value, lf.Modality) and pg.contains(
+        value, type=lf.Modality
+    )
 
-  def modalities(
-      self, value: Any, root_path: pg.KeyPath | None = None
-  ) -> dict[str, lf.Modality]:
-    return lf.Modality.from_value(value, root_path)
+  def modalities(self, value: Any) -> dict[str, lf.Modality]:
+    return lf.Modality.from_value(value)
 
   def modality_refs_repr(self, value: Any) -> str:
     with lf.modality.format_modality_as_ref(True):

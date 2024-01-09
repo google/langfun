@@ -110,16 +110,17 @@ class MessageTest(unittest.TestCase):
   def test_get(self):
 
     class A(pg.Object):
-      pass
+      p: int
 
     # Create a symbolic object and assign it to a container, so we could test
     # pg.Ref.
-    a = A()
+    a = A(1)
     d = pg.Dict(x=a)
 
     m = message.UserMessage('hi', x=pg.Ref(a), y=dict(z=[0, 1, 2]))
     self.assertEqual(m.get('text'), 'hi')
     self.assertIs(m.get('x'), a)
+    self.assertIs(m.get('x.p'), 1)
     self.assertEqual(m.get('y'), dict(z=[0, 1, 2]))
     self.assertEqual(m.get('y.z'), [0, 1, 2])
     self.assertEqual(m.get('y.z[0]'), 0)
