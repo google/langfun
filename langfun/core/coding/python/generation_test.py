@@ -41,9 +41,10 @@ class PythonCodeTest(unittest.TestCase):
         generation.PythonCode("""
             x = 1
             y = x + 1
+            print(y)
             z = x + y
             """).eval(),
-        dict(x=1, y=2, z=3, __result__=3),
+        dict(x=1, y=2, z=3, __result__=3, __stdout__='2\n'),
     )
 
   def test_call(self):
