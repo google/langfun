@@ -52,6 +52,35 @@ class ModalityRefTest(unittest.TestCase):
         modality.ModalityRef.placehold(a),
         A(x=dict(z=modality.ModalityRef('x.z')), y=modality.ModalityRef('y')),
     )
+    self.assertEqual(
+        modality.ModalityRef.placehold(a.x),
+        # The prefix 'x' of referred name is preserved.
+        dict(z=modality.ModalityRef('x.z')),
+    )
+
+  def test_from_value(self):
+    class A(pg.Object):
+      x: Any
+      y: Any
+
+    a = A(x=dict(z=CustomModality('a')), y=CustomModality('b'))
+    self.assertTrue(
+        pg.eq(
+            modality.Modality.from_value(a),
+            {
+                'x.z': CustomModality('a'),
+                'y': CustomModality('b'),
+            },
+        )
+    )
+    self.assertTrue(
+        pg.eq(
+            modality.Modality.from_value(a.x.z),
+            {
+                'x.z': CustomModality('a'),
+            },
+        )
+    )
 
 
 if __name__ == '__main__':

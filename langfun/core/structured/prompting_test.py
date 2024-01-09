@@ -18,6 +18,7 @@ import unittest
 
 import langfun.core as lf
 from langfun.core import coding
+from langfun.core import modalities
 from langfun.core.llms import fake
 from langfun.core.structured import mapping
 from langfun.core.structured import prompting
@@ -36,14 +37,205 @@ class Itinerary(pg.Object):
   hotel: pg.typing.Str['.*Hotel'] | None
 
 
+class QueryTest(unittest.TestCase):
+
+  def assert_render(
+      self,
+      prompt,
+      schema,
+      *,
+      expected_snippet: str,
+      exact_match: bool = False,
+      expected_modalities: int = 0,
+      **kwargs,
+  ):
+    m = prompting.query(prompt, schema=schema, **kwargs, returns_message=True)
+    self.assertIsNotNone(m.lm_input)
+    if exact_match:
+      self.assertEqual(expected_snippet, m.lm_input.text)
+    else:
+      self.assertIn(expected_snippet, m.lm_input.text)
+    self.assertEqual(
+        len([c for c in m.lm_input.chunk() if isinstance(c, lf.Modality)]),
+        expected_modalities,
+    )
+
+  def test_call(self):
+    lm = fake.StaticSequence(['1'])
+    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
+
+    # Testing calling the same `lm` without copy.
+    with self.assertRaises(IndexError):
+      prompting.query('what is 1 + 2', int, lm=lm)
+
+    self.assertEqual(
+        prompting.query(
+            'what is 1 + 0', int, lm=lm.clone(), returns_message=True
+        ),
+        lf.AIMessage(
+            '1',
+            result=1,
+            score=1.0,
+            tags=['lm-response', 'lm-output', 'transformed'],
+        ),
+    )
+    self.assertEqual(
+        prompting.query(
+            lf.Template('what is {{x}} + {{y}}'), int, x=1, y=0, lm=lm.clone()
+        ),
+        1,
+    )
+    self.assertEqual(
+        prompting.query('what is {{x}} + {{y}}', int, x=1, y=0, lm=lm.clone()),
+        1,
+    )
+    self.assertEqual(
+        prompting.query(
+            'what is {{x}} + {{y}}',
+            x=1,
+            y=0,
+            lm=fake.StaticResponse('The answer is one.'),
+        ),
+        'The answer is one.',
+    )
+    self.assertEqual(
+        prompting.query(
+            Activity.partial(),
+            lm=fake.StaticResponse('Activity(description="hello")'),
+        ),
+        Activity(description='hello'),
+    )
+
+  def test_str_to_structure_render(self):
+    lm = fake.StaticResponse('1')
+    self.assert_render(
+        'What is {{x}} + {{y}}?',
+        int,
+        x=1,
+        y=2,
+        lm=lm.clone(),
+        expected_snippet='\n\nUSER_REQUEST:\n  What is 1 + 2?\n\n',
+    )
+
+  def test_str_to_str_render(self):
+    lm = fake.StaticResponse('1')
+    self.assert_render(
+        'What is {{x}} + {{y}}?',
+        None,
+        x=1,
+        y=2,
+        lm=lm.clone(),
+        expected_snippet='What is 1 + 2?',
+        exact_match=True,
+    )
+
+  def test_structure_to_structure_render(self):
+    lm = fake.StaticResponse('[1]')
+    self.assert_render(
+        [1],
+        list[int],
+        x=1,
+        y=2,
+        lm=lm.clone(),
+        expected_snippet=(
+            '\n\nUSER_REQUEST:\n  ```python\n  [\n    1\n  ]\n  ```\n\n'
+        ),
+    )
+
+  def test_structure_to_str_render(self):
+    lm = fake.StaticResponse('[1]')
+    self.assert_render(
+        [1], None, x=1, y=2, lm=lm, expected_snippet='`[1]`', exact_match=True
+    )
+
+  def test_root_modality_to_structure_render(self):
+    lm = fake.StaticResponse('1')
+    self.assert_render(
+        modalities.Image.from_bytes(b'mock_image'),
+        int,
+        lm=lm,
+        expected_snippet='\n\nUSER_REQUEST:\n  {{input}}\n\n',
+        expected_modalities=1,
+    )
+
+  def test_root_modality_to_str_render(self):
+    lm = fake.StaticResponse('1')
+    self.assert_render(
+        modalities.Image.from_bytes(b'mock_image'),
+        None,
+        lm=lm,
+        expected_snippet='{{input}}',
+        exact_match=True,
+        expected_modalities=1,
+    )
+
+  def test_str_with_modality_to_str_render(self):
+    lm = fake.StaticResponse('A cat and a mouse.')
+    self.assert_render(
+        'What are these? {{this_image}} and {{that_image}}',
+        None,
+        this_image=modalities.Image.from_bytes(b'cat_image'),
+        that_image=modalities.Image.from_bytes(b'mouse_image'),
+        lm=lm,
+        expected_snippet='What are these? {{this_image}} and {{that_image}}',
+        exact_match=True,
+        expected_modalities=2,
+    )
+
+  def test_structure_with_modality_to_str_render(self):
+    lm = fake.StaticResponse('A cat and a mouse.')
+    self.assert_render(
+        [
+            modalities.Image.from_bytes(b'cat_image'),
+            modalities.Image.from_bytes(b'mouse_image'),
+        ],
+        None,
+        lm=lm,
+        expected_snippet='`[{{input[0]}}, {{input[1]}}]`',
+        exact_match=True,
+        expected_modalities=2,
+    )
+
+  def test_structure_with_modality_to_structure_render(self):
+    lm = fake.StaticResponse('["cat", "mouse"]')
+    self.assert_render(
+        [
+            modalities.Image.from_bytes(b'cat_image'),
+            modalities.Image.from_bytes(b'mouse_image'),
+        ],
+        list[str],
+        lm=lm,
+        expected_snippet=inspect.cleandoc("""
+            USER_REQUEST:
+              ```python
+              [
+                ModalityRef(
+                  name='input[0]'
+                ),
+                ModalityRef(
+                  name='input[1]'
+                )
+              ]
+              ```
+
+            MODALITY_REFERENCES:
+              {
+                'input[0]': {{input[0]}},
+                'input[1]': {{input[1]}}
+              }
+            """),
+        expected_modalities=2,
+    )
+
+
 class QueryStructurePythonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = prompting.QueryStructurePython(int)
-    m = lf.AIMessage('Compute 12 / 6 + 2.')
-
+    l = prompting.QueryStructurePython(
+        input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
+    )
     self.assertEqual(
-        l.render(input=m).text,
+        l.render().text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
@@ -80,7 +272,8 @@ class QueryStructurePythonTest(unittest.TestCase):
 
   def test_render(self):
     l = prompting.QueryStructurePython(
-        int,
+        input=lf.AIMessage('Compute 12 / 6 + 2.'),
+        schema=int,
         examples=[
             mapping.MappingExample(
                 input='What is the answer of 1 plus 1?', output=2
@@ -91,7 +284,7 @@ class QueryStructurePythonTest(unittest.TestCase):
         ],
     )
     self.assertEqual(
-        l.render(input=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render().text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
@@ -192,7 +385,8 @@ class QueryStructurePythonTest(unittest.TestCase):
         override_attrs=True,
     ):
       l = prompting.QueryStructurePython(
-          [Itinerary],
+          input=lm_input,
+          schema=[Itinerary],
           examples=[
               mapping.MappingExample(
                   input=inspect.cleandoc("""
@@ -212,7 +406,7 @@ class QueryStructurePythonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(input=lm_input)
+      r = l()
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)
@@ -245,55 +439,15 @@ class QueryStructurePythonTest(unittest.TestCase):
     ])
     self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
 
-  def test_query(self):
-    lm = fake.StaticSequence(['1'])
-    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
-
-    # Testing calling the same `lm` without copy.
-    with self.assertRaises(IndexError):
-      prompting.query('what is 1 + 2', int, lm=lm)
-
-    self.assertEqual(
-        prompting.query(
-            'what is 1 + 0', int, lm=lm.clone(), returns_message=True
-        ),
-        lf.AIMessage(
-            '1',
-            result=1,
-            score=1.0,
-            tags=['lm-response', 'lm-output', 'transformed'],
-        ),
-    )
-    self.assertEqual(
-        prompting.query(
-            lf.Template('what is {{x}} + {{y}}'), int, x=1, y=0, lm=lm.clone()
-        ),
-        1,
-    )
-    self.assertEqual(
-        prompting.query(
-            'what is {{x}} + {{y}}', int, x=1, y=0, lm=lm.clone()
-        ),
-        1,
-    )
-    self.assertEqual(
-        prompting.query(
-            'what is {{x}} + {{y}}', x=1, y=0, lm=fake.StaticResponse(
-                'The answer is one.'
-            )
-        ),
-        'The answer is one.'
-    )
-
 
 class QueryStructureJsonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = prompting.QueryStructureJson(int)
-    m = lf.AIMessage('Compute 12 / 6 + 2.')
-
+    l = prompting.QueryStructureJson(
+        input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
+    )
     self.assertEqual(
-        l.render(input=m).text,
+        l.render().text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with JSON according to SCHEMA:
 
@@ -322,14 +476,15 @@ class QueryStructureJsonTest(unittest.TestCase):
 
   def test_render(self):
     l = prompting.QueryStructureJson(
-        int,
+        input=lf.AIMessage('Compute 12 / 6 + 2.'),
+        schema=int,
         examples=[
             mapping.MappingExample('What is the answer of 1 plus 1?', 2),
             mapping.MappingExample('Compute the value of 3 + (2 * 6).', 15),
         ],
     )
     self.assertEqual(
-        l.render(input=lf.AIMessage('Compute 12 / 6 + 2.')).text,
+        l.render().text,
         inspect.cleandoc("""
             Please respond to the last USER_REQUEST with JSON according to SCHEMA:
 
@@ -456,7 +611,8 @@ class QueryStructureJsonTest(unittest.TestCase):
         override_attrs=True,
     ):
       l = prompting.QueryStructureJson(
-          [Itinerary],
+          input=lm_input,
+          schema=[Itinerary],
           examples=[
               mapping.MappingExample(
                   input=inspect.cleandoc("""
@@ -476,7 +632,7 @@ class QueryStructureJsonTest(unittest.TestCase):
               )
           ],
       )
-      r = l(input=lm_input)
+      r = l()
       self.assertEqual(len(r.result), 3)
       self.assertIsInstance(r.result[0], Itinerary)
       self.assertEqual(len(r.result[0].activities), 3)

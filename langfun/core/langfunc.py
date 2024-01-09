@@ -326,18 +326,20 @@ class LangFunc(
     return lm_output
 
   @classmethod
-  def from_value(cls, value: Union[str, template_lib.Template]) -> 'LangFunc':
+  def from_value(
+      cls, value: Union[str, template_lib.Template], **kwargs
+  ) -> 'LangFunc':
     """Create a LangFunc object from a string or template."""
     if isinstance(value, LangFunc):
       return value
     if isinstance(value, template_lib.Template):
-      lfun = LangFunc(value.template_str)
+      lfun = LangFunc(value.template_str, **kwargs)
       # So lfun could acccess all attributes from value.
       lfun.sym_setparent(value)
       return lfun
     if isinstance(value, str):
-      return LangFunc(template_str=value)
-    raise TypeError(f'Unsupported input type: {value!r}.')
+      return LangFunc(template_str=value, **kwargs)
+    return LangFunc('{{input}}', input=value, **kwargs)
 
 
 # Register converter from str to LangFunc, therefore we can always

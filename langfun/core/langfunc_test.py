@@ -64,8 +64,8 @@ class BasicTest(unittest.TestCase):
     l3 = LangFunc.from_value(c.l)
     self.assertEqual(l3.render(), '1 + 2')
 
-    with self.assertRaisesRegex(TypeError, 'Unsupported input type'):
-      LangFunc.from_value(1)
+    l4 = LangFunc.from_value(1)
+    self.assertEqual(l4.render(), '1')
 
 
 class LangFuncCallTest(unittest.TestCase):

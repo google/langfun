@@ -37,7 +37,7 @@ class CompleteStructure(mapping.Mapping):
       {{ schema_title }}:
       {{ class_defs_repr(example.input) | indent(2, True) }}
       {%- endif %}
-      {%- if has_modalities(example.input) %}
+      {%- if has_modality_refs(example.input) %}
 
       {{ modality_refs_title }}:
       {{ modality_refs_repr(example.input) | indent(2, True) }}
@@ -97,15 +97,7 @@ class CompleteStructure(mapping.Mapping):
           'The input of `lf.complete` must contain a least one '
           f'missing value. Encountered: {self.input}.'
       )
-
-    # Find modalities to fill the input message.
-    modalities = self.modalities(self.input)
-    modalities.update(
-        self.modalities(self.examples, root_path=pg.KeyPath('examples'))
-    )
-    if modalities:
-      lm_input.metadata.update(pg.object_utils.canonicalize(modalities))
-    return lm_input
+    return super().transform_input(lm_input)
 
   def missing_type_dependencies(self, value: Any) -> list[Type[Any]]:
     value_specs = tuple(
@@ -123,6 +115,10 @@ class CompleteStructure(mapping.Mapping):
     # Try restore modality objects from the input value to output value.
     modalities = self.modalities(self.input)
     if modalities:
+      # Remove the `input` prefix for all entries.
+      modalities = pg.object_utils.flatten(
+          pg.object_utils.canonicalize(modalities)['input']
+      )
       result.rebind(modalities)
     return result
 
@@ -214,16 +210,13 @@ def complete(
   Returns:
     The result based on the schema.
   """
-  t = CompleteStructure(default=default, examples=examples)
+  t = CompleteStructure(
+      input=schema_lib.mark_missing(input_value),
+      default=default,
+      examples=examples,
+      autofix=autofix,
+      **kwargs,
+  )
 
-  context = dict(autofix=autofix)
-  if lm is not None:
-    context['lm'] = lm
-  autofix_lm = autofix_lm or lm
-  if autofix_lm is not None:
-    context['autofix_lm'] = autofix_lm
-  context.update(kwargs)
-
-  with t.override(**context):
-    output = t(input=schema_lib.mark_missing(input_value))
+  output = t(lm=lm, autofix_lm=autofix_lm or lm)
   return output if returns_message else output.result

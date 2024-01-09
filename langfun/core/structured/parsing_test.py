@@ -689,9 +689,8 @@ class CallTest(unittest.TestCase):
     )
     self.assertEqual(parsing.call('what is one plus two?', int, lm=lm), 3)
 
-  def test_bad_call(self):
-    with self.assertRaisesRegex(TypeError, 'Unsupported input'):
-      parsing.call(1)
+  def test_call_with_structured_input(self):
+    self.assertEqual(parsing.call(1, lm=fake.StaticResponse('2')), '2')
 
   def test_call_with_response_postprocess(self):
     target_str = '@TARGET_STR@'

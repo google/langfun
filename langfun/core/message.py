@@ -195,7 +195,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     if key_path == Message.PATH_TEXT:
       return self.text
     else:
-      v = self.metadata.sym_get(key_path, default)
+      v = self.metadata.sym_get(key_path, default, use_inferred=True)
       return v.value if isinstance(v, pg.Ref) else v
 
   #
