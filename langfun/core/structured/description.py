@@ -104,11 +104,9 @@ def describe(
   """
   if examples is None:
     examples = DEFAULT_DESCRIBE_EXAMPLES
-  if lm is not None:
-    kwargs['lm'] = lm
-  return DescribeStructure(examples)(
-      input=value, context=context, **kwargs
-  ).text
+  return DescribeStructure(
+      input=value, context=context, examples=examples, **kwargs
+  )(lm=lm).text
 
 
 class _Country(pg.Object):

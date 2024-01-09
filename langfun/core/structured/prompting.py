@@ -174,36 +174,36 @@ def query(
   Returns:
     The result based on the schema.
   """
-  call_context = dict(kwargs)
-  if lm is not None:
-    call_context['lm'] = lm
+  # When `lf.query` is used for symbolic completion, schema is automatically
+  # inferred when it is None.
+  if isinstance(prompt, pg.Symbolic) and prompt.sym_partial and schema is None:
+    schema = prompt.__class__
 
   if schema in (None, str):
     # Query with natural language output.
-    l = lf.LangFunc.from_value(prompt)
-    output = l(**call_context)
+    output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)
     return output if returns_message else output.text
 
   # Query with structured output.
   if isinstance(prompt, str):
-    prompt = lf.Template(prompt)
+    prompt = lf.Template(prompt, **kwargs)
+  elif isinstance(prompt, lf.Template):
+    prompt = prompt.rebind(**kwargs)
 
   if isinstance(prompt, lf.Template):
-    prompt = prompt.render(**kwargs)
+    prompt = prompt.render(lm=lm)
+  else:
+    prompt = schema_lib.mark_missing(prompt)
 
-  t = _query_structure_cls(protocol)(
-      schema, default=default, examples=examples)
-
-  # Autofix is not supported for JSON yet.
-  if protocol == 'json':
-    autofix = 0
-
-  call_context['autofix'] = autofix
-  autofix_lm = autofix_lm or lm
-  if autofix_lm is not None:
-    call_context['autofix_lm'] = autofix_lm
-
-  with t.override(**call_context):
-    output = t(input=prompt)
-
+  output = _query_structure_cls(protocol)(
+      input=prompt,
+      schema=schema,
+      default=default,
+      examples=examples,
+      autofix=autofix if protocol == 'python' else 0,
+      **kwargs,
+  )(
+      lm=lm,
+      autofix_lm=autofix_lm or lm,
+  )
   return output if returns_message else output.result

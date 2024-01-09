@@ -61,17 +61,13 @@ class Modality(component.Component):
     return path[9:] if path.startswith('metadata.') else path
 
   @classmethod
-  def from_value(
-      cls, value: pg.Symbolic, root_path: pg.KeyPath | None = None
-  ) -> dict[str, 'Modality']:
+  def from_value(cls, value: pg.Symbolic) -> dict[str, 'Modality']:
     """Returns a dict of path to modality from a symbolic value."""
     modalities = {}
-    root_path = root_path or pg.KeyPath()
-
     def _visit(k, v, p):
-      del p
+      del k, p
       if isinstance(v, Modality):
-        modalities[str(root_path + k)] = v
+        modalities[v.referred_name] = v
         return pg.TraverseAction.CONTINUE
       return pg.TraverseAction.ENTER
 
@@ -107,9 +103,8 @@ class ModalityRef(pg.Object, pg.typing.CustomTyping):
     """
 
     def _placehold(k, v, p):
-      del k, p
+      del p
       if isinstance(v, Modality):
-        return ModalityRef(name=v.referred_name)
+        return ModalityRef(name=value.sym_path + k)
       return v
-
     return value.clone().rebind(_placehold, raise_on_no_change=False)

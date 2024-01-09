@@ -37,6 +37,17 @@ class DescribeStructureTest(unittest.TestCase):
 
   def test_render(self):
     l = description_lib.DescribeStructure(
+        input=Itinerary(
+            day=1,
+            type='daytime',
+            activities=[
+                Activity('Visit Golden Gate Bridge.'),
+                Activity("Visit Fisherman's Wharf."),
+                Activity('Visit Alcatraz Island.'),
+            ],
+            hotel=None,
+        ),
+        context='1 day itinerary to SF',
         examples=[
             mapping.MappingExample(
                 context='Compute 1 + 2',
@@ -51,21 +62,11 @@ class DescribeStructureTest(unittest.TestCase):
                     'in Broadway threatres.'
                 ),
             ),
-        ]
-    )
-    value = Itinerary(
-        day=1,
-        type='daytime',
-        activities=[
-            Activity('Visit Golden Gate Bridge.'),
-            Activity("Visit Fisherman's Wharf."),
-            Activity('Visit Alcatraz Island.'),
         ],
-        hotel=None,
     )
 
     self.assertEqual(
-        l.render(input=value, context='1 day itinerary to SF').text,
+        l.render().text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -126,7 +127,6 @@ class DescribeStructureTest(unittest.TestCase):
     )
 
   def test_render_no_examples(self):
-    l = description_lib.DescribeStructure()
     value = Itinerary(
         day=1,
         type='daytime',
@@ -137,8 +137,11 @@ class DescribeStructureTest(unittest.TestCase):
         ],
         hotel=None,
     )
+    l = description_lib.DescribeStructure(
+        input=value, context='1 day itinerary to SF'
+    )
     self.assertEqual(
-        l.render(input=value, context='1 day itinerary to SF').text,
+        l.render().text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
@@ -174,7 +177,6 @@ class DescribeStructureTest(unittest.TestCase):
     )
 
   def test_render_no_context(self):
-    l = description_lib.DescribeStructure()
     value = Itinerary(
         day=1,
         type='daytime',
@@ -185,9 +187,9 @@ class DescribeStructureTest(unittest.TestCase):
         ],
         hotel=None,
     )
-
+    l = description_lib.DescribeStructure(input=value)
     self.assertEqual(
-        l.render(input=value).text,
+        l.render().text,
         inspect.cleandoc("""
             Please help describe PYTHON_OBJECT in natural language.
 
