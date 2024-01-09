@@ -15,6 +15,7 @@
 
 import ast
 import contextlib
+import io
 import multiprocessing
 from typing import Any, Callable
 
@@ -23,6 +24,9 @@ from langfun.core.coding.python import parsing
 from langfun.core.coding.python import permissions
 import pyglove as pg
 
+
+# Key in returned dict that captures stdout.
+STDOUT_KEY = '__stdout__'
 
 # Key in the returned dict that represents the final result.
 RESULT_KEY = '__result__'
@@ -86,45 +90,51 @@ def evaluate(
   code, code_block = parsing.PythonCodeParser().parse(code, permission)
   global_vars, orig_global_vars = ctx, ctx.copy()
 
-  if hasattr(code_block.body[-1], 'value'):
-    last_expr = code_block.body.pop()  # pytype: disable=attribute-error
-    result_vars = [RESULT_KEY]
+  # No code.
+  if not code_block.body:
+    return {} if outputs_intermediate else None
 
-    if isinstance(last_expr, ast.Assign):
-      for name_node in last_expr.targets:
-        result_vars.append(name_node.id)
+  stdout = io.StringIO()
+  with contextlib.redirect_stdout(stdout):
+    if hasattr(code_block.body[-1], 'value'):
+      last_expr = code_block.body.pop()  # pytype: disable=attribute-error
+      result_vars = [RESULT_KEY]
 
-    last_expr = ast.Expression(last_expr.value)  # pytype: disable=attribute-error
+      if isinstance(last_expr, ast.Assign):
+        for name_node in last_expr.targets:
+          result_vars.append(name_node.id)
 
-    try:
-      # Execute the lines before the last expression.
-      # NOTE(daiyip): Only a `globals` dict is specified here, which will also
-      # be used to output intermediate values by `exec`. We do not specify a
-      # separate `locals` dict here, for - "If exec gets two separate objects as
-      # globals and locals, the code will be executed as if it were embedded in
-      # a class definition." - as the Python document explains. The outcome is
-      # that new functions defined in the code block could not be called by
-      # other newly defined functions.
-      # Refer to https://stackoverflow.com/questions/
-      # 73940751/why-cant-i-call-a-function-from-another-function-using-exec
-      # for more details.
-      exec(compile(code_block, '', mode='exec'), global_vars)  # pylint: disable=exec-used
+      last_expr = ast.Expression(last_expr.value)  # pytype: disable=attribute-error
 
-      # Evaluate the last expression.
-      result = eval(  # pylint: disable=eval-used
-          compile(last_expr, '', mode='eval'), global_vars
-      )
-    except Exception as e:
-      raise errors.CodeError(code, e) from e
+      try:
+        # Execute the lines before the last expression.
+        # NOTE(daiyip): Only a `globals` dict is specified here, which will also
+        # be used to output intermediate values by `exec`. We do not specify a
+        # separate `locals` dict here, for - "If exec gets two separate objects
+        # as globals and locals, the code will be executed as if it were
+        # embedded in a class definition." - as the Python document explains.
+        # The outcome is that new functions defined in the code block could not
+        # be called by other newly defined functions.
+        # Refer to https://stackoverflow.com/questions/
+        # 73940751/why-cant-i-call-a-function-from-another-function-using-exec
+        # for more details.
+        exec(compile(code_block, '', mode='exec'), global_vars)  # pylint: disable=exec-used
 
-    for result_var in result_vars:
-      global_vars[result_var] = result
-  else:
-    try:
-      exec(compile(code_block, '', mode='exec'), global_vars)  # pylint: disable=exec-used
-    except Exception as e:
-      raise errors.CodeError(code, e) from e
-    global_vars[RESULT_KEY] = list(global_vars.values())[-1]
+        # Evaluate the last expression.
+        result = eval(  # pylint: disable=eval-used
+            compile(last_expr, '', mode='eval'), global_vars
+        )
+      except Exception as e:
+        raise errors.CodeError(code, e) from e
+
+      for result_var in result_vars:
+        global_vars[result_var] = result
+    else:
+      try:
+        exec(compile(code_block, '', mode='exec'), global_vars)  # pylint: disable=exec-used
+      except Exception as e:
+        raise errors.CodeError(code, e) from e
+      global_vars[RESULT_KEY] = list(global_vars.values())[-1]
 
   if outputs_intermediate:
     outputs = {}
@@ -133,6 +143,8 @@ def evaluate(
         continue
       if k not in orig_global_vars or v is not orig_global_vars[k]:
         outputs[k] = v
+    # Add stdout to outputs.
+    outputs[STDOUT_KEY] = stdout.getvalue()
     return outputs
   return global_vars[RESULT_KEY]
 

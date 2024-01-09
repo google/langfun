@@ -36,7 +36,7 @@ class EvaluateTest(unittest.TestCase):
                 global_vars=dict(z=3),
                 outputs_intermediate=True,
             ),
-            dict(p=2 + 0 + 3, __result__=2 + 0 + 3),
+            dict(p=2 + 0 + 3, __result__=2 + 0 + 3, __stdout__=''),
         )
 
   def test_basics(self):
@@ -45,17 +45,19 @@ class EvaluateTest(unittest.TestCase):
             """
             x = 1
             y = x + 1
+            print(y)
             z = x + y
             """,
             outputs_intermediate=True,
         ),
-        dict(x=1, y=2, z=3, __result__=3),
+        dict(x=1, y=2, z=3, __result__=3, __stdout__='2\n'),
     )
     self.assertEqual(
         execution.evaluate(
             """
             x = 1
             y = x + 1
+            print(y)
             z = x + y
             """,
         ),
@@ -75,9 +77,10 @@ class EvaluateTest(unittest.TestCase):
         global_vars=dict(pg=pg),
         outputs_intermediate=True,
     )
-    self.assertEqual(list(ret.keys()), ['A', '__result__'])
+    self.assertEqual(list(ret.keys()), ['A', '__result__', '__stdout__'])
     self.assertTrue(issubclass(ret['A'], pg.Object))
     self.assertIs(ret['__result__'], ret['A'])
+    self.assertEqual(ret['__stdout__'], '')
 
   def test_function_def(self):
     ret = execution.evaluate(
@@ -91,7 +94,9 @@ class EvaluateTest(unittest.TestCase):
         permission=permissions.CodePermission.ALL,
         outputs_intermediate=True,
     )
-    self.assertEqual(list(ret.keys()), ['foo', 'bar', '__result__'])
+    self.assertEqual(
+        list(ret.keys()), ['foo', 'bar', '__result__', '__stdout__']
+    )
     self.assertTrue(inspect.isfunction(ret['foo']))
     self.assertTrue(inspect.isfunction(ret['bar']))
     self.assertIs(ret['__result__'], ret['bar'])
@@ -110,7 +115,9 @@ class EvaluateTest(unittest.TestCase):
         permission=permissions.CodePermission.ALL,
         outputs_intermediate=True,
     )
-    self.assertEqual(list(ret.keys()), ['foo', 'bar', '__result__'])
+    self.assertEqual(
+        list(ret.keys()), ['foo', 'bar', '__result__', '__stdout__']
+    )
     self.assertEqual(ret['__result__'], 3)
 
   def test_complex(self):
@@ -131,7 +138,9 @@ class EvaluateTest(unittest.TestCase):
         global_vars=dict(pg=pg),
         outputs_intermediate=True,
     )
-    self.assertEqual(list(ret.keys()), ['A', 'foo', 'k', '__result__'])
+    self.assertEqual(
+        list(ret.keys()), ['A', 'foo', 'k', '__result__', '__stdout__']
+    )
     self.assertTrue(issubclass(ret['A'], pg.Object))
     self.assertTrue(inspect.isfunction(ret['foo']))
     self.assertIsInstance(ret['k'], pg.Object)
