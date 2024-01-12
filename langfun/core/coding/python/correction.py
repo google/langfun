@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Python code error correction."""
-
+import re
 from typing import Any
 import langfun.core as lf
 from langfun.core.coding.python import errors
@@ -29,6 +29,11 @@ class CodeWithError(pg.Object):
 
 class CorrectedCode(pg.Object):
   corrected_code: str
+
+
+def remove_docstrings(code):
+  pattern = re.compile(r"(def .+?:\s*?)('''|\"\"\")((.|\s)*?)(\2)", re.DOTALL)
+  return pattern.sub(r"\1", code)
 
 
 def run_with_correction(
@@ -81,6 +86,7 @@ def run_with_correction(
   # pytype: disable=import-error
   # pylint: enable=g-import-not-at-top
 
+  code = remove_docstrings(code)
   if max_attempts == 0:
     result = execution.run(
         code,

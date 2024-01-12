@@ -88,6 +88,7 @@ class PythonCode(pg.Object):
       sandbox: bool | None = None,
       timeout: int | None = 5,
       global_vars: dict[str, Any] | None = None,
+      autofix: int = 3,
       autofix_lm: lf.LanguageModel = lf.contextual(),
   ) -> Any:
     """Returns the value of the last expression from the source.
@@ -100,6 +101,8 @@ class PythonCode(pg.Object):
       timeout: Timeout in seconds. If None, there is no timeout. Applicable when
         sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
+      autofix: Number of attempts to auto fix the generated code. If 0, autofix
+        is disabled.
       autofix_lm: Language model to be used. If not specified, it will try to
         use the `lm` under `lf.context`.
 
@@ -115,6 +118,7 @@ class PythonCode(pg.Object):
         global_vars=global_vars,
         sandbox=sandbox,
         timeout=timeout,
+        max_attempts=autofix,
         lm=autofix_lm,
         returns_code=True,
     )
@@ -127,6 +131,7 @@ class PythonCode(pg.Object):
       sandbox: bool | None = None,
       timeout: int | None = 5,
       global_vars: dict[str, Any] | None = None,
+      autofix: int = 3,
       autofix_lm: lf.LanguageModel = lf.contextual(),
   ) -> Any | tuple[Any, str]:
     """Evaluates the code and return a dict of local variable names to values.
@@ -139,6 +144,8 @@ class PythonCode(pg.Object):
       timeout: Timeout in seconds. If None, there is no timeout. Applicable when
         sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
+      autofix: Number of attempts to auto fix the generated code. If 0, autofix
+        is disabled. Auto-fix is not supported for 'json' protocol.
       autofix_lm: Language model to be used. If not specified, it will try to
         use the `lm` under `lf.context`.
 
@@ -157,6 +164,7 @@ class PythonCode(pg.Object):
         sandbox=sandbox,
         timeout=timeout,
         outputs_intermediate=True,
+        max_attempts=autofix,
         lm=autofix_lm,
         returns_code=True,
     )
