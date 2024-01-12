@@ -558,12 +558,7 @@ class CompleteStructureTest(unittest.TestCase):
         [
             "Solution(question='Compute 1 + 1', answer=2",
             inspect.cleandoc("""
-            CodeCorrection(
-                latest_code=CodeWithError(
-                    code='Solution(question=\\\'Compute 1 + 1\\\', answer=2',
-                    error='SyntaxError: incomplete input (<unknown> line 1)\\n: Solution(question=\\\'Compute 1 + 1\\\', answer=2'
-                ),
-                correction_history=[],
+            CorrectedCode(
                 corrected_code='Solution(question=\\\'Compute 1 + 1\\\', answer=2)',
             )
             """),

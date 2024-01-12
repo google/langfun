@@ -32,27 +32,12 @@ class RunWithCorrectionTest(unittest.TestCase):
             """),
         lm=fake.StaticSequence([
             inspect.cleandoc("""
-                CodeCorrection(
-                    latest_code=CodeWithError(
-                        code='x = 1,\\ny = x + 2\\n z = x + y',
-                        error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
-                    ),
-                    correction_history=[],
+                CorrectedCode(
                     corrected_code='x = 1,\\ny = x + 2\\nz = x + y',
                 )
                 """),
             inspect.cleandoc("""
-                CodeCorrection(
-                    latest_code=CodeWithError(
-                        code='x = 1\\ny = x + 2\\n z = x + y',
-                        error='TypeError: can only concatenate tuple (not "int") to tuple (<unknown>, line 2)\\n  y = x + 2'
-                    ),
-                    correction_history=[
-                        CodeWithError(
-                            code='x = 1,\\ny = x + 2\\n z = x + y',
-                            error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
-                        )
-                    ],
+                CorrectedCode(
                     corrected_code='x = 1\\ny = x + 2\\nz = x + y',
                 )
                 """),
@@ -92,27 +77,12 @@ class CorrectTest(unittest.TestCase):
             """),
         lm=fake.StaticSequence([
             inspect.cleandoc("""
-                CodeCorrection(
-                    latest_code=CodeWithError(
-                        code='x = 1,\\ny = x + 2\\n z = x + y',
-                        error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
-                    ),
-                    correction_history=[],
+                CorrectedCode(
                     corrected_code='x = 1,\\ny = x + 2\\nz = x + y',
                 )
                 """),
             inspect.cleandoc("""
-                CodeCorrection(
-                    latest_code=CodeWithError(
-                        code='x = 1\\ny = x + 2\\n z = x + y',
-                        error='TypeError: can only concatenate tuple (not "int") to tuple (<unknown>, line 2)\\n  y = x + 2'
-                    ),
-                    correction_history=[
-                        CodeWithError(
-                            code='x = 1,\\ny = x + 2\\n z = x + y',
-                            error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
-                        )
-                    ],
+                CorrectedCode(
                     corrected_code='x = 1\\ny = x + 2\\nz = x + y',
                 )
                 """),
@@ -142,40 +112,12 @@ class CorrectTest(unittest.TestCase):
           ),
           lm=fake.StaticSequence([
               inspect.cleandoc("""
-                  CodeCorrection(
-                      latest_code=CodeWithError(
-                          code='x = 1,\\ny = x + 2\\n z = x + y',
-                          error='IndentationError: unexpected indent (<unknown>, line 3)\\n  z = x + y'
-                      ),
-                      correction_history=[],
+                  CorrectedCode(
                       corrected_code='x = 1,\\ny = x + 2\\nz = x + y',
                   )
                   """),
           ]),
           max_attempts=1,
-      )
-
-  def test_correct_with_completion_error(self):
-    with self.assertRaisesRegex(
-        errors.CodeError, 'Cannot correct code after 1 attempts'
-    ):
-      correction.correct(
-          inspect.cleandoc("""
-              x = 1,
-              y = x + 2
-              z = x + y
-              """),
-          (
-              'IndentationError: unexpected indent (<unknown>, line 3)\n'
-              '  z = x + y'
-          ),
-          lm=fake.StaticSequence([
-              inspect.cleandoc("""
-                  CodeCorrection(
-                      corrected_code='x = 1,\\ny = x + 2\\nz = x + y',
-                  )
-                  """),
-          ]),
       )
 
 

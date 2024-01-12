@@ -13,7 +13,6 @@
 # limitations under the License.
 """Python code error correction."""
 
-import inspect
 from typing import Any
 import langfun.core as lf
 from langfun.core.coding.python import errors
@@ -28,11 +27,7 @@ class CodeWithError(pg.Object):
   error: str
 
 
-class CodeCorrection(pg.Object):
-  """Structure used for code correction."""
-
-  latest_code: CodeWithError
-  correction_history: list[CodeWithError]
+class CorrectedCode(pg.Object):
   corrected_code: str
 
 
@@ -42,11 +37,11 @@ def run_with_correction(
     *,
     global_vars: dict[str, Any] | None = None,
     lm: lf.LanguageModel = lf.contextual(),
-    examples: list[CodeCorrection] | None = None,
     max_attempts: int = 5,
     sandbox: bool | None = None,
     timeout: int | None = 5,
     returns_code: bool = False,
+    outputs_intermediate: bool = False,
 ) -> Any | tuple[Any, str]:
   """Correct code with a language model via self-play.
 
@@ -59,7 +54,6 @@ def run_with_correction(
       accessed within the corrected code.
     lm: Language model to be used. If not specified, it will try to use the `lm`
       under `lf.context`.
-    examples: Code correction examples to use.
     max_attempts: Max number of attempts for the correction.
     sandbox: If True, run code in sandbox; If False, run code in current
       process. If None, run in sandbox first, if the output could not be
@@ -69,6 +63,9 @@ def run_with_correction(
       timeout. Applicable only when sandbox is set to True.
     returns_code: If True, the return value is a tuple of (result, final code).
       Otherwise the return value is the result only.
+    outputs_intermediate: If True, intermediate output will be outputted as a
+      dict, with the last line's value accessible by key '__result__'. Otherwise
+      the value of the last line will be returned.
 
   Returns:
     Run result if `returns_code` is set to False (default), otherwise a tuple
@@ -79,12 +76,18 @@ def run_with_correction(
   """
   # Delay import at runtime to avoid circular depenency.
   # pylint: disable=g-import-not-at-top
-  from langfun.core.structured import completion  # pytype: disable=import-error
+  # pytype: disable=import-error
+  from langfun.core.structured import prompting
+  # pytype: disable=import-error
   # pylint: enable=g-import-not-at-top
 
   if max_attempts == 0:
     result = execution.run(
-        code, global_vars=global_vars, sandbox=sandbox, timeout=timeout
+        code,
+        global_vars=global_vars,
+        sandbox=sandbox,
+        timeout=timeout,
+        outputs_intermediate=outputs_intermediate,
     )
     return (result, code) if returns_code else result
 
@@ -95,6 +98,7 @@ def run_with_correction(
           global_vars=global_vars,
           sandbox=sandbox,
           timeout=timeout,
+          outputs_intermediate=outputs_intermediate,
       )
       return (result, None)
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -105,34 +109,19 @@ def run_with_correction(
     if error is None:
       return (result, code) if returns_code else result
 
-  examples = examples or DEFAULT_CODE_CORRECTION_EXAMPLES
-  examples = [  # pylint: disable=g-complex-comprehension
-      completion.mapping.MappingExample(
-          CodeCorrection.partial(ex.latest_code, ex.correction_history),
-          ex,
-      )
-      for ex in examples
-  ]
-
-  history = []
   num_attempts = 0
   for _ in range(max_attempts):
-    correction = CodeCorrection.partial(
-        CodeWithError(code=code, error=error), history
-    )
     num_attempts += 1
-
-    # Catch completion error when the LM could not formulate a completion
+    # Catch query() error when the LM could not formulate a completion
     # structure.
     try:
       # Disable autofix for code correction to avoid recursion.
-      correction = completion.complete(
-          correction, lm=lm, examples=examples, autofix=0
+      correction = prompting.query(
+          CodeWithError(code=code, error=error), CorrectedCode, lm=lm, autofix=0
       )
     except errors.CodeError:
       break
 
-    history.append(CodeWithError(code=code, error=error))
     code = correction.corrected_code
     result, error = result_and_error(code)
     if error is None:
@@ -153,7 +142,6 @@ def correct(
     *,
     global_vars: dict[str, Any] | None = None,
     lm: lf.LanguageModel = lf.contextual(),
-    examples: list[CodeCorrection] | None = None,
     max_attempts: int = 5,
     sandbox: bool | None = None,
     timeout: int | None = 5,
@@ -169,7 +157,6 @@ def correct(
       accessed within the corrected code.
     lm: Language model to be used. If not specified, it will try to use the `lm`
       under `lf.context`.
-    examples: Code correction examples to use.
     max_attempts: Max number of attempts for the correction.
     sandbox: If True, run code in sandbox; If False, run code in current
       process. If None, run in sandbox first, if the output could not be
@@ -189,7 +176,6 @@ def correct(
       error=error,
       global_vars=global_vars,
       lm=lm,
-      examples=examples,
       max_attempts=max_attempts,
       sandbox=sandbox,
       timeout=timeout,
@@ -205,59 +191,3 @@ def _error_feedback_str(error: Exception) -> str:
     )
   else:
     return f"Encountered {error.__class__.__name__}: {error}"
-
-
-DEFAULT_CODE_CORRECTION_EXAMPLES = [
-    CodeCorrection(
-        CodeWithError(
-            inspect.cleandoc("""
-                class A(pg.Object):
-                  x: str
-
-                a = A('1')
-                b = a + 'foo'
-                """),
-            (
-                "TypeError: unsupported operand type(s) for +: 'A' and "
-                "'str' (<unknown>, line 5)\n"
-                "  b = a + 'foo'"
-            ),
-        ),
-        correction_history=[
-            CodeWithError(
-                inspect.cleandoc("""
-                    class A(pg.Object):
-                      x: str
-
-                    a = A(1
-                    b = a + 'foo'
-                    """),
-                (
-                    "SyntaxError: '(' was never closed (<unknown>, line 4)\n"
-                    "  a = A(1"
-                ),
-            ),
-            CodeWithError(
-                inspect.cleandoc("""
-                    class A(pg.Object):
-                      x: str
-
-                    a = A(1)
-                    b = a + 'foo'
-                    """),
-                (
-                    "TypeError: Expect <class 'str'> but encountered "
-                    "<class 'int'>: 1. (path=x) (<unknown>, line 4)\n"
-                    "  a = A(1)"
-                ),
-            ),
-        ],
-        corrected_code=inspect.cleandoc("""
-            class A(pg.Object):
-              x: str
-
-            a = A('1')
-            b = a.x + 'foo'
-            """),
-    ),
-]

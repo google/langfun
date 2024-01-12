@@ -264,12 +264,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     lm = fake.StaticSequence([
         '=3',
         inspect.cleandoc("""
-            CodeCorrection(
-                latest_code=CodeWithError(
-                    code='=3',
-                    error='SyntaxError: invalid syntax (<unknown> line 1)\\n: =3'
-                ),
-                correction_history=[],
+            CorrectedCode(
                 corrected_code='3',
             )
             """),
@@ -675,12 +670,7 @@ class CallTest(unittest.TestCase):
             'three',
             '=3',
             inspect.cleandoc("""
-            CodeCorrection(
-                latest_code=CodeWithError(
-                    code='=3',
-                    error='SyntaxError: invalid syntax (<unknown> line 1)\\n: =3'
-                ),
-                correction_history=[],
+            CorrectedCode(
                 corrected_code='3',
             )
             """),

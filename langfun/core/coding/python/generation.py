@@ -15,7 +15,8 @@
 
 import functools
 from typing import Annotated, Any, Callable, ContextManager
-
+import langfun.core as lf
+from langfun.core.coding.python import correction
 from langfun.core.coding.python import execution
 import pyglove as pg
 
@@ -23,10 +24,13 @@ import pyglove as pg
 class PythonCode(pg.Object):
   """Symbolic class for Python code.
 
-  The source code will be directly passed into eval() for execution. The value
-  of the last expression of the source will be returned.
+  The value of the last expression of the source will be the returned value.
   """
-  source: Annotated[str, 'Source code.']
+
+  source: Annotated[
+      str,
+      'Source code. Avoid using docstring for defined functions and classes.',
+  ]
 
   _TLS_AUTO_RUN = '__auto_run__'
 
@@ -83,8 +87,9 @@ class PythonCode(pg.Object):
       *,
       sandbox: bool | None = None,
       timeout: int | None = 5,
-      global_vars: dict[str, Any] | None = None
-      ) -> Any:
+      global_vars: dict[str, Any] | None = None,
+      autofix_lm: lf.LanguageModel = lf.contextual(),
+  ) -> Any:
     """Returns the value of the last expression from the source.
 
     Args:
@@ -92,9 +97,11 @@ class PythonCode(pg.Object):
         process. If None, run in sandbox first, if the output could not be
         serialized and pass to current process, run the code again in current
         process.
-      timeout: Timeout in seconds. If None, there is no timeout.
-        Applicable when sandbox is set to True.
+      timeout: Timeout in seconds. If None, there is no timeout. Applicable when
+        sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
+      autofix_lm: Language model to be used. If not specified, it will try to
+        use the `lm` under `lf.context`.
 
     Returns:
       The value of the last expression in the source code.
@@ -103,15 +110,25 @@ class PythonCode(pg.Object):
       TimeoutError: If `sandbox` is True and timeout has reached.
       Exception: Any errors that the source code has raised.
     """
-    return execution.run(
-        self.source, global_vars=global_vars, sandbox=sandbox, timeout=timeout)
+    result, updated_code = correction.run_with_correction(
+        self.source,
+        global_vars=global_vars,
+        sandbox=sandbox,
+        timeout=timeout,
+        lm=autofix_lm,
+        returns_code=True,
+    )
+    self.rebind(source=updated_code)
+    return result
 
   def eval(
       self,
       *,
       sandbox: bool | None = None,
       timeout: int | None = 5,
-      global_vars: dict[str, Any] | None = None) -> dict[str, Any]:
+      global_vars: dict[str, Any] | None = None,
+      autofix_lm: lf.LanguageModel = lf.contextual(),
+  ) -> Any | tuple[Any, str]:
     """Evaluates the code and return a dict of local variable names to values.
 
     Args:
@@ -119,24 +136,32 @@ class PythonCode(pg.Object):
         process. If None, run in sandbox first, if the output could not be
         serialized and pass to current process, run the code again in current
         process.
-      timeout: Timeout in seconds. If None, there is no timeout.
-        Applicable when sandbox is set to True.
+      timeout: Timeout in seconds. If None, there is no timeout. Applicable when
+        sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
+      autofix_lm: Language model to be used. If not specified, it will try to
+        use the `lm` under `lf.context`.
 
     Returns:
-      A dict of local variable names defined in the source code to their values.
+      A dict of local variable names defined in the source code to their values
+      if `returns_code` is set to False (default), otherwise a tuple
+      of (dict, final code str).
 
     Raises:
       TimeoutError: If `sandbox` is True and timeout has reached.
       Exception: Any errors that the source code has raised.
     """
-    return execution.run(
+    result, updated_code = correction.run_with_correction(
         self.source,
         global_vars=global_vars,
         sandbox=sandbox,
         timeout=timeout,
         outputs_intermediate=True,
+        lm=autofix_lm,
+        returns_code=True,
     )
+    self.rebind(source=updated_code)
+    return result
 
 
 class PythonFunction(pg.Object):

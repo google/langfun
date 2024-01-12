@@ -66,7 +66,7 @@ class QueryStructurePython(QueryStructure):
       Please respond to the last {{ input_title }} with {{ output_title }} according to {{ schema_title }}.
 
       INSTRUCTIONS:
-        1. Only response the required {{ output_title }} as illustrated by the given example.
+        1. Only respond with the required {{ output_title }} encapsulated with python markdown as illustrated by the given example.
         2. Don't add any comments in the response.
         3. {{ output_title }} must strictly follow the {{ schema_title }}.
 
@@ -149,7 +149,7 @@ def query(
     ```
 
   Args:
-    prompt: A str (may contain {{}} as template) as natural language input, or a 
+    prompt: A str (may contain {{}} as template) as natural language input, or a
       `pg.Symbolic` object as structured input as prompt to LLM.
     schema: A type annotation as the schema for output object. If str (default),
       the response will be a str in natural language.

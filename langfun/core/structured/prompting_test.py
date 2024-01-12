@@ -240,7 +240,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
             INSTRUCTIONS:
-              1. Only response the required RESULT_OBJECT as illustrated by the given example.
+              1. Only respond with the required RESULT_OBJECT encapsulated with python markdown as illustrated by the given example.
               2. Don't add any comments in the response.
               3. RESULT_OBJECT must strictly follow the RESULT_TYPE.
 
@@ -289,7 +289,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
 
             INSTRUCTIONS:
-              1. Only response the required RESULT_OBJECT as illustrated by the given example.
+              1. Only respond with the required RESULT_OBJECT encapsulated with python markdown as illustrated by the given example.
               2. Don't add any comments in the response.
               3. RESULT_OBJECT must strictly follow the RESULT_TYPE.
 
@@ -427,12 +427,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     lm = fake.StaticSequence([
         '=1',
         inspect.cleandoc("""
-            CodeCorrection(
-                latest_code=CodeWithError(
-                    code='=1',
-                    error='SyntaxError: invalid syntax (<unknown> line 1)\\n: =1'
-                ),
-                correction_history=[],
+            CorrectedCode(
                 corrected_code='1',
             )
             """),

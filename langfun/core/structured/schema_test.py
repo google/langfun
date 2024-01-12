@@ -589,12 +589,7 @@ class ValuePythonReprTest(unittest.TestCase):
             schema_lib.Schema(A),
             autofix=1,
             autofix_lm=fake.StaticResponse(inspect.cleandoc("""
-                    CodeCorrection(
-                        latest_code=CodeWithError(
-                            code='A(foo=[Foo(x=1), Foo(x=2)], y=\\\'bar\\\'',
-                            error='SyntaxError: incomplete input (<unknown> line 1)\\n  A(foo=[Foo(x=1), Foo(x=2)], y=\\\'bar\\\''
-                        ),
-                        correction_history=[],
+                    CorrectedCode(
                         corrected_code='A(foo=[Foo(x=1), Foo(x=2)], y=\\\'bar\\\')',
                     )
                     """)),
