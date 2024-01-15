@@ -421,7 +421,7 @@ class QueryStructurePythonTest(unittest.TestCase):
           coding.CodeError,
           'name .* is not defined',
       ):
-        prompting.query('Compute 1 + 2', int, autofix=0)
+        prompting.query('Compute 1 + 2', int)
 
   def test_autofix(self):
     lm = fake.StaticSequence([
@@ -432,7 +432,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             )
             """),
     ])
-    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
+    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
 
 
 class QueryStructureJsonTest(unittest.TestCase):

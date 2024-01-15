@@ -258,7 +258,7 @@ class Mapping(lf.LangFunc):
           'If 0 (default), there is no automatic correction. '
           'This flag is effective only when the output needs to be structured.'
       ),
-  ] = 3
+  ] = 0
 
   autofix_lm: Annotated[
       lf.LanguageModel,

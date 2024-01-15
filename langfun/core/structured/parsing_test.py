@@ -269,7 +269,7 @@ class ParseStructurePythonTest(unittest.TestCase):
             )
             """),
     ])
-    self.assertEqual(parsing.parse('three', int, lm=lm), 3)
+    self.assertEqual(parsing.parse('three', int, lm=lm, autofix=3), 3)
 
   def test_parse(self):
     lm = fake.StaticResponse('1')
@@ -677,7 +677,9 @@ class CallTest(unittest.TestCase):
         ],
         debug=True,
     )
-    self.assertEqual(parsing.call('what is one plus two?', int, lm=lm), 3)
+    self.assertEqual(
+        parsing.call('what is one plus two?', int, lm=lm, autofix=3), 3
+    )
 
   def test_call_with_structured_input(self):
     self.assertEqual(parsing.call(1, lm=fake.StaticResponse('2')), '2')

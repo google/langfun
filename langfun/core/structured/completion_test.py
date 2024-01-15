@@ -566,7 +566,9 @@ class CompleteStructureTest(unittest.TestCase):
         debug=True,
     )
     self.assertEqual(
-        completion.complete(Solution.partial('Compute 1 + 1'), lm=lm),
+        completion.complete(
+            Solution.partial('Compute 1 + 1'), lm=lm, autofix=3
+        ),
         Solution(question='Compute 1 + 1', answer=2),
     )
 

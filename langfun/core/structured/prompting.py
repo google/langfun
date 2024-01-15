@@ -111,7 +111,7 @@ def query(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    autofix: int = 3,
+    autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
     returns_message: bool = False,
