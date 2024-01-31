@@ -41,7 +41,7 @@ def run_with_correction(
     error: str | None = None,
     *,
     global_vars: dict[str, Any] | None = None,
-    lm: lf.LanguageModel = lf.contextual(),
+    lm: lf.LanguageModel | None = None,
     max_attempts: int = 5,
     sandbox: bool | None = None,
     timeout: int | None = 5,

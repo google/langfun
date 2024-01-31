@@ -89,7 +89,7 @@ class PythonCode(pg.Object):
       timeout: int | None = 5,
       global_vars: dict[str, Any] | None = None,
       autofix: int = 3,
-      autofix_lm: lf.LanguageModel = lf.contextual(),
+      autofix_lm: lf.LanguageModel | None = None,
   ) -> Any:
     """Returns the value of the last expression from the source.
 
