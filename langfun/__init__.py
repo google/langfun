@@ -23,6 +23,8 @@ Schema = structured.Schema
 MISSING = structured.MISSING
 UNKNOWN = structured.UNKNOWN
 
+MappingExample = structured.MappingExample
+
 call = structured.call
 parse = structured.parse
 query = structured.query

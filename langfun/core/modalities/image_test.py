@@ -31,8 +31,8 @@ image_content = (
 )
 
 
-def mock_request(uri):
-  del uri
+def mock_request(*args, **kwargs):
+  del args, kwargs
   return pg.Dict(content=image_content)
 
 

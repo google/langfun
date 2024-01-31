@@ -66,7 +66,10 @@ class ImageFile(Image):
 
   def to_bytes(self) -> bytes:
     if self._bytes is None:
-      self._bytes = requests.get(self.uri).content
+      self._bytes = requests.get(
+          self.uri,
+          headers={'User-Agent': 'Langfun'},
+      ).content
     return self._bytes
 
   def _repr_html_(self) -> str:
