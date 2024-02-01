@@ -44,29 +44,32 @@ SUPPORTED_MODELS_AND_SETTINGS = [
     # Model name, max concurrent requests.
     # The concurrent requests is estimated by TPM/RPM from
     # https://platform.openai.com/account/limits
-    # GPT4 Turbo models.
-    ('gpt-4-1106-preview', 1),  # Gpt4 Turbo.
-    ('gpt-4-vision-preview', 1),  # Gpt4 Turbo with Vision.
-    # GPT4 models.
+    # GPT-4 Turbo models.
+    ('gpt-4-turbo-preview', 1),  # GPT-4 Turbo.
+    ('gpt-4-0125-preview', 1),  # GPT-4 Turbo
+    ('gpt-4-1106-preview', 1),  # GPT-4 Turbo
+    ('gpt-4-vision-preview', 1),  # GPT-4 Turbo with Vision.
+    # GPT-4 models.
     ('gpt-4', 4),
     ('gpt-4-0613', 4),
     ('gpt-4-0314', 4),
     ('gpt-4-32k', 4),
     ('gpt-4-32k-0613', 4),
     ('gpt-4-32k-0314', 4),
-    # GPT3.5 Turbo models.
+    # GPT-3.5 Turbo models.
     ('gpt-3.5-turbo', 16),
+    ('gpt-3.5-turbo-0125', 16),
     ('gpt-3.5-turbo-1106', 16),
     ('gpt-3.5-turbo-0613', 16),
     ('gpt-3.5-turbo-0301', 16),
     ('gpt-3.5-turbo-16k', 16),
     ('gpt-3.5-turbo-16k-0613', 16),
     ('gpt-3.5-turbo-16k-0301', 16),
-    # GPT3.5 models.
-    ('text-davinci-003', 8),  # Gpt3.5, trained with RHLF.
+    # GPT-3.5 models.
+    ('text-davinci-003', 8),  # GPT-3.5, trained with RHLF.
     ('text-davinci-002', 4),  # Trained with SFT but no RHLF.
     ('code-davinci-002', 4),
-    # GPT3 instruction-tuned models.
+    # GPT-3 instruction-tuned models.
     ('text-curie-001', 4),
     ('text-babbage-001', 4),
     ('text-ada-001', 4),
@@ -74,7 +77,7 @@ SUPPORTED_MODELS_AND_SETTINGS = [
     ('curie', 4),
     ('babbage', 4),
     ('ada', 4),
-    # GPT3 base models without instruction tuning.
+    # GPT-3 base models without instruction tuning.
     ('babbage-002', 4),
     ('davinci-002', 4),
 ]
