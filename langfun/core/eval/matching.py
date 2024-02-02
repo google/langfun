@@ -102,17 +102,17 @@ class Matching(base.Evaluation):
     del progress
     return {
         'Model': self.lm.model_id,
-        'Matches': '%.2f%% (%d/%d)' % (
+        'Matches': f'%.{self.report_precision}f%% (%d/%d)' % (
             self.match_rate * 100,
             self.num_matches,
             self.num_completed,
         ),
-        'Mismatches': '%.2f%% (%d/%d)' % (
+        'Mismatches': f'%.{self.report_precision}f%% (%d/%d)' % (
             self.mismatch_rate * 100,
             self.num_mismatches,
             self.num_completed,
         ),
-        'Failed': '%.2f%% (%d/%d)' % (
+        'Failed': f'%.{self.report_precision}f%% (%d/%d)' % (
             self.failure_rate * 100,
             self.num_failures,
             self.num_completed,
@@ -123,8 +123,9 @@ class Matching(base.Evaluation):
     assert self.result is not None
     m = self.result.metrics
     return (
-        'COMPLETED(%s): Matches=%.2f%% (%d/%d) Mismatches=%.2f%% (%d/%d) '
-        'Failures=%.2f%% (%d/%d)'
+        f'COMPLETED(%s): Matches=%.{self.report_precision}f%% (%d/%d)'
+        f' Mismatches=%.{self.report_precision}f%% (%d/%d)'
+        f' Failures=%.{self.report_precision}f%% (%d/%d)'
     ) % (
         run_status,
         m.match_rate * 100,
@@ -202,7 +203,7 @@ class Matching(base.Evaluation):
     s.write(
         '<td><span style="color:red">%s</span>%s</td>'
         % (
-            '%.2f%% ' % (self.mismatch_rate * 100),
+            f'%.{self.report_precision}f%% ' % (self.mismatch_rate * 100),
             '<a href="%s">(%d/%d)</a>'
             % (self.mismatches_link, self.num_mismatches, self.num_completed),
         )
@@ -210,7 +211,7 @@ class Matching(base.Evaluation):
     s.write(
         '<td><span style="color:green">%s</span>%s</td>'
         % (
-            '%.2f%% ' % (self.match_rate * 100),
+            f'%.{self.report_precision}f%% ' % (self.match_rate * 100),
             '<a href="%s">(%d/%d)</a>'
             % (self.matches_link, self.num_matches, self.num_completed),
         )
@@ -226,7 +227,7 @@ class Matching(base.Evaluation):
             m.num_matches,
             m.total,
             self.matches_link,
-            '%.2f%% ' % (m.match_rate * 100),
+            f'%.{self.report_precision}f%% ' % (m.match_rate * 100),
         )
     )
     s.write(' | ')
@@ -236,7 +237,7 @@ class Matching(base.Evaluation):
             m.num_mismatches,
             m.total,
             self.mismatches_link,
-            '%.2f%% ' % (m.mismatch_rate * 100),
+            f'%.{self.report_precision}f%% ' % (m.mismatch_rate * 100),
         )
     )
     s.write(' | ')

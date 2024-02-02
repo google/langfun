@@ -57,6 +57,10 @@ class Evaluable(lf.Component):
       ),
   ] = lf.contextual(default=None)
 
+  report_precision: Annotated[
+      int, 'Number of decimals when reporting precision.'
+  ] = lf.contextual(default=1)
+
   @property
   def dir(self) -> str | None:
     """Returns the directory for saving results and details."""
@@ -1045,12 +1049,12 @@ class Evaluation(Evaluable):
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     return {
         'Model': self.lm.model_id,
-        'Succeeded': '%.2f%% (%d/%d)' % (
+        'Succeeded': f'%.{self.report_precision}f%% (%d/%d)' % (
             progress.success_rate * 100,
             progress.succeeded,
             progress.completed,
         ),
-        'Failed': '%.2f%% (%d/%d)' % (
+        'Failed': f'%.{self.report_precision}f%% (%d/%d)' % (
             progress.failure_rate * 100,
             progress.failed,
             progress.completed,
@@ -1060,14 +1064,18 @@ class Evaluation(Evaluable):
   def _completion_status(self, run_status: str) -> str:
     assert self.result is not None
     m = self.result.metrics
-    return 'COMPLETED(%s): Successes=%.2f%% (%d/%d) Failures=%.2f%% (%d/%d)' % (
-        run_status,
-        (1 - m.failure_rate) * 100,
-        m.total - m.failures,
-        m.total,
-        m.failure_rate * 100,
-        m.failures,
-        m.total,
+    return (
+        f'COMPLETED(%s): Successes=%.{self.report_precision}f%% (%d/%d)'
+        f' Failures=%.{self.report_precision}f%% (%d/%d)'
+        % (
+            run_status,
+            (1 - m.failure_rate) * 100,
+            m.total - m.failures,
+            m.total,
+            m.failure_rate * 100,
+            m.failures,
+            m.total,
+        )
     )
 
   def summarize(self) -> pg.Dict:
@@ -1130,7 +1138,7 @@ class Evaluation(Evaluable):
             m.failures,
             m.total,
             self.failures_link,
-            '%.2f%% ' % (m.failure_rate * 100),
+            f'%.{self.report_precision}f%% ' % (m.failure_rate * 100),
         )
     )
 
@@ -1218,7 +1226,7 @@ class Evaluation(Evaluable):
     s.write(
         '<td><span style="color:orange">%s</span>%s</td>'
         % (
-            '%.2f%%' % (self.failure_rate * 100),
+            f'%.{self.report_precision}f%%' % (self.failure_rate * 100),
             '<a href="%s">(%d/%d)</a>'
             % (self.failures_link, self.num_failures, self.num_completed),
         )
