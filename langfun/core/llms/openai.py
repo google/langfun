@@ -167,6 +167,7 @@ class OpenAI(lf.LanguageModel):
         max_tokens=options.max_tokens,
         stream=False,
         timeout=self.timeout,
+        logprobs=options.logprobs,
     )
     # Completion and ChatCompletion uses different parameter name for model.
     args['model' if self.is_chat_model else 'engine'] = self.model
@@ -249,11 +250,21 @@ class OpenAI(lf.LanguageModel):
           **self._get_request_args(self.sampling_options),
       )
       response = cast(openai_object.OpenAIObject, response)
+      samples = []
+      for choice in response.choices:
+        logprobs = None
+        if choice.logprobs:
+          logprobs = [(t.token, t.logprob) for t in choice.logprobs.content]
+        samples.append(
+            lf.LMSample(
+                choice.message.content,
+                score=0.0,
+                logprobs=logprobs,
+            )
+        )
+
       return LMSamplingResult(
-          [
-              lf.LMSample(choice.message.content, score=0.0)
-              for choice in response.choices
-          ],
+          samples=samples,
           usage=Usage(
               prompt_tokens=response.usage.prompt_tokens,
               completion_tokens=response.usage.completion_tokens,

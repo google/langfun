@@ -76,6 +76,7 @@ class QueryTest(unittest.TestCase):
             '1',
             result=1,
             score=1.0,
+            logprobs=None,
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )

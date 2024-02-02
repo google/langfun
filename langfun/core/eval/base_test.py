@@ -101,7 +101,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(s.dir, os.path.join(s.root_dir, s.id))
     self.assertEqual(s.hash, s.clone().hash)
     # Test persistent hash.
-    self.assertEqual(s.hash, 'c76d4fe6')
+    self.assertEqual(s.hash, '8543f767')
     self.assertEqual(
         s.hash, s.clone(override={'max_workers': 2, 'lm.timeout': 20}).hash
     )
@@ -195,6 +195,7 @@ class EvaluationTest(unittest.TestCase):
             result=Solution(2),
             cache_seed=0,
             score=1.0,
+            logprobs=None,
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )
@@ -323,7 +324,7 @@ class EvaluationTest(unittest.TestCase):
         s.children[0].dir, os.path.join(s.root_dir, s.children[0].id)
     )
     # Test persistent hash.
-    self.assertEqual(s.hash, 'e987475a')
+    self.assertEqual(s.hash, '503ad6e3')
 
     summary = s.run(verbose=True)
     self.assertEqual(len(summary.evaluations), 2)
@@ -451,7 +452,7 @@ class SuiteTest(unittest.TestCase):
         ],
     )
     # Test for persistent hash.
-    self.assertEqual(s.hash, 'bb86a963')
+    self.assertEqual(s.hash, 'd641f0be')
     s.run()
     expected = {
         s.children[0].id: dict(

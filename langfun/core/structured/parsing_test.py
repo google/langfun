@@ -286,7 +286,7 @@ class ParseStructurePythonTest(unittest.TestCase):
             returns_message=True
         ),
         lf.AIMessage(
-            '1', score=1.0, result=1,
+            '1', score=1.0, result=1, logprobs=None,
             tags=['lm-response', 'lm-output', 'transformed']
         ),
     )
@@ -640,7 +640,7 @@ class CallTest(unittest.TestCase):
             returns_message=True
         ),
         lf.AIMessage(
-            '3', result=3, score=1.0,
+            '3', result=3, score=1.0, logprobs=None,
             tags=['lm-response', 'lm-output', 'transformed']
         ),
     )

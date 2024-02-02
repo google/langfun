@@ -46,7 +46,8 @@ def mock_chat_completion_query(messages, *, n=1, **kwargs):
     choices.append(pg.Dict(
         message=pg.Dict(
             content=f'Sample {k} for message.'
-        )
+        ),
+        logprobs=None,
     ))
   return pg.Dict(choices=choices, usage=openai.Usage(
       prompt_tokens=100,
@@ -65,7 +66,8 @@ def mock_chat_completion_query_vision(messages, *, n=1, **kwargs):
     choices.append(pg.Dict(
         message=pg.Dict(
             content=f'Sample {k} for message: {"".join(urls)}'
-        )
+        ),
+        logprobs=None,
     ))
   return pg.Dict(choices=choices, usage=openai.Usage(
       prompt_tokens=100,
@@ -99,6 +101,7 @@ class OpenaiTest(unittest.TestCase):
                 top_p=1.0)),
         dict(
             engine='text-davinci-003',
+            logprobs=False,
             n=2,
             temperature=2.0,
             max_tokens=4096,
@@ -113,6 +116,7 @@ class OpenaiTest(unittest.TestCase):
         ),
         dict(
             model='gpt-4',
+            logprobs=False,
             n=1,
             temperature=1.0,
             max_tokens=1024,

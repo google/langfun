@@ -582,6 +582,7 @@ class CompleteStructureTest(unittest.TestCase):
             text='Activity(description="foo")',
             result=Activity(description='foo'),
             score=1.0,
+            logprobs=None,
             tags=['lm-response', 'lm-output', 'transformed']
         )
     )

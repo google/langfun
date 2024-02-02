@@ -31,14 +31,19 @@ class LMSample(pg.Object):
       pg.typing.Object(
           message_lib.Message,
           # Allowing automatic conversion from text to AIMessage.
-          transform=message_lib.AIMessage.from_value
+          transform=message_lib.AIMessage.from_value,
       ),
-      'The natural language response of LM.'
+      'The natural language response of LM.',
   ]
 
   score: Annotated[
       float, 'The score of sampled response. The larger is better'
   ] = 0.0
+
+  logprobs: Annotated[
+      list[tuple[str, float]] | None,
+      'Tokens of the response and their log probabilities.',
+  ] = None
 
 
 class LMSamplingResult(pg.Object):
@@ -92,6 +97,14 @@ class LMSamplingOptions(component.Component):
   random_seed: Annotated[
       int | None, 'A fixed random seed used during model inference.'
   ] = None
+  logprobs: Annotated[
+      bool,
+      (
+          'Whether to return log probabilities of the output tokens or not. If '
+          'true, returns the log probabilities of each output token returned '
+          'in the content of message.'
+      ),
+  ] = False
 
   def cache_key(self) -> tuple[Any, ...]:
     """Returns a tuple of current values as cache key."""
@@ -339,7 +352,9 @@ class LanguageModel(component.Component):
           [prompt], sampling_options=sampling_options, cache_seed=cache_seed
       )[0]
       response = result.samples[0].response
+      logprobs = result.samples[0].logprobs
       response.set('score', result.samples[0].score)
+      response.metadata.logprobs = logprobs
       elapse = time.time() - request_start
       self._debug(prompt, response, call_counter, elapse)
       return response
