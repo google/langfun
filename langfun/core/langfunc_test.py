@@ -94,9 +94,9 @@ class LangFuncCallTest(unittest.TestCase):
         "LangFunc(template_str='Hello', clean=True,"
         ' lm=ExcitedEchoer(sampling_options=LMSamplingOptions(temperature=0.0,'
         ' max_tokens=1024, n=1, top_k=40, top_p=None, stop=None,'
-        ' random_seed=None, logprobs=False), cache=None, timeout=120.0,'
-        ' max_attempts=5, retry_interval=(5, 60), exponential_backoff=True,'
-        ' debug=False))',
+        ' random_seed=None, logprobs=False, top_logprobs=None), cache=None,'
+        ' timeout=120.0, max_attempts=5, retry_interval=(5, 60),'
+        ' exponential_backoff=True, debug=False))',
     )
 
     l = LangFunc('Hello')

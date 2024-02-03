@@ -41,8 +41,8 @@ class LMSample(pg.Object):
   ] = 0.0
 
   logprobs: Annotated[
-      list[tuple[str, float]] | None,
-      'Tokens of the response and their log probabilities.',
+      list[tuple[str, float, list[tuple[str, float]]]] | None,
+      '(token, log prob, top tokens and their probs).',
   ] = None
 
 
@@ -105,6 +105,15 @@ class LMSamplingOptions(component.Component):
           'in the content of message.'
       ),
   ] = False
+  top_logprobs: Annotated[
+      int | None,
+      (
+          'An integer between 0 and 5 specifying the number of most likely '
+          'tokens to return at each token position, each with an associated '
+          'log probability. logprobs must be set to true if this parameter is '
+          'used.'
+      ),
+  ] = None
 
   def cache_key(self) -> tuple[Any, ...]:
     """Returns a tuple of current values as cache key."""

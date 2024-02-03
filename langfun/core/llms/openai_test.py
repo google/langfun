@@ -102,6 +102,7 @@ class OpenaiTest(unittest.TestCase):
         dict(
             engine='text-davinci-003',
             logprobs=False,
+            top_logprobs=None,
             n=2,
             temperature=2.0,
             max_tokens=4096,
@@ -117,6 +118,7 @@ class OpenaiTest(unittest.TestCase):
         dict(
             model='gpt-4',
             logprobs=False,
+            top_logprobs=None,
             n=1,
             temperature=1.0,
             max_tokens=1024,
