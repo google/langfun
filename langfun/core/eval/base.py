@@ -584,8 +584,22 @@ class Suite(Evaluable):
 
   children: Annotated[list[Evaluable], 'Child evaluation sets or suites.']
 
+  __kwargs__: Annotated[
+      Any,
+      (
+          'Wildcard keyword arguments for `__init__` that can be accessed from '
+          'parent suite if the argument is absent from current evaluation set.'
+      ),
+  ]
+
   def _on_bound(self):
     super()._on_bound()
+    overrides = {
+        k: v for k, v in self.sym_init_args.items()
+        if k not in ('id', 'children')
+    }
+    for child in self.children:
+      child.rebind(overrides, notify_parents=False)
     self.__dict__.pop('hash', None)
 
   @functools.cached_property
@@ -620,7 +634,7 @@ class Evaluation(Evaluable):
 
   method: Annotated[
       Literal['call', 'query', 'complete'], 'Method for symbolic prompting.'
-  ]
+  ] = lf.contextual(default='query')
 
   prompt: Annotated[
       lf.Template,
@@ -628,7 +642,7 @@ class Evaluation(Evaluable):
           'Template for rendering the template. Example object could be '
           'accessed via `example`.'
       ),
-  ]
+  ] = lf.contextual()
 
   schema_fn: pg.typing.Annotated[
       pg.typing.Functor().noneable(),
@@ -662,9 +676,11 @@ class Evaluation(Evaluable):
               ```
               """)
       ),
-  ]
+  ] = lf.contextual()
 
-  lm: Annotated[lf.LanguageModel, 'Language model to use for evaluation.']
+  lm: Annotated[lf.LanguageModel, 'Language model to use for evaluation.'] = (
+      lf.contextual()
+  )
 
   parsing_lm: Annotated[
       lf.LanguageModel | None,
@@ -672,7 +688,7 @@ class Evaluation(Evaluable):
           'Language model for parsing. Applicable only when method is set'
           'to `call`. If None, `lm` will also be used for parsing. '
       ),
-  ] = None
+  ] = lf.contextual(default=None)
 
   completion_prompt_field: Annotated[
       str | None,
@@ -682,8 +698,8 @@ class Evaluation(Evaluable):
           'the class, instead the prompt will be passed as the first argument '
           'of the input object to complete. Applicable only when `method` is '
           'set to `complete`.'
-      )
-  ] = None
+      ),
+  ] = lf.contextual(default=None)
 
   autofix: Annotated[
       int,
@@ -692,7 +708,7 @@ class Evaluation(Evaluable):
           'generated code for the output structure. If 0, autofix will be '
           'disabled.'
       ),
-  ] = 0
+  ] = lf.contextual(default=0)
 
   autofix_lm: Annotated[
       lf.LanguageModel | None,
@@ -700,14 +716,16 @@ class Evaluation(Evaluable):
           'Language model for autofix. If None, `lm` will also be used for '
           'autofix.'
       ),
-  ] = None
+  ] = lf.contextual(default=None)
 
   additional_args: Annotated[
       dict[str, Any] | None,
-      'Additional kwargs that will be passed to `self.process`'
-  ] = None
+      'Additional kwargs that will be passed to `self.process`',
+  ] = lf.contextual(default=None)
 
-  use_cache: Annotated[bool, 'If True, LM cache will be enabled.'] = True
+  use_cache: Annotated[bool, 'If True, LM cache will be enabled.'] = (
+      lf.contextual(default=True)
+  )
 
   max_workers: Annotated[
       int, 'Max workers to run the evaluation in parallel.'
@@ -746,7 +764,11 @@ class Evaluation(Evaluable):
   @functools.cached_property
   def examples(self):
     """Returns examples for evaluation."""
-    return self.inputs()
+    kwargs = {}
+    # Allow inputs to be dependent on current evaluation.
+    if 'evaluation' in self.inputs.__signature__.arg_names:
+      kwargs['evaluation'] = self
+    return self.inputs(**kwargs)
 
   @property
   def num_examples(self) -> int:
@@ -786,7 +808,12 @@ class Evaluation(Evaluable):
     if self.schema_fn is None:
       return None
 
-    schema = self.schema_fn()
+    kwargs = {}
+    # Allow schema to be a function based on current evaluation.
+    if 'evaluation' in self.schema_fn.__signature__.arg_names:
+      kwargs['evaluation'] = self
+
+    schema = self._call_schema_fn()
     fewshot_examples = None
     if isinstance(schema, tuple):
       schema, fewshot_examples = schema
@@ -800,12 +827,19 @@ class Evaluation(Evaluable):
     if self.schema_fn is None:
       return None
 
-    schema = self.schema_fn()
+    schema = self._call_schema_fn()
     fewshot_examples = None
     if isinstance(schema, tuple):
       schema, fewshot_examples = schema
     self.__dict__['schema'] = self._formalize_schema(schema)
     return self._maybe_adjust_examples_for_completion(fewshot_examples)
+
+  def _call_schema_fn(self):
+    kwargs = {}
+    # Allow schema to be a function based on current evaluation.
+    if 'evaluation' in self.schema_fn.__signature__.arg_names:
+      kwargs['evaluation'] = self
+    return self.schema_fn(**kwargs)
 
   def _formalize_schema(self, annotation) -> lf_structured.Schema:
     """Formalizes schema from annotation."""
@@ -856,9 +890,9 @@ class Evaluation(Evaluable):
       return []
     children = []
     for i, child in enumerate(pg.iter(self)):
-      child.rebind(id=f'{self.id}@{child.hash}', skip_notification=True)
       child.sym_setparent(self)
       child.sym_setpath(self.sym_path + f'children[{i}]')
+      child.rebind(id=f'{self.id}@{child.hash}', skip_notification=True)
       children.append(child)
     return children
 
@@ -875,9 +909,6 @@ class Evaluation(Evaluable):
 
   def _on_bound(self):
     super()._on_bound()
-    if self.method != 'call' and self.schema_fn is None:
-      raise ValueError(
-          f'`schema_fn` must be specified for method {self.method!r}')
     self.__dict__.pop('hash', None)
     self.__dict__.pop('children', None)
     self.__dict__.pop('examples', None)
@@ -1444,11 +1475,11 @@ class Summary(pg.Object):
       cols = set()
       nonpivot_values = collections.defaultdict(set)
       for e in evaluations:
-        for k, v in e.sym_init_args.items():
+        for k in e.sym_init_args:
           if pivot_field == k:
-            cols.add(SymbolicComparable(v))
+            cols.add(SymbolicComparable(e.sym_inferred(k)))
           elif k not in ('id', 'groundtruth'):
-            nonpivot_values[k].add(SymbolicComparable(v))
+            nonpivot_values[k].add(SymbolicComparable(e.sym_inferred(k)))
 
       cols = sorted(cols)
 

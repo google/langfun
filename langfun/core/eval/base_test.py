@@ -42,7 +42,8 @@ def answer_schema():
 
 
 @pg.functor
-def answer_schema_with_fewshot_examples():
+def answer_schema_with_fewshot_examples(evaluation):
+  del evaluation
   return Solution, [
       lf_structured.MappingExample(
           input='The result of one plus two',
@@ -61,7 +62,7 @@ def eval_set(
     eval_id: str,
     method: str,
     schema_fn,
-    lm: lf.LanguageModel,
+    lm: lf.LanguageModel = pg.MISSING_VALUE,
     use_cache: bool = True,
     cls: Type[base.Evaluation] = base.Evaluation,
     **kwargs,
@@ -170,8 +171,6 @@ class EvaluationTest(unittest.TestCase):
     )
 
   def test_bad_init(self):
-    with self.assertRaisesRegex(ValueError, '.*'):
-      eval_set('bad_init1', 'complete', None, lm=fake.StaticResponse('hi'))
 
     @pg.functor()
     def _bad_completion_schema():
@@ -438,18 +437,18 @@ class SuiteTest(unittest.TestCase):
     lm = fake.StaticSequence([
         'Solution(final_answer=2)',
         '3',
-    ])
+    ] * 5)
     s = base.Suite(
         'suite_run_test',
         [
-            eval_set('run_test_1', 'query', schema_fn=answer_schema(), lm=lm),
+            eval_set('run_test_1', 'query', schema_fn=answer_schema()),
             # A suite of search space. Two of the sub-experiments are identical,
             # thus the result of run_test_2 would include only two keys.
             eval_set('run_test_2',
                      pg.oneof(['call', 'query']),
-                     schema_fn=pg.oneof([answer_schema(), answer_schema()]),
-                     lm=lm),
+                     schema_fn=pg.oneof([answer_schema(), answer_schema()])),
         ],
+        lm=lm
     )
     # Test for persistent hash.
     self.assertEqual(s.hash, '7285e52b')
@@ -482,7 +481,7 @@ class SuiteTest(unittest.TestCase):
                     schema_fn='answer_schema()',
                 ),
                 cache_stats=dict(
-                    use_cache=True, num_queries=3, num_hits=0, num_updates=2
+                    use_cache=True, num_queries=4, num_hits=0, num_updates=4
                 ),
                 metrics=dict(total=2, failures=2, failure_rate=1.0),
             ),
