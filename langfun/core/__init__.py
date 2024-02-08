@@ -109,6 +109,8 @@ from langfun.core.memory import Memory
 # Utility for console output.
 from langfun.core import console
 
+# Import internal modules.
+
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order
