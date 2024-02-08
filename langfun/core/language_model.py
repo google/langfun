@@ -288,6 +288,8 @@ class LanguageModel(component.Component):
       **kwargs,
   ) -> list[LMSamplingResult]:
     """Samples one or multiple prompts."""
+    # Internal usage logging.
+
     prompts = [message_lib.UserMessage.from_value(p) for p in prompts]
 
     with component.context(override_attrs=True, **kwargs):

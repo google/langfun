@@ -174,6 +174,8 @@ def query(
   Returns:
     The result based on the schema.
   """
+    # Internal usage logging.
+
   # When `lf.query` is used for symbolic completion, schema is automatically
   # inferred when it is None.
   if isinstance(prompt, pg.Symbolic) and prompt.sym_partial and schema is None:

@@ -83,7 +83,7 @@ def run_with_correction(
   # pylint: disable=g-import-not-at-top
   # pytype: disable=import-error
   from langfun.core.structured import prompting
-  # pytype: disable=import-error
+  # pytype: enable=import-error
   # pylint: enable=g-import-not-at-top
 
   code = remove_docstrings(code)

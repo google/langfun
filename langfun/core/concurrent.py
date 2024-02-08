@@ -538,11 +538,12 @@ def concurrent_map(
     An iterator of (input, output, error).
 
   Raises:
-    Exception: Erros that are not in `silence_on_errors` or `retry_on_errors`,
+    Exception: Errors that are not in `silence_on_errors` or `retry_on_errors`,
       or retry on such errors has reached max attempts.
     TimeoutError: Any item timed out while TimeoutError is not silenced via
       `silence_on_errors`.
   """
+    # Internal usage logging.
 
   if retry_on_errors:
     func = with_retry(
@@ -683,7 +684,7 @@ def concurrent_map(
 class ExecutorPool:
   """A pool of managed executors.
 
-  Managed executors are used for controlling the parallism of execution based
+  Managed executors are used for controlling the parallelism of execution based
   on resource id. This design is to honor overall rate limit of LMs globally
   (with current process).
   """
