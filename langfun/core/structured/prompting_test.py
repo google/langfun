@@ -115,7 +115,14 @@ class QueryTest(unittest.TestCase):
         x=1,
         y=2,
         lm=lm.clone(),
-        expected_snippet='\n\nUSER_REQUEST:\n  What is 1 + 2?\n\n',
+        expected_snippet=(
+            'Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT'
+            ' according to OUTPUT_TYPE.\n\nINPUT_OBJECT:\n  1 + 1'
+            ' =\n\nOUTPUT_TYPE:\n  Answer\n\n  ```python\n  class Answer:\n   '
+            ' final_answer: int\n  ```\n\nOUTPUT_OBJECT:\n  ```python\n '
+            ' Answer(final_answer=2)\n  ```\n\nINPUT_OBJECT:\n  What is 1 +'
+            ' 2?\n\nOUTPUT_TYPE:\n  int\n\nOUTPUT_OBJECT:'
+        ),
     )
 
   def test_str_to_str_render(self):
@@ -139,7 +146,7 @@ class QueryTest(unittest.TestCase):
         y=2,
         lm=lm.clone(),
         expected_snippet=(
-            '\n\nUSER_REQUEST:\n  ```python\n  [\n    1\n  ]\n  ```\n\n'
+            '\n\nINPUT_OBJECT:\n  ```python\n  [\n    1\n  ]\n  ```\n\n'
         ),
     )
 
@@ -155,7 +162,7 @@ class QueryTest(unittest.TestCase):
         modalities.Image.from_bytes(b'mock_image'),
         int,
         lm=lm,
-        expected_snippet='\n\nUSER_REQUEST:\n  {{input}}\n\n',
+        expected_snippet='\n\nINPUT_OBJECT:\n  {{input}}\n\n',
         expected_modalities=1,
     )
 
@@ -207,7 +214,7 @@ class QueryTest(unittest.TestCase):
         list[str],
         lm=lm,
         expected_snippet=inspect.cleandoc("""
-            USER_REQUEST:
+            INPUT_OBJECT:
               ```python
               [
                 ModalityRef(
@@ -238,17 +245,12 @@ class QueryStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render().text,
         inspect.cleandoc("""
-            Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
+            Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT according to OUTPUT_TYPE.
 
-            INSTRUCTIONS:
-              1. Only respond with the required RESULT_OBJECT encapsulated with python markdown as illustrated by the given example.
-              2. Don't add any comments in the response.
-              3. RESULT_OBJECT must strictly follow the RESULT_TYPE.
-
-            USER_REQUEST:
+            INPUT_OBJECT:
               1 + 1 =
 
-            RESULT_TYPE:
+            OUTPUT_TYPE:
               Answer
 
               ```python
@@ -256,18 +258,18 @@ class QueryStructurePythonTest(unittest.TestCase):
                 final_answer: int
               ```
 
-            RESULT_OBJECT:
+            OUTPUT_OBJECT:
               ```python
               Answer(final_answer=2)
               ```
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               Compute 12 / 6 + 2.
 
-            RESULT_TYPE:
+            OUTPUT_TYPE:
               int
 
-            RESULT_OBJECT:
+            OUTPUT_OBJECT:
             """),
     )
 
@@ -287,17 +289,12 @@ class QueryStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         l.render().text,
         inspect.cleandoc("""
-            Please respond to the last USER_REQUEST with RESULT_OBJECT according to RESULT_TYPE.
+            Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT according to OUTPUT_TYPE.
 
-            INSTRUCTIONS:
-              1. Only respond with the required RESULT_OBJECT encapsulated with python markdown as illustrated by the given example.
-              2. Don't add any comments in the response.
-              3. RESULT_OBJECT must strictly follow the RESULT_TYPE.
-
-            USER_REQUEST:
+            INPUT_OBJECT:
               1 + 1 =
 
-            RESULT_TYPE:
+            OUTPUT_TYPE:
               Answer
 
               ```python
@@ -305,41 +302,41 @@ class QueryStructurePythonTest(unittest.TestCase):
                 final_answer: int
               ```
 
-            RESULT_OBJECT:
+            OUTPUT_OBJECT:
               ```python
               Answer(final_answer=2)
               ```
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               What is the answer of 1 plus 1?
 
-            RESULT_TYPE:
+            OUTPUT_TYPE:
               int
 
-            RESULT_OBJECT:
+            OUTPUT_OBJECT:
               ```python
               2
               ```
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               Compute the value of 3 + (2 * 6).
 
-            RESULT_TYPE:
+            OUTPUT_TYPE:
               int
 
-            RESULT_OBJECT:
+            OUTPUT_OBJECT:
               ```python
               15
               ```
 
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               Compute 12 / 6 + 2.
 
-            RESULT_TYPE:
+            OUTPUT_TYPE:
               int
 
-            RESULT_OBJECT:
+            OUTPUT_OBJECT:
             """),
     )
 
@@ -445,13 +442,13 @@ class QueryStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render().text,
         inspect.cleandoc("""
-            Please respond to the last USER_REQUEST with JSON according to SCHEMA:
+            Please respond to the last INPUT_OBJECT with JSON according to SCHEMA:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
               2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               1 + 1 =
 
             SCHEMA:
@@ -460,7 +457,7 @@ class QueryStructureJsonTest(unittest.TestCase):
             JSON:
               {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               Compute 12 / 6 + 2.
 
             SCHEMA:
@@ -482,13 +479,13 @@ class QueryStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         l.render().text,
         inspect.cleandoc("""
-            Please respond to the last USER_REQUEST with JSON according to SCHEMA:
+            Please respond to the last INPUT_OBJECT with JSON according to SCHEMA:
 
             INSTRUCTIONS:
               1. If the schema has `_type`, carry it over to the JSON output.
               2. If a field from the schema cannot be extracted from the response, use null as the JSON value.
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               1 + 1 =
 
             SCHEMA:
@@ -497,7 +494,7 @@ class QueryStructureJsonTest(unittest.TestCase):
             JSON:
               {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               What is the answer of 1 plus 1?
 
             SCHEMA:
@@ -506,7 +503,7 @@ class QueryStructureJsonTest(unittest.TestCase):
             JSON:
               {"result": 2}
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               Compute the value of 3 + (2 * 6).
 
             SCHEMA:
@@ -516,7 +513,7 @@ class QueryStructureJsonTest(unittest.TestCase):
               {"result": 15}
 
 
-            USER_REQUEST:
+            INPUT_OBJECT:
               Compute 12 / 6 + 2.
 
             SCHEMA:

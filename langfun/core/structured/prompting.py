@@ -26,7 +26,7 @@ class QueryStructure(mapping.Mapping):
   """Query an object out from a natural language text."""
 
   context_title = 'CONTEXT'
-  input_title = 'USER_REQUEST'
+  input_title = 'INPUT_OBJECT'
 
   # Mark schema as required.
   schema: pg.typing.Annotated[
@@ -65,11 +65,6 @@ class QueryStructurePython(QueryStructure):
   preamble = """
       Please respond to the last {{ input_title }} with {{ output_title }} according to {{ schema_title }}.
 
-      INSTRUCTIONS:
-        1. Only respond with the required {{ output_title }} encapsulated with python markdown as illustrated by the given example.
-        2. Don't add any comments in the response.
-        3. {{ output_title }} must strictly follow the {{ schema_title }}.
-
       {{ input_title }}:
         1 + 1 =
 
@@ -87,8 +82,8 @@ class QueryStructurePython(QueryStructure):
         ```
       """
   protocol = 'python'
-  schema_title = 'RESULT_TYPE'
-  output_title = 'RESULT_OBJECT'
+  schema_title = 'OUTPUT_TYPE'
+  output_title = 'OUTPUT_OBJECT'
 
 
 def _query_structure_cls(
