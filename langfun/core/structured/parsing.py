@@ -78,6 +78,7 @@ def parse(
     user_prompt: str | None = None,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    include_context: bool = False,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
@@ -131,6 +132,8 @@ def parse(
       `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    include_context: If True, include the request sent to LLM for obtaining the
+      response to pares. Otherwise include only the response.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled. Auto-fix is not supported for 'json' protocol.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -153,7 +156,7 @@ def parse(
   message = lf.AIMessage.from_value(message)
   if message.source is None and user_prompt is not None:
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
-  context = getattr(message.lm_input, 'text', None)
+  context = getattr(message.lm_input, 'text', None) if include_context else None
 
   if examples is None:
     examples = DEFAULT_PARSE_EXAMPLES
@@ -184,6 +187,7 @@ def call(
     lm: lf.LanguageModel | None = None,
     parsing_lm: lf.LanguageModel | None = None,
     parsing_examples: list[mapping.MappingExample] | None = None,
+    parsing_include_context: bool = False,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     response_postprocess: Callable[[str], str] | None = None,
@@ -225,6 +229,8 @@ def call(
       for prompting the LM will be used.
     parsing_examples: Examples for parsing the output. If None,
       `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
+    parsing_include_context: If True, include the request sent to LLM for
+      obtaining the response to pares. Otherwise include only the response.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled. Auto-fix is not supported for 'json' protocol.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -258,6 +264,7 @@ def call(
       schema,
       examples=parsing_examples,
       lm=parsing_lm or lm,
+      include_context=parsing_include_context,
       autofix=autofix,
       autofix_lm=autofix_lm or lm,
       protocol=protocol,
