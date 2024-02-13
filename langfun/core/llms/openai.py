@@ -302,38 +302,38 @@ class Gpt4(OpenAI):
 
 class Gpt4Turbo(Gpt4):
   """GPT-4 Turbo with 128K context window size. Knowledge up to 4-2023."""
-  model = 'gpt-4-1106-preview'
+  model = 'gpt-4-turbo-preview'
 
 
-class Gpt4TurboVision(Gpt4):
+class Gpt4TurboVision(Gpt4Turbo):
   """GPT-4 Turbo with vision."""
   model = 'gpt-4-vision-preview'
   multimodal = True
 
 
+class Gpt4Turbo_0125(Gpt4Turbo):   # pylint:disable=invalid-name
+  """GPT-4 Turbo with 128K context window size. Knowledge up to 4-2023."""
+  model = 'gpt-4-0125-preview'
+
+
+class Gpt4Turbo_1106(Gpt4Turbo):   # pylint:disable=invalid-name
+  """GPT-4 Turbo @20231106. 128K context window. Knowledge up to 4-2023."""
+  model = 'gpt-4-1106-preview'
+
+
 class Gpt4_0613(Gpt4):    # pylint:disable=invalid-name
-  """GPT-4 0613."""
+  """GPT-4 @20230613. 8K context window. Knowledge up to 9-2021."""
   model = 'gpt-4-0613'
 
 
-class Gpt4_0314(Gpt4):   # pylint:disable=invalid-name
-  """GPT-4 0314."""
-  model = 'gpt-4-0314'
-
-
 class Gpt4_32K(Gpt4):       # pylint:disable=invalid-name
-  """GPT-4 with 32K context window size."""
+  """Latest GPT-4 with 32K context window."""
   model = 'gpt-4-32k'
 
 
 class Gpt4_32K_0613(Gpt4_32K):    # pylint:disable=invalid-name
-  """GPT-4 32K 0613."""
+  """GPT-4 @20230613. 32K context window. Knowledge up to 9-2021."""
   model = 'gpt-4-32k-0613'
-
-
-class Gpt4_32K_0314(Gpt4_32K):   # pylint:disable=invalid-name
-  """GPT-4 32K 0314."""
-  model = 'gpt-4-32k-0314'
 
 
 class Gpt35(OpenAI):
@@ -346,19 +346,19 @@ class Gpt35Turbo(Gpt35):
   model = 'gpt-3.5-turbo'
 
 
+class Gpt35Turbo_0125(Gpt35Turbo):   # pylint:disable=invalid-name
+  """GPT-3.5 Turbo @20240125. 16K context window. Knowledge up to 09/2021."""
+  model = 'gpt-3.5-turbo-0125'
+
+
 class Gpt35Turbo_1106(Gpt35Turbo):   # pylint:disable=invalid-name
-  """Gpt3.5 Turbo snapshot at 2023/11/06, with with 16K context window size."""
+  """Gpt3.5 Turbo @20231106. 16K context window. Knowledge up to 09/2021."""
   model = 'gpt-3.5-turbo-1106'
 
 
 class Gpt35Turbo_0613(Gpt35Turbo):   # pylint:disable=invalid-name
   """Gpt3.5 Turbo snapshot at 2023/06/13, with 4K context window size."""
   model = 'gpt-3.5-turbo-0613'
-
-
-class Gpt35Turbo_0301(Gpt35Turbo):   # pylint:disable=invalid-name
-  """Gpt3.5 Turbo snapshot at 2023/03/01, with 4K context window size."""
-  model = 'gpt-3.5-turbo-0301'
 
 
 class Gpt35Turbo16K(Gpt35Turbo):
@@ -369,11 +369,6 @@ class Gpt35Turbo16K(Gpt35Turbo):
 class Gpt35Turbo16K_0613(Gpt35Turbo):   # pylint:disable=invalid-name
   """Gtp 3.5 Turbo 16K 0613."""
   model = 'gpt-3.5-turbo-16k-0613'
-
-
-class Gpt35Turbo16K_0301(Gpt35Turbo):   # pylint:disable=invalid-name
-  """Gtp 3.5 Turbo 16K 0301."""
-  model = 'gpt-3.5-turbo-16k-0301'
 
 
 class Gpt3(OpenAI):
