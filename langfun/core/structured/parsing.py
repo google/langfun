@@ -253,7 +253,10 @@ def call(
   lm_output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)
 
   if response_postprocess is not None:
-    lm_output.set('text', response_postprocess(lm_output.text))
+    postprocessed_text = response_postprocess(lm_output.text)
+    if postprocessed_text != lm_output.text:
+      processed_lm_output = lf.AIMessage(postprocessed_text, source=lm_output)
+      lm_output = processed_lm_output
 
   if schema in (str, None):
     return lm_output if returns_message else lm_output.text

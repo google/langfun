@@ -841,8 +841,10 @@ class Evaluation(Evaluable):
       kwargs['evaluation'] = self
     return self.schema_fn(**kwargs)
 
-  def _formalize_schema(self, annotation) -> lf_structured.Schema:
+  def _formalize_schema(self, annotation) -> lf_structured.Schema | None:
     """Formalizes schema from annotation."""
+    if annotation in (str, None):
+      return None
     if self.method == 'complete':
       if not hasattr(annotation, '__schema__'):
         raise TypeError(
@@ -1518,7 +1520,7 @@ class Summary(pg.Object):
     pivot_field = pivot_field or self.pivot_field
     s = io.StringIO()
     s.write('<html><body>')
-    for task in self.tasks():
+    for task in sorted(self.tasks(), key=lambda cls: cls.__name__):
       s.write('<div>')
       s.write(f'<h2>{task.__name__}</h2>')
       table = Summary.Table.from_evaluations(
