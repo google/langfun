@@ -210,6 +210,7 @@ class LangFunc(
       lm: language_model.LanguageModel | None = None,
       lm_input: message_lib.Message | None = None,
       cache_seed: int | None = 0,
+      skip_lm: bool = False,
       **variables,
   ) -> message_lib.Message:
     """Calls language model with `lm_input` or rendered text.
@@ -223,6 +224,8 @@ class LangFunc(
       cache_seed: Seed for computing cache key. The cache key is determined by a
         tuple of (lm, prompt, cache seed). If None, cache will be disabled for
         the query even cache is configured by the LM.
+      skip_lm: If True, returns the rendered prompt as a UserMessage object.
+        otherwise return the LLM response based on the rendered prompt.
       **variables: Template variables applicable to this or child LangFunc.
 
     Returns:
@@ -232,6 +235,7 @@ class LangFunc(
         lm=lm,
         lm_input=lm_input,
         cache_seed=cache_seed,
+        skip_lm=skip_lm,
         **variables,
     )
 
@@ -241,6 +245,7 @@ class LangFunc(
       lm: language_model.LanguageModel | None = None,
       lm_input: message_lib.Message | None = None,
       cache_seed: int | None = 0,
+      skip_lm: bool = False,
       **variables,
   ) -> message_lib.Message:
     """Call the language model once, with invoking the output transform."""
@@ -256,10 +261,13 @@ class LangFunc(
         if lm_input is None:
           lm_input = self.render(**kwargs)
 
+        lm_input.tag(message_lib.Message.TAG_LM_INPUT)
+        if skip_lm:
+          return lm_input
+
         self._cached_lm_input = lm_input
 
         # Send rendered text to LM.
-        lm_input.tag(message_lib.Message.TAG_LM_INPUT)
         lm_output = self.lm(lm_input, cache_seed=cache_seed)
 
         # Track the input as the source of the output.

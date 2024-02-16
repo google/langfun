@@ -38,6 +38,13 @@ class EchoTest(unittest.TestCase):
     self.assertIn('[0] PROMPT SENT TO LM:', debug_info)
     self.assertIn('[0] LM RESPONSE', debug_info)
 
+  def test_score(self):
+    lm = fakelm.Echo()
+    self.assertEqual(
+        lm.score('hi', ['hello', 'how are you']),
+        [lf.LMScoringResult(0.0), lf.LMScoringResult(-1.0)],
+    )
+
 
 class StaticResponseTest(unittest.TestCase):
 

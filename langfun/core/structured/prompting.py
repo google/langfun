@@ -110,6 +110,7 @@ def query(
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
     returns_message: bool = False,
+    skip_lm: bool = False,
     **kwargs,
 ) -> Any:
   """Parse a natural langugage message based on schema.
@@ -163,6 +164,8 @@ def query(
       are 'json' and 'python'. By default `python` will be used.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
+    skip_lm: If True, returns the rendered prompt as a UserMessage object.
+      otherwise return the LLM response based on the rendered prompt.
     **kwargs: Keyword arguments passed to the
       `lf.structured.NaturalLanguageToStructureed` transform.
 
@@ -178,7 +181,7 @@ def query(
 
   if schema in (None, str):
     # Query with natural language output.
-    output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)
+    output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm, skip_lm=skip_lm)
     return output if returns_message else output.text
 
   # Query with structured output.
@@ -202,5 +205,6 @@ def query(
   )(
       lm=lm,
       autofix_lm=autofix_lm or lm,
+      skip_lm=skip_lm,
   )
   return output if returns_message else output.result

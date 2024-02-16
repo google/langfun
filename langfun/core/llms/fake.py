@@ -17,7 +17,14 @@ from typing import Annotated
 import langfun.core as lf
 
 
-class Echo(lf.LanguageModel):
+class Fake(lf.LanguageModel):
+  """The base class for all fake language models."""
+
+  def _score(self, prompt: lf.Message, completions: list[lf.Message]):
+    return [lf.LMScoringResult(score=-i * 1.0) for i in range(len(completions))]
+
+
+class Echo(Fake):
   """A simple echo language model for testing."""
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
@@ -28,7 +35,7 @@ class Echo(lf.LanguageModel):
 
 
 @lf.use_init_args(['response'])
-class StaticResponse(lf.LanguageModel):
+class StaticResponse(Fake):
   """Language model that always gives the same canned response."""
 
   response: Annotated[
@@ -44,7 +51,7 @@ class StaticResponse(lf.LanguageModel):
 
 
 @lf.use_init_args(['mapping'])
-class StaticMapping(lf.LanguageModel):
+class StaticMapping(Fake):
   """A static mapping from prompt to response."""
 
   mapping: Annotated[
@@ -60,7 +67,7 @@ class StaticMapping(lf.LanguageModel):
 
 
 @lf.use_init_args(['sequence'])
-class StaticSequence(lf.LanguageModel):
+class StaticSequence(Fake):
   """A static sequence of responses to use."""
 
   sequence: Annotated[

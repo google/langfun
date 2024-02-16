@@ -18,6 +18,7 @@
 # pylint: disable=g-import-not-at-top
 
 # LMs for testing.
+from langfun.core.llms.fake import Fake
 from langfun.core.llms.fake import Echo
 from langfun.core.llms.fake import StaticMapping
 from langfun.core.llms.fake import StaticResponse

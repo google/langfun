@@ -127,6 +127,15 @@ class LMSamplingOptions(component.Component):
     )
 
 
+class LMScoringResult(pg.Object):
+  """Language model scoring result."""
+
+  score: Annotated[
+      float,
+      'The log likelyhood of the requested completion towards the prompt.',
+  ]
+
+
 class LMCache(pg.Object):
   """Interface for LM cache."""
 
@@ -425,3 +434,83 @@ class LanguageModel(component.Component):
         title=f'\n[{call_counter}] LM RESPONSE (in {elapse:.2f} seconds):',
         color='blue',
     )
+
+  def score(
+      self,
+      prompt: str | message_lib.Message,
+      completions: list[str | message_lib.Message],
+      **kwargs,
+  ) -> list[LMScoringResult]:
+    """Scores the given prompt."""
+    prompt = message_lib.UserMessage.from_value(prompt)
+    completions = [message_lib.UserMessage.from_value(c) for c in completions]
+
+    call_counter = self._call_counter
+    self._call_counter += 1
+    request_start = time.time()
+
+    with component.context(override_attrs=True, **kwargs):
+      scoring_results = self._score(prompt, completions)
+      elapse = time.time() - request_start
+      self._debug_score(
+          prompt, completions, scoring_results, call_counter, elapse
+      )
+      return scoring_results
+
+  def _score(
+      self, prompt: message_lib.Message, completions: list[message_lib.Message]
+  ) -> list[LMScoringResult]:
+    """Subclass to implement."""
+    raise NotImplementedError(
+        f'{self.__class__.__name__} does not support scoring.'
+    )
+
+  def _debug_score(
+      self,
+      prompt: message_lib.Message,
+      completions: list[message_lib.Message],
+      scoring_results: list[LMScoringResult],
+      call_counter: int,
+      elapse: float,
+  ):
+    debug = self.debug
+    if isinstance(debug, bool):
+      debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
+
+    if debug & LMDebugMode.INFO:
+      self._debug_model_info(call_counter)
+
+    if debug & LMDebugMode.PROMPT:
+      console.write(
+          prompt,
+          title=f'\n[{call_counter}] SCORING LM WITH PROMPT:',
+          color='green',
+      )
+      referred_modalities = prompt.referred_modalities()
+      if referred_modalities:
+        console.write(
+            pg.object_utils.kvlist_str(
+                [(k, repr(v), None) for k, v in referred_modalities.items()]
+            ),
+            title=f'\n[{call_counter}] MODALITY OBJECTS SENT TO LM:',
+            color='green',
+        )
+
+    if debug & LMDebugMode.RESPONSE:
+      console.write(
+          '',
+          title=(
+              f'\n[{call_counter}] SCORING COMPLETED (in {elapse:.2f} seconds):'
+          ),
+          color='blue',
+      )
+      for i, (c, r) in enumerate(zip(completions, scoring_results)):
+        console.write(
+            c,
+            title=f'COMPLETION #{i}',
+            color='green',
+        )
+        console.write(
+            f'score: {r.score}',
+            color='blue',
+        )

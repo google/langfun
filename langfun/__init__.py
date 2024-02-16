@@ -30,6 +30,7 @@ parse = structured.parse
 query = structured.query
 describe = structured.describe
 complete = structured.complete
+score = structured.score
 
 from langfun.core import eval  # pylint: disable=redefined-builtin
 from langfun.core import templates

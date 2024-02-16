@@ -54,6 +54,19 @@ class MockModel(lm_lib.LanguageModel):
     )(prompts)
 
 
+class MockScoringModel(MockModel):
+
+  def _score(
+      self,
+      prompt: message_lib.Message,
+      completions: list[message_lib.Message],
+      **kwargs
+  ) -> list[lm_lib.LMScoringResult]:
+    return [
+        lm_lib.LMScoringResult(score=-i * 1.0) for i in range(len(completions))
+    ]
+
+
 class LMSamplingOptionsTest(unittest.TestCase):
   """Tests for LMSamplingOptions."""
 
@@ -265,6 +278,68 @@ class LanguageModelTest(unittest.TestCase):
         self.assertIn('[0] ' + expected_include, debug_info)
       for expected_exclude in expected_excluded:
         self.assertNotIn('[0] ' + expected_exclude, debug_info)
+
+  def test_score(self):
+    info_flag = lm_lib.LMDebugMode.INFO
+    prompt_flag = lm_lib.LMDebugMode.PROMPT
+    response_flag = lm_lib.LMDebugMode.RESPONSE
+    debug_prints = {
+        info_flag: 'LM INFO',
+        prompt_flag: 'SCORING LM WITH PROMPT',
+        response_flag: 'SCORING COMPLETED',
+    }
+    debug_modes = [
+        info_flag,
+        prompt_flag,
+        response_flag,
+        info_flag | prompt_flag,
+        info_flag | response_flag,
+        prompt_flag | response_flag,
+        info_flag | prompt_flag | response_flag,
+    ]
+
+    class Image(modality.Modality):
+      def to_bytes(self):
+        return b'fake_image'
+
+    for debug_mode in debug_modes:
+      string_io = io.StringIO()
+      lm = MockScoringModel()
+
+      with contextlib.redirect_stdout(string_io):
+        self.assertEqual(
+            lm.score(
+                message_lib.UserMessage('hi {{image}}', image=Image()),
+                ['1', '2'], debug=debug_mode),
+            [
+                lm_lib.LMScoringResult(score=-0.0),
+                lm_lib.LMScoringResult(score=-1.0),
+            ],
+        )
+
+      debug_info = string_io.getvalue()
+      expected_included = [
+          debug_prints[f]
+          for f in lm_lib.LMDebugMode
+          if f != lm_lib.LMDebugMode.NONE and f in debug_mode
+      ]
+      expected_excluded = [
+          debug_prints[f]
+          for f in lm_lib.LMDebugMode
+          if f != lm_lib.LMDebugMode.NONE and f not in debug_mode
+      ]
+
+      for expected_include in expected_included:
+        self.assertIn('[0] ' + expected_include, debug_info)
+      for expected_exclude in expected_excluded:
+        self.assertNotIn('[0] ' + expected_exclude, debug_info)
+
+      if debug_mode & lm_lib.LMDebugMode.PROMPT:
+        self.assertIn('[0] MODALITY OBJECTS SENT TO LM', debug_info)
+
+  def test_score_with_unsupported_model(self):
+    with self.assertRaises(NotImplementedError):
+      MockModel().score('hi', ['1', '2'])
 
 
 if __name__ == '__main__':

@@ -235,6 +235,10 @@ class QueryTest(unittest.TestCase):
         expected_modalities=2,
     )
 
+  def test_bad_protocol(self):
+    with self.assertRaisesRegex(ValueError, 'Unknown protocol'):
+      prompting.query('what is 1 + 1', int, protocol='text')
+
 
 class QueryStructurePythonTest(unittest.TestCase):
 

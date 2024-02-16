@@ -64,6 +64,8 @@ from langfun.core.structured.description import describe
 from langfun.core.structured.completion import CompleteStructure
 from langfun.core.structured.completion import complete
 
+from langfun.core.structured.scoring import score
+
 # Expose default examples for structured operations so users could refer to
 # them.
 from langfun.core.structured.parsing import DEFAULT_PARSE_EXAMPLES

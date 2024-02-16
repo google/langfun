@@ -194,6 +194,11 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(l(x=1, cache_seed=None), 'd')
       self.assertEqual(l(x=2), 'b')
 
+  def test_call_with_skip_lm(self):
+    l = LangFunc('hi')
+    with component.context(lm=ExcitedEchoer()):
+      self.assertEqual(l(skip_lm=True), 'hi')
+
 
 class CallEventTest(unittest.TestCase):
 
