@@ -79,6 +79,7 @@ def parse(
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
     include_context: bool = False,
+    cache_seed: int | None = 0,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
@@ -134,6 +135,9 @@ def parse(
       the default one-shot example will be added.
     include_context: If True, include the request sent to LLM for obtaining the
       response to pares. Otherwise include only the response.
+    cache_seed: Seed for computing cache key. The cache key is determined by a
+      tuple of (lm, prompt, cache seed). If None, cache will be disabled for
+      the query even cache is configured by the LM.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled. Auto-fix is not supported for 'json' protocol.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -166,7 +170,7 @@ def parse(
   )
 
   # Setting up context.
-  call_context = dict(autofix=autofix)
+  call_context = dict(cache_seed=cache_seed, autofix=autofix)
   if lm is not None:
     call_context['lm'] = lm
   autofix_lm = autofix_lm or lm
@@ -188,6 +192,7 @@ def call(
     parsing_lm: lf.LanguageModel | None = None,
     parsing_examples: list[mapping.MappingExample] | None = None,
     parsing_include_context: bool = False,
+    cache_seed: int | None = 0,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     response_postprocess: Callable[[str], str] | None = None,
@@ -231,6 +236,9 @@ def call(
       `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
     parsing_include_context: If True, include the request sent to LLM for
       obtaining the response to pares. Otherwise include only the response.
+    cache_seed: Seed for computing cache key. The cache key is determined by a
+      tuple of (lm, prompt, cache seed). If None, cache will be disabled for
+      the query even cache is configured by the LM.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled. Auto-fix is not supported for 'json' protocol.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -253,7 +261,10 @@ def call(
   lm_output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)
 
   if response_postprocess is not None:
-    lm_output.set('text', response_postprocess(lm_output.text))
+    postprocessed_text = response_postprocess(lm_output.text)
+    if postprocessed_text != lm_output.text:
+      processed_lm_output = lf.AIMessage(postprocessed_text, source=lm_output)
+      lm_output = processed_lm_output
 
   if schema in (str, None):
     return lm_output if returns_message else lm_output.text
@@ -265,6 +276,7 @@ def call(
       examples=parsing_examples,
       lm=parsing_lm or lm,
       include_context=parsing_include_context,
+      cache_seed=cache_seed,
       autofix=autofix,
       autofix_lm=autofix_lm or lm,
       protocol=protocol,

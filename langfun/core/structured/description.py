@@ -44,6 +44,7 @@ def describe(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    cache_seed: int | None = 0,
     **kwargs,
 ) -> str:
   """Describes a structured value using natural language.
@@ -97,6 +98,9 @@ def describe(
       `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    cache_seed: Seed for computing cache key. The cache key is determined by a
+      tuple of (lm, prompt, cache seed). If None, cache will be disabled for
+      the query even cache is configured by the LM.
     **kwargs: Keyword arguments passed to the `lf.structured.DescribeStructure`.
 
   Returns:
@@ -106,7 +110,7 @@ def describe(
     examples = DEFAULT_DESCRIBE_EXAMPLES
   return DescribeStructure(
       input=value, context=context, examples=examples, **kwargs
-  )(lm=lm).text
+  )(lm=lm, cache_seed=cache_seed).text
 
 
 class _Country(pg.Object):

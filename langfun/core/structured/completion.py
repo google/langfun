@@ -153,6 +153,7 @@ def complete(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    cache_seed: int | None = 0,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     returns_message: bool = False,
@@ -197,6 +198,9 @@ def complete(
       `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    cache_seed: Seed for computing cache key. The cache key is determined by a
+      tuple of (lm, prompt, cache seed). If None, cache will be disabled for
+      the query even cache is configured by the LM.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -218,5 +222,5 @@ def complete(
       **kwargs,
   )
 
-  output = t(lm=lm, autofix_lm=autofix_lm or lm)
+  output = t(lm=lm, cache_seed=cache_seed, autofix_lm=autofix_lm or lm)
   return output if returns_message else output.result

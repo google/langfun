@@ -106,6 +106,7 @@ def query(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
+    cache_seed: int | None = 0,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
@@ -155,6 +156,9 @@ def query(
       `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
       the default one-shot example will be added.
+    cache_seed: Seed for computing cache key. The cache key is determined by a
+      tuple of (lm, prompt, cache seed). If None, cache will be disabled for
+      the query even cache is configured by the LM.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled. Auto-fix is not supported for 'json' protocol.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -181,7 +185,9 @@ def query(
 
   if schema in (None, str):
     # Query with natural language output.
-    output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm, skip_lm=skip_lm)
+    output = lf.LangFunc.from_value(prompt, **kwargs)(
+        lm=lm, cache_seed=cache_seed, skip_lm=skip_lm
+    )
     return output if returns_message else output.text
 
   # Query with structured output.
@@ -205,6 +211,7 @@ def query(
   )(
       lm=lm,
       autofix_lm=autofix_lm or lm,
+      cache_seed=cache_seed,
       skip_lm=skip_lm,
   )
   return output if returns_message else output.result
