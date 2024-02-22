@@ -167,6 +167,7 @@ class OpenAI(lf.LanguageModel):
         max_tokens=options.max_tokens,
         stream=False,
         timeout=self.timeout,
+        request_timeout=self.timeout,
         logprobs=options.logprobs,
         top_logprobs=options.top_logprobs,
     )
