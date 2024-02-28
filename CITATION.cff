@@ -1,0 +1,18 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Langfun
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Daiyi
+    family-names: Peng
+    email: daiyip@outlook.com
+    affiliation: Google Deepmind
+repository-code: 'https://github.com/google/langfun'
+license: Apache-2.0
+version: 0.0.1
+date-released: '2023-09-14'
