@@ -107,9 +107,9 @@ class Gemini(lf.LanguageModel):
     for lf_chunk in formatted.chunk():
       if isinstance(lf_chunk, str):
         chunk = lf_chunk
-      elif self.multimodal and isinstance(lf_chunk, lf_modalities.Image):
+      elif self.multimodal and isinstance(lf_chunk, lf_modalities.MimeType):
         chunk = genai.types.BlobDict(
-            data=lf_chunk.to_bytes(), mime_type=f'image/{lf_chunk.image_format}'
+            data=lf_chunk.to_bytes(), mime_type=lf_chunk.mime_type
         )
       else:
         raise ValueError(f'Unsupported modality: {lf_chunk!r}')

@@ -17,6 +17,8 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-import-not-at-top
 
+from langfun.core.modalities.mime import MimeType
+from langfun.core.modalities.mime import Custom
 from langfun.core.modalities.image import Image
 
 # pylint: enable=g-import-not-at-top

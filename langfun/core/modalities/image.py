@@ -15,24 +15,12 @@
 
 import base64
 import imghdr
-from typing import Annotated, cast
-
-import langfun.core as lf
-import requests
+from typing import cast
+from langfun.core.modalities import mime
 
 
-class Image(lf.Modality):
+class Image(mime.MimeType):
   """Base class for image."""
-
-  @classmethod
-  def from_bytes(cls, content: bytes) -> 'Image':
-    """Creates an image from bytes."""
-    return ImageContent(content)
-
-  @classmethod
-  def from_uri(cls, uri: str) -> 'Image':
-    """Creates an image from file."""
-    return ImageFile(uri)
 
   @property
   def image_format(self) -> str:
@@ -41,36 +29,12 @@ class Image(lf.Modality):
       raise ValueError(f'Unsupported image format: {iformat!r}.')
     return cast(str, iformat)
 
-
-class ImageContent(Image):
-  """Raw image content."""
-
-  content: Annotated[bytes, 'The raw content of the image.']
-
-  def to_bytes(self) -> bytes:
-    return self.content
+  @property
+  def mime_type(self) -> str:
+    return f'image/{self.image_format}'
 
   def _repr_html_(self) -> str:
+    if self.uri:
+      return f'<img src="{self.uri}">'
     image_raw = base64.b64encode(self.to_bytes()).decode()
     return f'<img src="data:image/{self.image_format};base64,{image_raw}">'
-
-
-class ImageFile(Image):
-  """A image file."""
-
-  uri: Annotated[str, 'The URI of the image. (e.g. https://..../a.jpg).']
-
-  def _on_bound(self):
-    super()._on_bound()
-    self._bytes = None
-
-  def to_bytes(self) -> bytes:
-    if self._bytes is None:
-      self._bytes = requests.get(
-          self.uri,
-          headers={'User-Agent': 'Langfun'},
-      ).content
-    return self._bytes
-
-  def _repr_html_(self) -> str:
-    return f'<img src="{self.uri}">'
