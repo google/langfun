@@ -76,6 +76,6 @@ class Custom(MimeType):
     return self.type
 
 
-class Pdf(Custom):
+class PDF(Custom):
   """PDF document."""
   type = 'application/pdf'

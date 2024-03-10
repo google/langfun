@@ -47,6 +47,8 @@ from langfun.core import memories
 from langfun.core import modalities
 
 Image = modalities.Image
+Video = modalities.Video
+PDF = modalities.PDF
 
 # Error types.
 SchemaError = structured.SchemaError
