@@ -99,8 +99,8 @@ class RetryError(RuntimeError):
 def with_retry(
     func: Callable[[Any], Any],
     retry_on_errors: Union[
-        Union[Type[Exception], Tuple[Exception, str]],
-        Sequence[Union[Type[Exception], Tuple[Exception, str]]],
+        Union[Type[Exception], Tuple[Type[Exception], str]],
+        Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]],
     ],
     max_attempts: int,
     retry_interval: int | tuple[int, int] = (5, 60),
@@ -174,9 +174,8 @@ def concurrent_execute(
     executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,
     retry_on_errors: Union[
-        Type[Exception],
-        Tuple[Type[Exception], ...],
-        None,
+        Union[Type[Exception], Tuple[Type[Exception], str]],
+        Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]], None
     ] = None,
     max_attempts: int = 5,
     retry_interval: int | tuple[int, int] = (5, 60),
