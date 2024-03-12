@@ -34,7 +34,7 @@ class Image(mime.MimeType):
     return f'image/{self.image_format}'
 
   def _repr_html_(self) -> str:
-    if self.uri:
+    if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
       return f'<img src="{self.uri}">'
     image_raw = base64.b64encode(self.to_bytes()).decode()
     return f'<img src="data:image/{self.image_format};base64,{image_raw}">'
