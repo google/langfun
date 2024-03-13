@@ -215,6 +215,12 @@ def concurrent_execute(
         exponential_backoff=exponential_backoff,
     )
 
+  # NOTE(daiyip): when executor is not specified and max_worker is 1,
+  # we don't need to create a executor pool. Instead, the inputs will be
+  # processed by the user function in sequence within the current thread.
+  if executor is None and max_workers == 1:
+    return [func(i) for i in parallel_inputs]
+
   shutdown_after_finish = executor is None
   executor = _executor_pool.executor_from(executor, max_workers=max_workers)
 

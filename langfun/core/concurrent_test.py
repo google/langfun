@@ -163,6 +163,16 @@ class ConcurrentExecuteTest(unittest.TestCase):
     with component.context(y=2):
       self.assertEqual(concurrent.concurrent_execute(fun, [A(1), A(2)]), [2, 4])
 
+  def test_concurrent_execute_with_a_single_worker(self):
+    def fun(a):
+      return a.x * a.y
+
+    with component.context(y=2):
+      self.assertEqual(
+          concurrent.concurrent_execute(fun, [A(1), A(2)], max_workers=1),
+          [2, 4],
+      )
+
   def test_concurrent_execute_with_external_executor(self):
     def fun(a):
       return a.x * a.y
