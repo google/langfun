@@ -154,6 +154,10 @@ class DefinitionTest(unittest.TestCase):
     with self.assertRaisesRegex(TypeError, '.* missing 1 required argument'):
       MyPrompt(y=2)()
 
+  def test_bad_template(self):
+    with self.assertRaisesRegex(ValueError, 'Bad template string.*'):
+      Template('{{x=1')
+
 
 class VarsTest(unittest.TestCase):
 

@@ -124,9 +124,12 @@ class Template(
 
   @classmethod
   def resolve_vars(cls, template_str: str) -> Set[str]:
-    env = jinja2.Environment()
-    ast = env.parse(template_str)
-    return jinja2_meta.find_undeclared_variables(ast)
+    try:
+      env = jinja2.Environment()
+      ast = env.parse(template_str)
+      return jinja2_meta.find_undeclared_variables(ast)
+    except jinja2.TemplateSyntaxError as e:
+      raise ValueError(f'Bad template string:\n\n{template_str}') from e
 
   def _on_bound(self) -> None:
     super()._on_bound()
