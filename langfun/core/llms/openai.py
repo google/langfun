@@ -214,18 +214,13 @@ class OpenAI(lf.LanguageModel):
           for index in sorted(samples_by_index.keys())
       ]
 
-    return lf.concurrent_execute(
+    return self._parallel_execute_with_currency_control(
         _open_ai_completion,
         [prompts],
-        executor=self.resource_id,
-        max_workers=self.max_concurrency,
         retry_on_errors=(
             openai_error.ServiceUnavailableError,
             openai_error.RateLimitError,
         ),
-        max_attempts=self.max_attempts,
-        retry_interval=self.retry_interval,
-        exponential_backoff=self.exponential_backoff,
     )[0]
 
   def _chat_complete_batch(
@@ -280,18 +275,13 @@ class OpenAI(lf.LanguageModel):
           ),
       )
 
-    return lf.concurrent_execute(
+    return self._parallel_execute_with_currency_control(
         _open_ai_chat_completion,
         prompts,
-        executor=self.resource_id,
-        max_workers=self.max_concurrency,
         retry_on_errors=(
             openai_error.ServiceUnavailableError,
             openai_error.RateLimitError,
         ),
-        max_attempts=self.max_attempts,
-        retry_interval=self.retry_interval,
-        exponential_backoff=self.exponential_backoff,
     )
 
 

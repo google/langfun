@@ -17,8 +17,9 @@ import abc
 import dataclasses
 import enum
 import time
-from typing import Annotated, Any
+from typing import Annotated, Any, Callable, Sequence, Tuple, Type, Union
 from langfun.core import component
+from langfun.core import concurrent
 from langfun.core import console
 from langfun.core import message as message_lib
 import pyglove as pg
@@ -209,6 +210,22 @@ class LanguageModel(component.Component):
       )
   ] = component.contextual(default=None)
 
+  max_concurrency: Annotated[
+      int | None,
+      (
+          'Max concurrent requests being sent to the server. '
+          'If None, there is no limit. '
+          'Please note that the concurrency control is based on the '
+          '`resource_id` property, meaning that model instances shared '
+          'the same resource ID will be accounted under the same concurrency '
+          'control key. This allows a process-level concurrency control '
+          'for specific models regardless the number of LM (client) instances '
+          'created by the program. Subclasses could override this number or '
+          'replace it with a `max_concurrency` property to allow dynamic '
+          'concurrency control.'
+      ),
+  ] = None
+
   timeout: Annotated[
       float | None, 'Timeout in seconds. If None, there is no timeout.'
   ] = 120.0
@@ -284,11 +301,6 @@ class LanguageModel(component.Component):
     """Resource ID for performing request parallism control."""
     return self.model_id
 
-  @property
-  def max_concurrency(self) -> int:
-    """Max concurrent requests."""
-    return 32
-
   def sample(
       self,
       prompts: list[str | message_lib.Message],
@@ -354,6 +366,28 @@ class LanguageModel(component.Component):
       prompt: list[message_lib.Message],
   ) -> list[LMSamplingResult]:
     """Subclass should override."""
+
+  def _parallel_execute_with_currency_control(
+      self,
+      action: Callable[..., Any],
+      inputs: Sequence[Any],
+      retry_on_errors: Union[
+          None,
+          Union[Type[Exception], Tuple[Type[Exception], str]],
+          Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]],
+      ] = None,
+  ) -> Any:
+    """Helper method for subclasses for implementing _sample."""
+    return concurrent.concurrent_execute(
+        action,
+        inputs,
+        executor=self.resource_id if self.max_concurrency else None,
+        max_workers=self.max_concurrency or len(inputs),
+        retry_on_errors=retry_on_errors,
+        max_attempts=self.max_attempts,
+        retry_interval=self.retry_interval,
+        exponential_backoff=self.exponential_backoff,
+    )
 
   def __call__(
       self, prompt: message_lib.Message, *, cache_seed: int = 0, **kwargs

@@ -89,7 +89,7 @@ class LanguageModelTest(unittest.TestCase):
     lm = MockModel(1, temperature=0.5, top_k=2, max_attempts=2)
     self.assertEqual(lm.model_id, 'MockModel')
     self.assertEqual(lm.resource_id, 'MockModel')
-    self.assertEqual(lm.max_concurrency, 32)
+    self.assertIsNone(lm.max_concurrency)
     self.assertEqual(lm.failures_before_attempt, 1)
     self.assertEqual(lm.sampling_options.temperature, 0.5)
     self.assertEqual(lm.sampling_options.top_k, 2)

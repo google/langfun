@@ -133,14 +133,9 @@ class Gemini(lf.LanguageModel):
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized, 'Vertex AI API is not initialized.'
-    return lf.concurrent_execute(
+    return self._parallel_execute_with_currency_control(
         self._sample_single,
         prompts,
-        executor=self.resource_id,
-        max_workers=self.max_concurrency,
-        # NOTE(daiyip): Vertex has its own policy on handling
-        # with rate limit, so we do not retry on errors.
-        retry_on_errors=None,
     )
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
