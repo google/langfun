@@ -162,11 +162,11 @@ def parse(
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
   context = getattr(message.lm_input, 'text', None) if include_context else None
 
-  if examples is None:
-    examples = DEFAULT_PARSE_EXAMPLES
-
   t = _parse_structure_cls(protocol)(
-      schema=schema, context=context, default=default, examples=examples
+      schema=schema,
+      context=context,
+      default=default,
+      examples=examples or default_parse_examples(),
   )
 
   # Setting up context.
@@ -296,17 +296,19 @@ def _parse_structure_cls(
     raise ValueError(f'Unknown protocol: {protocol!r}.')
 
 
-class _AdditionResults(pg.Object):
-  one_plus_one_equals: int | None
-  two_plus_two_equals: int | None
+def default_parse_examples() -> list[mapping.MappingExample]:
+  """Default parsing examples."""
 
+  class AdditionResults(pg.Object):
+    one_plus_one_equals: int | None
+    two_plus_two_equals: int | None
 
-DEFAULT_PARSE_EXAMPLES: list[mapping.MappingExample] = [
-    mapping.MappingExample(
-        input='Two plus two equals four. Three plus three equals six.',
-        schema=_AdditionResults,
-        output=_AdditionResults(
-            one_plus_one_equals=None, two_plus_two_equals=4
-        ),
-    ),
-]
+  return [
+      mapping.MappingExample(
+          input='Two plus two equals four. Three plus three equals six.',
+          schema=AdditionResults,
+          output=AdditionResults(
+              one_plus_one_equals=None, two_plus_two_equals=4
+          ),
+      ),
+  ]

@@ -31,6 +31,9 @@ query = structured.query
 describe = structured.describe
 complete = structured.complete
 score = structured.score
+generate_class = structured.generate_class
+
+source_form = structured.source_form
 
 from langfun.core import eval  # pylint: disable=redefined-builtin
 from langfun.core import templates

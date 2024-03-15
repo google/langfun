@@ -293,24 +293,26 @@ class Mapping(lf.LangFunc):
 
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
     """Transforms LM response into structure if schema is present."""
-    schema = self.mapping_request.schema
-    if schema is None:
-      return lm_output
-
     try:
-      result = schema.parse(
-          lm_output.text,
-          protocol=self.protocol,
-          additional_context=self.globals(),
-          autofix=self.autofix,
-          autofix_lm=self.autofix_lm or self.lm,
-      )
-      lm_output.result = self.postprocess_result(result)
+      lm_output.result = self.postprocess_result(self.parse_result(lm_output))
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.RAISE_IF_HAS_ERROR:
         raise e
       lm_output.result = self.default
     return lm_output
+
+  def parse_result(self, lm_output: lf.Message) -> Any:
+    """Parse result from LLM response."""
+    schema = self.mapping_request.schema
+    if schema is None:
+      return None
+    return schema.parse(
+        lm_output.text,
+        protocol=self.protocol,
+        additional_context=self.globals(),
+        autofix=self.autofix,
+        autofix_lm=self.autofix_lm or self.lm,
+    )
 
   def postprocess_result(self, result: Any) -> Any:
     """Post process structured output."""

@@ -106,58 +106,61 @@ def describe(
   Returns:
     The parsed result based on the schema.
   """
-  if examples is None:
-    examples = DEFAULT_DESCRIBE_EXAMPLES
   return DescribeStructure(
-      input=value, context=context, examples=examples, **kwargs
+      input=value,
+      context=context,
+      examples=examples or default_describe_examples(),
+      **kwargs,
   )(lm=lm, cache_seed=cache_seed).text
 
 
-class _Country(pg.Object):
-  """A example dataclass for structured mapping."""
+def default_describe_examples() -> list[mapping.MappingExample]:
+  """Default describe examples."""
 
-  name: str
-  continents: list[
-      Literal[
-          'Africa',
-          'Asia',
-          'Europe',
-          'Oceania',
-          'North America',
-          'South America',
-      ]
+  class Country(pg.Object):
+    """A example dataclass for structured mapping."""
+
+    name: str
+    continents: list[
+        Literal[
+            'Africa',
+            'Asia',
+            'Europe',
+            'Oceania',
+            'North America',
+            'South America',
+        ]
+    ]
+    num_states: int
+    neighbor_countries: list[str]
+    population: int
+    capital: str | None
+    president: str | None
+
+  return [
+      mapping.MappingExample(
+          context='Brief intro to United States',
+          input=Country(
+              name='The United States of America',
+              continents=['North America'],
+              num_states=50,
+              neighbor_countries=[
+                  'Canada',
+                  'Mexico',
+                  'Bahamas',
+                  'Cuba',
+                  'Russia',
+              ],
+              population=333000000,
+              capital='Washington, D.C',
+              president=None,
+          ),
+          output=inspect.cleandoc("""
+              The United States of America is a country primarily located in North America
+              consisting of fifty states. It shares land borders with Canada to its north
+              and with Mexico to its south and has maritime borders with the Bahamas, Cuba,
+              Russia, and other nations. With a population of over 333 million. The national
+              capital of the United States is Washington, D.C.
+              """),
+      ),
   ]
-  num_states: int
-  neighbor_countries: list[str]
-  population: int
-  capital: str | None
-  president: str | None
-
-
-DEFAULT_DESCRIBE_EXAMPLES: list[mapping.MappingExample] = [
-    mapping.MappingExample(
-        context='Brief intro to United States',
-        input=_Country(
-            name='The United States of America',
-            continents=['North America'],
-            num_states=50,
-            neighbor_countries=[
-                'Canada',
-                'Mexico',
-                'Bahamas',
-                'Cuba',
-                'Russia',
-            ],
-            population=333000000,
-            capital='Washington, D.C',
-            president=None,
-        ),
-        output=inspect.cleandoc("""
-            The United States of America is a country primarily located in North America
-            consisting of fifty states. It shares land borders with Canada to its north
-            and with Mexico to its south and has maritime borders with the Bahamas, Cuba,
-            Russia, and other nations. With a population of over 333 million. The national
-            capital of the United States is Washington, D.C.
-            """),
-    ),
-]

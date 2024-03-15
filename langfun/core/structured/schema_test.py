@@ -435,6 +435,10 @@ class SchemaPythonReprTest(unittest.TestCase):
         schema_lib.class_definition(A),
         'class A:\n  pass\n',
     )
+    self.assertEqual(
+        schema_lib.class_definition(A, include_pg_object_as_base=True),
+        'class A(Object):\n  pass\n',
+    )
 
     class B:
       pass
@@ -520,6 +524,32 @@ class SchemaPythonReprTest(unittest.TestCase):
             ```
             """),
     )
+    self.assertEqual(
+        schema_lib.SchemaPythonRepr().repr(
+            schema,
+            include_result_definition=False,
+            include_pg_object_as_base=True,
+            markdown=False,
+        ),
+        inspect.cleandoc("""
+            class Foo(Object):
+              x: int
+
+            class A(Object):
+              foo: Foo
+
+            class Bar(Object):
+              y: str
+
+            class Baz(Bar):
+              y: str
+
+            class B(A):
+              foo: Foo
+              bar: Bar
+              foo2: Foo
+            """),
+    )
 
 
 class SchemaJsonReprTest(unittest.TestCase):
@@ -559,6 +589,20 @@ class ValuePythonReprTest(unittest.TestCase):
         ),
         "A(foo=[Foo(x=1), Foo(x=2)], y='bar')",
     )
+    self.assertEqual(
+        schema_lib.ValuePythonRepr().repr(A),
+        inspect.cleandoc("""
+            ```python
+            class Foo(Object):
+              x: int
+            
+            class A(Object):
+              foo: list[Foo]
+              y: str | None
+            ```
+            """),
+    )
+    self.assertEqual(schema_lib.source_form(int), 'int')
 
   def test_parse(self):
     class Foo(pg.Object):

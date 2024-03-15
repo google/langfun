@@ -301,23 +301,43 @@ class SchemaRepr(metaclass=abc.ABCMeta):
 class SchemaPythonRepr(SchemaRepr):
   """Python-representation for a schema."""
 
-  def repr(self, schema: Schema) -> str:
-    ret = self.result_definition(schema)
-    class_definition_str = self.class_definitions(schema)
+  def repr(
+      self,
+      schema: Schema,
+      *,
+      include_result_definition: bool = True,
+      markdown: bool = True,
+      **kwargs,
+  ) -> str:
+    ret = ''
+    if include_result_definition:
+      ret += self.result_definition(schema)
+    class_definition_str = self.class_definitions(
+        schema, markdown=markdown, **kwargs
+    )
     if class_definition_str:
-      ret += f'\n\n```python\n{class_definition_str}```'
-    return ret
+      ret += f'\n\n{class_definition_str}'
+    return ret.strip()
 
-  def class_definitions(self, schema: Schema) -> str | None:
+  def class_definitions(self, schema: Schema, **kwargs) -> str | None:
     deps = schema.class_dependencies(include_subclasses=True)
-    return class_definitions(deps)
+    return class_definitions(deps, **kwargs)
 
   def result_definition(self, schema: Schema) -> str:
     return annotation(schema.spec)
 
 
+def source_form(value, markdown: bool = False) -> str:
+  """Returns the source code form of an object."""
+  return ValuePythonRepr().repr(value, markdown=markdown)
+
+
 def class_definitions(
-    classes: Sequence[Type[Any]], strict: bool = False, markdown: bool = False
+    classes: Sequence[Type[Any]],
+    *,
+    include_pg_object_as_base: bool = False,
+    strict: bool = False,
+    markdown: bool = False,
 ) -> str | None:
   """Returns a str for class definitions."""
   if not classes:
@@ -326,14 +346,22 @@ def class_definitions(
   for i, cls in enumerate(classes):
     if i > 0:
       def_str.write('\n')
-    def_str.write(class_definition(cls, strict))
+    def_str.write(
+        class_definition(
+            cls,
+            strict=strict,
+            include_pg_object_as_base=include_pg_object_as_base,
+        )
+    )
   ret = def_str.getvalue()
   if markdown and ret:
     ret = f'```python\n{ret}```'
   return ret
 
 
-def class_definition(cls, strict: bool = False) -> str:
+def class_definition(
+    cls, strict: bool = False, include_pg_object_as_base: bool = False
+) -> str:
   """Returns the Python class definition."""
   out = io.StringIO()
   if not issubclass(cls, pg.Object):
@@ -344,10 +372,9 @@ def class_definition(cls, strict: bool = False) -> str:
   schema = cls.__schema__
   eligible_bases = []
   for base_cls in cls.__bases__:
-    if issubclass(base_cls, pg.Symbolic) and not base_cls.__module__.startswith(
-        'pyglove'
-    ):
-      eligible_bases.append(base_cls.__name__)
+    if issubclass(base_cls, pg.Object):
+      if include_pg_object_as_base or base_cls is not pg.Object:
+        eligible_bases.append(base_cls.__name__)
   if eligible_bases:
     base_cls_str = ', '.join(eligible_bases)
     out.write(f'class {cls.__name__}({base_cls_str}):\n')
@@ -547,8 +574,20 @@ class ValuePythonRepr(ValueRepr):
            markdown: bool = True,
            **kwargs) -> str:
     del schema
-    object_code = pg.format(
-        value, compact=compact, verbose=verbose, python_format=True)
+    if inspect.isclass(value):
+      cls_schema = Schema.from_value(value)
+      if isinstance(cls_schema.spec, pg.typing.Object):
+        object_code = SchemaPythonRepr().class_definitions(
+            cls_schema, markdown=markdown, include_pg_object_as_base=True
+        )
+        assert object_code is not None
+        return object_code
+      else:
+        object_code = SchemaPythonRepr().result_definition(cls_schema)
+    else:
+      object_code = pg.format(
+          value, compact=compact, verbose=verbose, python_format=True
+      )
     if markdown:
       return f'```python\n{ object_code }\n```'
     return object_code
@@ -588,6 +627,7 @@ def structure_from_python(
   global_vars = global_vars or {}
   global_vars.update({
       'pg': pg,
+      'Object': pg.Object,
       'Any': typing.Any,
       'List': typing.List,
       'Tuple': typing.Tuple,

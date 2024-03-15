@@ -41,8 +41,12 @@ from langfun.core.structured.schema import ValueRepr
 from langfun.core.structured.schema import ValueJsonRepr
 from langfun.core.structured.schema import ValuePythonRepr
 from langfun.core.structured.schema import schema_repr
+from langfun.core.structured.schema import source_form
 from langfun.core.structured.schema import value_repr
 
+from langfun.core.structured.schema_generation import generate_class
+from langfun.core.structured.schema_generation import classgen_example
+from langfun.core.structured.schema_generation import default_classgen_examples
 
 from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingExample
@@ -68,8 +72,8 @@ from langfun.core.structured.scoring import score
 
 # Expose default examples for structured operations so users could refer to
 # them.
-from langfun.core.structured.parsing import DEFAULT_PARSE_EXAMPLES
-from langfun.core.structured.description import DEFAULT_DESCRIBE_EXAMPLES
+from langfun.core.structured.parsing import default_parse_examples
+from langfun.core.structured.description import default_describe_examples
 
 # Default examples.
 
