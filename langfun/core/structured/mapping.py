@@ -285,7 +285,9 @@ class Mapping(lf.LangFunc):
   def transform_input(self, lm_input: lf.Message) -> lf.Message:
     # Find modalities to fill the input message.
     lm_input.metadata.update(
-        examples=pg.Ref(self.examples), input=pg.Ref(self.input)
+        examples=pg.Ref(self.examples),
+        input=pg.Ref(self.input),
+        schema=pg.Ref(self.schema) if self.schema is not None else None,
     )
     if isinstance(self.input, lf.Message):
       lm_input.source = self.input
