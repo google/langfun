@@ -16,6 +16,7 @@ from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
+from langfun.core.structured import prompting
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
@@ -270,7 +271,7 @@ def call(
     return lm_output if returns_message else lm_output.text
 
   # Call `parsing_lm` for structured parsing.
-  return parse(
+  return prompting.query(
       lm_output,
       schema,
       examples=parsing_examples,
