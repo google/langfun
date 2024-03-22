@@ -1015,7 +1015,10 @@ class Evaluation(Evaluable):
             status_fn=self._status,
         ):
           if error is not None:
-            self._failures.append((example, str(error)))
+            try:
+              self._failures.append((example, str(error)))
+            except Exception as e:  # pylint: disable=broad-exception-caught
+              self._failures.append((example, str(e)))
           else:
             output = message.text if self.schema is None else message.result
             self.audit(example, output, message)
