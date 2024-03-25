@@ -143,14 +143,14 @@ def generate_class(
 
 
 def classgen_example(
-    class_name: str, prompt: str | pg.Symbolic, cls: Type[Any]
+    prompt: str | pg.Symbolic, cls: Type[Any]
 ) -> mapping.MappingExample:
   """Creates a class generation example."""
   if isinstance(prompt, lf.Template):
     prompt = prompt.render()
   return mapping.MappingExample(
       input=prompt,
-      context=class_name,
+      context=cls.__name__,
       output=cls,
   )
 
@@ -168,7 +168,6 @@ def default_classgen_examples() -> list[mapping.MappingExample]:
 
   return [
       classgen_example(
-          'Solution',
           'How to evaluate an arithmetic expression?',
           Solution,
       )
