@@ -55,10 +55,6 @@ def parse_value_spec(value) -> pg.typing.ValueSpec:
           ),
       ):
         raise ValueError(f'Unsupported schema specification: {v}')
-      if isinstance(spec, pg.typing.Object) and not issubclass(
-          spec.cls, pg.Symbolic
-      ):
-        raise ValueError(f'{v} must be a symbolic class to be parsable.')
       return spec
 
   return _parse_node(value)
@@ -208,7 +204,9 @@ def class_dependencies(
   if isinstance(value_or_spec, Schema):
     return value_or_spec.class_dependencies(include_subclasses)
 
-  if isinstance(value_or_spec, (pg.typing.ValueSpec, pg.symbolic.ObjectMeta)):
+  if inspect.isclass(value_or_spec) or isinstance(
+      value_or_spec, pg.typing.ValueSpec
+  ):
     value_or_spec = (value_or_spec,)
 
   if isinstance(value_or_spec, tuple):
@@ -216,7 +214,7 @@ def class_dependencies(
     for v in value_or_spec:
       if isinstance(v, pg.typing.ValueSpec):
         value_specs.append(v)
-      elif inspect.isclass(v) and issubclass(v, pg.Object):
+      elif inspect.isclass(v):
         value_specs.append(pg.typing.Object(v))
       else:
         raise TypeError(f'Unsupported spec type: {v!r}')
@@ -235,23 +233,20 @@ def class_dependencies(
 
   def _fill_dependencies(vs: pg.typing.ValueSpec, include_subclasses: bool):
     if isinstance(vs, pg.typing.Object):
-      if issubclass(vs.cls, pg.Object) and vs.cls not in seen:
+      if vs.cls not in seen:
         seen.add(vs.cls)
 
         # Add base classes as dependencies.
         for base_cls in vs.cls.__bases__:
           # We only keep track of user-defined symbolic classes.
-          if issubclass(
-              base_cls, pg.Object
-          ) and not base_cls.__module__.startswith('pyglove'):
+          if base_cls is not object and base_cls is not pg.Object:
             _fill_dependencies(
                 pg.typing.Object(base_cls), include_subclasses=False
             )
 
         # Add members as dependencies.
-        if hasattr(vs.cls, '__schema__'):
-          for field in vs.cls.__schema__.values():
-            _fill_dependencies(field.value, include_subclasses)
+        for field in _pg_schema(vs.cls).values():
+          _fill_dependencies(field.value, include_subclasses)
       _add_dependency(vs.cls)
 
       # Check subclasses if available.
@@ -364,17 +359,13 @@ def class_definition(
 ) -> str:
   """Returns the Python class definition."""
   out = io.StringIO()
-  if not issubclass(cls, pg.Object):
-    raise TypeError(
-        'Classes must be `pg.Object` subclasses to be used as schema. '
-        f'Encountered: {cls}.'
-    )
-  schema = cls.__schema__
+  schema = _pg_schema(cls)
   eligible_bases = []
   for base_cls in cls.__bases__:
-    if issubclass(base_cls, pg.Object):
+    if base_cls is not object:
       if include_pg_object_as_base or base_cls is not pg.Object:
         eligible_bases.append(base_cls.__name__)
+
   if eligible_bases:
     base_cls_str = ', '.join(eligible_bases)
     out.write(f'class {cls.__name__}({base_cls_str}):\n')
@@ -839,3 +830,13 @@ class Unknown(pg.Object, pg.typing.CustomTyping):
 
 
 UNKNOWN = Unknown()
+
+
+def _pg_schema(cls: Type[Any]) -> pg.Schema:
+  """Returns PyGlove schema for the constructor of a class."""
+  schema = getattr(cls, '__schema__', None)
+  if schema is None:
+    schema = pg.symbolic.callable_schema(
+        cls.__init__, auto_typing=True, auto_doc=True, remove_self=True
+    )
+  return schema

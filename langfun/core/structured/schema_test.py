@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for structured parsing."""
 
+import dataclasses
 import inspect
 import typing
 import unittest
@@ -101,12 +102,7 @@ class SchemaTest(unittest.TestCase):
 
     self.assert_unsupported_annotation(typing.Type[int])
     self.assert_unsupported_annotation(typing.Union[int, str, bool])
-
-    class X:
-      pass
-
-    # X must be a symbolic type to be parsable.
-    self.assert_unsupported_annotation(X)
+    self.assert_unsupported_annotation(typing.Any)
 
   def test_schema_dict(self):
     schema = schema_lib.Schema([{'x': Itinerary}])
@@ -149,6 +145,25 @@ class SchemaTest(unittest.TestCase):
 
     schema = schema_lib.Schema([B])
     self.assertEqual(schema.class_dependencies(), [Foo, A, Bar, X, B])
+
+  def test_class_dependencies_non_pyglove(self):
+    class Baz:
+      def __init__(self, x: int):
+        pass
+
+    @dataclasses.dataclass(frozen=True)
+    class AA:
+      foo: tuple[Baz, int]
+
+    class XX(pg.Object):
+      pass
+
+    @dataclasses.dataclass(frozen=True)
+    class BB(AA):
+      foo2: Baz | XX
+
+    schema = schema_lib.Schema([AA])
+    self.assertEqual(schema.class_dependencies(), [Baz, AA, XX, BB])
 
   def test_schema_repr(self):
     schema = schema_lib.Schema([{'x': Itinerary}])
@@ -440,13 +455,6 @@ class SchemaPythonReprTest(unittest.TestCase):
         'class A(Object):\n  pass\n',
     )
 
-    class B:
-      pass
-
-    with self.assertRaisesRegex(
-        TypeError, 'Classes must be `pg.Object` subclasses.*'):
-      schema_lib.class_definition(B)
-
     class C(pg.Object):
       x: str
       __kwargs__: typing.Any
@@ -459,9 +467,12 @@ class SchemaPythonReprTest(unittest.TestCase):
     class Foo(pg.Object):
       x: int
 
-    class Bar(pg.Object):
+    @dataclasses.dataclass(frozen=True)
+    class Bar:
+      """Class Bar."""
       y: str
 
+    @dataclasses.dataclass(frozen=True)
     class Baz(Bar):  # pylint: disable=unused-variable
       pass
 
@@ -475,7 +486,7 @@ class SchemaPythonReprTest(unittest.TestCase):
     schema = schema_lib.Schema([B])
     self.assertEqual(
         schema_lib.SchemaPythonRepr().class_definitions(schema),
-        inspect.cleandoc("""
+        inspect.cleandoc('''
             class Foo:
               x: int
 
@@ -483,16 +494,18 @@ class SchemaPythonReprTest(unittest.TestCase):
               foo: Foo
 
             class Bar:
+              """Class Bar."""
               y: str
 
             class Baz(Bar):
+              """Baz(y: str)"""
               y: str
 
             class B(A):
               foo: Foo
               bar: Bar
               foo2: Foo
-            """) + '\n',
+            ''') + '\n',
     )
 
     self.assertEqual(
@@ -501,7 +514,7 @@ class SchemaPythonReprTest(unittest.TestCase):
 
     self.assertEqual(
         schema_lib.SchemaPythonRepr().repr(schema),
-        inspect.cleandoc("""
+        inspect.cleandoc('''
             list[B]
 
             ```python
@@ -512,9 +525,11 @@ class SchemaPythonReprTest(unittest.TestCase):
               foo: Foo
 
             class Bar:
+              """Class Bar."""
               y: str
 
             class Baz(Bar):
+              """Baz(y: str)"""
               y: str
 
             class B(A):
@@ -522,7 +537,7 @@ class SchemaPythonReprTest(unittest.TestCase):
               bar: Bar
               foo2: Foo
             ```
-            """),
+            '''),
     )
     self.assertEqual(
         schema_lib.SchemaPythonRepr().repr(
@@ -531,24 +546,26 @@ class SchemaPythonReprTest(unittest.TestCase):
             include_pg_object_as_base=True,
             markdown=False,
         ),
-        inspect.cleandoc("""
+        inspect.cleandoc('''
             class Foo(Object):
               x: int
 
             class A(Object):
               foo: Foo
 
-            class Bar(Object):
+            class Bar:
+              """Class Bar."""
               y: str
 
             class Baz(Bar):
+              """Baz(y: str)"""
               y: str
 
             class B(A):
               foo: Foo
               bar: Bar
               foo2: Foo
-            """),
+            '''),
     )
 
 
