@@ -43,7 +43,6 @@ def constrained_by_upperbound(upper_bound: int):
 
 
 class ConstraintFollowing(scoring.Scoring):
-  id = 'constraint_following'
   inputs = constrained_by_upperbound(1)
   prompt = '{{example}}'
   method = 'query'
@@ -82,7 +81,7 @@ class ScoringTest(unittest.TestCase):
         s.result,
         dict(
             experiment_setup=dict(
-                id='constraint_following',
+                id='ConstraintFollowing@9e51bb9e',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example}}',

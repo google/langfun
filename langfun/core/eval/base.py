@@ -41,14 +41,6 @@ class Evaluable(lf.Component):
   INDEX_HTML = 'index.html'
   SUMMARY_HTML = 'summary.html'
 
-  id: Annotated[
-      str,
-      (
-          'The ID of the evaluation, which should be unique across all '
-          'evaluations.'
-      ),
-  ]
-
   root_dir: Annotated[
       str | None,
       (
@@ -60,6 +52,18 @@ class Evaluable(lf.Component):
   report_precision: Annotated[
       int, 'Number of decimals when reporting precision.'
   ] = lf.contextual(default=1)
+
+  @property
+  @abc.abstractmethod
+  def id(self) -> str:
+    """Returns the ID of the task.
+
+    Returns:
+      Evaluation task ID. Different evaluation task should have their unique
+      task IDs, for each task will be stored in sub-directoreis identified by
+      their IDs. For suites, the ID could be an empty string as they will not
+      produce sub-directories
+    """
 
   @property
   def dir(self) -> str | None:
@@ -578,11 +582,14 @@ class _LeafNode:
   progress_bar: int | None = None
 
 
-@pg.use_init_args(['id', 'children'])
+@pg.use_init_args(['children'])
 class Suite(Evaluable):
   """Evaluation suite."""
 
   children: Annotated[list[Evaluable], 'Child evaluation sets or suites.']
+
+  # Use empty ID as suite is just a container of child evaluations.
+  id: str = ''
 
   __kwargs__: Annotated[
       Any,
@@ -885,6 +892,14 @@ class Evaluation(Evaluable):
       completion_examples.append(ex)
     return completion_examples
 
+  @property
+  def id(self) -> str:
+    """Returns the ID of this evaluation."""
+    id_prefix = self.__class__.__name__
+    if not self.is_deterministic:
+      return id_prefix
+    return f'{id_prefix}@{self.hash}'
+
   @functools.cached_property
   def children(self) -> list['Evaluation']:
     """Returns the trials as child evaluations if this evaluation is a space."""
@@ -894,7 +909,6 @@ class Evaluation(Evaluable):
     for i, child in enumerate(pg.iter(self)):
       child.sym_setparent(self)
       child.sym_setpath(self.sym_path + f'children[{i}]')
-      child.rebind(id=f'{self.id}@{child.hash}', skip_notification=True)
       children.append(child)
     return children
 

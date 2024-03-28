@@ -70,8 +70,7 @@ def eval_set(
   """Creates an evaluation object for testing."""
   tmp_dir = tempfile.gettempdir()
   return cls(
-      id=eval_id,
-      root_dir=tmp_dir,
+      root_dir=os.path.join(tmp_dir, eval_id),
       inputs=base.as_inputs([
           pg.Dict(question='Compute 1 + 1'),
           pg.Dict(question='Compute 1 + 2'),
@@ -210,7 +209,7 @@ class EvaluationTest(unittest.TestCase):
         s.result,
         dict(
             experiment_setup=dict(
-                id='run_test',
+                id='Evaluation@17915dc6',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example.question}}',
@@ -302,7 +301,6 @@ class EvaluationTest(unittest.TestCase):
         '3',
     ])
     s = base.Evaluation(
-        id='search_space_test',
         root_dir=tempfile.gettempdir(),
         inputs=base.as_inputs([
             pg.Dict(question='Compute 1 + 1'),
@@ -439,7 +437,6 @@ class SuiteTest(unittest.TestCase):
         '3',
     ] * 5)
     s = base.Suite(
-        'suite_run_test',
         [
             eval_set('run_test_1', 'query', schema_fn=answer_schema()),
             # A suite of search space. Two of the sub-experiments are identical,
@@ -548,7 +545,6 @@ class SummaryTest(unittest.TestCase):
   def _eval_set(self, root_dir):
     return base.Suite(id='select_test', children=[
         TaskA(
-            id='task_a',
             inputs=base.as_inputs([
                 pg.Dict(question='Compute 1 + 1'),
             ]),
@@ -569,7 +565,6 @@ class SummaryTest(unittest.TestCase):
             max_workers=1,
         ),
         TaskB(
-            id='task_b',
             inputs=base.as_inputs([
                 pg.Dict(question='Compute 1 + 1'),
             ]),
@@ -650,10 +645,10 @@ class SummaryTest(unittest.TestCase):
         len(base.Summary.from_dirs(root_dir)), 2 * 2 * 2 * 2 + 2 * 1 * 1 * 2
     )
     self.assertEqual(
-        len(base.Summary.from_dirs(root_dir, 'task_b')), 2 * 1 * 1 * 2
+        len(base.Summary.from_dirs(root_dir, 'TaskB')), 2 * 1 * 1 * 2
     )
     self.assertEqual(
-        len(base.Summary.from_dirs(root_dir, ('task_a'))), 2 * 2 * 2 * 2
+        len(base.Summary.from_dirs(root_dir, ('TaskA'))), 2 * 2 * 2 * 2
     )
 
   def test_monitor(self):
