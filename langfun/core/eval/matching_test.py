@@ -65,10 +65,8 @@ def eval_set(
     use_cache: bool = True,
 ):
   """Creates an evaluation object for testing."""
-  tmp_dir = tempfile.gettempdir()
   return MyTask(
-      id=eval_id,
-      root_dir=tmp_dir,
+      root_dir=os.path.join(tempfile.gettempdir(), eval_id),
       inputs=base.as_inputs([
           pg.Dict(question='Compute 1 + 1', groundtruth=2),
           pg.Dict(question='Compute 1 + 2', groundtruth=3),
@@ -105,7 +103,7 @@ class MatchingTest(unittest.TestCase):
         s.result,
         dict(
             experiment_setup=dict(
-                id='match_run_test',
+                id='MyTask@3d87f97f',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example.question}}',
