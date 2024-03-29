@@ -27,6 +27,7 @@ import time
 from typing import Annotated, Any, Callable, Iterator, Literal, Optional, Sequence, Type, Union
 
 import langfun.core as lf
+import langfun.core.coding as lf_coding
 from langfun.core.llms.cache import in_memory
 import langfun.core.structured as lf_structured
 import pyglove as pg
@@ -1020,7 +1021,11 @@ class Evaluation(Evaluable):
       self._reset()
 
       def _process(example: Any):
-        return self.process(example, **(self.additional_args or {}))
+        # NOTE(daiyip): set the `input` symbol of the globals to None, so LLM
+        # generated code with calls to `input` will raise an error, thus not
+        # blocking the evaluation.
+        with lf_coding.context(input=None):
+          return self.process(example, **(self.additional_args or {}))
 
       try:
         for example, message, error in lf.concurrent_map(
@@ -1535,8 +1540,11 @@ class Summary(pg.Object):
     s = io.StringIO()
     s.write('<html><body>')
     for task in sorted(self.tasks(), key=lambda cls: cls.__name__):
+      table_id = task.__name__.lower()
       s.write('<div>')
-      s.write(f'<h2>{task.__name__}</h2>')
+      s.write(f'<a id="{table_id}"')
+      s.write(f'<h2><a href="#{table_id}">{task.__name__}</a></h2>')
+      s.write('</a>')
       table = Summary.Table.from_evaluations(
           self.select(task=task).evaluations, pivot_field
       )
