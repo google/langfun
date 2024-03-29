@@ -20,7 +20,7 @@ from unittest import mock
 from google import generativeai as genai
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
-from langfun.core.llms import gemini
+from langfun.core.llms import google_genai
 import pyglove as pg
 
 
@@ -34,6 +34,29 @@ example_image = (
     b'\x1a\x1a\x1a@5\x0e\x04\xa0q\x88\x05\x00\x07\xf8\x18\xf9'
     b'\xdao\xd0|\x00\x00\x00\x00IEND\xaeB`\x82'
 )
+
+
+def mock_get_model(model_name, *args, **kwargs):
+  del args, kwargs
+  if 'gemini' in model_name:
+    method = 'generateContent'
+  elif 'chat' in model_name:
+    method = 'generateMessage'
+  else:
+    method = 'generateText'
+  return pg.Dict(supported_generation_methods=[method])
+
+
+def mock_generate_text(*, model, prompt, **kwargs):
+  return pg.Dict(
+      candidates=[pg.Dict(output=f'{prompt} to {model} with {kwargs}')]
+  )
+
+
+def mock_chat(*, model, messages, **kwargs):
+  return pg.Dict(
+      candidates=[pg.Dict(content=f'{messages} to {model} with {kwargs}')]
+  )
 
 
 def mock_generate_content(content, generation_config, **kwargs):
@@ -68,12 +91,12 @@ def mock_generate_content(content, generation_config, **kwargs):
   )
 
 
-class GeminiTest(unittest.TestCase):
-  """Tests for Evergreen language model."""
+class GenAITest(unittest.TestCase):
+  """Tests for Google GenAI model."""
 
   def test_content_from_message_text_only(self):
     text = 'This is a beautiful day'
-    model = gemini.GeminiPro()
+    model = google_genai.GeminiPro()
     chunks = model._content_from_message(lf.UserMessage(text))
     self.assertEqual(chunks, [text])
 
@@ -85,9 +108,9 @@ class GeminiTest(unittest.TestCase):
 
     # Non-multimodal model.
     with self.assertRaisesRegex(ValueError, 'Unsupported modality'):
-      gemini.GeminiPro()._content_from_message(message)
+      google_genai.GeminiPro()._content_from_message(message)
 
-    model = gemini.GeminiProVision()
+    model = google_genai.GeminiProVision()
     chunks = model._content_from_message(message)
     self.maxDiff = None
     self.assertEqual(
@@ -118,7 +141,7 @@ class GeminiTest(unittest.TestCase):
             ],
         ),
     )
-    model = gemini.GeminiProVision()
+    model = google_genai.GeminiProVision()
     result = model._response_to_result(response)
     self.assertEqual(
         result,
@@ -129,26 +152,28 @@ class GeminiTest(unittest.TestCase):
     )
 
   def test_model_hub(self):
-    model = gemini._GOOGLE_GENAI_MODEL_HUB.get('gemini-pro')
+    model = google_genai._GOOGLE_GENAI_MODEL_HUB.get('gemini-pro')
     self.assertIsNotNone(model)
-    self.assertIs(gemini._GOOGLE_GENAI_MODEL_HUB.get('gemini-pro'), model)
+    self.assertIs(google_genai._GOOGLE_GENAI_MODEL_HUB.get('gemini-pro'), model)
 
   def test_api_key_check(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
-      _ = gemini.GeminiPro()._api_initialized
+      _ = google_genai.GeminiPro()._api_initialized
 
-    self.assertTrue(gemini.GeminiPro(api_key='abc')._api_initialized)
+    self.assertTrue(google_genai.GeminiPro(api_key='abc')._api_initialized)
     os.environ['GOOGLE_API_KEY'] = 'abc'
-    self.assertTrue(gemini.GeminiPro()._api_initialized)
+    self.assertTrue(google_genai.GeminiPro()._api_initialized)
     del os.environ['GOOGLE_API_KEY']
 
   def test_call(self):
     with mock.patch(
         'google.generativeai.generative_models.GenerativeModel.generate_content'
     ) as mock_generate:
+      orig_get_model = genai.get_model
+      genai.get_model = mock_get_model
       mock_generate.side_effect = mock_generate_content
 
-      lm = gemini.GeminiPro(api_key='test_key')
+      lm = google_genai.GeminiPro(api_key='test_key')
       self.maxDiff = None
       self.assertEqual(
           lm('hello', temperature=2.0, top_k=20).text,
@@ -157,6 +182,44 @@ class GeminiTest(unittest.TestCase):
               'top_p=None, top_k=20, max_tokens=1024, stop=None.'
           ),
       )
+      genai.get_model = orig_get_model
+
+  def test_call_with_legacy_completion_model(self):
+    orig_get_model = genai.get_model
+    genai.get_model = mock_get_model
+    orig_generate_text = genai.generate_text
+    genai.generate_text = mock_generate_text
+
+    lm = google_genai.Palm2(api_key='test_key')
+    self.maxDiff = None
+    self.assertEqual(
+        lm('hello', temperature=2.0, top_k=20).text,
+        (
+            "hello to models/text-bison-001 with {'temperature': 2.0, "
+            "'top_k': 20, 'top_p': None, 'candidate_count': 1, "
+            "'max_output_tokens': 1024, 'stop_sequences': None}"
+        ),
+    )
+    genai.get_model = orig_get_model
+    genai.generate_text = orig_generate_text
+
+  def test_call_with_legacy_chat_model(self):
+    orig_get_model = genai.get_model
+    genai.get_model = mock_get_model
+    orig_chat = genai.chat
+    genai.chat = mock_chat
+
+    lm = google_genai.Palm2_IT(api_key='test_key')
+    self.maxDiff = None
+    self.assertEqual(
+        lm('hello', temperature=2.0, top_k=20).text,
+        (
+            "hello to models/chat-bison-001 with {'temperature': 2.0, "
+            "'top_k': 20, 'top_p': None, 'candidate_count': 1}"
+        ),
+    )
+    genai.get_model = orig_get_model
+    genai.chat = orig_chat
 
 
 if __name__ == '__main__':

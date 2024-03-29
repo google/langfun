@@ -13,6 +13,7 @@
 # limitations under the License.
 """Gemini models exposed through Google Generative AI APIs."""
 
+import abc
 import functools
 import os
 from typing import Annotated, Any, Literal
@@ -20,14 +21,20 @@ from typing import Annotated, Any, Literal
 import google.generativeai as genai
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+import pyglove as pg
 
 
 @lf.use_init_args(['model'])
-class Gemini(lf.LanguageModel):
-  """Language model served on VertexAI."""
+class GenAI(lf.LanguageModel):
+  """Language models provided by Google GenAI."""
 
   model: Annotated[
-      Literal['gemini-pro', 'gemini-pro-vision', ''],
+      Literal[
+          'gemini-pro',
+          'gemini-pro-vision',
+          'text-bison-001',
+          'chat-bison-001',
+      ],
       'Model name.',
   ]
 
@@ -35,13 +42,17 @@ class Gemini(lf.LanguageModel):
       str | None,
       (
           'API key. If None, the key will be read from environment variable '
-          "'GOOGLE_API_KEY'."
+          "'GOOGLE_API_KEY'. "
+          'Get an API key at https://ai.google.dev/tutorials/setup'
       ),
   ] = None
 
   multimodal: Annotated[bool, 'Whether this model has multimodal support.'] = (
       False
   )
+
+  # Set the default max concurrency to 8 workers.
+  max_concurrency = 8
 
   def _on_bound(self):
     super()._on_bound()
@@ -67,7 +78,11 @@ class Gemini(lf.LanguageModel):
     return [
         m.name.lstrip('models/')
         for m in genai.list_models()
-        if 'generateContent' in m.supported_generation_methods
+        if (
+            'generateContent' in m.supported_generation_methods
+            or 'generateText' in m.supported_generation_methods
+            or 'generateMessage' in m.supported_generation_methods
+        )
     ]
 
   @property
@@ -79,11 +94,6 @@ class Gemini(lf.LanguageModel):
   def resource_id(self) -> str:
     """Returns a string to identify the resource for rate control."""
     return self.model_id
-
-  @property
-  def max_concurrency(self) -> int:
-    """Max concurrent requests."""
-    return 8
 
   def _generation_config(self, options: lf.LMSamplingOptions) -> dict[str, Any]:
     """Creates generation config from langfun sampling options."""
@@ -117,7 +127,7 @@ class Gemini(lf.LanguageModel):
     return chunks
 
   def _response_to_result(
-      self, response: genai.types.GenerateContentResponse
+      self, response: genai.types.GenerateContentResponse | pg.Dict
   ) -> lf.LMSamplingResult:
     """Parses generative response into message."""
     samples = []
@@ -149,17 +159,97 @@ class Gemini(lf.LanguageModel):
     return self._response_to_result(response)
 
 
+class _LegacyGenerativeModel(pg.Object):
+  """Base for legacy GenAI generative model."""
+
+  model: str
+
+  def generate_content(
+      self,
+      input_content: list[str | genai.types.BlobDict],
+      generation_config: genai.GenerationConfig,
+  ) -> pg.Dict:
+    """Generate content."""
+    segments = []
+    for s in input_content:
+      if not isinstance(s, str):
+        raise ValueError(f'Unsupported modality: {s!r}')
+      segments.append(s)
+    return self.generate(' '.join(segments), generation_config)
+
+  @abc.abstractmethod
+  def generate(
+      self, prompt: str, generation_config: genai.GenerationConfig) -> pg.Dict:
+    """Generate response based on prompt."""
+
+
+class _LegacyCompletionModel(_LegacyGenerativeModel):
+  """Legacy GenAI completion model."""
+
+  def generate(
+      self, prompt: str, generation_config: genai.GenerationConfig
+  ) -> pg.Dict:
+    completion: genai.types.Completion = genai.generate_text(
+        model=f'models/{self.model}',
+        prompt=prompt,
+        temperature=generation_config.temperature,
+        top_k=generation_config.top_k,
+        top_p=generation_config.top_p,
+        candidate_count=generation_config.candidate_count,
+        max_output_tokens=generation_config.max_output_tokens,
+        stop_sequences=generation_config.stop_sequences,
+    )
+    return pg.Dict(
+        candidates=[
+            pg.Dict(content=pg.Dict(parts=[pg.Dict(text=c['output'])]))
+            for c in completion.candidates
+        ]
+    )
+
+
+class _LegacyChatModel(_LegacyGenerativeModel):
+  """Legacy GenAI chat model."""
+
+  def generate(
+      self, prompt: str, generation_config: genai.GenerationConfig
+  ) -> pg.Dict:
+    response: genai.types.ChatResponse = genai.chat(
+        model=f'models/{self.model}',
+        messages=prompt,
+        temperature=generation_config.temperature,
+        top_k=generation_config.top_k,
+        top_p=generation_config.top_p,
+        candidate_count=generation_config.candidate_count,
+    )
+    return pg.Dict(
+        candidates=[
+            pg.Dict(content=pg.Dict(parts=[pg.Dict(text=c['content'])]))
+            for c in response.candidates
+        ]
+    )
+
+
 class _ModelHub:
   """Google Generative AI model hub."""
 
   def __init__(self):
     self._model_cache = {}
 
-  def get(self, model_name: str) -> genai.GenerativeModel:
+  def get(
+      self, model_name: str
+  ) -> genai.GenerativeModel | _LegacyGenerativeModel:
     """Gets a generative model by model id."""
     model = self._model_cache.get(model_name, None)
     if model is None:
-      model = genai.GenerativeModel(model_name)
+      model_info = genai.get_model(f'models/{model_name}')
+      if 'generateContent' in model_info.supported_generation_methods:
+        model = genai.GenerativeModel(model_name)
+      elif 'generateText' in model_info.supported_generation_methods:
+        model = _LegacyCompletionModel(model_name)
+      elif 'generateMessage' in model_info.supported_generation_methods:
+        model = _LegacyChatModel(model_name)
+      else:
+        raise ValueError(f'Unsupported model: {model_name!r}')
       self._model_cache[model_name] = model
     return model
 
@@ -172,14 +262,26 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 #
 
 
-class GeminiPro(Gemini):
+class GeminiPro(GenAI):
   """Gemini Pro model."""
 
   model = 'gemini-pro'
 
 
-class GeminiProVision(Gemini):
+class GeminiProVision(GenAI):
   """Gemini Pro vision model."""
 
   model = 'gemini-pro-vision'
   multimodal = True
+
+
+class Palm2(GenAI):
+  """PaLM2 model."""
+
+  model = 'text-bison-001'
+
+
+class Palm2_IT(GenAI):  # pylint: disable=invalid-name
+  """PaLM2 instruction-tuned model."""
+
+  model = 'chat-bison-001'

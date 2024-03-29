@@ -25,9 +25,11 @@ from langfun.core.llms.fake import StaticResponse
 from langfun.core.llms.fake import StaticSequence
 
 # Gemini models.
-from langfun.core.llms.gemini import Gemini
-from langfun.core.llms.gemini import GeminiPro
-from langfun.core.llms.gemini import GeminiProVision
+from langfun.core.llms.google_genai import GenAI
+from langfun.core.llms.google_genai import GeminiPro
+from langfun.core.llms.google_genai import GeminiProVision
+from langfun.core.llms.google_genai import Palm2
+from langfun.core.llms.google_genai import Palm2_IT
 
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
