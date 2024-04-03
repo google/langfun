@@ -15,9 +15,7 @@
 
 import base64
 from typing import cast
-
 from langfun.core.modalities import mime
-import magic
 
 
 class Video(mime.MimeType):
@@ -29,6 +27,11 @@ class Video(mime.MimeType):
 
   @property
   def mime_type(self) -> str:
+    # TODO(daiyip): after cl/619658455, LaunchPad binaries cannot import `magic`
+    # correctly. This is to mitigate the issue for major Langfun users who do
+    # not use Video. We shall move this import out once the issue is fixed.
+    import magic  # pylint: disable=g-import-not-at-top
+
     video_mime_type = magic.from_buffer(self.to_bytes(), mime=True)
     if 'video/' not in video_mime_type:
       raise ValueError(f'Not a video: {video_mime_type!r}.')
