@@ -436,6 +436,23 @@ class QueryStructurePythonTest(unittest.TestCase):
     ])
     self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
 
+  def test_response_postprocess(self):
+    with lf.context(
+        lm=fake.StaticResponse('<!-- some comment-->\n3'),
+        override_attrs=True,
+    ):
+      self.assertEqual(
+          prompting.query(
+              'Compute 1 + 2', response_postprocess=lambda x: x.split('\n')[1]),
+          '3'
+      )
+      self.assertEqual(
+          prompting.query(
+              'Compute 1 + 2', int,
+              response_postprocess=lambda x: x.split('\n')[1]),
+          3
+      )
+
 
 class QueryStructureJsonTest(unittest.TestCase):
 

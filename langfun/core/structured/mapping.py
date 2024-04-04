@@ -14,7 +14,7 @@
 """The base of symbolic mapping methods."""
 
 import io
-from typing import Annotated, Any
+from typing import Annotated, Any, Callable
 import langfun.core as lf
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
@@ -278,6 +278,14 @@ class Mapping(lf.LangFunc):
       ),
   ] = lf.RAISE_IF_HAS_ERROR
 
+  response_postprocess: Annotated[
+      Callable[[str], str] | None,
+      (
+          'A callable object that post process the raw LLM response before '
+          'parsing it into the output Python object.'
+      )
+  ] = None
+
   #
   # Key methods for implementing specific mappings.
   #
@@ -296,6 +304,7 @@ class Mapping(lf.LangFunc):
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
     """Transforms LM response into structure if schema is present."""
     try:
+      lm_output = self.postprocess_response(lm_output)
       lm_output.result = self.postprocess_result(self.parse_result(lm_output))
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.RAISE_IF_HAS_ERROR:
@@ -315,6 +324,14 @@ class Mapping(lf.LangFunc):
         autofix=self.autofix,
         autofix_lm=self.autofix_lm or self.lm,
     )
+
+  def postprocess_response(self, response: lf.Message) -> lf.Message:
+    """Post process LLM response."""
+    if self.response_postprocess is not None:
+      postprocessed_text = self.response_postprocess(response.text)
+      if postprocessed_text != response.text:
+        return lf.AIMessage(postprocessed_text, source=response)
+    return response
 
   def postprocess_result(self, result: Any) -> Any:
     """Post process structured output."""

@@ -13,7 +13,7 @@
 # limitations under the License.
 """Symbolic query."""
 
-from typing import Any, Type, Union
+from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -107,6 +107,7 @@ def query(
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
     cache_seed: int | None = 0,
+    response_postprocess: Callable[[str], str] | None = None,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
@@ -159,6 +160,9 @@ def query(
     cache_seed: Seed for computing cache key. The cache key is determined by a
       tuple of (lm, prompt, cache seed). If None, cache will be disabled for
       the query even cache is configured by the LM.
+    response_postprocess: An optional callable object to process the raw LM
+      response before parsing it into the final output object. If None, the
+      raw LM response will not be processed.
     autofix: Number of attempts to auto fix the generated code. If 0, autofix is
       disabled. Auto-fix is not supported for 'json' protocol.
     autofix_lm: The language model to use for autofix. If not specified, the
@@ -188,6 +192,10 @@ def query(
     output = lf.LangFunc.from_value(prompt, **kwargs)(
         lm=lm, cache_seed=cache_seed, skip_lm=skip_lm
     )
+    if response_postprocess:
+      processed_text = response_postprocess(output.text)
+      if processed_text != output.text:
+        output = lf.AIMessage(processed_text, source=output)
     return output if returns_message else output.text
 
   # Query with structured output.
@@ -206,6 +214,7 @@ def query(
       schema=schema,
       default=default,
       examples=examples,
+      response_postprocess=response_postprocess,
       autofix=autofix if protocol == 'python' else 0,
       **kwargs,
   )(
