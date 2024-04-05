@@ -816,11 +816,6 @@ class Evaluation(Evaluable):
     if self.schema_fn is None:
       return None
 
-    kwargs = {}
-    # Allow schema to be a function based on current evaluation.
-    if 'evaluation' in self.schema_fn.__signature__.arg_names:
-      kwargs['evaluation'] = self
-
     schema = self._call_schema_fn()
     fewshot_examples = None
     if isinstance(schema, tuple):

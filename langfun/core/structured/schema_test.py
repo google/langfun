@@ -459,9 +459,7 @@ class SchemaPythonReprTest(unittest.TestCase):
       x: str
       __kwargs__: typing.Any
 
-    with self.assertRaisesRegex(
-        TypeError, 'Variable-length keyword arguments is not supported'):
-      schema_lib.class_definition(C)
+    self.assertEqual(schema_lib.class_definition(C), 'class C:\n  x: str\n')
 
   def test_repr(self):
     class Foo(pg.Object):

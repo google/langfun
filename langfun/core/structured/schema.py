@@ -386,10 +386,12 @@ def class_definition(
   if schema.fields:
     for key, field in schema.items():
       if not isinstance(key, pg.typing.ConstStrKey):
-        raise TypeError(
+        pg.logging.warning(
             'Variable-length keyword arguments is not supported in '
-            f'structured parsing or query. Encountered: {field}'
+            f'structured parsing or query. Encountered: {cls}, Schema: {schema}'
         )
+        continue
+
       # Write field doc string as comments before the field definition.
       if field.description:
         for line in field.description.split('\n'):
