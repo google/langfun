@@ -121,7 +121,6 @@ class OpenaiTest(unittest.TestCase):
             top_logprobs=None,
             n=1,
             temperature=1.0,
-            max_tokens=1024,
             stream=False,
             timeout=120.0,
             stop=['\n'],

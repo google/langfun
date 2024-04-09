@@ -75,13 +75,14 @@ class ScoringTest(unittest.TestCase):
     ])
 
     s = eval_set(lm=lm)
+    self.maxDiff = None
     self.assertEqual(s.avg_score, 0.0)
     s.run()
     self.assertEqual(
         s.result,
         dict(
             experiment_setup=dict(
-                id='ConstraintFollowing@9e51bb9e',
+                id='ConstraintFollowing@76285393',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example}}',

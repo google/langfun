@@ -73,13 +73,13 @@ class LMSamplingOptionsTest(unittest.TestCase):
   def test_cache_key(self):
     options = lm_lib.LMSamplingOptions()
     key1 = options.cache_key()
-    self.assertEqual(key1, (0.0, 1024, 1, 40, None, None))
+    self.assertEqual(key1, (0.0, None, 1, 40, None, None))
     with options.override(temperature=1.0, max_tokens=256):
       key2 = options.cache_key()
       self.assertEqual(key2, (1.0, 256, 1, 40, None, None))
 
       # Make sure key1 does not change upon override.
-      self.assertEqual(key1, (0.0, 1024, 1, 40, None, None))
+      self.assertEqual(key1, (0.0, None, 1, 40, None, None))
 
 
 class LanguageModelTest(unittest.TestCase):

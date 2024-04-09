@@ -69,7 +69,14 @@ class LMSamplingOptions(component.Component):
           'OpenAI models have temperature range from 0.0 to 2.0.'
       )
   ] = 0.0
-  max_tokens: Annotated[int, 'Per example max tokens to generate.'] = 1024
+  max_tokens: Annotated[
+      int | None,
+      (
+          'Per example max tokens to generate. '
+          'If None, use the model default.'
+      )
+  ] = None
+
   n: Annotated[int | None, 'Max number of samples to return.'] = 1
   top_k: Annotated[
       int | None,

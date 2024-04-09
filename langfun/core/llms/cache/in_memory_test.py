@@ -44,19 +44,19 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(
         list(cache.keys()),
         [
-            ('a', (0.0, 1024, 1, 40, None, None), 0),
-            ('a', (0.0, 1024, 1, 40, None, None), 1),
-            ('b', (0.0, 1024, 1, 40, None, None), 0),
-            ('c', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 1),
+            ('b', (0.0, None, 1, 40, None, None), 0),
+            ('c', (0.0, None, 1, 40, None, None), 0),
         ],
     )
     self.assertEqual(
         list(cache.keys('StaticSequence')),
         [
-            ('a', (0.0, 1024, 1, 40, None, None), 0),
-            ('a', (0.0, 1024, 1, 40, None, None), 1),
-            ('b', (0.0, 1024, 1, 40, None, None), 0),
-            ('c', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 1),
+            ('b', (0.0, None, 1, 40, None, None), 0),
+            ('c', (0.0, None, 1, 40, None, None), 0),
         ],
     )
 
@@ -90,19 +90,19 @@ class InMemoryLMCacheTest(unittest.TestCase):
         list(cache.items()),
         [
             (
-                ('a', (0.0, 1024, 1, 40, None, None), 0),
+                ('a', (0.0, None, 1, 40, None, None), 0),
                 cache_entry('1'),
             ),
             (
-                ('a', (0.0, 1024, 1, 40, None, None), 1),
+                ('a', (0.0, None, 1, 40, None, None), 1),
                 cache_entry('2', 1),
             ),
             (
-                ('b', (0.0, 1024, 1, 40, None, None), 0),
+                ('b', (0.0, None, 1, 40, None, None), 0),
                 cache_entry('3'),
             ),
             (
-                ('c', (0.0, 1024, 1, 40, None, None), 0),
+                ('c', (0.0, None, 1, 40, None, None), 0),
                 cache_entry('4'),
             ),
         ],
@@ -111,19 +111,19 @@ class InMemoryLMCacheTest(unittest.TestCase):
         list(cache.items('StaticSequence')),
         [
             (
-                ('a', (0.0, 1024, 1, 40, None, None), 0),
+                ('a', (0.0, None, 1, 40, None, None), 0),
                 cache_entry('1'),
             ),
             (
-                ('a', (0.0, 1024, 1, 40, None, None), 1),
+                ('a', (0.0, None, 1, 40, None, None), 1),
                 cache_entry('2', 1),
             ),
             (
-                ('b', (0.0, 1024, 1, 40, None, None), 0),
+                ('b', (0.0, None, 1, 40, None, None), 0),
                 cache_entry('3'),
             ),
             (
-                ('c', (0.0, 1024, 1, 40, None, None), 0),
+                ('c', (0.0, None, 1, 40, None, None), 0),
                 cache_entry('4'),
             ),
         ],
@@ -161,8 +161,8 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(
         list(cache.keys()),
         [
-            ('a', (0.0, 1024, 1, 40, None, None), 0),
-            ('a', (1.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 0),
+            ('a', (1.0, None, 1, 40, None, None), 0),
         ],
     )
 
@@ -180,15 +180,15 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(
         list(cache.keys('StaticSequence')),
         [
-            ('a', (0.0, 1024, 1, 40, None, None), 0),
-            ('b', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 0),
+            ('b', (0.0, None, 1, 40, None, None), 0),
         ],
     )
     self.assertEqual(
         list(cache.keys('Echo')),
         [
-            ('a', (0.0, 1024, 1, 40, None, None), 0),
-            ('b', (0.0, 1024, 1, 40, None, None), 0),
+            ('a', (0.0, None, 1, 40, None, None), 0),
+            ('b', (0.0, None, 1, 40, None, None), 0),
         ],
     )
     self.assertEqual(len(cache), 4)

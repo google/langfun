@@ -176,7 +176,7 @@ class GenAITest(unittest.TestCase):
       lm = google_genai.GeminiPro(api_key='test_key')
       self.maxDiff = None
       self.assertEqual(
-          lm('hello', temperature=2.0, top_k=20).text,
+          lm('hello', temperature=2.0, top_k=20, max_tokens=1024).text,
           (
               'This is a response to hello with n=1, temperature=2.0, '
               'top_p=None, top_k=20, max_tokens=1024, stop=None.'
@@ -197,7 +197,7 @@ class GenAITest(unittest.TestCase):
         (
             "hello to models/text-bison-001 with {'temperature': 2.0, "
             "'top_k': 20, 'top_p': None, 'candidate_count': 1, "
-            "'max_output_tokens': 1024, 'stop_sequences': None}"
+            "'max_output_tokens': None, 'stop_sequences': None}"
         ),
     )
     genai.get_model = orig_get_model

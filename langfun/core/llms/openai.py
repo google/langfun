@@ -164,7 +164,6 @@ class OpenAI(lf.LanguageModel):
     args = dict(
         n=options.n,
         temperature=options.temperature,
-        max_tokens=options.max_tokens,
         stream=False,
         timeout=self.timeout,
         logprobs=options.logprobs,
@@ -173,6 +172,8 @@ class OpenAI(lf.LanguageModel):
     # Completion and ChatCompletion uses different parameter name for model.
     args['model' if self.is_chat_model else 'engine'] = self.model
 
+    if options.max_tokens is not None:
+      args['max_tokens'] = options.max_tokens
     if options.top_p is not None:
       args['top_p'] = options.top_p
     if options.stop:
