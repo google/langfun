@@ -152,9 +152,14 @@ class GenAITest(unittest.TestCase):
     )
 
   def test_model_hub(self):
+    orig_get_model = genai.get_model
+    genai.get_model = mock_get_model
+
     model = google_genai._GOOGLE_GENAI_MODEL_HUB.get('gemini-pro')
     self.assertIsNotNone(model)
     self.assertIs(google_genai._GOOGLE_GENAI_MODEL_HUB.get('gemini-pro'), model)
+
+    genai.get_model = orig_get_model
 
   def test_api_key_check(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
@@ -167,7 +172,7 @@ class GenAITest(unittest.TestCase):
 
   def test_call(self):
     with mock.patch(
-        'google.generativeai.generative_models.GenerativeModel.generate_content'
+        'google.generativeai.GenerativeModel.generate_content',
     ) as mock_generate:
       orig_get_model = genai.get_model
       genai.get_model = mock_get_model
