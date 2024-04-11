@@ -40,7 +40,7 @@ class MockModel(lm_lib.LanguageModel):
         return [
             lm_lib.LMSamplingResult([lm_lib.LMSample(  # pylint: disable=g-complex-comprehension
                 response=prompt.text * self.sampling_options.top_k,
-                score=self.sampling_options.temperature)])
+                score=self.sampling_options.temperature or -1.0)])
             for prompt in prompts
         ]
       context.attempt += 1
@@ -73,13 +73,13 @@ class LMSamplingOptionsTest(unittest.TestCase):
   def test_cache_key(self):
     options = lm_lib.LMSamplingOptions()
     key1 = options.cache_key()
-    self.assertEqual(key1, (0.0, None, 1, 40, None, None))
+    self.assertEqual(key1, (None, None, 1, 40, None, None))
     with options.override(temperature=1.0, max_tokens=256):
       key2 = options.cache_key()
       self.assertEqual(key2, (1.0, 256, 1, 40, None, None))
 
       # Make sure key1 does not change upon override.
-      self.assertEqual(key1, (0.0, None, 1, 40, None, None))
+      self.assertEqual(key1, (None, None, 1, 40, None, None))
 
 
 class LanguageModelTest(unittest.TestCase):
@@ -100,8 +100,8 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar']),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=0.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=0.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=-1.0)]),
+            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=-1.0)]),
         ],
     )
     # Test override sampling_options.
@@ -143,7 +143,7 @@ class LanguageModelTest(unittest.TestCase):
     lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
     response = lm(prompt='foo')
     self.assertEqual(response.text, 'foo')
-    self.assertEqual(response.score, 0.0)
+    self.assertEqual(response.score, -1.0)
 
     # Test override sampling_options.
     self.assertEqual(
@@ -159,9 +159,9 @@ class LanguageModelTest(unittest.TestCase):
         lm.sample(prompts=['foo', 'bar']),
         [
             lm_lib.LMSamplingResult([lm_lib.LMSample(
-                message_lib.AIMessage('foo', cache_seed=0), score=0.0)]),
+                message_lib.AIMessage('foo', cache_seed=0), score=-1.0)]),
             lm_lib.LMSamplingResult([lm_lib.LMSample(
-                message_lib.AIMessage('bar', cache_seed=0), score=0.0)]),
+                message_lib.AIMessage('bar', cache_seed=0), score=-1.0)]),
         ])
     self.assertEqual(cache.stats.num_queries, 2)
     self.assertEqual(cache.stats.num_hits, 0)

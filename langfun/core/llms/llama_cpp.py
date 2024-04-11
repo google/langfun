@@ -51,10 +51,12 @@ class LlamaCppRemote(lf.LanguageModel):
           data = {
               "prompt": prompt.text,
               "n_predict": self.sampling_options.max_tokens,
-              "temperature": self.sampling_options.temperature,
               "top_k": self.sampling_options.top_k or 50,
               "top_p": self.sampling_options.top_p or 0.95,
           }
+          if self.sampling_options.temperature is not None:
+            data["temperature"] = self.sampling_options.temperature
+
           response = requests.post(
               f"{self.url}/completion",
               json=data,

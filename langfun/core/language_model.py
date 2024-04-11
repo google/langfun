@@ -63,12 +63,14 @@ class LMSamplingOptions(component.Component):
   """Language model sampling options."""
 
   temperature: Annotated[
-      float,
+      float | None,
       (
           'Model temperature, which is usually between 0 and 1.0. '
-          'OpenAI models have temperature range from 0.0 to 2.0.'
+          'OpenAI models have temperature range from 0.0 to 2.0. '
+          'If None (default), honor the model\'s default behavior. '
       )
-  ] = 0.0
+  ] = None
+
   max_tokens: Annotated[
       int | None,
       (
@@ -78,6 +80,7 @@ class LMSamplingOptions(component.Component):
   ] = None
 
   n: Annotated[int | None, 'Max number of samples to return.'] = 1
+
   top_k: Annotated[
       int | None,
       (
@@ -85,6 +88,7 @@ class LMSamplingOptions(component.Component):
           'Not applicable to OpenAI models.'
       )
   ] = 40
+
   top_p: Annotated[
       float | None,
       (
@@ -93,6 +97,7 @@ class LMSamplingOptions(component.Component):
           '`top_p` but not both.'
       ),
   ] = None
+
   stop: Annotated[
       list[str] | None,
       (
@@ -102,9 +107,11 @@ class LMSamplingOptions(component.Component):
           '`Model:` is reached.'
       ),
   ] = None
+
   random_seed: Annotated[
       int | None, 'A fixed random seed used during model inference.'
   ] = None
+
   logprobs: Annotated[
       bool,
       (
@@ -113,6 +120,7 @@ class LMSamplingOptions(component.Component):
           'in the content of message.'
       ),
   ] = False
+
   top_logprobs: Annotated[
       int | None,
       (
