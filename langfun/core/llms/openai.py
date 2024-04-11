@@ -222,6 +222,10 @@ class OpenAI(lf.LanguageModel):
         retry_on_errors=(
             openai_error.ServiceUnavailableError,
             openai_error.RateLimitError,
+            # Handling transient OpenAI server error (code 500). Check out
+            # https://platform.openai.com/docs/guides/error-codes/error-codes
+            (openai_error.APIError,
+             '.*The server had an error processing your request'),
         ),
     )[0]
 
