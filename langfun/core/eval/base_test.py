@@ -229,12 +229,22 @@ class EvaluationTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.CACHE_JSON)))
     self.assertTrue(
-        os.path.exists(os.path.join(s.root_dir, base.Evaluation.SUMMARY_HTML))
-    )
-    self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.INDEX_HTML)))
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.FAILURES_HTML)))
+    self.assertTrue(
+        os.path.exists(os.path.join(s.root_dir, base.Evaluation.SUMMARY_HTML))
+    )
+    # Check summary JSON.
+    summary_json = os.path.join(
+        s.root_dir, base.Evaluation.SUMMARY_HTML.replace('.html', '.json')
+    )
+    self.assertTrue(os.path.exists(summary_json))
+    summary = pg.load(summary_json, force_dict=True)
+    self.assertIn('Evaluation', summary)
+    self.assertEqual(len(summary['Evaluation']), 1)
+    self.assertIsNotNone(summary['Evaluation'][0].experiment)
+    self.assertIsNotNone(summary['Evaluation'][0].metrics)
 
   def test_run_wihtout_save(self):
     lm = fake.StaticSequence([

@@ -1551,8 +1551,33 @@ class Summary(pg.Object):
   def _repr_html_(self) -> str:
     return self.html()
 
+  def json(
+      self,
+  ) -> dict[
+      str,  # Task name
+      list[pg.Dict],  # List of pg.Dict with `experiment` and `metrics`.
+  ]:
+    """Returns the JSON representation of the summary."""
+    task_results = {}
+    for task in sorted(self.tasks(), key=lambda cls: cls.__name__):
+      results = []
+      for entry in self.select(task=task).evaluations:
+        results.append(
+            pg.Dict(
+                experiment=entry,
+                metrics=entry.result.metrics if entry.result else None,
+            )
+        )
+      task_results[task.__name__] = results
+    return task_results
+
   def save(self, file: str, pivot_field: str | None = None) -> None:
     pg.save(self.html(pivot_field), file, file_format='txt')
+    if file.endswith('.html'):
+      json_file = file.replace('.html', '.json')
+    else:
+      json_file = os.path.join(file, '.json')
+    pg.save(self.json(), json_file)
 
   @classmethod
   def from_dirs(
