@@ -116,12 +116,26 @@ class QueryTest(unittest.TestCase):
         y=2,
         lm=lm.clone(),
         expected_snippet=(
-            'Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT'
-            ' according to OUTPUT_TYPE.\n\nINPUT_OBJECT:\n  1 + 1'
-            ' =\n\nOUTPUT_TYPE:\n  Answer\n\n  ```python\n  class Answer:\n   '
-            ' final_answer: int\n  ```\n\nOUTPUT_OBJECT:\n  ```python\n '
-            ' Answer(final_answer=2)\n  ```\n\nINPUT_OBJECT:\n  What is 1 +'
-            ' 2?\n\nOUTPUT_TYPE:\n  int\n\nOUTPUT_OBJECT:'
+            'Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT '
+            'according to OUTPUT_TYPE.\n\n'
+            'INPUT_OBJECT:\n  1 + 1 =\n\n'
+            'OUTPUT_TYPE:\n'
+            '  Answer\n\n'
+            '  ```python\n'
+            '  class Answer:\n'
+            '    final_answer: int\n'
+            '  ```\n\n'
+            'OUTPUT_OBJECT:\n'
+            '  ```python\n'
+            '  Answer(\n'
+            '    final_answer=2\n'
+            '  )\n'
+            '  ```\n\n'
+            'INPUT_OBJECT:\n'
+            '  What is 1 + 2?\n\n'
+            'OUTPUT_TYPE:\n'
+            '  int\n\n'
+            'OUTPUT_OBJECT:'
         ),
     )
 
@@ -264,7 +278,9 @@ class QueryStructurePythonTest(unittest.TestCase):
 
             OUTPUT_OBJECT:
               ```python
-              Answer(final_answer=2)
+              Answer(
+                final_answer=2
+              )
               ```
 
             INPUT_OBJECT:
@@ -308,7 +324,9 @@ class QueryStructurePythonTest(unittest.TestCase):
 
             OUTPUT_OBJECT:
               ```python
-              Answer(final_answer=2)
+              Answer(
+                final_answer=2
+              )
               ```
 
             INPUT_OBJECT:

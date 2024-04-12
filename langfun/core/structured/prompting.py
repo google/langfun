@@ -78,7 +78,9 @@ class QueryStructurePython(QueryStructure):
 
       {{ output_title }}:
         ```python
-        Answer(final_answer=2)
+        Answer(
+          final_answer=2
+        )
         ```
       """
   protocol = 'python'
