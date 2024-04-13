@@ -118,19 +118,18 @@ class Scoring(base.Evaluation):
     super().save(definition, result, report)
 
     if result:
-
-      def force_dict(v):
-        return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
-
       # Save scored.
       pg.save(
           [
               # We force the output to be dict as its type may be defined
               # within functors which could be deserialized.
-              pg.Dict(input=input, output=force_dict(output), score=score)
+              pg.Dict(input=input, output=output, score=score)
               for input, output, score, _ in self.scored
           ],
           os.path.join(self.dir, Scoring.SCORED_JSON),
+          # We force the input and output to be dict so it does not depend on
+          # the downstream to serialize.
+          force_dict=True,
       )
 
     if report:

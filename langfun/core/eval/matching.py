@@ -155,19 +155,16 @@ class Matching(base.Evaluation):
     super().save(definition, result, report)
 
     if result:
-
-      def force_dict(v):
-        return pg.object_utils.json_conversion.strip_types(pg.to_json(v))
-
       # Save matches.
       pg.save(
           [
-              # We force the output to be dict as its type may be defined
-              # within functors which could be deserialized.
-              pg.Dict(input=input, output=force_dict(output))
+              pg.Dict(input=input, output=output)
               for input, output, _ in self.matches
           ],
           os.path.join(self.dir, Matching.MATCHES_JSON),
+          # We force the input and output to be dict so it does not depend on
+          # the downstream to serialize.
+          force_dict=True,
       )
 
       # Save mismatches.
@@ -175,10 +172,13 @@ class Matching(base.Evaluation):
           [
               # We force the output to be dict as its type may be defined
               # within functors which could be deserialized.
-              pg.Dict(input=input, output=force_dict(output))
+              pg.Dict(input=input, output=output)
               for input, output, _ in self.mismatches
           ],
           os.path.join(self.dir, Matching.MISMATCHES_JSON),
+          # We force the input and output to be dict so it does not depend on
+          # the downstream to serialize.
+          force_dict=True,
       )
 
     if report:
