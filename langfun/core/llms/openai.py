@@ -26,20 +26,6 @@ from openai import openai_object
 import pyglove as pg
 
 
-class Usage(pg.Object):
-  """Usage information per completion."""
-
-  prompt_tokens: int
-  completion_tokens: int
-  total_tokens: int
-
-
-class LMSamplingResult(lf.LMSamplingResult):
-  """LMSamplingResult with usage information."""
-
-  usage: Usage | None = None
-
-
 SUPPORTED_MODELS_AND_SETTINGS = [
     # Model name, max concurrent requests.
     # The concurrent requests is estimated by TPM/RPM from
@@ -181,7 +167,7 @@ class OpenAI(lf.LanguageModel):
       args['stop'] = options.stop
     return args
 
-  def _sample(self, prompts: list[lf.Message]) -> list[LMSamplingResult]:
+  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized
     if self.is_chat_model:
       return self._chat_complete_batch(prompts)
@@ -189,7 +175,8 @@ class OpenAI(lf.LanguageModel):
       return self._complete_batch(prompts)
 
   def _complete_batch(
-      self, prompts: list[lf.Message]) -> list[LMSamplingResult]:
+      self, prompts: list[lf.Message]
+  ) -> list[lf.LMSamplingResult]:
 
     def _open_ai_completion(prompts):
       response = openai.Completion.create(
@@ -204,13 +191,13 @@ class OpenAI(lf.LanguageModel):
             lf.LMSample(choice.text.strip(), score=choice.logprobs or 0.0)
         )
 
-      usage = Usage(
+      usage = lf.LMSamplingUsage(
           prompt_tokens=response.usage.prompt_tokens,
           completion_tokens=response.usage.completion_tokens,
           total_tokens=response.usage.total_tokens,
       )
       return [
-          LMSamplingResult(
+          lf.LMSamplingResult(
               samples_by_index[index], usage=usage if index == 0 else None
           )
           for index in sorted(samples_by_index.keys())
@@ -231,7 +218,7 @@ class OpenAI(lf.LanguageModel):
 
   def _chat_complete_batch(
       self, prompts: list[lf.Message]
-  ) -> list[LMSamplingResult]:
+  ) -> list[lf.LMSamplingResult]:
     def _open_ai_chat_completion(prompt: lf.Message):
       if self.multimodal:
         content = []
@@ -272,9 +259,9 @@ class OpenAI(lf.LanguageModel):
             )
         )
 
-      return LMSamplingResult(
+      return lf.LMSamplingResult(
           samples=samples,
-          usage=Usage(
+          usage=lf.LMSamplingUsage(
               prompt_tokens=response.usage.prompt_tokens,
               completion_tokens=response.usage.completion_tokens,
               total_tokens=response.usage.total_tokens,

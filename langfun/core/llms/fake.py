@@ -13,6 +13,7 @@
 # limitations under the License.
 """Fake LMs for testing."""
 
+import abc
 from typing import Annotated
 import langfun.core as lf
 
@@ -23,15 +24,32 @@ class Fake(lf.LanguageModel):
   def _score(self, prompt: lf.Message, completions: list[lf.Message]):
     return [lf.LMScoringResult(score=-i * 1.0) for i in range(len(completions))]
 
+  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
+    results = []
+    for prompt in prompts:
+      response = self._response_from(prompt)
+      results.append(
+          lf.LMSamplingResult(
+              [lf.LMSample(response, 1.0)],
+              usage=lf.LMSamplingUsage(
+                  prompt_tokens=len(prompt.text),
+                  completion_tokens=len(response.text),
+                  total_tokens=len(prompt.text) + len(response.text),
+              )
+          )
+      )
+    return results
+
+  @abc.abstractmethod
+  def _response_from(self, prompt: lf.Message) -> lf.Message:
+    """Returns the response for the given prompt."""
+
 
 class Echo(Fake):
   """A simple echo language model for testing."""
 
-  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
-    return [
-        lf.LMSamplingResult([lf.LMSample(prompt.text, 1.0)])
-        for prompt in prompts
-    ]
+  def _response_from(self, prompt: lf.Message) -> lf.Message:
+    return lf.AIMessage(prompt.text)
 
 
 @lf.use_init_args(['response'])
@@ -43,11 +61,8 @@ class StaticResponse(Fake):
       'A canned response that will be returned regardless of the prompt.'
   ]
 
-  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
-    return [
-        lf.LMSamplingResult([lf.LMSample(self.response, 1.0)])
-        for _ in prompts
-    ]
+  def _response_from(self, prompt: lf.Message) -> lf.Message:
+    return lf.AIMessage(self.response)
 
 
 @lf.use_init_args(['mapping'])
@@ -59,11 +74,8 @@ class StaticMapping(Fake):
       'A mapping from prompt to response.'
   ]
 
-  def _sample(self, prompts: list[str]) -> list[lf.LMSamplingResult]:
-    return [
-        lf.LMSamplingResult([lf.LMSample(self.mapping[prompt], 1.0)])
-        for prompt in prompts
-    ]
+  def _response_from(self, prompt: lf.Message) -> lf.Message:
+    return lf.AIMessage(self.mapping[prompt])
 
 
 @lf.use_init_args(['sequence'])
@@ -79,10 +91,7 @@ class StaticSequence(Fake):
     super()._on_bound()
     self._pos = 0
 
-  def _sample(self, prompts: list[str]) -> list[lf.LMSamplingResult]:
-    results = []
-    for _ in prompts:
-      results.append(lf.LMSamplingResult(
-          [lf.LMSample(self.sequence[self._pos], 1.0)]))
-      self._pos += 1
-    return results
+  def _response_from(self, prompt: lf.Message) -> lf.Message:
+    r = lf.AIMessage(self.sequence[self._pos])
+    self._pos += 1
+    return r

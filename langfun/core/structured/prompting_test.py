@@ -77,6 +77,7 @@ class QueryTest(unittest.TestCase):
             result=1,
             score=1.0,
             logprobs=None,
+            usage=lf.LMSamplingUsage(323, 1, 324),
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )

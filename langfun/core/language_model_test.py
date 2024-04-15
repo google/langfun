@@ -38,9 +38,19 @@ class MockModel(lm_lib.LanguageModel):
     def fake_sample(prompts):
       if context.attempt >= self.failures_before_attempt:
         return [
-            lm_lib.LMSamplingResult([lm_lib.LMSample(  # pylint: disable=g-complex-comprehension
-                response=prompt.text * self.sampling_options.top_k,
-                score=self.sampling_options.temperature or -1.0)])
+            lm_lib.LMSamplingResult(
+                [
+                    lm_lib.LMSample(  # pylint: disable=g-complex-comprehension
+                        response=prompt.text * self.sampling_options.top_k,
+                        score=self.sampling_options.temperature or -1.0,
+                    )
+                ],
+                usage=lm_lib.LMSamplingUsage(
+                    prompt_tokens=100,
+                    completion_tokens=100,
+                    total_tokens=200,
+                ),
+            )
             for prompt in prompts
         ]
       context.attempt += 1
@@ -100,8 +110,14 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar']),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=-1.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=-1.0)]),
+            lm_lib.LMSamplingResult(
+                [lm_lib.LMSample('foo', score=-1.0)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
+            lm_lib.LMSamplingResult(
+                [lm_lib.LMSample('bar', score=-1.0)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
         ],
     )
     # Test override sampling_options.
@@ -112,10 +128,12 @@ class LanguageModelTest(unittest.TestCase):
         ),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('foo' * 2, score=0.5)]
+                [lm_lib.LMSample('foo' * 2, score=0.5)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('bar' * 2, score=0.5)]
+                [lm_lib.LMSample('bar' * 2, score=0.5)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
         ],
     )
@@ -123,18 +141,26 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar'], temperature=1.0),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample('foo', score=1.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample('bar', score=1.0)]),
+            lm_lib.LMSamplingResult(
+                [lm_lib.LMSample('foo', score=1.0)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
+            lm_lib.LMSamplingResult(
+                [lm_lib.LMSample('bar', score=1.0)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
         ],
     )
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar'], top_k=2, temperature=0.7),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('foo' * 2, score=0.7)]
+                [lm_lib.LMSample('foo' * 2, score=0.7)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('bar' * 2, score=0.7)]
+                [lm_lib.LMSample('bar' * 2, score=0.7)],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
         ],
     )
@@ -144,6 +170,8 @@ class LanguageModelTest(unittest.TestCase):
     response = lm(prompt='foo')
     self.assertEqual(response.text, 'foo')
     self.assertEqual(response.score, -1.0)
+    self.assertIsNone(response.logprobs)
+    self.assertEqual(response.usage, lm_lib.LMSamplingUsage(100, 100, 200))
 
     # Test override sampling_options.
     self.assertEqual(
@@ -158,11 +186,24 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar']),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample(
-                message_lib.AIMessage('foo', cache_seed=0), score=-1.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample(
-                message_lib.AIMessage('bar', cache_seed=0), score=-1.0)]),
-        ])
+            lm_lib.LMSamplingResult(
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage('foo', cache_seed=0), score=-1.0
+                    )
+                ],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
+            lm_lib.LMSamplingResult(
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage('bar', cache_seed=0), score=-1.0
+                    )
+                ],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
+        ],
+    )
     self.assertEqual(cache.stats.num_queries, 2)
     self.assertEqual(cache.stats.num_hits, 0)
     self.assertEqual(cache.stats.num_updates, 2)
@@ -181,10 +222,22 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(prompts=['foo', 'baz'], temperature=1.0),
         [
-            lm_lib.LMSamplingResult([lm_lib.LMSample(
-                message_lib.AIMessage('foo', cache_seed=0), score=1.0)]),
-            lm_lib.LMSamplingResult([lm_lib.LMSample(
-                message_lib.AIMessage('baz', cache_seed=0), score=1.0)]),
+            lm_lib.LMSamplingResult(
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage('foo', cache_seed=0), score=1.0
+                    )
+                ],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
+            lm_lib.LMSamplingResult(
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage('baz', cache_seed=0), score=1.0
+                    )
+                ],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+            ),
         ],
     )
     self.assertEqual(cache.stats.num_queries, 6)

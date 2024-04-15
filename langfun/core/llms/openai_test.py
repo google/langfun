@@ -32,11 +32,14 @@ def mock_completion_query(prompt, *, n=1, **kwargs):
           text=f'Sample {k} for prompt {i}.',
           logprobs=k / 10,
       ))
-  return pg.Dict(choices=choices, usage=openai.Usage(
-      prompt_tokens=100,
-      completion_tokens=100,
-      total_tokens=200,
-  ))
+  return pg.Dict(
+      choices=choices,
+      usage=lf.LMSamplingUsage(
+          prompt_tokens=100,
+          completion_tokens=100,
+          total_tokens=200,
+      ),
+  )
 
 
 def mock_chat_completion_query(messages, *, n=1, **kwargs):
@@ -49,11 +52,14 @@ def mock_chat_completion_query(messages, *, n=1, **kwargs):
         ),
         logprobs=None,
     ))
-  return pg.Dict(choices=choices, usage=openai.Usage(
-      prompt_tokens=100,
-      completion_tokens=100,
-      total_tokens=200,
-  ))
+  return pg.Dict(
+      choices=choices,
+      usage=lf.LMSamplingUsage(
+          prompt_tokens=100,
+          completion_tokens=100,
+          total_tokens=200,
+      ),
+  )
 
 
 def mock_chat_completion_query_vision(messages, *, n=1, **kwargs):
@@ -69,11 +75,14 @@ def mock_chat_completion_query_vision(messages, *, n=1, **kwargs):
         ),
         logprobs=None,
     ))
-  return pg.Dict(choices=choices, usage=openai.Usage(
-      prompt_tokens=100,
-      completion_tokens=100,
-      total_tokens=200,
-  ))
+  return pg.Dict(
+      choices=choices,
+      usage=lf.LMSamplingUsage(
+          prompt_tokens=100,
+          completion_tokens=100,
+          total_tokens=200,
+      ),
+  )
 
 
 class OpenaiTest(unittest.TestCase):
@@ -169,18 +178,28 @@ class OpenaiTest(unittest.TestCase):
       )
 
     self.assertEqual(len(results), 2)
-    self.assertEqual(results[0], openai.LMSamplingResult([
-        lf.LMSample('Sample 0 for prompt 0.', score=0.0),
-        lf.LMSample('Sample 1 for prompt 0.', score=0.1),
-        lf.LMSample('Sample 2 for prompt 0.', score=0.2),
-    ], usage=openai.Usage(
-        prompt_tokens=100, completion_tokens=100, total_tokens=200)))
+    self.assertEqual(
+        results[0],
+        lf.LMSamplingResult(
+            [
+                lf.LMSample('Sample 0 for prompt 0.', score=0.0),
+                lf.LMSample('Sample 1 for prompt 0.', score=0.1),
+                lf.LMSample('Sample 2 for prompt 0.', score=0.2),
+            ],
+            usage=lf.LMSamplingUsage(
+                prompt_tokens=100, completion_tokens=100, total_tokens=200
+            ),
+        ),
+    )
 
-    self.assertEqual(results[1], openai.LMSamplingResult([
-        lf.LMSample('Sample 0 for prompt 1.', score=0.0),
-        lf.LMSample('Sample 1 for prompt 1.', score=0.1),
-        lf.LMSample('Sample 2 for prompt 1.', score=0.2),
-    ]))
+    self.assertEqual(
+        results[1],
+        lf.LMSamplingResult([
+            lf.LMSample('Sample 0 for prompt 1.', score=0.0),
+            lf.LMSample('Sample 1 for prompt 1.', score=0.1),
+            lf.LMSample('Sample 2 for prompt 1.', score=0.2),
+        ]),
+    )
 
   def test_sample_chat_completion(self):
     with mock.patch('openai.ChatCompletion.create') as mock_chat_completion:
@@ -191,18 +210,32 @@ class OpenaiTest(unittest.TestCase):
       )
 
     self.assertEqual(len(results), 2)
-    self.assertEqual(results[0], openai.LMSamplingResult([
-        lf.LMSample('Sample 0 for message.', score=0.0),
-        lf.LMSample('Sample 1 for message.', score=0.0),
-        lf.LMSample('Sample 2 for message.', score=0.0),
-    ], usage=openai.Usage(
-        prompt_tokens=100, completion_tokens=100, total_tokens=200)))
-    self.assertEqual(results[1], openai.LMSamplingResult([
-        lf.LMSample('Sample 0 for message.', score=0.0),
-        lf.LMSample('Sample 1 for message.', score=0.0),
-        lf.LMSample('Sample 2 for message.', score=0.0),
-    ], usage=openai.Usage(
-        prompt_tokens=100, completion_tokens=100, total_tokens=200)))
+    self.assertEqual(
+        results[0],
+        lf.LMSamplingResult(
+            [
+                lf.LMSample('Sample 0 for message.', score=0.0),
+                lf.LMSample('Sample 1 for message.', score=0.0),
+                lf.LMSample('Sample 2 for message.', score=0.0),
+            ],
+            usage=lf.LMSamplingUsage(
+                prompt_tokens=100, completion_tokens=100, total_tokens=200
+            ),
+        ),
+    )
+    self.assertEqual(
+        results[1],
+        lf.LMSamplingResult(
+            [
+                lf.LMSample('Sample 0 for message.', score=0.0),
+                lf.LMSample('Sample 1 for message.', score=0.0),
+                lf.LMSample('Sample 2 for message.', score=0.0),
+            ],
+            usage=lf.LMSamplingUsage(
+                prompt_tokens=100, completion_tokens=100, total_tokens=200
+            ),
+        ),
+    )
 
   def test_sample_with_contextual_options(self):
     with mock.patch('openai.Completion.create') as mock_completion:
@@ -212,11 +245,18 @@ class OpenaiTest(unittest.TestCase):
         results = lm.sample(['hello'])
 
     self.assertEqual(len(results), 1)
-    self.assertEqual(results[0], openai.LMSamplingResult([
-        lf.LMSample('Sample 0 for prompt 0.', score=0.0),
-        lf.LMSample('Sample 1 for prompt 0.', score=0.1),
-    ], usage=openai.Usage(
-        prompt_tokens=100, completion_tokens=100, total_tokens=200)))
+    self.assertEqual(
+        results[0],
+        lf.LMSamplingResult(
+            [
+                lf.LMSample('Sample 0 for prompt 0.', score=0.0),
+                lf.LMSample('Sample 1 for prompt 0.', score=0.1),
+            ],
+            usage=lf.LMSamplingUsage(
+                prompt_tokens=100, completion_tokens=100, total_tokens=200
+            ),
+        ),
+    )
 
 
 if __name__ == '__main__':

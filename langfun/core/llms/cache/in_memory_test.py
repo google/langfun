@@ -62,10 +62,19 @@ class InMemoryLMCacheTest(unittest.TestCase):
 
     def cache_entry(response_text, cache_seed=0):
       return base.LMCacheEntry(
-          lf.LMSamplingResult([
-              lf.LMSample(
-                  lf.AIMessage(response_text, cache_seed=cache_seed), score=1.0)
-          ])
+          lf.LMSamplingResult(
+              [
+                  lf.LMSample(
+                      lf.AIMessage(response_text, cache_seed=cache_seed),
+                      score=1.0
+                  )
+              ],
+              usage=lf.LMSamplingUsage(
+                  1,
+                  len(response_text),
+                  len(response_text) + 1,
+              )
+          )
       )
 
     self.assertEqual(

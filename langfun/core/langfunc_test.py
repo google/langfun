@@ -82,7 +82,9 @@ class LangFuncCallTest(unittest.TestCase):
     self.assertEqual(i.tags, ['rendered'])
 
     r = l()
-    self.assertEqual(r, message.AIMessage('Hello!!!', score=0.0, logprobs=None))
+    self.assertEqual(
+        r, message.AIMessage('Hello!!!', score=0.0, logprobs=None, usage=None)
+    )
     self.assertEqual(r.tags, ['lm-response', 'lm-output'])
     self.assertEqual(r.source, message.UserMessage('Hello'))
     self.assertEqual(r.source.tags, ['rendered', 'lm-input'])
@@ -106,7 +108,7 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(l.render(), 'Hello')
       r = l()
       self.assertEqual(
-          r, message.AIMessage('Hello!!!', score=0.0, logprobs=None)
+          r, message.AIMessage('Hello!!!', score=0.0, logprobs=None, usage=None)
       )
       self.assertEqual(r.tags, ['lm-response', 'lm-output'])
 

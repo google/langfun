@@ -25,7 +25,12 @@ class EchoTest(unittest.TestCase):
   def test_sample(self):
     lm = fakelm.Echo()
     self.assertEqual(
-        lm.sample(['hi']), [lf.LMSamplingResult([lf.LMSample('hi', 1.0)])]
+        lm.sample(['hi']),
+        [
+            lf.LMSamplingResult(
+                [lf.LMSample('hi', 1.0)],
+                lf.LMSamplingUsage(2, 2, 4))
+        ]
     )
 
   def test_call(self):
@@ -53,11 +58,21 @@ class StaticResponseTest(unittest.TestCase):
     lm = fakelm.StaticResponse(canned_response)
     self.assertEqual(
         lm.sample(['hi']),
-        [lf.LMSamplingResult([lf.LMSample(canned_response, 1.0)])],
+        [
+            lf.LMSamplingResult(
+                [lf.LMSample(canned_response, 1.0)],
+                usage=lf.LMSamplingUsage(2, 38, 40)
+            )
+        ],
     )
     self.assertEqual(
         lm.sample(['Tell me a joke.']),
-        [lf.LMSamplingResult([lf.LMSample(canned_response, 1.0)])],
+        [
+            lf.LMSamplingResult(
+                [lf.LMSample(canned_response, 1.0)],
+                usage=lf.LMSamplingUsage(15, 38, 53)
+            )
+        ],
     )
 
   def test_call(self):
@@ -85,8 +100,14 @@ class StaticMappingTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(['Hi', 'How are you?']),
         [
-            lf.LMSamplingResult([lf.LMSample('Hello', 1.0)]),
-            lf.LMSamplingResult([lf.LMSample('I am fine, how about you?', 1.0)])
+            lf.LMSamplingResult(
+                [lf.LMSample('Hello', 1.0)],
+                usage=lf.LMSamplingUsage(2, 5, 7)
+            ),
+            lf.LMSamplingResult(
+                [lf.LMSample('I am fine, how about you?', 1.0)],
+                usage=lf.LMSamplingUsage(12, 25, 37)
+            )
         ]
     )
     with self.assertRaises(KeyError):
@@ -104,8 +125,14 @@ class StaticSequenceTest(unittest.TestCase):
     self.assertEqual(
         lm.sample(['Hi', 'How are you?']),
         [
-            lf.LMSamplingResult([lf.LMSample('Hello', 1.0)]),
-            lf.LMSamplingResult([lf.LMSample('I am fine, how about you?', 1.0)])
+            lf.LMSamplingResult(
+                [lf.LMSample('Hello', 1.0)],
+                usage=lf.LMSamplingUsage(2, 5, 7)
+            ),
+            lf.LMSamplingResult(
+                [lf.LMSample('I am fine, how about you?', 1.0)],
+                usage=lf.LMSamplingUsage(12, 25, 37)
+            )
         ]
     )
     with self.assertRaises(IndexError):

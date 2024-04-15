@@ -280,13 +280,15 @@ class ParseStructurePythonTest(unittest.TestCase):
         ),
         1,
     )
+    r = parsing.parse(
+        'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm,
+        returns_message=True
+    )
     self.assertEqual(
-        parsing.parse(
-            'the answer is 1', int, user_prompt='what is 0 + 1?', lm=lm,
-            returns_message=True
-        ),
+        r,
         lf.AIMessage(
             '1', score=1.0, result=1, logprobs=None,
+            usage=lf.LMSamplingUsage(652, 1, 653),
             tags=['lm-response', 'lm-output', 'transformed']
         ),
     )
@@ -634,13 +636,18 @@ class CallTest(unittest.TestCase):
       )
 
   def test_call_with_returning_message(self):
+    r = parsing.call(
+        'Compute 1 + 2', int, lm=fake.StaticSequence(['three', '3']),
+        returns_message=True
+    )
     self.assertEqual(
-        parsing.call(
-            'Compute 1 + 2', int, lm=fake.StaticSequence(['three', '3']),
-            returns_message=True
-        ),
+        r,
         lf.AIMessage(
-            '3', result=3, score=1.0, logprobs=None,
+            '3',
+            result=3,
+            score=1.0,
+            logprobs=None,
+            usage=lf.LMSamplingUsage(315, 1, 316),
             tags=['lm-response', 'lm-output', 'transformed']
         ),
     )

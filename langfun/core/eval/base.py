@@ -1565,6 +1565,7 @@ class Summary(pg.Object):
         results.append(
             pg.Dict(
                 experiment=entry,
+                dir=entry.dir,
                 metrics=entry.result.metrics if entry.result else None,
             )
         )

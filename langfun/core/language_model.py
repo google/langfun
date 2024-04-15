@@ -47,6 +47,14 @@ class LMSample(pg.Object):
   ] = None
 
 
+class LMSamplingUsage(pg.Object):
+  """Usage information per completion."""
+
+  prompt_tokens: int
+  completion_tokens: int
+  total_tokens: int
+
+
 class LMSamplingResult(pg.Object):
   """Language model response."""
 
@@ -57,6 +65,11 @@ class LMSamplingResult(pg.Object):
           'The first candidate has the highest score.'
       ),
   ] = []
+
+  usage: Annotated[
+      LMSamplingUsage | None,
+      'Usage information. Currently only OpenAI models are supported.',
+  ] = None
 
 
 class LMSamplingOptions(component.Component):
@@ -424,6 +437,8 @@ class LanguageModel(component.Component):
       logprobs = result.samples[0].logprobs
       response.set('score', result.samples[0].score)
       response.metadata.logprobs = logprobs
+      response.metadata.usage = result.usage
+
       elapse = time.time() - request_start
       self._debug(prompt, response, call_counter, elapse)
       return response
