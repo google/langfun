@@ -34,6 +34,7 @@ score = structured.score
 generate_class = structured.generate_class
 
 source_form = structured.source_form
+function_gen = structured.function_gen
 
 from langfun.core import eval  # pylint: disable=redefined-builtin
 from langfun.core import templates
