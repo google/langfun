@@ -440,7 +440,7 @@ class LanguageModel(component.Component):
       response.metadata.usage = result.usage
 
       elapse = time.time() - request_start
-      self._debug(prompt, response, call_counter, elapse)
+      self._debug(prompt, response, call_counter, result.usage, elapse)
       return response
 
   def _debug(
@@ -448,35 +448,51 @@ class LanguageModel(component.Component):
       prompt: message_lib.Message,
       response: message_lib.Message,
       call_counter: int,
+      usage: LMSamplingUsage | None,
       elapse: float,
-  ):
+  ) -> None:
     """Outputs debugging information."""
     debug = self.debug
     if isinstance(debug, bool):
       debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
 
     if debug & LMDebugMode.INFO:
-      self._debug_model_info(call_counter)
+      self._debug_model_info(call_counter, usage)
 
     if debug & LMDebugMode.PROMPT:
-      self._debug_prompt(prompt, call_counter)
+      self._debug_prompt(prompt, call_counter, usage)
 
     if debug & LMDebugMode.RESPONSE:
-      self._debug_response(response, call_counter, elapse)
+      self._debug_response(response, call_counter, usage, elapse)
 
-  def _debug_model_info(self, call_counter: int):
+  def _debug_model_info(
+      self, call_counter: int, usage: LMSamplingUsage | None) -> None:
     """Outputs debugging information about the model."""
+    title_suffix = ''
+    if usage and usage.total_tokens != 0:
+      title_suffix = console.colored(
+          f' (total {usage.total_tokens} tokens)', 'red')
+
     console.write(
         self.format(compact=True, use_inferred=True),
-        title=f'[{call_counter}] LM INFO:',
+        title=f'[{call_counter}] LM INFO{title_suffix}:',
         color='magenta',
     )
 
-  def _debug_prompt(self, prompt: message_lib.Message, call_counter: int):
+  def _debug_prompt(
+      self,
+      prompt: message_lib.Message,
+      call_counter: int,
+      usage: LMSamplingUsage | None,
+  ) -> None:
     """Outputs debugging information about the prompt."""
+    title_suffix = ''
+    if usage and usage.prompt_tokens != 0:
+      title_suffix = console.colored(f' ({usage.prompt_tokens} tokens)', 'red')
+
     console.write(
         prompt,
-        title=f'\n[{call_counter}] PROMPT SENT TO LM:',
+        title=f'\n[{call_counter}] PROMPT SENT TO LM{title_suffix}:',
         color='green',
     )
     referred_modalities = prompt.referred_modalities()
@@ -490,12 +506,22 @@ class LanguageModel(component.Component):
       )
 
   def _debug_response(
-      self, response: message_lib.Message, call_counter: int, elapse: float
-  ):
+      self,
+      response: message_lib.Message,
+      call_counter: int,
+      usage: LMSamplingUsage | None,
+      elapse: float
+  ) -> None:
     """Outputs debugging information about the response."""
+    title_suffix = ' ('
+    if usage and usage.completion_tokens != 0:
+      title_suffix += f'{usage.completion_tokens} tokens '
+    title_suffix += f'in {elapse:.2f} seconds)'
+    title_suffix = console.colored(title_suffix, 'red')
+
     console.write(
         str(response) + '\n',
-        title=f'\n[{call_counter}] LM RESPONSE (in {elapse:.2f} seconds):',
+        title=f'\n[{call_counter}] LM RESPONSE{title_suffix}:',
         color='blue',
     )
 
@@ -542,7 +568,7 @@ class LanguageModel(component.Component):
       debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
 
     if debug & LMDebugMode.INFO:
-      self._debug_model_info(call_counter)
+      self._debug_model_info(call_counter, None)
 
     if debug & LMDebugMode.PROMPT:
       console.write(

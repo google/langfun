@@ -39,8 +39,8 @@ class EchoTest(unittest.TestCase):
     with contextlib.redirect_stdout(string_io):
       self.assertEqual(lm('hi'), 'hi')
     debug_info = string_io.getvalue()
-    self.assertIn('[0] LM INFO:', debug_info)
-    self.assertIn('[0] PROMPT SENT TO LM:', debug_info)
+    self.assertIn('[0] LM INFO', debug_info)
+    self.assertIn('[0] PROMPT SENT TO LM', debug_info)
     self.assertIn('[0] LM RESPONSE', debug_info)
 
   def test_score(self):
@@ -84,8 +84,8 @@ class StaticResponseTest(unittest.TestCase):
       self.assertEqual(lm('hi'), canned_response)
 
     debug_info = string_io.getvalue()
-    self.assertIn('[0] LM INFO:', debug_info)
-    self.assertIn('[0] PROMPT SENT TO LM:', debug_info)
+    self.assertIn('[0] LM INFO', debug_info)
+    self.assertIn('[0] PROMPT SENT TO LM', debug_info)
     self.assertIn('[0] LM RESPONSE', debug_info)
 
 
