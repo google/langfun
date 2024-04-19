@@ -31,10 +31,13 @@ SUPPORTED_MODELS_AND_SETTINGS = [
     # The concurrent requests is estimated by TPM/RPM from
     # https://platform.openai.com/account/limits
     # GPT-4 Turbo models.
-    ('gpt-4-turbo-preview', 1),  # GPT-4 Turbo.
-    ('gpt-4-0125-preview', 1),  # GPT-4 Turbo
-    ('gpt-4-1106-preview', 1),  # GPT-4 Turbo
-    ('gpt-4-vision-preview', 1),  # GPT-4 Turbo with Vision.
+    ('gpt-4-turbo', 8),  # GPT-4 Turbo with Vision
+    ('gpt-4-turbo-2024-04-09', 8),  # GPT-4-Turbo with Vision, 04/09/2024
+    ('gpt-4-turbo-preview', 8),  # GPT-4 Turbo Preview
+    ('gpt-4-0125-preview', 8),  # GPT-4 Turbo Preview, 01/25/2024
+    ('gpt-4-1106-preview', 8),  # GPT-4 Turbo Preview, 11/06/2023
+    ('gpt-4-vision-preview', 8),  # GPT-4 Turbo Vision Preview.
+    ('gpt-4-1106-vision-preview', 8),  # GPT-4 Turbo Vision Preview, 11/06/2023
     # GPT-4 models.
     ('gpt-4', 4),
     ('gpt-4-0613', 4),
@@ -284,24 +287,41 @@ class Gpt4(OpenAI):
 
 
 class Gpt4Turbo(Gpt4):
-  """GPT-4 Turbo with 128K context window size. Knowledge up to 4-2023."""
+  """GPT-4 Turbo with 128K context window. Knowledge up to Dec. 2023."""
+  model = 'gpt-4-turbo'
+  multimodal = True
+
+
+class Gpt4Turbo_20240409(Gpt4Turbo):  # pylint:disable=invalid-name
+  """GPT-4 Turbo with 128K context window. Knowledge up to Dec. 2023."""
+  model = 'gpt-4-turbo-2024-04-09'
+  multimodal = True
+
+
+class Gpt4TurboPreview(Gpt4):
+  """GPT-4 Turbo Preview with 128k context window. Knowledge up to Dec. 2023."""
   model = 'gpt-4-turbo-preview'
 
 
-class Gpt4TurboVision(Gpt4Turbo):
-  """GPT-4 Turbo with vision."""
+class Gpt4TurboPreview_0125(Gpt4TurboPreview):  # pylint: disable=invalid-name
+  """GPT-4 Turbo Preview with 128k context window. Knowledge up to Dec. 2023."""
+  model = 'gpt-4-0125-preview'
+
+
+class Gpt4TurboPreview_1106(Gpt4TurboPreview):  # pylint: disable=invalid-name
+  """GPT-4 Turbo Preview with 128k context window. Knowledge up to Apr. 2023."""
+  model = 'gpt-4-1106-preview'
+
+
+class Gpt4VisionPreview(Gpt4):
+  """GPT-4 Turbo vision preview. 128k context window. Knowledge to Apr. 2023."""
   model = 'gpt-4-vision-preview'
   multimodal = True
 
 
-class Gpt4Turbo_0125(Gpt4Turbo):   # pylint:disable=invalid-name
-  """GPT-4 Turbo with 128K context window size. Knowledge up to 4-2023."""
-  model = 'gpt-4-0125-preview'
-
-
-class Gpt4Turbo_1106(Gpt4Turbo):   # pylint:disable=invalid-name
-  """GPT-4 Turbo @20231106. 128K context window. Knowledge up to 4-2023."""
-  model = 'gpt-4-1106-preview'
+class Gpt4VisionPreview_1106(Gpt4):  # pylint: disable=invalid-name
+  """GPT-4 Turbo vision preview. 128k context window. Knowledge to Apr. 2023."""
+  model = 'gpt-4-1106-vision-preview'
 
 
 class Gpt4_0613(Gpt4):    # pylint:disable=invalid-name

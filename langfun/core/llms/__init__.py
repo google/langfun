@@ -35,8 +35,12 @@ from langfun.core.llms.google_genai import Palm2_IT
 from langfun.core.llms.openai import OpenAI
 
 from langfun.core.llms.openai import Gpt4Turbo
-from langfun.core.llms.openai import Gpt4Turbo_0125
-from langfun.core.llms.openai import Gpt4TurboVision
+from langfun.core.llms.openai import Gpt4Turbo_20240409
+from langfun.core.llms.openai import Gpt4TurboPreview
+from langfun.core.llms.openai import Gpt4TurboPreview_0125
+from langfun.core.llms.openai import Gpt4TurboPreview_1106
+from langfun.core.llms.openai import Gpt4VisionPreview
+from langfun.core.llms.openai import Gpt4VisionPreview_1106
 from langfun.core.llms.openai import Gpt4
 from langfun.core.llms.openai import Gpt4_0613
 from langfun.core.llms.openai import Gpt4_32K
