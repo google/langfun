@@ -26,9 +26,12 @@ import requests
 
 SUPPORTED_MODELS_AND_SETTINGS = {
     # See https://docs.anthropic.com/claude/docs/models-overview
-    'claude-3-opus-20240229': pg.Dict(max_tokens=4096, max_concurrency=1),
-    'claude-3-sonnet-20240229': pg.Dict(max_tokens=4096, max_concurrency=4),
+    'claude-3-opus-20240229': pg.Dict(max_tokens=4096, max_concurrency=16),
+    'claude-3-sonnet-20240229': pg.Dict(max_tokens=4096, max_concurrency=16),
     'claude-3-haiku-20240307': pg.Dict(max_tokens=4096, max_concurrency=16),
+    'claude-2.1': pg.Dict(max_tokens=4096, max_concurrency=16),
+    'claude-2.0': pg.Dict(max_tokens=4096, max_concurrency=16),
+    'claude-instant-1.2': pg.Dict(max_tokens=4096, max_concurrency=16),
 }
 
 
@@ -210,6 +213,7 @@ class Anthropic(lf.LanguageModel):
 
 class Claude3(Anthropic):
   """Base class for Claude 3 models. 200K input tokens and 4K output tokens."""
+  multimodal = True
 
 
 class Claude3Opus(Claude3):
@@ -228,3 +232,18 @@ class Claude3Haiku(Claude3):
   """Anthropic's most compact model."""
 
   model = 'claude-3-haiku-20240307'
+
+
+class Claude2(Anthropic):
+  """Predecessor to Claude 3 with 100K context window.."""
+  model = 'claude-2.0'
+
+
+class Claude21(Anthropic):
+  """Updated Claude 2 model with improved accuracy and 200K context window."""
+  model = 'claude-2.1'
+
+
+class ClaudeInstant(Anthropic):
+  """Cheapest small and fast model, 100K context window."""
+  model = 'claude-instant-1.2'
