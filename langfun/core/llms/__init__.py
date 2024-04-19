@@ -57,6 +57,12 @@ from langfun.core.llms.openai import Gpt3Curie
 from langfun.core.llms.openai import Gpt3Babbage
 from langfun.core.llms.openai import Gpt3Ada
 
+from langfun.core.llms.anthropic import Anthropic
+from langfun.core.llms.anthropic import Claude3Opus
+from langfun.core.llms.anthropic import Claude3Sonnet
+from langfun.core.llms.anthropic import Claude3Haiku
+
+
 # LLaMA C++ models.
 from langfun.core.llms.llama_cpp import LlamaCppRemote
 
