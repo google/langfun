@@ -55,7 +55,7 @@ class Anthropic(lf.LanguageModel):
   See https://docs.anthropic.com/claude/reference/messages_post
   """
 
-  model: Annotated[  # pytype: disable=invalid-annotation
+  model: pg.typing.Annotated[
       pg.typing.Enum(
           pg.MISSING_VALUE, list(SUPPORTED_MODELS_AND_SETTINGS.keys())
       ),
