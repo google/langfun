@@ -157,17 +157,19 @@ class OpenaiTest(unittest.TestCase):
   def test_call_chat_completion_vision(self):
     with mock.patch('openai.ChatCompletion.create') as mock_chat_completion:
       mock_chat_completion.side_effect = mock_chat_completion_query_vision
-      lm = openai.Gpt4TurboVision(api_key='test_key')
-      self.assertEqual(
-          lm(
-              lf.UserMessage(
-                  'hello {{image}}',
-                  image=lf_modalities.Image.from_uri('https://fake/image')
-              ),
-              sampling_options=lf.LMSamplingOptions(n=2)
-          ),
-          'Sample 0 for message: https://fake/image',
-      )
+      lm_1 = openai.Gpt4Turbo(api_key='test_key')
+      lm_2 = openai.Gpt4VisionPreview(api_key='test_key')
+      for lm in (lm_1, lm_2):
+        self.assertEqual(
+            lm(
+                lf.UserMessage(
+                    'hello {{image}}',
+                    image=lf_modalities.Image.from_uri('https://fake/image')
+                ),
+                sampling_options=lf.LMSamplingOptions(n=2)
+            ),
+            'Sample 0 for message: https://fake/image',
+        )
 
   def test_sample_completion(self):
     with mock.patch('openai.Completion.create') as mock_completion:
