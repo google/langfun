@@ -66,6 +66,13 @@ from langfun.core.llms.anthropic import Claude3Opus
 from langfun.core.llms.anthropic import Claude3Sonnet
 from langfun.core.llms.anthropic import Claude3Haiku
 
+from langfun.core.llms.groq import Groq
+from langfun.core.llms.groq import GroqLlama3_70B
+from langfun.core.llms.groq import GroqLlama3_8B
+from langfun.core.llms.groq import GroqLlama2_70B
+from langfun.core.llms.groq import GroqMistral_8x7B
+from langfun.core.llms.groq import GroqGemma7B_IT
+
 
 # LLaMA C++ models.
 from langfun.core.llms.llama_cpp import LlamaCppRemote
