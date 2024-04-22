@@ -204,12 +204,15 @@ class Groq(lf.LanguageModel):
             ]
         )
     )
-    response = self._session.post(
-        _CHAT_COMPLETE_API_ENDPOINT,
-        json=request,
-        timeout=self.timeout,
-    )
-    return self._parse_response(response)
+    try:
+      response = self._session.post(
+          _CHAT_COMPLETE_API_ENDPOINT,
+          json=request,
+          timeout=self.timeout,
+      )
+      return self._parse_response(response)
+    except ConnectionError as e:
+      raise OverloadedError(str(e)) from e
 
 
 class GroqLlama3_8B(Groq):  # pylint: disable=invalid-name

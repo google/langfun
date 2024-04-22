@@ -209,10 +209,13 @@ class Anthropic(lf.LanguageModel):
             ]
         )
     )
-    response = self._session.post(
-        _ANTHROPIC_MESSAGE_API_ENDPOINT, json=request, timeout=self.timeout,
-    )
-    return self._parse_response(response)
+    try:
+      response = self._session.post(
+          _ANTHROPIC_MESSAGE_API_ENDPOINT, json=request, timeout=self.timeout,
+      )
+      return self._parse_response(response)
+    except ConnectionError as e:
+      raise OverloadedError(str(e)) from e
 
 
 class Claude3(Anthropic):
