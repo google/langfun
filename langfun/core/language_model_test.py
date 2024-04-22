@@ -394,6 +394,38 @@ class LanguageModelTest(unittest.TestCase):
     with self.assertRaises(NotImplementedError):
       MockModel().score('hi', ['1', '2'])
 
+  def test_rate_to_max_concurrency_no_rpm_no_tpm(self) -> None:
+    lm = MockModel()
+    self.assertEqual(
+        lm_lib.DEFAULT_MAX_CONCURRENCY,
+        lm.rate_to_max_concurrency(requests_per_min=0, tokens_per_min=0),
+    )
+    self.assertEqual(
+        lm_lib.DEFAULT_MAX_CONCURRENCY,
+        lm.rate_to_max_concurrency(requests_per_min=-1, tokens_per_min=-1),
+    )
+
+  def test_rate_to_max_concurrency_only_rpm_specified_uses_rpm(self) -> None:
+    lm = MockModel()
+    test_rpm = 1e4
+    self.assertEqual(
+        lm.rate_to_max_concurrency(requests_per_min=test_rpm),
+        int(test_rpm / 60)
+    )
+
+  def test_rate_to_max_concurrency_tpm_specified_uses_tpm(self) -> None:
+    lm = MockModel()
+    test_tpm = 1e7
+    self.assertEqual(
+        lm.rate_to_max_concurrency(requests_per_min=1, tokens_per_min=test_tpm),
+        int(test_tpm / lm_lib.TOKENS_PER_REQUEST / 60),
+    )
+
+  def test_rate_to_max_concurrency_small_rate_returns_one(self) -> None:
+    lm = MockModel()
+    self.assertEqual(lm.rate_to_max_concurrency(requests_per_min=1), 1)
+    self.assertEqual(lm.rate_to_max_concurrency(tokens_per_min=1), 1)
+
 
 if __name__ == '__main__':
   unittest.main()

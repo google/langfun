@@ -98,13 +98,13 @@ def mock_requests_post_error(status_code, error_type, error_message):
   return _mock_requests
 
 
-class AuthropicTest(unittest.TestCase):
+class AnthropicTest(unittest.TestCase):
 
   def test_basics(self):
     self.assertEqual(
         anthropic.Claude3Haiku().model_id, 'claude-3-haiku-20240307'
     )
-    self.assertEqual(anthropic.Claude3Haiku().max_concurrency, 16)
+    self.assertGreater(anthropic.Claude3Haiku().max_concurrency, 0)
 
   def test_api_key(self):
     lm = anthropic.Claude3Haiku()

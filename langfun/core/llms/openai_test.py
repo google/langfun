@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for openai models."""
+"""Tests for OpenAI models."""
 
 import unittest
 from unittest import mock
@@ -85,7 +85,7 @@ def mock_chat_completion_query_vision(messages, *, n=1, **kwargs):
   )
 
 
-class OpenaiTest(unittest.TestCase):
+class OpenAITest(unittest.TestCase):
   """Tests for OpenAI language model."""
 
   def test_model_id(self):
@@ -98,7 +98,7 @@ class OpenaiTest(unittest.TestCase):
     )
 
   def test_max_concurrency(self):
-    self.assertEqual(openai.Gpt35(api_key='test_key').max_concurrency, 8)
+    self.assertGreater(openai.Gpt35(api_key='test_key').max_concurrency, 0)
 
   def test_get_request_args(self):
     self.assertEqual(

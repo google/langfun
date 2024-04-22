@@ -24,6 +24,9 @@ from langfun.core import console
 from langfun.core import message as message_lib
 import pyglove as pg
 
+TOKENS_PER_REQUEST = 250  # Estimated num tokens for a single request
+DEFAULT_MAX_CONCURRENCY = 1  # Use this as max concurrency if no RPM or TPM data
+
 
 class LMSample(pg.Object):
   """Response candidate."""
@@ -604,3 +607,14 @@ class LanguageModel(component.Component):
             f'score: {r.score}',
             color='blue',
         )
+
+  def rate_to_max_concurrency(
+      self, requests_per_min: float = 0, tokens_per_min: float = 0
+  ) -> int:
+    """Converts a rate to a max concurrency."""
+    if tokens_per_min > 0:
+      return max(int(tokens_per_min / TOKENS_PER_REQUEST / 60), 1)
+    elif requests_per_min > 0:
+      return max(int(requests_per_min / 60), 1)  # Max concurrency can't be zero
+    else:
+      return DEFAULT_MAX_CONCURRENCY  # Default of 1

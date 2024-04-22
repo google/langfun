@@ -26,54 +26,55 @@ from openai import openai_object
 import pyglove as pg
 
 
-SUPPORTED_MODELS_AND_SETTINGS = [
-    # Model name, max concurrent requests.
-    # The concurrent requests is estimated by TPM/RPM from
-    # https://platform.openai.com/account/limits
-    # GPT-4 Turbo models.
-    ('gpt-4-turbo', 8),  # GPT-4 Turbo with Vision
-    ('gpt-4-turbo-2024-04-09', 8),  # GPT-4-Turbo with Vision, 04/09/2024
-    ('gpt-4-turbo-preview', 8),  # GPT-4 Turbo Preview
-    ('gpt-4-0125-preview', 8),  # GPT-4 Turbo Preview, 01/25/2024
-    ('gpt-4-1106-preview', 8),  # GPT-4 Turbo Preview, 11/06/2023
-    ('gpt-4-vision-preview', 8),  # GPT-4 Turbo Vision Preview.
-    ('gpt-4-1106-vision-preview', 8),  # GPT-4 Turbo Vision Preview, 11/06/2023
-    # GPT-4 models.
-    ('gpt-4', 4),
-    ('gpt-4-0613', 4),
-    ('gpt-4-0314', 4),
-    ('gpt-4-32k', 4),
-    ('gpt-4-32k-0613', 4),
-    ('gpt-4-32k-0314', 4),
-    # GPT-3.5 Turbo models.
-    ('gpt-3.5-turbo', 16),
-    ('gpt-3.5-turbo-0125', 16),
-    ('gpt-3.5-turbo-1106', 16),
-    ('gpt-3.5-turbo-0613', 16),
-    ('gpt-3.5-turbo-0301', 16),
-    ('gpt-3.5-turbo-16k', 16),
-    ('gpt-3.5-turbo-16k-0613', 16),
-    ('gpt-3.5-turbo-16k-0301', 16),
-    # GPT-3.5 models.
-    ('text-davinci-003', 8),  # GPT-3.5, trained with RHLF.
-    ('text-davinci-002', 4),  # Trained with SFT but no RHLF.
-    ('code-davinci-002', 4),
-    # GPT-3 instruction-tuned models.
-    ('text-curie-001', 4),
-    ('text-babbage-001', 4),
-    ('text-ada-001', 4),
-    ('davinci', 4),
-    ('curie', 4),
-    ('babbage', 4),
-    ('ada', 4),
-    # GPT-3 base models without instruction tuning.
-    ('babbage-002', 4),
-    ('davinci-002', 4),
-]
+# From https://platform.openai.com/settings/organization/limits
+_DEFAULT_TPM = 250000
+_DEFAULT_RPM = 3000
 
-
-# Model concurreny setting.
-_MODEL_CONCURRENCY = {m[0]: m[1] for m in SUPPORTED_MODELS_AND_SETTINGS}
+SUPPORTED_MODELS_AND_SETTINGS = {
+    # Models from https://platform.openai.com/docs/models
+    # RPM is from https://platform.openai.com/docs/guides/rate-limits
+    # GPT-4-Turbo models
+    'gpt-4-turbo': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4-turbo-2024-04-09': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4-turbo-preview': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4-0125-preview': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4-1106-preview': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4-vision-preview': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4-1106-vision-preview': pg.Dict(
+        rpm=10000, tpm=1500000
+    ),
+    # GPT-4 models
+    'gpt-4': pg.Dict(rpm=10000, tpm=300000),
+    'gpt-4-0613': pg.Dict(rpm=10000, tpm=300000),
+    'gpt-4-0314': pg.Dict(rpm=10000, tpm=300000),
+    'gpt-4-32k': pg.Dict(rpm=10000, tpm=300000),
+    'gpt-4-32k-0613': pg.Dict(rpm=10000, tpm=300000),
+    'gpt-4-32k-0314': pg.Dict(rpm=10000, tpm=300000),
+    # GPT-3.5-Turbo models
+    'gpt-3.5-turbo': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-0125': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-1106': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-0613': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-0301': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-16k': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-16k-0613': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo-16k-0301': pg.Dict(rpm=10000, tpm=2000000),
+    # GPT-3.5 models
+    'text-davinci-003': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'text-davinci-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'code-davinci-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    # GPT-3 instruction-tuned models
+    'text-curie-001': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'text-babbage-001': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'text-ada-001': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'davinci': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'curie': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'babbage': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'ada': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    # GPT-3 base models
+    'babbage-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'davinci-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+}
 
 
 @lf.use_init_args(['model'])
@@ -82,7 +83,7 @@ class OpenAI(lf.LanguageModel):
 
   model: pg.typing.Annotated[
       pg.typing.Enum(
-          pg.MISSING_VALUE, [m[0] for m in SUPPORTED_MODELS_AND_SETTINGS]
+          pg.MISSING_VALUE, list(SUPPORTED_MODELS_AND_SETTINGS.keys())
       ),
       'The name of the model to use.',
   ] = 'gpt-3.5-turbo'
@@ -134,7 +135,11 @@ class OpenAI(lf.LanguageModel):
 
   @property
   def max_concurrency(self) -> int:
-    return _MODEL_CONCURRENCY[self.model]
+    rpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('rpm', 0)
+    tpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('tpm', 0)
+    return self.rate_to_max_concurrency(
+        requests_per_min=rpm, tokens_per_min=tpm
+    )
 
   @classmethod
   def dir(cls):

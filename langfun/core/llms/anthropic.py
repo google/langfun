@@ -26,12 +26,15 @@ import requests
 
 SUPPORTED_MODELS_AND_SETTINGS = {
     # See https://docs.anthropic.com/claude/docs/models-overview
-    'claude-3-opus-20240229': pg.Dict(max_tokens=4096, max_concurrency=16),
-    'claude-3-sonnet-20240229': pg.Dict(max_tokens=4096, max_concurrency=16),
-    'claude-3-haiku-20240307': pg.Dict(max_tokens=4096, max_concurrency=16),
-    'claude-2.1': pg.Dict(max_tokens=4096, max_concurrency=16),
-    'claude-2.0': pg.Dict(max_tokens=4096, max_concurrency=16),
-    'claude-instant-1.2': pg.Dict(max_tokens=4096, max_concurrency=16),
+    # Rate limits from https://docs.anthropic.com/claude/reference/rate-limits
+    #     RPM/TPM for Claude-2.1, Claude-2.0, and Claude-Instant-1.2 estimated
+    #     as RPM/TPM of the largest-available model (Claude-3-Opus).
+    'claude-3-opus-20240229': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
+    'claude-3-sonnet-20240229': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
+    'claude-3-haiku-20240307': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
+    'claude-2.1': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
+    'claude-2.0': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
+    'claude-instant-1.2': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
 }
 
 
@@ -112,7 +115,11 @@ class Anthropic(lf.LanguageModel):
 
   @property
   def max_concurrency(self) -> int:
-    return SUPPORTED_MODELS_AND_SETTINGS[self.model].max_concurrency
+    rpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('rpm', 0)
+    tpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('tpm', 0)
+    return self.rate_to_max_concurrency(
+        requests_per_min=rpm, tokens_per_min=tpm
+    )
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized
