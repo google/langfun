@@ -78,6 +78,7 @@ class Groq(lf.LanguageModel):
     super()._on_bound()
     self._api_key = None
     self.__dict__.pop('_api_initialized', None)
+    self.__dict__.pop('_session', None)
 
   @functools.cached_property
   def _api_initialized(self):
@@ -85,10 +86,20 @@ class Groq(lf.LanguageModel):
     if not api_key:
       raise ValueError(
           'Please specify `api_key` during `__init__` or set environment '
-          'variable `GROQ_API_KEY` with your Anthropic API key.'
+          'variable `GROQ_API_KEY` with your Groq API key.'
       )
     self._api_key = api_key
     return True
+
+  @functools.cached_property
+  def _session(self) -> requests.Session:
+    assert self._api_initialized
+    s = requests.Session()
+    s.headers.update({
+        'Authorization': f'Bearer {self._api_key}',
+        'Content-Type': 'application/json',
+    })
+    return s
 
   @property
   def model_id(self) -> str:
@@ -119,7 +130,7 @@ class Groq(lf.LanguageModel):
     return args
 
   def _content_from_message(self, prompt: lf.Message) -> list[dict[str, Any]]:
-    """Converts an message to Anthropic's content protocol (list of dicts)."""
+    """Converts an message to Groq's content protocol (list of dicts)."""
     # Refer: https://platform.openai.com/docs/api-reference/chat/create
     content = []
     for chunk in prompt.chunk():
@@ -138,7 +149,7 @@ class Groq(lf.LanguageModel):
     return content
 
   def _message_from_choice(self, choice: dict[str, Any]) -> lf.Message:
-    """Converts Anthropic's content protocol to message."""
+    """Converts Groq's content protocol to message."""
     # Refer: https://platform.openai.com/docs/api-reference/chat/create
     content = choice['message']['content']
     if isinstance(content, str):
@@ -148,10 +159,10 @@ class Groq(lf.LanguageModel):
     )
 
   def _parse_response(self, response: requests.Response) -> lf.LMSamplingResult:
-    """Parses Anthropic's response."""
+    """Parses Groq's response."""
     # Refer: https://platform.openai.com/docs/api-reference/chat/object
-    output = response.json()
     if response.status_code == 200:
+      output = response.json()
       samples = [
           lf.LMSample(self._message_from_choice(choice), score=0.0)
           for choice in output['choices']
@@ -169,12 +180,11 @@ class Groq(lf.LanguageModel):
       # https://platform.openai.com/docs/guides/error-codes/api-errors
       if response.status_code == 429:
         error_cls = RateLimitError
-      elif response.status_code in (500, 503):
+      elif response.status_code in (500, 502, 503):
         error_cls = OverloadedError
       else:
         error_cls = GroqError
-      error = output['error']
-      raise error_cls(f'{error["type"]}: {error["message"]}')
+      raise error_cls(f'{response.status_code}: {response.content}')
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized
@@ -194,13 +204,9 @@ class Groq(lf.LanguageModel):
             ]
         )
     )
-    response = requests.post(
+    response = self._session.post(
         _CHAT_COMPLETE_API_ENDPOINT,
         json=request,
-        headers={
-            'Authorization': f'Bearer {self._api_key}',
-            'Content-Type': 'application/json',
-        },
         timeout=self.timeout,
     )
     return self._parse_response(response)

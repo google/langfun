@@ -111,7 +111,7 @@ class AuthropicTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
       lm('hi')
 
-    with mock.patch('requests.post') as mock_request:
+    with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_requests_post
 
       lm = anthropic.Claude3Haiku(api_key='fake key')
@@ -123,7 +123,7 @@ class AuthropicTest(unittest.TestCase):
       del os.environ['ANTHROPIC_API_KEY']
 
   def test_call(self):
-    with mock.patch('requests.post') as mock_request:
+    with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_requests_post
       lm = anthropic.Claude3Haiku(api_key='fake_key')
       response = lm('hello', temperature=0.0, top_k=0.1, top_p=0.2, stop=['\n'])
@@ -140,7 +140,7 @@ class AuthropicTest(unittest.TestCase):
       self.assertIsNotNone(response.usage.total_tokens, 3)
 
   def test_mm_call(self):
-    with mock.patch('requests.post') as mock_mm_request:
+    with mock.patch('requests.Session.post') as mock_mm_request:
       mock_mm_request.side_effect = mock_mm_requests_post
       lm = anthropic.Claude3Haiku(api_key='fake_key')
       response = lm(lf_modalities.Image.from_bytes(image_content), lm=lm)
@@ -152,13 +152,13 @@ class AuthropicTest(unittest.TestCase):
         (529, 'service_unavailable', 'Service unavailable.'),
         (500, 'bad_request', 'Bad request.'),
     ]:
-      with mock.patch('requests.post') as mock_mm_request:
+      with mock.patch('requests.Session.post') as mock_mm_request:
         mock_mm_request.side_effect = mock_requests_post_error(
             status_code, error_type, error_message
         )
         lm = anthropic.Claude3Haiku(api_key='fake_key')
         with self.assertRaisesRegex(
-            Exception, f'{error_type}: {error_message}'
+            Exception, f'.*{status_code}: .*{error_message}'
         ):
           lm('hello', lm=lm, max_attempts=1)
 

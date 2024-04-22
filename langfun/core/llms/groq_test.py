@@ -107,7 +107,7 @@ class AuthropicTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
       lm('hi')
 
-    with mock.patch('requests.post') as mock_request:
+    with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_requests_post
 
       lm = groq.GroqMistral_8x7B(api_key='fake key')
@@ -119,7 +119,7 @@ class AuthropicTest(unittest.TestCase):
       del os.environ['GROQ_API_KEY']
 
   def test_call(self):
-    with mock.patch('requests.post') as mock_request:
+    with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_requests_post
       lm = groq.GroqLlama3_70B(api_key='fake_key')
       response = lm(
@@ -143,7 +143,7 @@ class AuthropicTest(unittest.TestCase):
       self.assertIsNotNone(response.usage.total_tokens, 3)
 
   def test_mm_call(self):
-    with mock.patch('requests.post') as mock_mm_request:
+    with mock.patch('requests.Session.post') as mock_mm_request:
       mock_mm_request.side_effect = mock_mm_requests_post
       lm = groq.GroqLlama3_70B(multimodal=True, api_key='fake_key')
       response = lm(lf_modalities.Image.from_uri('https://fake/image.jpg'))
@@ -155,13 +155,13 @@ class AuthropicTest(unittest.TestCase):
         (503, 'service_unavailable', 'Service unavailable.'),
         (500, 'bad_request', 'Bad request.'),
     ]:
-      with mock.patch('requests.post') as mock_mm_request:
+      with mock.patch('requests.Session.post') as mock_mm_request:
         mock_mm_request.side_effect = mock_requests_post_error(
             status_code, error_type, error_message
         )
         lm = groq.GroqLlama3_70B(api_key='fake_key')
         with self.assertRaisesRegex(
-            Exception, f'{error_type}: {error_message}'
+            Exception, f'{status_code}:.*{error_type}'
         ):
           lm('hello', lm=lm, max_attempts=1)
 

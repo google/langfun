@@ -81,6 +81,7 @@ class Anthropic(lf.LanguageModel):
     super()._on_bound()
     self._api_key = None
     self.__dict__.pop('_api_initialized', None)
+    self.__dict__.pop('_session', None)
 
   @functools.cached_property
   def _api_initialized(self):
@@ -92,6 +93,17 @@ class Anthropic(lf.LanguageModel):
       )
     self._api_key = api_key
     return True
+
+  @functools.cached_property
+  def _session(self) -> requests.Session:
+    assert self._api_initialized
+    s = requests.Session()
+    s.headers.update({
+        'x-api-key': self._api_key,
+        'anthropic-version': _ANTHROPIC_API_VERSION,
+        'content-type': 'application/json',
+    })
+    return s
 
   @property
   def model_id(self) -> str:
@@ -165,8 +177,8 @@ class Anthropic(lf.LanguageModel):
   def _parse_response(self, response: requests.Response) -> lf.LMSamplingResult:
     """Parses Anthropic's response."""
     # NOTE(daiyip): Refer https://docs.anthropic.com/claude/reference/errors
-    output = response.json()
     if response.status_code == 200:
+      output = response.json()
       message = self._message_from_content(output['content'])
       input_tokens = output['usage']['input_tokens']
       output_tokens = output['usage']['output_tokens']
@@ -181,12 +193,11 @@ class Anthropic(lf.LanguageModel):
     else:
       if response.status_code == 429:
         error_cls = RateLimitError
-      elif response.status_code == 529:
+      elif response.status_code in (502, 529):
         error_cls = OverloadedError
       else:
         error_cls = AnthropicError
-      error = output['error']
-      raise error_cls(f'{error["type"]}: {error["message"]}')
+      raise error_cls(f'{response.status_code}: {response.content}')
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
     request = dict()
@@ -198,15 +209,8 @@ class Anthropic(lf.LanguageModel):
             ]
         )
     )
-    response = requests.post(
-        _ANTHROPIC_MESSAGE_API_ENDPOINT,
-        json=request,
-        headers={
-            'x-api-key': self._api_key,
-            'anthropic-version': _ANTHROPIC_API_VERSION,
-            'content-type': 'application/json',
-        },
-        timeout=self.timeout,
+    response = self._session.post(
+        _ANTHROPIC_MESSAGE_API_ENDPOINT, json=request, timeout=self.timeout,
     )
     return self._parse_response(response)
 
