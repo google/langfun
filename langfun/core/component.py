@@ -210,6 +210,12 @@ def get_contextual_override(var_name: str) -> ContextualOverride | None:
   return _get_scoped_value(_global_tls, _CONTEXT_OVERRIDES, var_name)
 
 
+def all_contextual_values() -> dict[str, Any]:
+  """Returns all contextual values provided from `lf.context` in scope."""
+  overrides = getattr(_global_tls, _CONTEXT_OVERRIDES, {})
+  return {k: v.value for k, v in overrides.items()}
+
+
 @contextlib.contextmanager
 def _contextual_scope(
     tls: threading.local, tls_key, **variables

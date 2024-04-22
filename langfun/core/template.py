@@ -38,6 +38,10 @@ NO_TEMPLATE_DOCSTR_SIGN = 'THIS IS NOT A TEMPLATE'
 _TLS_RENDER_STACK = '_template_render_stack'
 _TLS_RENDER_RESULT_CACHE = '_template_render_result_cache'
 
+# The prefix for fields or contextual attributes to be treated as additional
+# metadata for rendered message.
+_ADDITIONAL_METADATA_PREFIX = 'metadata_'
+
 
 class Template(
     natural_language.NaturalLanguageFormattable,
@@ -303,18 +307,18 @@ class Template(
               with modality.format_modality_as_ref():
                 rendered_text = self._template.render(**inputs)
 
+            # Carry additional metadata.
+            metadata = self.additional_metadata()
+
         if self.clean:
           rendered_text = rendered_text.strip()
 
-        # Fill the variables for rendering the template as metadata.
-        message = message_cls(
-            text=rendered_text,
-            metadata={
-                k: pg.Ref(v)
-                for k, v in inputs.items()
-                if not inspect.ismethod(v)
-            },
+        metadata.update(
+            {k: pg.Ref(v) for k, v in inputs.items() if not inspect.ismethod(v)}
         )
+
+        # Fill the variables for rendering the template as metadata.
+        message = message_cls(text=rendered_text, metadata=metadata)
 
         # Tag input as rendered message.
         message.tag(message_lib.Message.TAG_RENDERED)
@@ -339,6 +343,20 @@ class Template(
     finally:
       top = pg.object_utils.thread_local_pop(_TLS_RENDER_STACK)
       assert top is self, (top, self)
+
+  def additional_metadata(self) -> dict[str, Any]:
+    """Returns additional metadta to be carried in the rendered message."""
+    metadata = {}
+    # Carry metadata from `lf.context`.
+    for k, v in component.all_contextual_values().items():
+      if k.startswith(_ADDITIONAL_METADATA_PREFIX):
+        metadata[k.removeprefix(_ADDITIONAL_METADATA_PREFIX)] = v
+
+    # Carry metadata from fields.
+    for k, v in self.sym_init_args.items():
+      if k.startswith(_ADDITIONAL_METADATA_PREFIX):
+        metadata[k.removeprefix(_ADDITIONAL_METADATA_PREFIX)] = v
+    return metadata
 
   #
   # Implements `pg.typing.CustomTyping`.

@@ -16,6 +16,7 @@ import inspect
 import unittest
 
 from langfun.core import component
+from langfun.core import message as message_lib
 from langfun.core import modality
 from langfun.core import subscription
 from langfun.core.template import Template
@@ -426,6 +427,14 @@ class RenderTest(unittest.TestCase):
 
     # Test len.
     self.assert_partial(Template('Hello {{len(x)}}'), 'Hello {{len(x)}}')
+
+  def test_additional_metadata(self):
+    t = Template('hi', metadata_weights=1.0, y=2)
+    self.assertEqual(t.render(), message_lib.UserMessage('hi', weights=1.0))
+
+    t = Template('hi')
+    with component.context(metadata_weights=1.0, y=2):
+      self.assertEqual(t.render(), message_lib.UserMessage('hi', weights=1.0))
 
 
 class TemplateRenderEventTest(unittest.TestCase):
