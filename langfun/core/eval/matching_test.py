@@ -103,7 +103,7 @@ class MatchingTest(unittest.TestCase):
         s.result,
         dict(
             experiment_setup=dict(
-                id='MyTask@acd56a61',
+                id='MyTask@739a174b',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example.question}}',
