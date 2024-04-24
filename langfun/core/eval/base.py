@@ -856,7 +856,11 @@ class Evaluation(Evaluable):
             'Encountered: {annotation!r}.'
         )
       self._maybe_adjust_schema_for_completion(annotation)
-    return lf_structured.Schema.from_value(annotation)
+    schema = lf_structured.Schema.from_value(annotation)
+    # NOTE(daiyip): add references to the dependent classes of the returned type
+    # to prevent unused subclasses get garbage collected by Python.
+    setattr(schema, '__dependencies__', schema.class_dependencies())
+    return schema
 
   def _maybe_adjust_schema_for_completion(self, cls):
     if (self.completion_prompt_field is None
