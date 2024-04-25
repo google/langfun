@@ -346,9 +346,42 @@ class LanguageModel(component.Component):
 
     with component.context(override_attrs=True, **kwargs):
       if self.cache is None:
-        return self._sample(prompts)
+        results = self._sample(prompts)
       else:
-        return self._sample_with_cache_lookup(prompts, cache_seed)
+        results = self._sample_with_cache_lookup(prompts, cache_seed)
+
+      for prompt, result in zip(prompts, results):
+
+        # Tag LM input.
+        prompt.tag(message_lib.Message.TAG_LM_INPUT)
+
+        for sample in result.samples:
+          # Update metadata for response message.
+
+          response = sample.response
+          response.metadata.score = sample.score
+          response.metadata.logprobs = sample.logprobs
+
+          # NOTE(daiyip): Current usage is computed at per-result level,
+          # which is accurate when n=1. For n > 1, we average the usage across
+          # multiple samples.
+          usage = result.usage
+          if len(result.samples) == 1 or usage is None:
+            response.metadata.usage = usage
+          else:
+            n = len(result.samples)
+            response.metadata.usage = LMSamplingUsage(
+                prompt_tokens=usage.prompt_tokens // n,
+                completion_tokens=usage.completion_tokens // n,
+                total_tokens=usage.total_tokens // n,
+            )
+
+          # Track the prompt for corresponding response.
+          response.source = prompt
+
+          # Tag LM response.
+          response.tag(message_lib.Message.TAG_LM_RESPONSE)
+      return results
 
   def _sample_with_cache_lookup(
       self, prompts: list[str | message_lib.Message], cache_seed: int
@@ -436,13 +469,8 @@ class LanguageModel(component.Component):
       result = self.sample(
           [prompt], sampling_options=sampling_options, cache_seed=cache_seed
       )[0]
-      response = result.samples[0].response
-      logprobs = result.samples[0].logprobs
-      response.set('score', result.samples[0].score)
-      response.metadata.logprobs = logprobs
-      response.metadata.usage = result.usage
-
       elapse = time.time() - request_start
+      response = result.samples[0].response
       self._debug(prompt, response, call_counter, result.usage, elapse)
       return response
 
@@ -494,7 +522,9 @@ class LanguageModel(component.Component):
       title_suffix = console.colored(f' ({usage.prompt_tokens} tokens)', 'red')
 
     console.write(
-        prompt,
+        # We use metadata 'formatted_text' for scenarios where the prompt text
+        # is formatted by the LM.
+        prompt.get('formatted_text', prompt.text),
         title=f'\n[{call_counter}] PROMPT SENT TO LM{title_suffix}:',
         color='green',
     )

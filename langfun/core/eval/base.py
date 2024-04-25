@@ -540,7 +540,7 @@ class Evaluable(lf.Component):
           f'<div style="color: {text_color}; white-space: pre-wrap;'
           'padding: 10px; border: 1px solid; margin-top: 10px">'
       )
-      s.write(m.text)
+      s.write(m.get('formatted_text', m.text))
       if m.result is not None:
         s.write(
             '<div style="color: magenta; white-space: pre-wrap;'

@@ -28,7 +28,19 @@ class EchoTest(unittest.TestCase):
         lm.sample(['hi']),
         [
             lf.LMSamplingResult(
-                [lf.LMSample('hi', 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            'hi',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(2, 2, 4),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 lf.LMSamplingUsage(2, 2, 4))
         ]
     )
@@ -60,7 +72,19 @@ class StaticResponseTest(unittest.TestCase):
         lm.sample(['hi']),
         [
             lf.LMSamplingResult(
-                [lf.LMSample(canned_response, 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            canned_response,
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(2, 38, 40),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lf.LMSamplingUsage(2, 38, 40)
             )
         ],
@@ -69,7 +93,19 @@ class StaticResponseTest(unittest.TestCase):
         lm.sample(['Tell me a joke.']),
         [
             lf.LMSamplingResult(
-                [lf.LMSample(canned_response, 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            canned_response,
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(15, 38, 53),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lf.LMSamplingUsage(15, 38, 53)
             )
         ],
@@ -101,11 +137,35 @@ class StaticMappingTest(unittest.TestCase):
         lm.sample(['Hi', 'How are you?']),
         [
             lf.LMSamplingResult(
-                [lf.LMSample('Hello', 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            'Hello',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(2, 5, 7),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lf.LMSamplingUsage(2, 5, 7)
             ),
             lf.LMSamplingResult(
-                [lf.LMSample('I am fine, how about you?', 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            'I am fine, how about you?',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(12, 25, 37),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lf.LMSamplingUsage(12, 25, 37)
             )
         ]
@@ -126,11 +186,35 @@ class StaticSequenceTest(unittest.TestCase):
         lm.sample(['Hi', 'How are you?']),
         [
             lf.LMSamplingResult(
-                [lf.LMSample('Hello', 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            'Hello',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(2, 5, 7),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lf.LMSamplingUsage(2, 5, 7)
             ),
             lf.LMSamplingResult(
-                [lf.LMSample('I am fine, how about you?', 1.0)],
+                [
+                    lf.LMSample(
+                        lf.AIMessage(
+                            'I am fine, how about you?',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lf.LMSamplingUsage(12, 25, 37),
+                            tags=[lf.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lf.LMSamplingUsage(12, 25, 37)
             )
         ]

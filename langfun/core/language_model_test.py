@@ -111,11 +111,35 @@ class LanguageModelTest(unittest.TestCase):
         lm.sample(prompts=['foo', 'bar']),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('foo', score=-1.0)],
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'foo',
+                            score=-1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=-1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('bar', score=-1.0)],
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'bar',
+                            score=-1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=-1.0,
+                        logprobs=None,
+                    )
+                ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
         ],
@@ -128,41 +152,119 @@ class LanguageModelTest(unittest.TestCase):
         ),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('foo' * 2, score=0.5)],
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'foo' * 2,
+                            score=0.5,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=0.5,
+                        logprobs=None,
+                    ),
+                ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('bar' * 2, score=0.5)],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'bar' * 2,
+                            score=0.5,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=0.5,
+                        logprobs=None,
+                    ),
+                ],
+                usage=lm_lib.LMSamplingUsage(
+                    prompt_tokens=100, completion_tokens=100, total_tokens=200
+                ),
             ),
-        ],
+        ]
     )
     # Test override individual flags within sampling_options.
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar'], temperature=1.0),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('foo', score=1.0)],
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'foo',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    ),
+                ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('bar', score=1.0)],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'bar',
+                            score=1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
+                    ),
+                ],
+                usage=lm_lib.LMSamplingUsage(
+                    prompt_tokens=100, completion_tokens=100, total_tokens=200
+                ),
             ),
-        ],
+        ]
     )
     self.assertEqual(
         lm.sample(prompts=['foo', 'bar'], top_k=2, temperature=0.7),
         [
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('foo' * 2, score=0.7)],
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'foo' * 2,
+                            score=0.7,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=0.7,
+                        logprobs=None,
+                    ),
+                ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
             ),
             lm_lib.LMSamplingResult(
-                [lm_lib.LMSample('bar' * 2, score=0.7)],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'bar' * 2,
+                            score=0.7,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=0.7,
+                        logprobs=None,
+                    ),
+                ],
+                usage=lm_lib.LMSamplingUsage(
+                    prompt_tokens=100, completion_tokens=100, total_tokens=200
+                ),
             ),
-        ],
+        ]
     )
 
   def test_call(self):
@@ -189,7 +291,16 @@ class LanguageModelTest(unittest.TestCase):
             lm_lib.LMSamplingResult(
                 [
                     lm_lib.LMSample(
-                        message_lib.AIMessage('foo', cache_seed=0), score=-1.0
+                        message_lib.AIMessage(
+                            'foo',
+                            cache_seed=0,
+                            score=-1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=-1.0,
+                        logprobs=None,
                     )
                 ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
@@ -197,7 +308,16 @@ class LanguageModelTest(unittest.TestCase):
             lm_lib.LMSamplingResult(
                 [
                     lm_lib.LMSample(
-                        message_lib.AIMessage('bar', cache_seed=0), score=-1.0
+                        message_lib.AIMessage(
+                            'bar',
+                            cache_seed=0,
+                            score=-1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=-1.0,
+                        logprobs=None,
                     )
                 ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
@@ -225,7 +345,16 @@ class LanguageModelTest(unittest.TestCase):
             lm_lib.LMSamplingResult(
                 [
                     lm_lib.LMSample(
-                        message_lib.AIMessage('foo', cache_seed=0), score=1.0
+                        message_lib.AIMessage(
+                            'foo',
+                            cache_seed=0,
+                            score=1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
                     )
                 ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),
@@ -233,7 +362,16 @@ class LanguageModelTest(unittest.TestCase):
             lm_lib.LMSamplingResult(
                 [
                     lm_lib.LMSample(
-                        message_lib.AIMessage('baz', cache_seed=0), score=1.0
+                        message_lib.AIMessage(
+                            'baz',
+                            cache_seed=0,
+                            score=1.0,
+                            logprobs=None,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            tags=[message_lib.Message.TAG_LM_RESPONSE],
+                        ),
+                        score=1.0,
+                        logprobs=None,
                     )
                 ],
                 usage=lm_lib.LMSamplingUsage(100, 100, 200),

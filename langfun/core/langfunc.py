@@ -261,7 +261,6 @@ class LangFunc(
         if lm_input is None:
           lm_input = self.render(**kwargs)
 
-        lm_input.tag(message_lib.Message.TAG_LM_INPUT)
         if skip_lm:
           return lm_input
 
@@ -269,10 +268,6 @@ class LangFunc(
 
         # Send rendered text to LM.
         lm_output = self.lm(lm_input, cache_seed=cache_seed)
-
-        # Track the input as the source of the output.
-        lm_output.source = lm_input
-        lm_output.tag(message_lib.Message.TAG_LM_RESPONSE)
 
         # Transform the output message.
         lm_output = self.transform_output(lm_output)
