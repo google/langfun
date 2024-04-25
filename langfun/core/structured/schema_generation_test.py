@@ -14,8 +14,8 @@
 import inspect
 import unittest
 
-import langfun.core.coding as lf_coding
 from langfun.core.llms import fake
+from langfun.core.structured import mapping
 from langfun.core.structured import schema_generation
 
 
@@ -92,7 +92,7 @@ class GenerateClassTest(unittest.TestCase):
     )
     self.assertIs(cls.__name__, 'B')
 
-    with self.assertRaises(lf_coding.CodeError):
+    with self.assertRaises(mapping.MappingError):
       schema_generation.generate_class(
           'Foo',
           'Generate a Foo class with a field pointing to another class A',

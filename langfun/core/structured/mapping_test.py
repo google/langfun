@@ -16,8 +16,25 @@
 import inspect
 import unittest
 
+import langfun.core as lf
 from langfun.core.structured import mapping
 import pyglove as pg
+
+
+class MappingErrorTest(unittest.TestCase):
+
+  def test_format(self):
+    error = mapping.MappingError(
+        lf.AIMessage('hi'), ValueError('Cannot parse message.')
+    )
+    self.assertEqual(
+        lf.text_formatting.decolored(str(error)),
+        'ValueError: Cannot parse message.\n\n[LM Response]\nhi',
+    )
+    self.assertEqual(
+        lf.text_formatting.decolored(error.format(include_lm_response=False)),
+        'ValueError: Cannot parse message.',
+    )
 
 
 class MappingExampleTest(unittest.TestCase):

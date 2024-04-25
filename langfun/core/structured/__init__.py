@@ -51,6 +51,7 @@ from langfun.core.structured.schema_generation import default_classgen_examples
 from langfun.core.structured.function_generation import function_gen
 
 from langfun.core.structured.mapping import Mapping
+from langfun.core.structured.mapping import MappingError
 from langfun.core.structured.mapping import MappingExample
 
 from langfun.core.structured.parsing import ParseStructure

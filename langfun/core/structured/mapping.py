@@ -20,6 +20,43 @@ from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
+class MappingError(Exception):  # pylint: disable=g-bad-exception-name
+  """Mapping error."""
+
+  def __init__(self, lm_response: lf.Message, cause: Exception):
+    self._lm_response = lm_response
+    self._cause = cause
+
+  @property
+  def lm_response(self) -> lf.Message:
+    """Returns the LM response that failed to be mapped."""
+    return self._lm_response
+
+  @property
+  def cause(self) -> Exception:
+    """Returns the cause of the error."""
+    return self._cause
+
+  def __str__(self) -> str:
+    return self.format(include_lm_response=True)
+
+  def format(self, include_lm_response: bool = True) -> str:
+    """Formats the mapping error."""
+    r = io.StringIO()
+    error_message = str(self.cause).rstrip()
+    r.write(
+        lf.colored(
+            f'{self.cause.__class__.__name__}: {error_message}', 'magenta'
+        )
+    )
+    if include_lm_response:
+      r.write('\n\n')
+      r.write(lf.colored('[LM Response]', 'blue', styles=['bold']))
+      r.write('\n')
+      r.write(lf.colored(self.lm_response.text, 'blue'))
+    return r.getvalue()
+
+
 @pg.use_init_args(['input', 'output', 'schema', 'context'])
 class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
   """Mapping example between text, schema and structured value."""
@@ -308,7 +345,7 @@ class Mapping(lf.LangFunc):
       lm_output.result = self.postprocess_result(self.parse_result(lm_output))
     except Exception as e:  # pylint: disable=broad-exception-caught
       if self.default == lf.RAISE_IF_HAS_ERROR:
-        raise e
+        raise MappingError(lm_output, e) from e
       lm_output.result = self.default
     return lm_output
 

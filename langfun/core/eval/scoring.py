@@ -61,8 +61,18 @@ class Scoring(base.Evaluation):
     super()._reset()
     self._scored = []
 
-  def audit(self, example: Any, output: Any, message: lf.Message) -> None:
+  def audit_processed(
+      self, example: Any, output: Any, message: lf.Message, dryrun: bool = False
+  ) -> None:
     score = self.score(example, output)
+
+    if dryrun:
+      lf.console.write('')
+      lf.console.write(
+          str(score),
+          title='SCORE',
+          color='blue',
+      )
     self._scored.append((example, output, score, message))
 
   @abc.abstractmethod

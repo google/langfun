@@ -221,6 +221,14 @@ class EvaluationTest(unittest.TestCase):
                 use_cache=True, num_queries=2, num_hits=0, num_updates=2
             ),
             metrics=dict(total=2, failures=1, failure_rate=0.5),
+            usage=dict(
+                total_prompt_tokens=774,
+                total_completion_tokens=25,
+                num_usages=2,
+                average_prompt_tokens=387,
+                average_completion_tokens=12,
+                average_total_tokens=399,
+            ),
         ),
     )
     self.assertTrue(
@@ -285,8 +293,11 @@ class EvaluationTest(unittest.TestCase):
     s = eval_set(
         'run_filter_test', pg.oneof(['call', 'query']),
         schema_fn=answer_schema(), lm=lm)
+    result = s.run(
+        filter=lambda x: x.method == 'query', dryrun=True, summary=False
+    )
     self.assertEqual(
-        s.run(filter=lambda x: x.method == 'query', dryrun=True, summary=False),
+        result,
         {
             s.children[0].id: None,
             s.children[1].id: dict(
@@ -302,7 +313,8 @@ class EvaluationTest(unittest.TestCase):
                     use_cache=True, num_queries=2, num_hits=0, num_updates=2
                 ),
                 metrics=dict(total=2, failures=0, failure_rate=0.0),
-            )
+                usage=s.children[1].result.usage,
+            ),
         },
     )
 
@@ -336,7 +348,6 @@ class EvaluationTest(unittest.TestCase):
 
     summary = s.run(verbose=True)
     self.assertEqual(len(summary.evaluations), 2)
-
     self.assertEqual(
         s.result,
         {
@@ -353,6 +364,7 @@ class EvaluationTest(unittest.TestCase):
                     use_cache=True, num_queries=2, num_hits=0, num_updates=2
                 ),
                 metrics=dict(total=2, failures=1, failure_rate=0.5),
+                usage=s.children[0].result.usage,
             ),
             s.children[1].id: dict(
                 experiment_setup=dict(
@@ -367,6 +379,7 @@ class EvaluationTest(unittest.TestCase):
                     use_cache=True, num_queries=2, num_hits=0, num_updates=2
                 ),
                 metrics=dict(total=2, failures=1, failure_rate=0.5),
+                usage=s.children[1].result.usage,
             ),
         },
     )
@@ -475,6 +488,7 @@ class SuiteTest(unittest.TestCase):
                 use_cache=True, num_queries=2, num_hits=0, num_updates=2
             ),
             metrics=dict(total=2, failures=1, failure_rate=0.5),
+            usage=s.children[0].result.usage,
         ),
         s.children[1].id: {
             s.children[1]
@@ -492,6 +506,7 @@ class SuiteTest(unittest.TestCase):
                     use_cache=True, num_queries=4, num_hits=1, num_updates=3
                 ),
                 metrics=dict(total=2, failures=2, failure_rate=1.0),
+                usage=s.children[1].children[0].result.usage,
             ),
             s.children[1]
             .children[2]
@@ -511,6 +526,7 @@ class SuiteTest(unittest.TestCase):
                     num_updates=2,
                 ),
                 metrics=dict(total=2, failures=1, failure_rate=0.5),
+                usage=s.children[1].children[2].result.usage,
             ),
         },
     }
@@ -680,6 +696,18 @@ class SummaryTest(unittest.TestCase):
     summary = r.stop()
     self.assertTrue(all(e.result for e in summary.evaluations))
     self.assertTrue(pg.io.path_exists(summary_file))
+
+
+class AppRunTest(unittest.TestCase):
+
+  def test_app_run(self):
+    lm = fake.StaticSequence(['two', 'Solution(final_answer=2)'])
+    try:
+      base.app_run(
+          eval_set('app_run_test', 'query', schema_fn=answer_schema(), lm=lm)
+      )
+    except SystemExit:
+      pass
 
 
 if __name__ == '__main__':

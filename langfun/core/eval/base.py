@@ -26,6 +26,8 @@ import threading
 import time
 from typing import Annotated, Any, Callable, Iterator, Literal, Optional, Sequence, Type, Union
 
+from absl import app
+from absl import flags
 import langfun.core as lf
 import langfun.core.coding as lf_coding
 from langfun.core.llms.cache import in_memory
@@ -546,6 +548,16 @@ class Evaluable(lf.Component):
         )
         s.write(pg.format(m.result))
         s.write('</div>')
+      if 'usage' in m.metadata:
+        s.write(
+            '<div style="background-color: #EEEEEE; color: black; '
+            'white-space: pre-wrap; padding: 10px; border: 0px solid; '
+            'margin: 10px">'
+            f'prompt: {m.usage.prompt_tokens} tokens, '
+            f'response: {m.usage.completion_tokens} tokens, '
+            f'total: {m.usage.total_tokens} tokens'
+            '</div>'
+        )
       s.write('</div>')
 
   @classmethod
@@ -810,6 +822,30 @@ class Evaluation(Evaluable):
       return 0.0
     return self.num_failures / self.num_completed
 
+  @property
+  def has_usage(self) -> bool:
+    """Returns True if token usage is enabled."""
+    return self._num_usages > 0
+
+  @property
+  def average_prompt_tokens(self) -> int:
+    """Returns the average prompt tokens."""
+    if not self.has_usage:
+      return 0
+    return self._total_prompt_tokens // self._num_usages
+
+  @property
+  def average_completion_tokens(self) -> int:
+    """Returns the average completion tokens."""
+    if not self.has_usage:
+      return 0
+    return self._total_completion_tokens // self._num_usages
+
+  @property
+  def average_total_tokens(self) -> int:
+    """Returns the average total tokens."""
+    return self.average_prompt_tokens + self.average_completion_tokens
+
   @functools.cached_property
   def schema(self) -> lf_structured.Schema | None:
     """Schema."""
@@ -937,6 +973,10 @@ class Evaluation(Evaluable):
     self._failures = []
     self._num_completed = 0
 
+    self._total_prompt_tokens = 0
+    self._total_completion_tokens = 0
+    self._num_usages = 0
+
   @property
   def failures_link(self) -> str | None:
     """Returns the link to the failures page."""
@@ -956,7 +996,7 @@ class Evaluation(Evaluable):
     example = example or self.examples[0]
 
     # We make a copy to avoid pollute the state of current object.
-    copy = self.clone()
+    copy: Evaluation = self.clone()
     copy.__dict__['examples'] = [example]
 
     # We set the symbolic parent of the cloned to access contextual information
@@ -986,9 +1026,9 @@ class Evaluation(Evaluable):
           color='blue',
       )
 
-    # Audit the result.
-    copy.audit(example, output, output_message)
+    copy.audit(example, output_message, None, dryrun=True)
     result = copy.summarize()
+
     if verbose:
       lf.console.write('')
       lf.console.write(
@@ -1035,11 +1075,12 @@ class Evaluation(Evaluable):
             status_fn=self._status,
         ):
           if error is not None:
-            self._failures.append((example, str(error)))
-          else:
-            output = message.text if self.schema is None else message.result
-            self.audit(example, output, message)
-          self._num_completed += 1
+            message = (
+                error.lm_response
+                if isinstance(error, lf_structured.MappingError)
+                else None
+            )
+          self.audit(example, message, error)
       finally:
         # Save cache upon completion or interruption.
         if self.dir and self.cache:
@@ -1142,6 +1183,19 @@ class Evaluation(Evaluable):
       )
     else:
       cache_stats = dict(use_cache=False)
+
+    if self.has_usage:
+      usage = pg.Dict(
+          total_prompt_tokens=self._total_prompt_tokens,
+          total_completion_tokens=self._total_completion_tokens,
+          num_usages=self._num_usages,
+          average_prompt_tokens=self.average_prompt_tokens,
+          average_completion_tokens=self.average_completion_tokens,
+          average_total_tokens=self.average_total_tokens,
+      )
+    else:
+      usage = None
+
     result = pg.Dict(
         experiment_setup=pg.Dict(
             id=self.id,
@@ -1157,6 +1211,7 @@ class Evaluation(Evaluable):
             failures=self.num_failures,
             failure_rate=self.failure_rate,
         ),
+        usage=usage,
     )
     return result
 
@@ -1178,8 +1233,27 @@ class Evaluation(Evaluable):
           '</td></tr><tr><td>'
       )
       self._render_metric(s)
+
+      # Summarize average usage.
+      if self.result.usage is not None:
+        self._render_usage(s)
+
     s.write('</td></tr></table></div>')
     return s.getvalue()
+
+  def _render_usage(self, s: io.StringIO) -> None:
+    """Renders usage in HTML."""
+    usage = self.result.usage
+    total = usage.total_prompt_tokens + usage.total_completion_tokens
+    s.write(
+        '&nbsp;<a title="'
+        f'# of usages: {usage.num_usages}&#013;'
+        f'total prompt: {usage.total_prompt_tokens}&#013;'
+        f'total response: {usage.total_completion_tokens}&#013;'
+        f'avg prompt: {usage.average_prompt_tokens}&#013;'
+        f'avg response: {usage.average_completion_tokens}'
+        f'" style="color:gray">({total} tokens)</a>'
+    )
 
   def _render_metric(self, s: io.StringIO) -> None:
     """Renders metrics in HTML."""
@@ -1195,17 +1269,48 @@ class Evaluation(Evaluable):
         )
     )
 
-  def audit(self, example: Any, output: Any, message: lf.Message) -> None:
+  def audit(
+      self,
+      example: Any,
+      message: lf.Message | None,
+      error: Exception | None = None,
+      dryrun: bool = False,
+  ) -> None:
     """Audits the example against the output. Subclasses should override.
 
     Args:
       example: The input object.
-      output: The output from LM. For `lf.call`, if `schema_fn` is not provided,
-        it will be the raw LM response string. Otherwise it will be the
-        structured output from the LM.
       message: The entire message returned by the LM, which could be used to
-        trace the LM input, response and parsed structure.
+        trace the LM input, response and parsed structure. If error is raised
+        before LLM could return a response, None will be its value.
+      error: The exception during processing the example.
+      dryrun: Whether or not audition takes place during dryrun.
     """
+    if error is not None:
+      self._failures.append((example, str(error)))
+      if isinstance(error, lf_structured.MappingError):
+        message = error.lm_response
+    else:
+      assert message is not None
+      output = message.text if self.schema is None else message.result
+      self.audit_processed(example, output, message, dryrun=dryrun)
+
+    # Audit usage.
+    if message is not None:
+      self.audit_usage(message, dryrun=dryrun)
+    self._num_completed += 1
+
+  def audit_usage(self, message: lf.Message, dryrun: bool = False) -> None:
+    for m in message.trace():
+      if 'usage' in m.metadata:
+        self._total_prompt_tokens += m.usage.prompt_tokens
+        self._total_completion_tokens += m.usage.completion_tokens
+        self._num_usages += 1
+
+  def audit_processed(
+      self, example: Any, output: Any, message: lf.Message, dryrun: bool = False
+  ) -> None:
+    """Audits a successfully processed example. Subclass should override."""
 
   def save(
       self, definition: bool = True, result: bool = True, report: bool = True
@@ -1249,8 +1354,10 @@ class Evaluation(Evaluable):
         '<td>Prompt</td>'
         '<td>Schema</td>'
         '<td>Additional Args</td>'
-        '<td>Failures</td>'
     )
+    if self.result.usage is not None:
+      s.write('<td>Usage</td>')
+    s.write('<td>Failures</td>')
 
   def _render_result_row(self, s: io.StringIO) -> None:
     s.write(
@@ -1275,6 +1382,12 @@ class Evaluation(Evaluable):
         '<td style="color:purple" '
         f'{_html_repr(self.additional_args, compact=False)}</td>'
     )
+    # Usage.
+    if self.result.usage is not None:
+      s.write('<td>')
+      self._render_usage(s)
+      s.write('</td>')
+
     # Failures.
     s.write(
         '<td><span style="color:orange">%s</span>%s</td>'
@@ -1373,8 +1486,8 @@ class Summary(pg.Object):
           Type[lf.LanguageModel],
           tuple[lf.LanguageModel | Type[lf.LanguageModel], ...],
       ] = lf.LanguageModel,
-      method: Union[str, tuple[str], None] = None,
-      schema_fn: Union[pg.Functor, tuple[pg.Functor], None] = None,
+      method: Union[str, tuple[str, ...], None] = None,
+      schema_fn: Union[pg.Functor, tuple[pg.Functor, ...], None] = None,
       completed: bool | None = None,
       pivot_field: str | None = None,
   ) -> 'Summary':
@@ -1568,6 +1681,7 @@ class Summary(pg.Object):
       for entry in self.select(task=task).evaluations:
         results.append(
             pg.Dict(
+                id=entry.id,
                 experiment=entry,
                 dir=entry.dir,
                 metrics=entry.result.metrics if entry.result else None,
@@ -1793,3 +1907,43 @@ def monitor_async(
       scan_interval=scan_interval,
       refresh_when_stop=refresh_when_stop,
   )
+
+
+def app_run(target: Evaluable):
+  """Runs the target evaluation as an absl app.
+
+  Args:
+    target: An Langfun evaluable object.
+  """
+  flags.DEFINE_string(
+      'root_dir', None, 'Root directory for running the evaluation.'
+  )
+
+  flags.DEFINE_bool(
+      'dryrun', False, 'If True, dryrun the experiment instead of running it.'
+  )
+
+  flags.DEFINE_bool(
+      'debug', False, 'If True, output prompt and response to the console.'
+  )
+
+  flags.DEFINE_bool(
+      'rerun',
+      False,
+      'If True, rerun the experiment even a cached result is found.',
+  )
+
+  FLAGS = flags.FLAGS  # pylint: disable=invalid-name
+
+  def _main(argv):
+    if len(argv) > 1:
+      raise app.UsageError('Too many command-line arguments.')
+
+    if FLAGS.root_dir:
+      target.rebind(root_dir=FLAGS.root_dir, raise_on_no_change=False)
+    if FLAGS.dryrun:
+      target.dryrun(debug=FLAGS.debug)
+    else:
+      target.run(debug=FLAGS.debug, rerun=FLAGS.rerun)
+
+  app.run(_main)

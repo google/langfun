@@ -102,6 +102,7 @@ class ScoringTest(unittest.TestCase):
                 score_rate=1.0,
                 avg_score=0.5,
             ),
+            usage=s.result.usage,
         ),
     )
     self.assertTrue(

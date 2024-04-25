@@ -17,11 +17,9 @@ import inspect
 import unittest
 
 import langfun.core as lf
-from langfun.core import coding
 from langfun.core.llms import fake
 from langfun.core.structured import mapping
 from langfun.core.structured import parsing
-from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
@@ -255,7 +253,7 @@ class ParseStructurePythonTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          coding.CodeError,
+          mapping.MappingError,
           'name .* is not defined',
       ):
         parsing.parse('three', int)
@@ -546,7 +544,7 @@ class ParseStructureJsonTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          schema_lib.JsonError,
+          mapping.MappingError,
           'No JSON dict in the output',
       ):
         parsing.parse('three', int, protocol='json')

@@ -17,7 +17,6 @@ import inspect
 import unittest
 
 import langfun.core as lf
-from langfun.core import coding
 from langfun.core import modalities
 from langfun.core.llms import fake
 from langfun.core.structured import completion
@@ -608,7 +607,7 @@ class CompleteStructureTest(unittest.TestCase):
         override_attrs=True,
     ):
       with self.assertRaisesRegex(
-          coding.CodeError,
+          mapping.MappingError,
           'Expect .* but encountered .*',
       ):
         completion.complete(Activity.partial(), autofix=0)

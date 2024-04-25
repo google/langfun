@@ -86,9 +86,26 @@ class Matching(base.Evaluation):
     self._matches = []
     self._mismatches = []
 
-  def audit(self, example: Any, output: Any, message: lf.Message) -> None:
+  def audit_processed(
+      self, example: Any, output: Any, message: lf.Message, dryrun: bool = False
+  ) -> None:
     groundtruth = self.groundtruth(example)
     answer = self.answer(output, example)
+
+    if dryrun:
+      lf.console.write('')
+      lf.console.write(
+          str(groundtruth),
+          title='GROUDTRUTH',
+          color='green',
+      )
+      lf.console.write('')
+      lf.console.write(
+          str(answer),
+          title='ANSWER',
+          color='blue',
+      )
+
     if self.match(answer, groundtruth):
       self._matches.append((example, output, message))
     else:

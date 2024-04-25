@@ -125,6 +125,7 @@ class MatchingTest(unittest.TestCase):
                 num_mismatches=1,
                 mismatch_rate=0.25,
             ),
+            usage=s.result.usage,
         ),
     )
     self.assertTrue(
