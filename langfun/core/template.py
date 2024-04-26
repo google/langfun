@@ -48,7 +48,12 @@ class Template(
     component.Component,
     pg.typing.CustomTyping,
 ):
-  """Langfun string template."""
+  """Langfun string template.
+
+  Langfun uses jinja2 as its template engine. Pleaes check out
+  https://jinja.palletsprojects.com/en/3.1.x/templates/ for detailed
+  explanation on the template language.
+  """
 
   template_str: Annotated[
       str,
@@ -101,6 +106,11 @@ class Template(
       # Declare template variables as symbolic attributes.
       template_vars = Template.resolve_vars(template_str)
       for var_name in template_vars:
+        if 'DEFAULT' == var_name:
+          raise ValueError(
+              '`{{ DEFAULT }}` cannot be used in pre-configured templates. '
+              f'Encountered: {template_str!r}'
+          )
         # NOTE(daiyip): This is to avoid warning from accessing
         # `pg.Object.schema`, which was replaced by `pg.Object.__schema__`.
         if var_name == 'schema' or not hasattr(cls, var_name):
@@ -153,7 +163,7 @@ class Template(
     # TODO(daiyip): Consider to delay template parsing upon usage.
     unassigned_vars = {}
     for k in self._variables:
-      if not hasattr(self, k):
+      if k not in ('DEFAULT',) and not hasattr(self, k):
         unassigned_vars[k] = component.contextual()
     if unassigned_vars:
       self.rebind(unassigned_vars, skip_notification=True)
@@ -397,6 +407,93 @@ class Template(
   def __hash__(self) -> int:
     # Override __hash__ since __eq__ has changed.
     return object.__hash__(self)
+
+  #
+  # Special methods.
+  #
+
+  @property
+  def DEFAULT(self) -> 'Template':
+    """Referring to the default value used for this template.
+
+    This method is intended to be used in template for referring to the default
+    value of current template. There are two scenarios:
+
+    Scenario 1: Use instance-level template_str to override the class default.
+
+    ```
+    class Foo(lf.Template):
+       '''Foo template.
+
+       This is {{x}}.
+       '''
+
+    f = Foo(template_str='<h1>{{DEFAULT}}</h1>', x=1)
+    f.render()
+
+    >> <h1>This is 1.</h1>
+    ```
+
+    Scenario 2: Use an ad-hoc template to override a predefined field.
+
+    ```
+    class Bar(lf.Template):
+      '''Bar template.
+
+      {{preamble}}
+      {{prompt}}
+      '''
+      preamble: lf.Template = lf.Template('You are a chat bot.')
+      prompt: lf.Template = lf.Template('User: hi')
+
+    b = Bar(preamble=lf.Template('<h1>{{DEFAULT}}<h1>'),
+            prompt=lf.Template('<h2>{{DEFAULT}}</h2>')
+    b.render()
+
+    >> <h1>You are a chat bot.<h1>
+    >> <h2>User: hi</h2>
+    ```
+
+    Returns:
+      The default (pre-configured) value used for this template.
+    """
+    base_template = self.__class__.__schema__['template_str'].default_value
+    if base_template == pg.MISSING_VALUE:
+      if not self.sym_path:
+        raise ValueError(
+            f'No DEFAULT template found for {self!r}: '
+            'The template neither has a default `template_str` nor is '
+            'contained under another object.'
+        )
+      key = self.sym_path.key
+      assert self.sym_parent is not None
+      assigned_field = self.sym_parent.sym_attr_field(key)
+      container_cls = self.sym_parent.__class__
+
+      if (
+          assigned_field is None
+          or assigned_field.default_value == pg.MISSING_VALUE
+      ):
+        raise ValueError(
+            f'No DEFAULT template found for {self!r}: '
+            f'`{container_cls.__name__}.{key}` '
+            'does not have a default value. '
+        )
+      base_template = assigned_field.default_value
+      if isinstance(base_template, Template):
+        base_template = base_template.template_str
+      if not isinstance(base_template, str):
+        raise ValueError(
+            f'No DEFAULT template found for {self!r}: The default '
+            f'value {base_template!r} of '
+            f'`{container_cls.__name__}.{key}` is not a '
+            '`lf.Template` object or str.'
+        )
+    t = Template(base_template)
+    # NOTE(daiyip): Set the parent of the newly created template to self so
+    # it could access all the contextual variables.
+    t.sym_setparent(self)
+    return t
 
 
 # Register converter from str to LangFunc, therefore we can always

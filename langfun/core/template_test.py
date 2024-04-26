@@ -312,6 +312,72 @@ class RenderTest(unittest.TestCase):
         'This is 1 and {{a}}',
     )
 
+  def test_render_with_default(self):
+
+    class Foo(Template):
+      """Foo.
+
+      This is {{x}}
+      """
+
+    f = Foo(template_str='!{{DEFAULT}}!', x=1)
+    self.assertEqual(f.DEFAULT.x, 1)
+    self.assertEqual(
+        f.render(), '!This is 1!'
+    )
+
+    class Bar(Template):
+      """Bar.
+
+      {{preamble}}
+      {{prompt}}
+      """
+
+      preamble: Template = Template('You are a chat bot.')
+      prompt: Template = Template('User: hi! {{name}}')
+
+    b = Bar(
+        preamble=Template('<h1>{{DEFAULT}}</h1>'),
+        prompt=Template('<h2>{{DEFAULT}}</h2>'),
+        name='Tom',
+    )
+    # Test variable access.
+    self.assertEqual(
+        b.render(),
+        inspect.cleandoc("""
+            <h1>You are a chat bot.</h1>
+            <h2>User: hi! Tom</h2>
+            """),
+    )
+
+    with self.assertRaisesRegex(ValueError, '`{{ DEFAULT }}` cannot be used'):
+
+      class Baz(Template):  # pylint: disable=unused-variable
+        """Baz.
+
+        {{DEFAULT}}
+        """
+
+    with self.assertRaisesRegex(
+        ValueError, 'The template neither has a default `template_str` nor'
+    ):
+      Template('{{DEFAULT}}').render()
+
+    d = pg.Dict(x=Template('{{DEFAULT}}'))
+    with self.assertRaisesRegex(
+        ValueError, 'does not have a default value'
+    ):
+      _ = d.x.DEFAULT
+
+    class Tes(pg.Object):
+      x: str | None = None
+
+    t = Tes(x=Template('{{DEFAULT}}'))
+    with self.assertRaisesRegex(
+        ValueError, 'is not a `lf.Template` object or str'
+    ):
+      _ = t.x.DEFAULT
+
   def test_bad_render(self):
     with self.assertRaises(ValueError):
       Template('Hello {{x}}').render(allow_partial=False)
