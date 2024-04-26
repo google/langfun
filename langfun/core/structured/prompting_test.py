@@ -138,6 +138,39 @@ class QueryTest(unittest.TestCase):
         ),
     )
 
+  def test_str_to_structure_render_custom_template(self):
+    lm = fake.StaticResponse('1')
+    self.assert_render(
+        'What is {{x}} + {{y}}?',
+        int,
+        x=1,
+        y=2,
+        lm=lm.clone(),
+        template_str='!!{{ DEFAULT }}!!',
+        expected_snippet=(
+            '!!Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT '
+            'according to OUTPUT_TYPE.\n\n'
+            'INPUT_OBJECT:\n  1 + 1 =\n\n'
+            'OUTPUT_TYPE:\n'
+            '  Answer\n\n'
+            '  ```python\n'
+            '  class Answer:\n'
+            '    final_answer: int\n'
+            '  ```\n\n'
+            'OUTPUT_OBJECT:\n'
+            '  ```python\n'
+            '  Answer(\n'
+            '    final_answer=2\n'
+            '  )\n'
+            '  ```\n\n'
+            'INPUT_OBJECT:\n'
+            '  What is 1 + 2?\n\n'
+            'OUTPUT_TYPE:\n'
+            '  int\n\n'
+            'OUTPUT_OBJECT:!!'
+        ),
+    )
+
   def test_str_to_str_render(self):
     lm = fake.StaticResponse('1')
     self.assert_render(

@@ -176,8 +176,11 @@ def query(
       returning the structured `message.result`.
     skip_lm: If True, returns the rendered prompt as a UserMessage object.
       otherwise return the LLM response based on the rendered prompt.
-    **kwargs: Keyword arguments passed to the
-      `lf.structured.NaturalLanguageToStructureed` transform.
+    **kwargs: Keyword arguments passed to render the prompt or configure the 
+      `lf.structured.Mapping` class. Notable kwargs are:
+      - template_str: Change the root template for query.
+      - preamble: Change the preamble for query.
+      - mapping_template: Change the template for each mapping examle.
 
   Returns:
     The result based on the schema.
@@ -201,10 +204,17 @@ def query(
     return output if returns_message else output.text
 
   # Query with structured output.
+  prompt_kwargs = kwargs.copy()
+
+  # NOTE(daiyip): when `template_str` is passed in, it's intended to modify the
+  # QueryStructure template string. Therefore, we pop out the argument for
+  # prompt rendering.
+  prompt_kwargs.pop('template_str', None)
+
   if isinstance(prompt, str):
-    prompt = lf.Template(prompt, **kwargs)
+    prompt = lf.Template(prompt, **prompt_kwargs)
   elif isinstance(prompt, lf.Template):
-    prompt = prompt.rebind(**kwargs)
+    prompt = prompt.rebind(**prompt_kwargs, raise_on_no_change=False)
 
   if isinstance(prompt, lf.Template):
     prompt = prompt.render(lm=lm)
