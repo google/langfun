@@ -113,8 +113,8 @@ class Scoring(base.Evaluation):
         m.total,
     )
 
-  def summarize(self) -> pg.Dict:
-    result = super().summarize()
+  def finalize(self) -> pg.Dict:
+    result = super().finalize()
     result.metrics.update(
         num_scored=self.num_scored,
         score_rate=self.score_rate,
@@ -168,7 +168,7 @@ class Scoring(base.Evaluation):
         )
     )
 
-  def _render_metric(self, s: io.StringIO) -> None:
+  def _render_summary_metrics(self, s: io.StringIO) -> None:
     """Renders metrics in HTML."""
     assert self.result is not None
     m = self.result.metrics
@@ -182,7 +182,7 @@ class Scoring(base.Evaluation):
         )
     )
     s.write(' | ')
-    super()._render_metric(s)
+    super()._render_summary_metrics(s)
 
   def _render_scored(self, s: io.StringIO) -> None:
     """Formats the matched cases into html."""

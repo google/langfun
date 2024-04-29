@@ -98,6 +98,11 @@ class ScoringTest(unittest.TestCase):
                 total=2,
                 failures=0,
                 failure_rate=0.0,
+                oop_failures=0,
+                oop_failure_rate=0.0,
+                non_oop_failures=0,
+                non_oop_failure_rate=0.0,
+                failure_breakdown={},
                 num_scored=2,
                 score_rate=1.0,
                 avg_score=0.5,
@@ -124,7 +129,12 @@ class ScoringTest(unittest.TestCase):
     )
     self.assertTrue(
         os.path.exists(
-            os.path.join(s.dir, scoring.Scoring.FAILURES_JSON)
+            os.path.join(s.dir, scoring.Scoring.OOP_FAILURES_JSON)
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, scoring.Scoring.NON_OOP_FAILURES_JSON)
         )
     )
     self.assertTrue(
@@ -143,7 +153,14 @@ class ScoringTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, scoring.Scoring.FAILURES_HTML
+                s.dir, scoring.Scoring.OOP_FAILURES_HTML
+            )
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(
+                s.dir, scoring.Scoring.NON_OOP_FAILURES_HTML
             )
         )
     )

@@ -220,7 +220,18 @@ class EvaluationTest(unittest.TestCase):
             cache_stats=dict(
                 use_cache=True, num_queries=2, num_hits=0, num_updates=2
             ),
-            metrics=dict(total=2, failures=1, failure_rate=0.5),
+            metrics=dict(
+                total=2,
+                failures=1,
+                failure_rate=0.5,
+                oop_failures=1,
+                oop_failure_rate=0.5,
+                non_oop_failures=0,
+                non_oop_failure_rate=0.0,
+                failure_breakdown={
+                    'MappingError.SchemaError.TypeError': 1
+                }
+            ),
             usage=dict(
                 total_prompt_tokens=774,
                 total_completion_tokens=25,
@@ -236,11 +247,19 @@ class EvaluationTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.RESULT_JSON)))
     self.assertTrue(
+        os.path.exists(os.path.join(s.dir, base.Evaluation.OOP_FAILURES_JSON)))
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, base.Evaluation.NON_OOP_FAILURES_JSON)))
+    self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.CACHE_JSON)))
     self.assertTrue(
         os.path.exists(os.path.join(s.dir, base.Evaluation.INDEX_HTML)))
     self.assertTrue(
-        os.path.exists(os.path.join(s.dir, base.Evaluation.FAILURES_HTML)))
+        os.path.exists(os.path.join(s.dir, base.Evaluation.OOP_FAILURES_HTML)))
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(s.dir, base.Evaluation.NON_OOP_FAILURES_HTML)))
     self.assertTrue(
         os.path.exists(os.path.join(s.root_dir, base.Evaluation.SUMMARY_HTML))
     )
@@ -274,7 +293,10 @@ class EvaluationTest(unittest.TestCase):
     self.assertFalse(
         os.path.exists(os.path.join(s.dir, base.Evaluation.INDEX_HTML)))
     self.assertFalse(
-        os.path.exists(os.path.join(s.dir, base.Evaluation.FAILURES_HTML)))
+        os.path.exists(os.path.join(s.dir, base.Evaluation.OOP_FAILURES_HTML)))
+    self.assertFalse(
+        os.path.exists(
+            os.path.join(s.dir, base.Evaluation.NON_OOP_FAILURES_HTML)))
 
   def test_load(self):
     lm = fake.StaticResponse('Solution(final_answer=2)')
@@ -312,7 +334,16 @@ class EvaluationTest(unittest.TestCase):
                 cache_stats=dict(
                     use_cache=True, num_queries=2, num_hits=0, num_updates=2
                 ),
-                metrics=dict(total=2, failures=0, failure_rate=0.0),
+                metrics=dict(
+                    total=2,
+                    failures=0,
+                    failure_rate=0.0,
+                    oop_failures=0,
+                    oop_failure_rate=0.0,
+                    non_oop_failures=0,
+                    non_oop_failure_rate=0.0,
+                    failure_breakdown={},
+                ),
                 usage=s.children[1].result.usage,
             ),
         },
@@ -363,7 +394,18 @@ class EvaluationTest(unittest.TestCase):
                 cache_stats=dict(
                     use_cache=True, num_queries=2, num_hits=0, num_updates=2
                 ),
-                metrics=dict(total=2, failures=1, failure_rate=0.5),
+                metrics=dict(
+                    total=2,
+                    failures=1,
+                    failure_rate=0.5,
+                    oop_failures=1,
+                    oop_failure_rate=0.5,
+                    non_oop_failures=0,
+                    non_oop_failure_rate=0.0,
+                    failure_breakdown={
+                        'MappingError.SchemaError.TypeError': 1
+                    }
+                ),
                 usage=s.children[0].result.usage,
             ),
             s.children[1].id: dict(
@@ -378,7 +420,18 @@ class EvaluationTest(unittest.TestCase):
                 cache_stats=dict(
                     use_cache=True, num_queries=2, num_hits=0, num_updates=2
                 ),
-                metrics=dict(total=2, failures=1, failure_rate=0.5),
+                metrics=dict(
+                    total=2,
+                    failures=1,
+                    failure_rate=0.5,
+                    oop_failures=1,
+                    oop_failure_rate=0.5,
+                    non_oop_failures=0,
+                    non_oop_failure_rate=0.0,
+                    failure_breakdown={
+                        'MappingError.SchemaError.TypeError': 1
+                    }
+                ),
                 usage=s.children[1].result.usage,
             ),
         },
@@ -475,7 +528,7 @@ class SuiteTest(unittest.TestCase):
     self.assertEqual(s.hash, '26e6cc25')
     s.run()
     expected = {
-        s.children[0].id: dict(
+        'Evaluation@0fade07d': dict(
             experiment_setup=dict(
                 id=s.children[0].id,
                 dir=s.children[0].dir,
@@ -487,48 +540,46 @@ class SuiteTest(unittest.TestCase):
             cache_stats=dict(
                 use_cache=True, num_queries=2, num_hits=0, num_updates=2
             ),
-            metrics=dict(total=2, failures=1, failure_rate=0.5),
+            metrics=dict(
+                total=2,
+                failures=1,
+                failure_rate=0.5,
+                oop_failures=1,
+                oop_failure_rate=0.5,
+                non_oop_failures=0,
+                non_oop_failure_rate=0.0,
+                failure_breakdown={
+                    'MappingError.SchemaError.TypeError': 1
+                }
+            ),
             usage=s.children[0].result.usage,
         ),
-        s.children[1].id: {
-            s.children[1]
-            .children[0]
-            .id: dict(
-                experiment_setup=dict(
-                    id=s.children[1].children[0].id,
-                    dir=s.children[1].children[0].dir,
-                    model='StaticSequence',
-                    prompt_template='{{example.question}}',
-                    method='call',
-                    schema_fn='answer_schema()',
-                ),
-                cache_stats=dict(
-                    use_cache=True, num_queries=4, num_hits=1, num_updates=3
-                ),
-                metrics=dict(total=2, failures=2, failure_rate=1.0),
-                usage=s.children[1].children[0].result.usage,
+        'Evaluation@ae86c703': dict(
+            experiment_setup=dict(
+                id=s.children[1].children[0].id,
+                dir=s.children[1].children[0].dir,
+                model='StaticSequence',
+                prompt_template='{{example.question}}',
+                method='call',
+                schema_fn='answer_schema()',
             ),
-            s.children[1]
-            .children[2]
-            .id: dict(
-                experiment_setup=dict(
-                    id=s.children[1].children[2].id,
-                    dir=s.children[1].children[2].dir,
-                    model='StaticSequence',
-                    prompt_template='{{example.question}}',
-                    method='query',
-                    schema_fn='answer_schema()',
-                ),
-                cache_stats=dict(
-                    use_cache=True,
-                    num_queries=2,
-                    num_hits=0,
-                    num_updates=2,
-                ),
-                metrics=dict(total=2, failures=1, failure_rate=0.5),
-                usage=s.children[1].children[2].result.usage,
+            cache_stats=dict(
+                use_cache=True, num_queries=4, num_hits=1, num_updates=3
             ),
-        },
+            metrics=dict(
+                total=2,
+                failures=2,
+                failure_rate=1.0,
+                oop_failures=2,
+                oop_failure_rate=1.0,
+                non_oop_failures=0,
+                non_oop_failure_rate=0.0,
+                failure_breakdown={
+                    'MappingError.SchemaError.TypeError': 2
+                }
+            ),
+            usage=s.children[1].children[0].result.usage,
+        ),
     }
     self.assertEqual(s.result, expected)
 

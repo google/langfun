@@ -119,18 +119,18 @@ class Matching(base.Evaluation):
     del progress
     return {
         'Model': self.lm.model_id,
-        'Matches': f'%.{self.report_precision}f%% (%d/%d)' % (
-            self.match_rate * 100,
+        'Matches': '%s (%d/%d)' % (
+            self._format_rate(self.match_rate),
             self.num_matches,
             self.num_completed,
         ),
-        'Mismatches': f'%.{self.report_precision}f%% (%d/%d)' % (
-            self.mismatch_rate * 100,
+        'Mismatches': '%s (%d/%d)' % (
+            self._format_rate(self.mismatch_rate),
             self.num_mismatches,
             self.num_completed,
         ),
-        'Failed': f'%.{self.report_precision}f%% (%d/%d)' % (
-            self.failure_rate * 100,
+        'Failed': '%s (%d/%d)' % (
+            self._format_rate(self.failure_rate),
             self.num_failures,
             self.num_completed,
         ),
@@ -140,24 +140,25 @@ class Matching(base.Evaluation):
     assert self.result is not None
     m = self.result.metrics
     return (
-        f'COMPLETED(%s): Matches=%.{self.report_precision}f%% (%d/%d)'
-        f' Mismatches=%.{self.report_precision}f%% (%d/%d)'
-        f' Failures=%.{self.report_precision}f%% (%d/%d)'
+        'COMPLETED(%s):'
+        ' Matches=%s (%d/%d)'
+        ' Mismatches=%s (%d/%d)'
+        ' Failures=%s (%d/%d)'
     ) % (
         run_status,
-        m.match_rate * 100,
+        self._format_rate(m.match_rate),
         m.num_matches,
         m.total,
-        m.mismatch_rate * 100,
+        self._format_rate(m.mismatch_rate),
         m.num_mismatches,
         m.total,
-        m.failure_rate * 100,
+        self._format_rate(m.failure_rate),
         m.failures,
         m.total,
     )
 
-  def summarize(self) -> pg.Dict:
-    result = super().summarize()
+  def finalize(self) -> pg.Dict:
+    result = super().finalize()
     result.metrics.update(
         num_matches=self.num_matches,
         match_rate=self.match_rate,
@@ -218,9 +219,9 @@ class Matching(base.Evaluation):
   def _render_result_row(self, s: io.StringIO):
     super()._render_result_row(s)
     s.write(
-        '<td><span style="color:red">%s</span>%s</td>'
+        '<td><span style="color:orange">%s</span>%s</td>'
         % (
-            f'%.{self.report_precision}f%% ' % (self.mismatch_rate * 100),
+            self._format_rate(self.mismatch_rate),
             '<a href="%s">(%d/%d)</a>'
             % (self.mismatches_link, self.num_mismatches, self.num_completed),
         )
@@ -228,13 +229,13 @@ class Matching(base.Evaluation):
     s.write(
         '<td><span style="color:green">%s</span>%s</td>'
         % (
-            f'%.{self.report_precision}f%% ' % (self.match_rate * 100),
+            self._format_rate(self.match_rate),
             '<a href="%s">(%d/%d)</a>'
             % (self.matches_link, self.num_matches, self.num_completed),
         )
     )
 
-  def _render_metric(self, s: io.StringIO) -> None:
+  def _render_summary_metrics(self, s: io.StringIO) -> None:
     """Renders metrics in HTML."""
     assert self.result is not None
     m = self.result.metrics
@@ -244,7 +245,7 @@ class Matching(base.Evaluation):
             m.num_matches,
             m.total,
             self.matches_link,
-            f'%.{self.report_precision}f%% ' % (m.match_rate * 100),
+            self._format_rate(m.match_rate),
         )
     )
     s.write(' | ')
@@ -254,11 +255,11 @@ class Matching(base.Evaluation):
             m.num_mismatches,
             m.total,
             self.mismatches_link,
-            f'%.{self.report_precision}f%% ' % (m.mismatch_rate * 100),
+            self._format_rate(m.mismatch_rate),
         )
     )
     s.write(' | ')
-    super()._render_metric(s)
+    super()._render_summary_metrics(s)
 
   def _render_matches(self, s: io.StringIO) -> None:
     """Formats the matched cases into html."""

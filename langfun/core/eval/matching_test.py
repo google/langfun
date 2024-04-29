@@ -120,6 +120,13 @@ class MatchingTest(unittest.TestCase):
                 total=4,
                 failures=1,
                 failure_rate=0.25,
+                oop_failures=1,
+                oop_failure_rate=0.25,
+                non_oop_failures=0,
+                non_oop_failure_rate=0.0,
+                failure_breakdown={
+                    'MappingError.SchemaError.TypeError': 1
+                },
                 num_matches=2,
                 match_rate=0.5,
                 num_mismatches=1,
@@ -160,7 +167,14 @@ class MatchingTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, matching.Matching.FAILURES_JSON
+                s.dir, matching.Matching.OOP_FAILURES_JSON
+            )
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(
+                s.dir, matching.Matching.NON_OOP_FAILURES_JSON
             )
         )
     )
@@ -175,7 +189,14 @@ class MatchingTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, matching.Matching.FAILURES_HTML
+                s.dir, matching.Matching.OOP_FAILURES_HTML
+            )
+        )
+    )
+    self.assertTrue(
+        os.path.exists(
+            os.path.join(
+                s.dir, matching.Matching.NON_OOP_FAILURES_HTML
             )
         )
     )

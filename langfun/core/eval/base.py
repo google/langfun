@@ -18,6 +18,7 @@ import collections
 import dataclasses
 import functools
 import hashlib
+import html
 import inspect
 import io
 import os
@@ -40,7 +41,8 @@ class Evaluable(lf.Component):
 
   EXPERIMENT_JSON = 'experiment.json'
   RESULT_JSON = 'result.json'
-  FAILURES_JSON = 'failures.json'
+  OOP_FAILURES_JSON = 'oop_failures.json'
+  NON_OOP_FAILURES_JSON = 'non_oop_failures.json'
   INDEX_HTML = 'index.html'
   SUMMARY_HTML = 'summary.html'
 
@@ -358,7 +360,7 @@ class Evaluable(lf.Component):
               color='yellow')
 
           for node in self.nonleaf_nodes:
-            node._result = {c.id: c.result for c in node.children}  # pylint: disable=protected-access
+            node._result = {c.id: c.result for c in node.leaf_nodes}  # pylint: disable=protected-access
             if should_save:
               node.save(result=False, report=False)
 
@@ -540,13 +542,13 @@ class Evaluable(lf.Component):
           f'<div style="color: {text_color}; white-space: pre-wrap;'
           'padding: 10px; border: 1px solid; margin-top: 10px">'
       )
-      s.write(m.get('formatted_text', m.text))
+      s.write(html.escape(m.get('formatted_text', m.text)))
       if m.result is not None:
         s.write(
             '<div style="color: magenta; white-space: pre-wrap;'
             'padding: 10px; border: 1px solid; margin: 10px">'
         )
-        s.write(pg.format(m.result))
+        s.write(html.escape(pg.format(m.result)))
         s.write('</div>')
       if 'usage' in m.metadata:
         s.write(
@@ -753,10 +755,12 @@ class Evaluation(Evaluable):
 
   # Constants.
   CACHE_JSON = 'cache.json'
-  FAILURES_HTML = 'failures.html'
+  OOP_FAILURES_HTML = 'oop_failures.html'
+  NON_OOP_FAILURES_HTML = 'non_oop_failures.html'
 
   @functools.cached_property
   def hash(self) -> str:
+    """Returns the semantic-based hash of the evaluation."""
     if self.is_deterministic:
       identity = pg.format(self._identifiers(), compact=True)
     else:
@@ -805,6 +809,10 @@ class Evaluation(Evaluable):
     """Returns the complete rate."""
     return self.num_completed / self.num_examples
 
+  #
+  # Properties on failures.
+  #
+
   @property
   def failures(self) -> list[tuple[Any, Exception]]:
     """Returns the failed examples and their errors."""
@@ -815,12 +823,61 @@ class Evaluation(Evaluable):
     """Returns the number of failed examples."""
     return len(self.failures)
 
+  @functools.cached_property
+  def failure_breakdown(self) -> dict[str, int]:
+    """Returns the breakdown of failures."""
+    breakdown = collections.defaultdict(int)
+    for _, error in self.failures:
+      breakdown[_error_key(error)] += 1
+    sorted_items = sorted(breakdown.items(), key=lambda x: x[1], reverse=True)
+    return pg.Dict({x[0]: x[1] for x in sorted_items})
+
   @property
   def failure_rate(self) -> float:
     """Returns the failure rate in range [0, 1]."""
     if self.num_completed == 0:
       return 0.0
     return self.num_failures / self.num_completed
+
+  @functools.cached_property
+  def oop_failures(self) -> list[tuple[Any, lf_structured.MappingError]]:
+    """Returns the OOP failures."""
+    return [item for item in self.failures
+            if isinstance(item[1], lf_structured.MappingError)]
+
+  @property
+  def num_oop_failures(self) -> int:
+    """Returns the number of OOP failures."""
+    return len(self.oop_failures)
+
+  @property
+  def oop_failure_rate(self) -> float:
+    """Returns the OOP failure rate in range [0, 1]."""
+    if self.num_completed == 0:
+      return 0.0
+    return self.num_oop_failures / self.num_completed
+
+  @functools.cached_property
+  def non_oop_failures(self) -> list[tuple[Any, Exception]]:
+    """Returns the OOP failures."""
+    return [item for item in self.failures
+            if not isinstance(item[1], lf_structured.MappingError)]
+
+  @property
+  def num_non_oop_failures(self) -> int:
+    """Returns the number of non-OOP failures."""
+    return len(self.non_oop_failures)
+
+  @property
+  def non_oop_failure_rate(self) -> float:
+    """Returns the non-OOP failure rate in range [0, 1]."""
+    if self.num_completed == 0:
+      return 0.0
+    return self.num_non_oop_failures / self.num_completed
+
+  #
+  # Properties on usage.
+  #
 
   @property
   def has_usage(self) -> bool:
@@ -976,13 +1033,22 @@ class Evaluation(Evaluable):
     self._total_prompt_tokens = 0
     self._total_completion_tokens = 0
     self._num_usages = 0
+    self.__dict__.pop('oop_failures', None)
+    self.__dict__.pop('non_oop_failures', None)
 
   @property
-  def failures_link(self) -> str | None:
-    """Returns the link to the failures page."""
+  def oop_failures_link(self) -> str | None:
+    """Returns the link to the OOP failures page."""
     if self.dir is None:
       return None
-    return self.link(os.path.join(self.dir, Evaluation.FAILURES_HTML))
+    return self.link(os.path.join(self.dir, Evaluation.OOP_FAILURES_HTML))
+
+  @property
+  def non_oop_failures_link(self) -> str | None:
+    """Returns the link to then non-OOP failures page."""
+    if self.dir is None:
+      return None
+    return self.link(os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_HTML))
 
   def _dryrun(
       self,
@@ -1011,23 +1077,34 @@ class Evaluation(Evaluable):
           color='green',
       )
 
-    with lf.use_settings(debug=debug):
-      output_message = copy.process(example, **(self.additional_args or {}))
-      if self.schema is None:
-        output = output_message.text
-      else:
-        output = output_message.result
+    error, output_message = None, None
 
-    if verbose:
+    try:
+      with lf.use_settings(debug=debug):
+        output_message = copy.process(example, **(self.additional_args or {}))
+        if self.schema is None:
+          output = output_message.text
+        else:
+          output = output_message.result
+
+      if verbose:
+        lf.console.write('')
+        lf.console.write(
+            str(output),
+            title='OUTPUT',
+            color='blue',
+        )
+    except lf_structured.MappingError as e:
       lf.console.write('')
       lf.console.write(
-          str(output),
-          title='OUTPUT',
-          color='blue',
+          str(e),
+          title='ERROR',
+          color='red',
       )
+      error = e
 
-    copy.audit(example, output_message, None, dryrun=True)
-    result = copy.summarize()
+    copy.audit(example, output_message, error, dryrun=True)
+    result = copy.finalize()
 
     if verbose:
       lf.console.write('')
@@ -1087,7 +1164,7 @@ class Evaluation(Evaluable):
           self.cache.save()
 
     # Summarize result.
-    self._result = self.summarize()
+    self._result = self.finalize()
     if verbose:
       lf.console.write(
           str(self.result),
@@ -1143,13 +1220,13 @@ class Evaluation(Evaluable):
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     return {
         'Model': self.lm.model_id,
-        'Succeeded': f'%.{self.report_precision}f%% (%d/%d)' % (
-            progress.success_rate * 100,
+        'Succeeded': '%s (%d/%d)' % (
+            self._format_rate(progress.success_rate),
             progress.succeeded,
             progress.completed,
         ),
-        'Failed': f'%.{self.report_precision}f%% (%d/%d)' % (
-            progress.failure_rate * 100,
+        'Failed': '%s (%d/%d)' % (
+            self._format_rate(progress.failure_rate),
             progress.failed,
             progress.completed,
         ),
@@ -1159,21 +1236,20 @@ class Evaluation(Evaluable):
     assert self.result is not None
     m = self.result.metrics
     return (
-        f'COMPLETED(%s): Successes=%.{self.report_precision}f%% (%d/%d)'
-        f' Failures=%.{self.report_precision}f%% (%d/%d)'
+        'COMPLETED(%s): Successes=%s(%d/%d) Failures=%s (%d/%d)'
         % (
             run_status,
-            (1 - m.failure_rate) * 100,
+            self._format_rate(1 - m.failure_rate),
             m.total - m.failures,
             m.total,
-            m.failure_rate * 100,
+            self._format_rate(m.failure_rate),
             m.failures,
             m.total,
         )
     )
 
-  def summarize(self) -> pg.Dict:
-    """Summarizes the evaluation result."""
+  def finalize(self) -> pg.Dict:
+    """Finalizes the evaluation result."""
     if self.cache:
       cache_stats = dict(
           use_cache=True,
@@ -1210,12 +1286,18 @@ class Evaluation(Evaluable):
             total=self.num_completed,
             failures=self.num_failures,
             failure_rate=self.failure_rate,
+            oop_failures=self.num_oop_failures,
+            oop_failure_rate=self.oop_failure_rate,
+            non_oop_failures=self.num_non_oop_failures,
+            non_oop_failure_rate=self.non_oop_failure_rate,
+            failure_breakdown=self.failure_breakdown,
         ),
         usage=usage,
     )
     return result
 
-  def summarize_html(self) -> str:
+  def summary_card(self) -> str:
+    """Returns summary card in HTML."""
     s = io.StringIO()
     definition = _html_repr(self, compact=False, escape=True)
     s.write('<div><table><tr><td>')
@@ -1230,18 +1312,19 @@ class Evaluation(Evaluable):
       s.write(
           f'<a target="_blank" title="{definition}" '
           f'href="{self.index_link}">{self.hash}</a>'
+          f' &nbsp;[<a href="{self.link(self.dir)}">dir</a>]'
           '</td></tr><tr><td>'
       )
-      self._render_metric(s)
+      self._render_summary_metrics(s)
 
       # Summarize average usage.
       if self.result.usage is not None:
-        self._render_usage(s)
+        self._render_summary_usage(s)
 
     s.write('</td></tr></table></div>')
     return s.getvalue()
 
-  def _render_usage(self, s: io.StringIO) -> None:
+  def _render_summary_usage(self, s: io.StringIO) -> None:
     """Renders usage in HTML."""
     usage = self.result.usage
     total = usage.total_prompt_tokens + usage.total_completion_tokens
@@ -1255,19 +1338,65 @@ class Evaluation(Evaluable):
         f'" style="color:gray">({total} tokens)</a>'
     )
 
-  def _render_metric(self, s: io.StringIO) -> None:
+  def _render_summary_metrics(self, s: io.StringIO) -> None:
     """Renders metrics in HTML."""
     assert self.result is not None
     m = self.result.metrics
+
+    # OOP failures.
+    oop_failure_title = f'OOP failures ({m.oop_failures}/{m.total})'
+    if m.oop_failures:
+      oop_failure_title += '&#013;'
+      for name, count in m.failure_breakdown.items():
+        if name.startswith('MappingError'):
+          oop_failure_title += '&#013;%s: %s (%d/%d)' % (
+              name.removeprefix('MappingError.'),
+              self._format_rate(count / m.total),
+              count,
+              m.total,
+          )
+
+    extra_style = ''
+    if m.oop_failure_rate > 0.1 and m.oop_failures > 3:
+      extra_style = ';font-weight:bold'
     s.write(
-        '<a title="Failures (%d/%d)" href="%s" style="color:red">%s</a>'
+        '<a title="%s" href="%s" style="color:magenta%s">%s</a>'
         % (
-            m.failures,
-            m.total,
-            self.failures_link,
-            f'%.{self.report_precision}f%% ' % (m.failure_rate * 100),
+            oop_failure_title,
+            self.oop_failures_link,
+            extra_style,
+            self._format_rate(m.oop_failure_rate),
         )
     )
+    s.write(' | ')
+
+    # Non-OOP failures.
+    non_oop_failure_title = f'Non-OOP failures ({m.non_oop_failures}/{m.total})'
+    if m.non_oop_failures:
+      non_oop_failure_title += '&#013;'
+      for name, count in m.failure_breakdown.items():
+        if not name.startswith('MappingError'):
+          non_oop_failure_title += '&#013;%s: %s (%d/%d)' % (
+              name,
+              self._format_rate(count / m.total),
+              count,
+              m.total,
+          )
+
+    extra_style = ';font-weight:bold' if m.non_oop_failures > 0 else ''
+    s.write(
+        '<a title="%s" href="%s" style="color:red%s">%s</a>'
+        % (
+            non_oop_failure_title,
+            self.non_oop_failures_link,
+            extra_style,
+            self._format_rate(m.non_oop_failure_rate),
+        )
+    )
+
+  def _format_rate(self, rate: float) -> str:
+    """Formats a rate."""
+    return f'%.{self.report_precision}f%% ' % (rate * 100)
 
   def audit(
       self,
@@ -1287,7 +1416,13 @@ class Evaluation(Evaluable):
       dryrun: Whether or not audition takes place during dryrun.
     """
     if error is not None:
-      self._failures.append((example, str(error)))
+      self._failures.append((example, error))
+
+      # Invalid cache of num_oop_failures.
+      self.__dict__.pop('oop_failures', None)
+      self.__dict__.pop('non_oop_failures', None)
+      self.__dict__.pop('failure_breakdown', None)
+
       if isinstance(error, lf_structured.MappingError):
         message = error.lm_response
     else:
@@ -1333,16 +1468,26 @@ class Evaluation(Evaluable):
       # Save failures.
       pg.save(
           [
-              pg.Dict(
-                  input=input, error=lf.text_formatting.decolored(str(error))
-              )
-              for input, error in self.failures
+              pg.Dict(input=input, error=_format_error(error))
+              for input, error in self.oop_failures
           ],
-          os.path.join(self.dir, Evaluation.FAILURES_JSON),
+          os.path.join(self.dir, Evaluation.OOP_FAILURES_JSON),
       )
       pg.save(
-          self._html([self._render_result, self._render_failures]),
-          os.path.join(self.dir, Evaluation.FAILURES_HTML),
+          self._html([self._render_result, self._render_oop_failures]),
+          os.path.join(self.dir, Evaluation.OOP_FAILURES_HTML),
+          file_format='txt',
+      )
+      pg.save(
+          [
+              pg.Dict(input=input, error=_format_error(error))
+              for input, error in self.non_oop_failures
+          ],
+          os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_JSON),
+      )
+      pg.save(
+          self._html([self._render_result, self._render_non_oop_failures]),
+          os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_HTML),
           file_format='txt',
       )
 
@@ -1357,7 +1502,8 @@ class Evaluation(Evaluable):
     )
     if self.result.usage is not None:
       s.write('<td>Usage</td>')
-    s.write('<td>Failures</td>')
+    s.write('<td>OOP Failures</td>')
+    s.write('<td>Non-OOP Failures</td>')
 
   def _render_result_row(self, s: io.StringIO) -> None:
     s.write(
@@ -1385,16 +1531,29 @@ class Evaluation(Evaluable):
     # Usage.
     if self.result.usage is not None:
       s.write('<td>')
-      self._render_usage(s)
+      self._render_summary_usage(s)
       s.write('</td>')
 
-    # Failures.
+    # OOP failures.
     s.write(
-        '<td><span style="color:orange">%s</span>%s</td>'
+        '<td><span style="color:magenta">%s</span>%s</td>'
         % (
-            f'%.{self.report_precision}f%%' % (self.failure_rate * 100),
+            self._format_rate(self.oop_failure_rate),
             '<a href="%s">(%d/%d)</a>'
-            % (self.failures_link, self.num_failures, self.num_completed),
+            % (self.oop_failures_link,
+               self.num_oop_failures,
+               self.num_completed),
+        )
+    )
+    # Non-OOP failures.
+    s.write(
+        '<td><span style="color:red">%s</span>%s</td>'
+        % (
+            self._format_rate(self.non_oop_failure_rate),
+            '<a href="%s">(%d/%d)</a>'
+            % (self.non_oop_failures_link,
+               self.num_non_oop_failures,
+               self.num_completed),
         )
     )
 
@@ -1408,24 +1567,77 @@ class Evaluation(Evaluable):
     else:
       return 'cyan'
 
-  def _render_failures(self, s: io.StringIO) -> None:
+  def _render_oop_failures(self, s: io.StringIO) -> None:
+    self._render_failures(s, '^MappingError.*', error_color='magenta')
+
+  def _render_non_oop_failures(self, s: io.StringIO) -> None:
+    self._render_failures(s, '^(?!MappingError).*', error_color='red')
+
+  def _render_failures(
+      self, s: io.StringIO, error_regex: str, error_color: str) -> None:
     """Formats the failed cases into html."""
+    # Failure summary.
     s.write(
-        '<h2> Failed Cases </h2>'
+        '<h2> Error Summary </h2>'
         '<div style="white-space:pre">\n'
         '<table style="border:1px solid">'
-        '<tr class="header"><td>No.</td><td>Input</td><td>Error</td></tr>'
+        '<tr class="header"><td>Error type</td><td>Stats</td></tr>'
     )
+    error_regex = re.compile(error_regex)
+    if self.result.metrics.failure_breakdown:
+      for name, count in self.result.metrics.failure_breakdown.items():
+        if not error_regex.match(name):
+          continue
 
-    for i, (example, error) in enumerate(self.failures):
-      bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
-      s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
-      input_str = pg.format(example, verbose=False)
-      s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
-      error_str = lf.text_formatting.decolored(str(error))
-      s.write(f'<td style="color:red;white-space:pre">{error_str}</td>')
-      s.write('</tr>')
-    s.write('</table></div>')
+        link = f'<a href="#{name}">{name}</a>'
+        error_rate = self._format_rate(count / self.result.metrics.total)
+        stats = (f'<span style="color:{error_color}">{error_rate} '
+                 f'({count}/{self.result.metrics.total})</span>')
+        s.write(f'<tr><td>{link}</td><td>{stats})</td></tr>')
+    s.write(
+        '</table></div>'
+        '<h2> Failed Cases </h2>'
+        '<div style="white-space:pre">'
+    )
+    # Failure details by error type.
+    failures_by_error = collections.defaultdict(list)
+    for example, error in self.failures:
+      error_name = _error_key(error)
+      if error_regex.match(error_name):
+        failures_by_error[error_name].append((example, error))
+
+    for error_key, failures in failures_by_error.items():
+      s.write(
+          f'<h3 id="{error_key}"><a href="#{error_key}">{error_key}</a> '
+          f'(count={len(failures)})</h3>'
+          '<table style="border:1px solid">'
+          '<tr class="header"><td>No.</td><td>Input</td>'
+          '<td>LM invocation</td><td>Error</td></tr>'
+      )
+      for i, (example, error) in enumerate(failures):
+        lm_response = None
+        if isinstance(error, lf.structured.MappingError):
+          lm_response = error.lm_response
+          error = error.cause
+
+        bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
+        s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
+        s.write('<td style="color:green;white-space:pre-wrap">')
+        s.write(pg.format(example, verbose=False))
+        s.write('</td><td>')
+        if lm_response is not None:
+          self._render_message(lm_response, s)
+        s.write(f'</td><td style="color:{error_color};white-space:pre">')
+        s.write(_format_error(error))
+        s.write('</td></tr>')
+      s.write('</table>')
+    s.write('</div>')
+
+  @classmethod
+  def visualize(cls, evaluations: list['Evaluation']) -> str | None:
+    """Visualize the a list of evaluations of this task in HTML."""
+    del evaluations
+    return None
 
 
 @pg.functor()
@@ -1578,7 +1790,7 @@ class Summary(pg.Object):
           if e is None:
             s.write('<span style="color: gray">N/A<span>')
           else:
-            s.write(e.summarize_html())
+            s.write(e.summary_card())
           s.write('</td>')
         s.write('</tr>')
       s.write('</table>')
@@ -1653,13 +1865,22 @@ class Summary(pg.Object):
     s.write('<html><body>')
     for task in sorted(self.tasks(), key=lambda cls: cls.__name__):
       table_id = task.__name__.lower()
+      evaluations = self.select(task=task).evaluations
+      table = Summary.Table.from_evaluations(evaluations, pivot_field)
       s.write('<div>')
-      s.write(f'<a id="{table_id}"')
-      s.write(f'<h2><a href="#{table_id}">{task.__name__}</a></h2>')
-      s.write('</a>')
-      table = Summary.Table.from_evaluations(
-          self.select(task=task).evaluations, pivot_field
+      s.write(
+          f'<a id="{table_id}" href="#{table_id}">'
+          f'<h2>{task.__name__}</h2></a>'
       )
+
+      # Allow users to plugin visualization code (e.g. matplot) in the summary
+      # page.
+      visual_part = task.visualize(evaluations)
+      if visual_part:
+        s.write(visual_part)
+
+      s.write(f'<h4 style="color:gray">{len(evaluations)} experiments</h4>')
+      s.write('<hr/>')
       s.write(table.html())
       s.write('</div>')
     s.write('</body></html>')
@@ -1685,6 +1906,7 @@ class Summary(pg.Object):
                 experiment=entry,
                 dir=entry.dir,
                 metrics=entry.result.metrics if entry.result else None,
+                usage=entry.result.usage if entry.result else None,
             )
         )
       task_results[task.__name__] = results
@@ -1831,6 +2053,21 @@ class Summary(pg.Object):
         expect_new_dirs=expect_new_dirs,
     )
     return result.join()
+
+
+def _format_error(error: Exception):
+  """Formats an error into a string."""
+  return (f'({error.__class__.__name__}) '
+          + lf.text_formatting.decolored(str(error)))
+
+
+def _error_key(error: Exception) -> str:
+  """Returns the key for an error."""
+  error_names = []
+  while error is not None:
+    error_names.append(error.__class__.__name__)
+    error = getattr(error, 'cause', None)
+  return '.'.join(error_names)
 
 
 def _html_repr(value: Any, compact: bool = True, escape: bool = False) -> str:
