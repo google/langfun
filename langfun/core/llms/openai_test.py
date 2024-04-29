@@ -66,7 +66,8 @@ def mock_chat_completion_query_vision(messages, *, n=1, **kwargs):
   del kwargs
   choices = []
   urls = [
-      c['image_url'] for c in messages[0]['content'] if c['type'] == 'image_url'
+      c['image_url']['url']
+      for c in messages[0]['content'] if c['type'] == 'image_url'
   ]
   for k in range(n):
     choices.append(pg.Dict(
