@@ -749,16 +749,97 @@ class SummaryTest(unittest.TestCase):
     self.assertTrue(pg.io.path_exists(summary_file))
 
 
-class AppRunTest(unittest.TestCase):
+class NamedEvaluationTest(unittest.TestCase):
 
-  def test_app_run(self):
-    lm = fake.StaticSequence(['two', 'Solution(final_answer=2)'])
-    try:
-      base.app_run(
-          eval_set('app_run_test', 'query', schema_fn=answer_schema(), lm=lm)
+  def test_named_eval_class(self):
+
+    @base.register('named_eval/class_test')
+    class MyEval(base.Evaluation):
+      inputs = base.as_inputs([
+          pg.Dict(question='Compute 1 + 1'),
+      ])
+      method = 'query'
+      prompt = pg.oneof([
+          lf.Template('{{example.question}}'),
+          lf.Template('Hello {{example.question}}'),
+      ])
+      schema_fn = answer_schema()
+
+    evaluation = base.get_evaluation('named_eval/class_test')
+    self.assertIsInstance(evaluation, MyEval)
+    self.assertIsNone(evaluation.dir)
+    self.assertIsNone(evaluation.root_dir)
+    self.assertIn('named_eval/class_test', base.registered_names())
+
+    with self.assertRaisesRegex(ValueError, 'Unsupported type.*'):
+      @base.register('named_eval/bad_class')
+      class Foo:  # pylint: disable=unused-variable
+        pass
+
+  def test_named_eval_functor(self):
+
+    @base.register('named_eval/functor_test')
+    def my_eval():
+      return base.Evaluation(
+          inputs=base.as_inputs([
+              pg.Dict(question='Compute 1 + 1'),
+          ]),
+          method='query',
+          prompt=pg.oneof([
+              lf.Template('{{example.question}}'),
+              lf.Template('Hello {{example.question}}'),
+          ]),
+          schema_fn=answer_schema(),
       )
-    except SystemExit:
-      pass
+
+    self.assertTrue(issubclass(my_eval, base.Evaluable))
+    evaluation = base.get_evaluation('named_eval/functor_test')
+    self.assertIn('named_eval/functor_test', base.registered_names())
+    self.assertIsInstance(evaluation, my_eval)
+    self.assertIsNone(evaluation.root_dir, None)
+
+    with self.assertRaisesRegex(ValueError, 'Evaluation .* not found'):
+      base.get_evaluation('named_eval/non_existent')
+
+    with self.assertRaisesRegex(TypeError, 'The return value .*'):
+      @base.register('named_eval/bad_return_type')
+      def bad_eval():   # pylint: disable=unused-variable
+        return 1
+
+  def test_run(self):
+    @base.register('test/run')
+    def test_run():  # pylint: disable=unused-variable
+      lm = fake.StaticResponse('Solution(final_answer=2)')
+      return eval_set('run_test', 'query', schema_fn=answer_schema(), lm=lm)
+
+    e = base.run(
+        tempfile.gettempdir(),
+        ['test/run'],
+        id_regex='run_test.*',
+        mode='dryrun',
+        print_definition=True,
+    )
+    self.assertEqual(
+        e.leaf_nodes[0].dir,
+        os.path.join(tempfile.gettempdir(), e.leaf_nodes[0].id),
+    )
+    self.assertTrue(
+        pg.eq(
+            e.leaf_nodes[0].lm, fake.StaticResponse('Solution(final_answer=2)')
+        )
+    )
+
+    @pg.patcher()
+    def bad_lm(unused_eval):  # pylint: disable=unused-variable
+      return dict(lm=fake.StaticResponse('efg'))
+
+    e = base.run(
+        tempfile.gettempdir(),
+        [test_run()],
+        filter='Evaluation.*',
+        patches=['bad_lm']
+    )
+    self.assertTrue(pg.eq(e.leaf_nodes[0].lm, fake.StaticResponse('efg')))
 
 
 if __name__ == '__main__':

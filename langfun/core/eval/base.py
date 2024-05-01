@@ -25,10 +25,9 @@ import os
 import re
 import threading
 import time
+import types
 from typing import Annotated, Any, Callable, Iterator, Literal, Optional, Sequence, Type, Union
 
-from absl import app
-from absl import flags
 import langfun.core as lf
 import langfun.core.coding as lf_coding
 from langfun.core.llms.cache import in_memory
@@ -600,7 +599,6 @@ class _LeafNode:
 @pg.use_init_args(['children'])
 class Suite(Evaluable):
   """Evaluation suite."""
-
   children: Annotated[list[Evaluable], 'Child evaluation sets or suites.']
 
   # Use empty ID as suite is just a container of child evaluations.
@@ -2146,41 +2144,191 @@ def monitor_async(
   )
 
 
-def app_run(target: Evaluable):
-  """Runs the target evaluation as an absl app.
+#
+# Named evaluations and experiments support.
+#
+
+
+class _NamedEvaluationRegistry:
+  """Named evaluation registry."""
+
+  def __init__(self):
+    self._registry = {}
+
+  def names(self) -> list[str]:
+    """Returns all registered names."""
+    return sorted(self._registry.keys())
+
+  def get(self, name: str) -> Type[Evaluable]:
+    """Gets an evaluation by name."""
+    if name not in self._registry:
+      raise ValueError(
+          f'Evaluation {name!r} not found. '
+          'Did you forget to import the module that registers it?'
+      )
+    return self._registry[name]
+
+  def register(
+      self,
+      name: str,
+      experiment_cls: Type[Evaluable],
+  ):
+    """Register an experiment class."""
+    self._registry[name] = experiment_cls
+
+
+_eval_registry = _NamedEvaluationRegistry()
+
+
+def registered_names() -> list[str]:
+  """Returns all registered names."""
+  return _eval_registry.names()
+
+
+def get_evaluation(evaluation: str | Evaluable) -> Evaluable:
+  """Gets an evaluation experiment by name."""
+  if isinstance(evaluation, str):
+    return _eval_registry.get(evaluation)()
+  return evaluation
+
+
+def register(name: str):
+  """Decorator to create a named evaluation class."""
+
+  def _register(func_or_cls: Type[Evaluation] | types.FunctionType):
+    if inspect.isfunction(func_or_cls):
+      e = func_or_cls()
+      if not isinstance(e, Evaluable):
+        raise TypeError(
+            f'The return value of `{func_or_cls}` should be an instance of '
+            '`lf.eval.Evaluable` subclass.'
+        )
+
+      class GeneratedSuite(Suite):
+        # NOTE(daiyip): Delay serialization key registration for generated
+        # class.
+        auto_register = False
+        children = e.children if isinstance(e, Suite) else [e]
+
+      cls = GeneratedSuite
+      cls.__name__ = func_or_cls.__name__
+      cls.__doc__ = func_or_cls.__doc__
+      cls.__qualname__ = func_or_cls.__qualname__
+      cls.__module__ = getattr(func_or_cls, '__module__', 'wrapper')
+      cls.register_for_deserialization(cls.__type_name__)
+
+    elif issubclass(func_or_cls, Evaluable):
+      cls = func_or_cls
+    else:
+      raise ValueError(f'Unsupported type: {type(func_or_cls)}')
+
+    _eval_registry.register(name, cls)
+    return cls
+
+  return _register
+
+
+def get(
+    root_dir: str,
+    evaluations: list[str | Evaluable],
+    filter: Union[                    # pylint: disable=redefined-builtin
+        str,                          # Regex to filter evaluation based on ID.
+        Callable[[Evaluable], bool],  # Custom filter function.
+        None                          # No filtering (Default).
+    ] = None,                         # pylint: disable=bad-whitespace
+    patches: list[Union[
+        str,                                    # String-based PyGlove patcher.
+        pg.patching.Patcher,                    # PyGlove patcher object.
+        Callable[[pg.KeyPath, Any, Any], Any],  # PyGlove rebind function.
+    ]] | None = None,                           # pylint: disable=bad-whitespace
+) -> Suite:
+  """Gets a suite from a list of patched evaluations.
 
   Args:
-    target: An Langfun evaluable object.
+    root_dir: The root directory of the experiment.
+    evaluations: A list of evaluations to be included in the suite.
+    filter: A regular expression (str) for selecting sub-experiments of matched
+      IDs, or a filter function to filter the evaluations.
+    patches: A list of patches to be applied to the suite. Each element can be
+      a string (for string-based patcher), a `pg.patching.Patcher` object, or
+      a rebind function (e.g. `pg.rebind`). See `lf.eval.patch_*` for more
+      details.
+
+  Returns:
+    A suite of selected `lf.eval.Evaluation` objects.
   """
-  flags.DEFINE_string(
-      'root_dir', None, 'Root directory for running the evaluation.'
-  )
+  evaluations = [get_evaluation(e) for e in evaluations]
+  suite = Suite(evaluations, root_dir=root_dir)
+  if patches:
+    suite = pg.patch(suite, patches)
 
-  flags.DEFINE_bool(
-      'dryrun', False, 'If True, dryrun the experiment instead of running it.'
-  )
+  if isinstance(filter, str):
+    regex = re.compile(filter)
+    filter = lambda x: bool(regex.match(x.id))
 
-  flags.DEFINE_bool(
-      'debug', False, 'If True, output prompt and response to the console.'
-  )
+  if filter:
+    suite = Suite(
+        [leaf for leaf in suite.leaf_nodes if filter(leaf)], root_dir=root_dir)
+  return suite
 
-  flags.DEFINE_bool(
-      'rerun',
-      False,
-      'If True, rerun the experiment even a cached result is found.',
-  )
 
-  FLAGS = flags.FLAGS  # pylint: disable=invalid-name
+def run(
+    root_dir: str,
+    evaluations: list[str | Evaluable],
+    filter: Union[                    # pylint: disable=redefined-builtin
+        str,                          # Regex to filter evaluation based on ID.
+        Callable[[Evaluable], bool],  # Custom filter function.
+        None                          # No filtering (Default).
+    ] = None,                         # pylint: disable=bad-whitespace
+    patches: list[Union[
+        str,                                    # String-based PyGlove patcher.
+        pg.patching.Patcher,                    # PyGlove patcher object.
+        Callable[[pg.KeyPath, Any, Any], Any],  # PyGlove rebind function.
+    ]] | None = None,                           # pylint: disable=bad-whitespace
+    mode: Literal['run', 'rerun', 'dryrun', 'noop'] = 'run',
+    debug: bool = False,
+    print_definition: bool = False,
+    **kwargs,
+) -> Suite:
+  """Run selected evaluations with patching.
 
-  def _main(argv):
-    if len(argv) > 1:
-      raise app.UsageError('Too many command-line arguments.')
+  Args:
+    root_dir: The root directory of the experiment.
+    evaluations: A list of evaluations to be included in the suite.
+    filter: A regular expression (str) for selecting sub-experiments of matched
+      IDs, or a filter function to filter the evaluations.
+    patches: A list of patches to be applied to the suite. Each element can be
+      a string (for string-based patcher), a `pg.patching.Patcher` object, or
+      a rebind function (e.g. `pg.rebind`). See `lf.eval.patch_*` for more
+      details.
+    mode: The mode to run the suite. "run" to run the suite, with reusing
+      existing results if available; "rerun" to rerun all evaluations even if
+      there are existing results; "dryrun" to dryrun the suite; and "noop"
+      to do nothing.
+    debug: Whether to run in debug mode.
+    print_definition: Whether to print the experiment definition.
+    **kwargs: Additional arguments to be passed to dryrun/run the suite.
 
-    if FLAGS.root_dir:
-      target.rebind(root_dir=FLAGS.root_dir, raise_on_no_change=False)
-    if FLAGS.dryrun:
-      target.dryrun(debug=FLAGS.debug)
-    else:
-      target.run(debug=FLAGS.debug, rerun=FLAGS.rerun)
+  Returns:
+    A suite of selected `lf.eval.Evaluation` objects.
+  """
+  suite = get(root_dir, evaluations, patches=patches, filter=filter)
+  if print_definition:
+    lf.console.write(
+        pg.format(
+            suite,
+            compact=False,
+            verbose=False,
+            hide_default_values=True,
+            python_format=True,
+        ),
+        title='[EXPERIMENT DEFINITION]',
+        color='blue',
+    )
 
-  app.run(_main)
+  if mode == 'run':
+    rerun = mode == 'rerun'
+    suite.run(debug=debug, rerun=rerun, **kwargs)
+  elif mode == 'dryrun':
+    suite.dryrun(debug=debug, **kwargs)
+  return suite

@@ -16,7 +16,11 @@
 # pylint: disable=g-importing-member
 # pylint: disable=g-bad-import-order
 
-from langfun.core.eval.base import app_run
+from langfun.core.eval.base import register
+from langfun.core.eval.base import registered_names
+from langfun.core.eval.base import get_evaluation
+from langfun.core.eval.base import get
+from langfun.core.eval.base import run
 
 from langfun.core.eval.base import Evaluable
 from langfun.core.eval.base import Evaluation
@@ -34,6 +38,15 @@ from langfun.core.eval.base import as_inputs
 from langfun.core.eval.matching import Matching
 from langfun.core.eval.scoring import Scoring
 
+# Experiment patching.
+from langfun.core.eval.patching import patch_member
 
+from langfun.core.eval.patching import patch_lm
+from langfun.core.eval.patching import patch_parsing_lm
+from langfun.core.eval.patching import patch_inputs
+from langfun.core.eval.patching import patch_prompt
+from langfun.core.eval.patching import patch_schema_fn
+
+# Placeholder for Google-internal imports.
 # pylint: enable=g-bad-import-order
 # pylint: enable=g-importing-member
