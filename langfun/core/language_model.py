@@ -22,6 +22,7 @@ from langfun.core import component
 from langfun.core import concurrent
 from langfun.core import console
 from langfun.core import message as message_lib
+
 import pyglove as pg
 
 TOKENS_PER_REQUEST = 250  # Estimated num tokens for a single request
@@ -166,6 +167,11 @@ class LMScoringResult(pg.Object):
       float,
       'The log likelyhood of the requested completion towards the prompt.',
   ]
+  gradients: Annotated[
+      Any | None,
+      '(Optional) gradients from the score method, w.r.t.' +
+      ' prompt.metadata.weights.',
+  ] = None
 
 
 class LMCache(pg.Object):

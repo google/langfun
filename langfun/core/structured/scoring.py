@@ -32,8 +32,9 @@ def score(
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
+    return_scoring_results: bool = False,
     **kwargs,
-) -> list[float]:
+) -> list[float] | list[lf.LMScoringResult]:
   """Scores the outputs based on the prompt."""
   if not completions:
     raise ValueError('`completions` must not be empty.')
@@ -72,4 +73,6 @@ def score(
           for c in completions
       ],
   )
+  if return_scoring_results:
+    return results
   return [r.score for r in results]

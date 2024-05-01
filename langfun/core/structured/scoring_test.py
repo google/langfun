@@ -35,6 +35,12 @@ class ScoringTest(unittest.TestCase):
   def test_score(self):
     self.assertEqual(scoring.score('hi', [1, 2], lm=fake.Echo()), [0.0, -1.0])
 
+  def test_score_returning_scoring_results(self):
+    self.assertEqual(scoring.score(
+        'hi', [1, 2], lm=fake.Echo(), return_scoring_results=True),
+                     [lf.LMScoringResult(score=0.0, gradients=None),
+                      lf.LMScoringResult(score=-1.0, gradients=None)])
+
   def test_scope_with_lm_from_the_context(self):
     with lf.context(lm=fake.Echo()):
       self.assertEqual(scoring.score('hi', [1, 2]), [0.0, -1.0])
