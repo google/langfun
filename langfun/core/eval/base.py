@@ -549,7 +549,7 @@ class Evaluable(lf.Component):
         )
         s.write(html.escape(pg.format(m.result)))
         s.write('</div>')
-      if 'usage' in m.metadata:
+      if 'usage' in m.metadata and m.usage is not None:
         s.write(
             '<div style="background-color: #EEEEEE; color: black; '
             'white-space: pre-wrap; padding: 10px; border: 0px solid; '
@@ -1056,11 +1056,11 @@ class Evaluation(Evaluable):
       verbose: bool,
       **kwargs,
   ) -> None:
-    # Set the example for dryrun.
-    example = example or self.examples[0]
-
     # We make a copy to avoid pollute the state of current object.
     copy: Evaluation = self.clone()
+
+    # Set the example for dryrun.
+    example = example or copy.examples[0]
     copy.__dict__['examples'] = [example]
 
     # We set the symbolic parent of the cloned to access contextual information
@@ -1126,6 +1126,9 @@ class Evaluation(Evaluable):
       **kwargs,
   ) -> None:
     # Setup examples.
+    # Reset examples so it could be read from the input functor.
+    self.__dict__.pop('examples', None)
+
     if end is None:
       end = len(self.examples)
     examples = self.examples[start:end]
@@ -1434,8 +1437,9 @@ class Evaluation(Evaluable):
     self._num_completed += 1
 
   def audit_usage(self, message: lf.Message, dryrun: bool = False) -> None:
+    del dryrun
     for m in message.trace():
-      if 'usage' in m.metadata:
+      if m.metadata.get('usage', None) is not None:
         self._total_prompt_tokens += m.usage.prompt_tokens
         self._total_completion_tokens += m.usage.completion_tokens
         self._num_usages += 1
