@@ -301,6 +301,7 @@ class SchemaPythonRepr(SchemaRepr):
       schema: Schema,
       *,
       include_result_definition: bool = True,
+      include_methods: bool = False,
       markdown: bool = True,
       **kwargs,
   ) -> str:
@@ -308,7 +309,7 @@ class SchemaPythonRepr(SchemaRepr):
     if include_result_definition:
       ret += self.result_definition(schema)
     class_definition_str = self.class_definitions(
-        schema, markdown=markdown, **kwargs
+        schema, markdown=markdown, include_methods=include_methods, **kwargs
     )
     if class_definition_str:
       ret += f'\n\n{class_definition_str}'
@@ -331,6 +332,7 @@ def class_definitions(
     classes: Sequence[Type[Any]],
     *,
     include_pg_object_as_base: bool = False,
+    include_methods: bool = False,
     strict: bool = False,
     markdown: bool = False,
 ) -> str | None:
@@ -346,6 +348,7 @@ def class_definitions(
             cls,
             strict=strict,
             include_pg_object_as_base=include_pg_object_as_base,
+            include_methods=include_methods,
         )
     )
   ret = def_str.getvalue()
@@ -355,7 +358,10 @@ def class_definitions(
 
 
 def class_definition(
-    cls, strict: bool = False, include_pg_object_as_base: bool = False
+    cls,
+    strict: bool = False,
+    include_pg_object_as_base: bool = False,
+    include_methods: bool = False,
 ) -> str:
   """Returns the Python class definition."""
   out = io.StringIO()
@@ -383,6 +389,7 @@ def class_definition(
         out.write('\n')
       out.write('  """\n')
 
+  empty_class = True
   if schema.fields:
     for key, field in schema.items():
       if not isinstance(key, pg.typing.ConstStrKey):
@@ -401,9 +408,31 @@ def class_definition(
             out.write('\n')
       out.write(f'  {field.key}: {annotation(field.value, strict=strict)}')
       out.write('\n')
-  else:
+      empty_class = False
+
+  if include_methods:
+    for method in _iter_newly_defined_methods(cls):
+      out.write('\n')
+      out.write(
+          textwrap.indent(
+              inspect.cleandoc('\n' + inspect.getsource(method)), ' ' * 2)
+      )
+      out.write('\n')
+      empty_class = False
+
+  if empty_class:
     out.write('  pass\n')
   return out.getvalue()
+
+
+def _iter_newly_defined_methods(cls):
+  names = set(dir(cls))
+  for base in cls.__bases__:
+    names -= set(dir(base))
+  for name in names:
+    attr = getattr(cls, name)
+    if callable(attr):
+      yield attr
 
 
 def annotation(
@@ -493,7 +522,8 @@ def annotation(
 class SchemaJsonRepr(SchemaRepr):
   """JSON-representation for a schema."""
 
-  def repr(self, schema: Schema) -> str:
+  def repr(self, schema: Schema, **kwargs) -> str:
+    del kwargs
     out = io.StringIO()
     def _visit(node: Any) -> None:
       if isinstance(node, str):

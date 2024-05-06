@@ -461,6 +461,23 @@ class SchemaPythonReprTest(unittest.TestCase):
 
     self.assertEqual(schema_lib.class_definition(C), 'class C:\n  x: str\n')
 
+    class D(pg.Object):
+      x: str
+      def __call__(self, y: int) -> int:
+        return len(self.x) + y
+
+    self.assertEqual(
+        schema_lib.class_definition(D, include_methods=True),
+        inspect.cleandoc(
+            """
+            class D:
+              x: str
+
+              def __call__(self, y: int) -> int:
+                return len(self.x) + y
+            """) + '\n'
+    )
+
   def test_repr(self):
     class Foo(pg.Object):
       x: int
@@ -477,19 +494,30 @@ class SchemaPythonReprTest(unittest.TestCase):
     class A(pg.Object):
       foo: Foo
 
+      def foo_value(self) -> int:
+        return self.foo.x
+
     class B(A):
       bar: Bar
       foo2: Foo
 
+      def bar_value(self) -> str:
+        return self.bar.y
+
     schema = schema_lib.Schema([B])
     self.assertEqual(
-        schema_lib.SchemaPythonRepr().class_definitions(schema),
+        schema_lib.SchemaPythonRepr().class_definitions(
+            schema, include_methods=True
+        ),
         inspect.cleandoc('''
             class Foo:
               x: int
 
             class A:
               foo: Foo
+
+              def foo_value(self) -> int:
+                return self.foo.x
 
             class Bar:
               """Class Bar."""
@@ -503,6 +531,9 @@ class SchemaPythonReprTest(unittest.TestCase):
               foo: Foo
               bar: Bar
               foo2: Foo
+
+              def bar_value(self) -> str:
+                return self.bar.y
             ''') + '\n',
     )
 

@@ -251,7 +251,7 @@ class Mapping(lf.LangFunc):
 
       {%- if example.schema -%}
       {{ schema_title }}:
-      {{ example.schema_repr(protocol) | indent(2, True) }}
+      {{ example.schema_repr(protocol, include_methods=include_methods) | indent(2, True) }}
 
       {% endif -%}
 
@@ -278,6 +278,10 @@ class Mapping(lf.LangFunc):
       schema_lib.SchemaProtocol,
       'The protocol for representing the schema and value.',
   ] = 'python'
+
+  include_methods: Annotated[
+      bool, 'If True, include method definitions in the schema.'
+  ] = False
 
   #
   # Other user-provided flags.
