@@ -1179,7 +1179,7 @@ class Evaluation(Evaluable):
 
   def process(self, example: Any, **kwargs) -> lf.Message:
     """Process an example and returns its output."""
-    prompt = self.prompt.render(example=example).text
+    prompt = lf.Template.from_value(self.prompt, example=example)
     if self.method == 'call':
       return lf_structured.call(
           prompt,
@@ -1207,7 +1207,9 @@ class Evaluation(Evaluable):
     else:
       assert self.method == 'complete', self.method
       assert isinstance(self.schema.spec, pg.typing.Object), self.schema
-      input_value = self.schema.spec.cls.partial(prompt)
+      # TODO(daiyip): Currently multi-modal inputs within the prompt for
+      # completion is not supported.
+      input_value = self.schema.spec.cls.partial(prompt.render().text)
       return lf_structured.complete(
           input_value,
           lm=self.lm,

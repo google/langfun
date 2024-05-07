@@ -17,7 +17,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
-from typing import Annotated, Any, Callable, Iterator, Set, Tuple, Type
+from typing import Annotated, Any, Callable, Iterator, Set, Tuple, Type, Union
 
 import jinja2
 from jinja2 import meta as jinja2_meta
@@ -494,6 +494,27 @@ class Template(
     # it could access all the contextual variables.
     t.sym_setparent(self)
     return t
+
+  @classmethod
+  def from_value(
+      cls,
+      value: Union[str, message_lib.Message, 'Template'],
+      **kwargs
+  ) -> 'Template':
+    """Create a template object from a string or template."""
+    if isinstance(value, cls):
+      return value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter
+    if isinstance(value, str):
+      return cls(template_str=value, **kwargs)
+    if isinstance(value, message_lib.Message):
+      kwargs.update(value.metadata)
+      return cls(template_str=value.text, **kwargs)
+    if isinstance(value, Template):
+      lfun = cls(template_str=value.template_str, **kwargs)
+      # So lfun could acccess all attributes from value.
+      lfun.sym_setparent(value)
+      return lfun
+    return cls(template_str='{{input}}', input=value, **kwargs)
 
 
 # Register converter from str to LangFunc, therefore we can always

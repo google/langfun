@@ -57,6 +57,10 @@ class BasicTest(unittest.TestCase):
     l2 = LangFunc.from_value(l1)
     self.assertIs(l2, l1)
 
+    l3 = LangFunc.from_value(l1, x=1)
+    self.assertIsNot(l3, l1)
+    self.assertTrue(pg.eq(l3, LangFunc('Hello', x=1)))
+
     c = template_lib.Template(
         '{{x}} + {{l}}',
         x=1,

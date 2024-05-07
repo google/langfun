@@ -214,13 +214,8 @@ def query(
   # prompt rendering.
   prompt_kwargs.pop('template_str', None)
 
-  if isinstance(prompt, str):
-    prompt = lf.Template(prompt, **prompt_kwargs)
-  elif isinstance(prompt, lf.Template):
-    prompt = prompt.rebind(**prompt_kwargs, raise_on_no_change=False)
-
-  if isinstance(prompt, lf.Template):
-    prompt = prompt.render(lm=lm)
+  if isinstance(prompt, (str, lf.Message, lf.Template)):
+    prompt = lf.Template.from_value(prompt, **prompt_kwargs).render(lm=lm)
   else:
     prompt = schema_lib.mark_missing(prompt)
 

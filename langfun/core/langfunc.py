@@ -14,7 +14,7 @@
 """LangFunc: Language-based functions."""
 
 import dataclasses
-from typing import Annotated, Type, Union
+from typing import Annotated, Type
 
 from langfun.core import component
 from langfun.core import language_model
@@ -327,22 +327,6 @@ class LangFunc(
       self, lm_output: message_lib.Message) -> message_lib.Message:
     """Transforms the output message before returning from __call__."""
     return lm_output
-
-  @classmethod
-  def from_value(
-      cls, value: Union[str, template_lib.Template], **kwargs
-  ) -> 'LangFunc':
-    """Create a LangFunc object from a string or template."""
-    if isinstance(value, LangFunc):
-      return value
-    if isinstance(value, template_lib.Template):
-      lfun = LangFunc(value.template_str, **kwargs)
-      # So lfun could acccess all attributes from value.
-      lfun.sym_setparent(value)
-      return lfun
-    if isinstance(value, str):
-      return LangFunc(template_str=value, **kwargs)
-    return LangFunc('{{input}}', input=value, **kwargs)
 
 
 # Register converter from str to LangFunc, therefore we can always
