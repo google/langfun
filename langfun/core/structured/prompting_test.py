@@ -285,6 +285,49 @@ class QueryTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Unknown protocol'):
       prompting.query('what is 1 + 1', int, protocol='text')
 
+  def test_query_prompt(self):
+    self.assertEqual(
+        prompting.query_prompt('what is this?', int),
+        inspect.cleandoc("""
+            Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT according to OUTPUT_TYPE.
+
+            INPUT_OBJECT:
+              1 + 1 =
+
+            OUTPUT_TYPE:
+              Answer
+
+              ```python
+              class Answer:
+                final_answer: int
+              ```
+
+            OUTPUT_OBJECT:
+              ```python
+              Answer(
+                final_answer=2
+              )
+              ```
+
+            INPUT_OBJECT:
+              what is this?
+
+            OUTPUT_TYPE:
+              int
+
+            OUTPUT_OBJECT:
+            """),
+    )
+
+  def test_query_output(self):
+    self.assertEqual(
+        prompting.query_output(
+            lf.AIMessage('1'),
+            int,
+        ),
+        1,
+    )
+
 
 class QueryStructurePythonTest(unittest.TestCase):
 

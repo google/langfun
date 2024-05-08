@@ -33,6 +33,11 @@ complete = structured.complete
 score = structured.score
 generate_class = structured.generate_class
 
+# Helper functions for input/output transformations based on
+# `lf.query` (e.g. jax-on-beam could use these for batch processing)
+query_prompt = structured.query_prompt
+query_output = structured.query_output
+
 source_form = structured.source_form
 function_gen = structured.function_gen
 

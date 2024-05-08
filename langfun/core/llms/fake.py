@@ -57,12 +57,12 @@ class StaticResponse(Fake):
   """Language model that always gives the same canned response."""
 
   response: Annotated[
-      str,
+      str | lf.Message,
       'A canned response that will be returned regardless of the prompt.'
   ]
 
   def _response_from(self, prompt: lf.Message) -> lf.Message:
-    return lf.AIMessage(self.response)
+    return lf.AIMessage.from_value(self.response)
 
 
 @lf.use_init_args(['mapping'])
@@ -70,12 +70,12 @@ class StaticMapping(Fake):
   """A static mapping from prompt to response."""
 
   mapping: Annotated[
-      dict[str, str],
+      dict[str, str | lf.Message],
       'A mapping from prompt to response.'
   ]
 
   def _response_from(self, prompt: lf.Message) -> lf.Message:
-    return lf.AIMessage(self.mapping[prompt])
+    return lf.AIMessage.from_value(self.mapping[prompt])
 
 
 @lf.use_init_args(['sequence'])
@@ -83,7 +83,7 @@ class StaticSequence(Fake):
   """A static sequence of responses to use."""
 
   sequence: Annotated[
-      list[str],
+      list[str | lf.Message],
       'A sequence of strings as the response.'
   ]
 
@@ -92,6 +92,6 @@ class StaticSequence(Fake):
     self._pos = 0
 
   def _response_from(self, prompt: lf.Message) -> lf.Message:
-    r = lf.AIMessage(self.sequence[self._pos])
+    r = lf.AIMessage.from_value(self.sequence[self._pos])
     self._pos += 1
     return r

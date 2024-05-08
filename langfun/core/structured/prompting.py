@@ -16,6 +16,7 @@
 from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
+from langfun.core.llms import fake
 from langfun.core.structured import mapping
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
@@ -235,3 +236,31 @@ def query(
       skip_lm=skip_lm,
   )
   return output if returns_message else output.result
+
+
+def query_prompt(
+    prompt: Union[str, pg.Symbolic],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
+    ] = None,
+    **kwargs,
+) -> lf.Message:
+  """Returns the final prompt sent to LLM for `lf.query`."""
+  kwargs.pop('returns_message', None)
+  kwargs.pop('skip_lm', None)
+  return query(prompt, schema, skip_lm=True, returns_message=True, **kwargs)
+
+
+def query_output(
+    response: Union[str, lf.Message],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
+    ],
+    **kwargs,
+) -> Any:
+  """Returns the final output of `lf.query` from a provided LLM response."""
+  kwargs.pop('prompt', None)
+  kwargs.pop('lm', None)
+  return query(
+      'Unused prompt', schema, lm=fake.StaticResponse(response), **kwargs
+  )
