@@ -13,7 +13,6 @@
 # limitations under the License.
 """Video modality."""
 
-import base64
 from typing import cast
 from langfun.core.modalities import mime
 
@@ -40,8 +39,7 @@ class Video(mime.MimeType):
   def _repr_html_(self) -> str:
     if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
       return f'<video controls> <source src="{self.uri}"> </video>'
-    video_raw = base64.b64encode(self.to_bytes()).decode()
     return (
         '<video controls> <source'
-        f' src="data:video/{self.video_format};base64,{video_raw}"> </video>'
+        f' src="data:video/{self.content_uri}"> </video>'
     )

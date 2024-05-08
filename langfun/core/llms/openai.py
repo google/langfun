@@ -233,8 +233,9 @@ class OpenAI(lf.LanguageModel):
         for chunk in prompt.chunk():
           if isinstance(chunk, str):
             item = dict(type='text', text=chunk)
-          elif isinstance(chunk, lf_modalities.Image) and chunk.uri:
-            item = dict(type='image_url', image_url=dict(url=chunk.uri))
+          elif isinstance(chunk, lf_modalities.Image):
+            uri = chunk.uri or chunk.content_uri
+            item = dict(type='image_url', image_url=dict(url=uri))
           else:
             raise ValueError(f'Unsupported modality object: {chunk!r}.')
           content.append(item)

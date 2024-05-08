@@ -14,6 +14,7 @@
 """MIME type data."""
 
 import abc
+import base64
 from typing import Annotated, Union
 import langfun.core as lf
 import pyglove as pg
@@ -53,6 +54,11 @@ class MimeType(lf.Modality):
       content = pg.io.readfile(self.uri, mode='rb')
     self.rebind(content=content, skip_notification=True)
     return self.content
+
+  @property
+  def content_uri(self) -> str:
+    base64_content = base64.b64encode(self.to_bytes()).decode()
+    return f'data:{self.mime_type};base64,{base64_content}'
 
   @classmethod
   def from_uri(cls, uri: str, **kwargs) -> 'MimeType':

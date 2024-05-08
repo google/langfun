@@ -13,7 +13,6 @@
 # limitations under the License.
 """Image modality."""
 
-import base64
 import imghdr
 from typing import cast
 from langfun.core.modalities import mime
@@ -36,5 +35,4 @@ class Image(mime.MimeType):
   def _repr_html_(self) -> str:
     if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
       return f'<img src="{self.uri}">'
-    image_raw = base64.b64encode(self.to_bytes()).decode()
-    return f'<img src="data:image/{self.image_format};base64,{image_raw}">'
+    return f'<img src="{self.content_uri}">'
