@@ -34,6 +34,7 @@ class GenAI(lf.LanguageModel):
           'gemini-pro-vision',
           'text-bison-001',
           'chat-bison-001',
+          'gemini-1.5-pro-latest',
       ],
       'Model name.',
   ]
@@ -260,6 +261,13 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 #
 # Public Gemini models.
 #
+
+
+class GeminiPro1_5(GenAI):  # pylint: disable=invalid-name
+  """Gemini Pro latest model."""
+
+  model = 'gemini-1.5-pro-latest'
+  multimodal = True
 
 
 class GeminiPro(GenAI):
