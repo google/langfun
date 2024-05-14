@@ -35,25 +35,39 @@ from langfun.core.llms.google_genai import Palm2_IT
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
 
+from langfun.core.llms.openai import Gpt4o
+from langfun.core.llms.openai import Gpt4o_20240513
+
 from langfun.core.llms.openai import Gpt4Turbo
 from langfun.core.llms.openai import Gpt4Turbo_20240409
 from langfun.core.llms.openai import Gpt4TurboPreview
-from langfun.core.llms.openai import Gpt4TurboPreview_0125
-from langfun.core.llms.openai import Gpt4TurboPreview_1106
+from langfun.core.llms.openai import Gpt4TurboPreview_20240125
+from langfun.core.llms.openai import Gpt4TurboPreview_20231106
 from langfun.core.llms.openai import Gpt4VisionPreview
-from langfun.core.llms.openai import Gpt4VisionPreview_1106
+from langfun.core.llms.openai import Gpt4VisionPreview_20231106
 from langfun.core.llms.openai import Gpt4
-from langfun.core.llms.openai import Gpt4_0613
+from langfun.core.llms.openai import Gpt4_20230613
+
 from langfun.core.llms.openai import Gpt4_32K
-from langfun.core.llms.openai import Gpt4_32K_0613
+from langfun.core.llms.openai import Gpt4_32K_20230613
 
 from langfun.core.llms.openai import Gpt35Turbo
-from langfun.core.llms.openai import Gpt35Turbo_0125
-from langfun.core.llms.openai import Gpt35Turbo_1106
-from langfun.core.llms.openai import Gpt35Turbo_0613
+from langfun.core.llms.openai import Gpt35Turbo_20240125
+from langfun.core.llms.openai import Gpt35Turbo_20231106
+from langfun.core.llms.openai import Gpt35Turbo_20230613
 from langfun.core.llms.openai import Gpt35Turbo16K
-from langfun.core.llms.openai import Gpt35Turbo16K_0613
+from langfun.core.llms.openai import Gpt35Turbo16K_20230613
 
+# For backward compatibility.
+Gpt4TurboPreview_0125 = Gpt4TurboPreview_20240125
+Gpt4TurboPreview_1106 = Gpt4TurboPreview_20231106
+Gpt4VisionPreview_1106 = Gpt4VisionPreview_20231106
+Gpt4_0613 = Gpt4_20230613
+Gpt4_32K_0613 = Gpt4_32K_20230613
+Gpt35Turbo_0125 = Gpt35Turbo_20240125
+Gpt35Turbo_1106 = Gpt35Turbo_20231106
+Gpt35Turbo_0613 = Gpt35Turbo_20230613
+Gpt35Turbo16K_0613 = Gpt35Turbo16K_20230613
 
 from langfun.core.llms.openai import Gpt35
 

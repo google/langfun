@@ -33,7 +33,9 @@ _DEFAULT_RPM = 3000
 SUPPORTED_MODELS_AND_SETTINGS = {
     # Models from https://platform.openai.com/docs/models
     # RPM is from https://platform.openai.com/docs/guides/rate-limits
-    # GPT-4-Turbo models
+    'gpt-4o': pg.Dict(rpm=10000, tpm=1500000),
+    'gpt-4o-2024-05-13': pg.Dict(rpm=10000, tpm=1500000),
+    # GPT-4-Turbo models.
     'gpt-4-turbo': pg.Dict(rpm=10000, tpm=1500000),
     'gpt-4-turbo-2024-04-09': pg.Dict(rpm=10000, tpm=1500000),
     'gpt-4-turbo-preview': pg.Dict(rpm=10000, tpm=1500000),
@@ -309,12 +311,12 @@ class Gpt4TurboPreview(Gpt4):
   model = 'gpt-4-turbo-preview'
 
 
-class Gpt4TurboPreview_0125(Gpt4TurboPreview):  # pylint: disable=invalid-name
+class Gpt4TurboPreview_20240125(Gpt4TurboPreview):  # pylint: disable=invalid-name
   """GPT-4 Turbo Preview with 128k context window. Knowledge up to Dec. 2023."""
   model = 'gpt-4-0125-preview'
 
 
-class Gpt4TurboPreview_1106(Gpt4TurboPreview):  # pylint: disable=invalid-name
+class Gpt4TurboPreview_20231106(Gpt4TurboPreview):  # pylint: disable=invalid-name
   """GPT-4 Turbo Preview with 128k context window. Knowledge up to Apr. 2023."""
   model = 'gpt-4-1106-preview'
 
@@ -325,12 +327,12 @@ class Gpt4VisionPreview(Gpt4):
   multimodal = True
 
 
-class Gpt4VisionPreview_1106(Gpt4):  # pylint: disable=invalid-name
+class Gpt4VisionPreview_20231106(Gpt4):  # pylint: disable=invalid-name
   """GPT-4 Turbo vision preview. 128k context window. Knowledge to Apr. 2023."""
   model = 'gpt-4-1106-vision-preview'
 
 
-class Gpt4_0613(Gpt4):    # pylint:disable=invalid-name
+class Gpt4_20230613(Gpt4):    # pylint:disable=invalid-name
   """GPT-4 @20230613. 8K context window. Knowledge up to 9-2021."""
   model = 'gpt-4-0613'
 
@@ -340,9 +342,21 @@ class Gpt4_32K(Gpt4):       # pylint:disable=invalid-name
   model = 'gpt-4-32k'
 
 
-class Gpt4_32K_0613(Gpt4_32K):    # pylint:disable=invalid-name
+class Gpt4_32K_20230613(Gpt4_32K):    # pylint:disable=invalid-name
   """GPT-4 @20230613. 32K context window. Knowledge up to 9-2021."""
   model = 'gpt-4-32k-0613'
+
+
+class Gpt4o(OpenAI):
+  """GPT-4o."""
+  model = 'gpt-4o'
+  multimodal = True
+
+
+class Gpt4o_20240513(OpenAI):     # pylint:disable=invalid-name
+  """GPT-4o."""
+  model = 'gpt-4o-2024-05-13'
+  multimodal = True
 
 
 class Gpt35(OpenAI):
@@ -355,17 +369,17 @@ class Gpt35Turbo(Gpt35):
   model = 'gpt-3.5-turbo'
 
 
-class Gpt35Turbo_0125(Gpt35Turbo):   # pylint:disable=invalid-name
+class Gpt35Turbo_20240125(Gpt35Turbo):   # pylint:disable=invalid-name
   """GPT-3.5 Turbo @20240125. 16K context window. Knowledge up to 09/2021."""
   model = 'gpt-3.5-turbo-0125'
 
 
-class Gpt35Turbo_1106(Gpt35Turbo):   # pylint:disable=invalid-name
+class Gpt35Turbo_20231106(Gpt35Turbo):   # pylint:disable=invalid-name
   """Gpt3.5 Turbo @20231106. 16K context window. Knowledge up to 09/2021."""
   model = 'gpt-3.5-turbo-1106'
 
 
-class Gpt35Turbo_0613(Gpt35Turbo):   # pylint:disable=invalid-name
+class Gpt35Turbo_20230613(Gpt35Turbo):   # pylint:disable=invalid-name
   """Gpt3.5 Turbo snapshot at 2023/06/13, with 4K context window size."""
   model = 'gpt-3.5-turbo-0613'
 
@@ -375,7 +389,7 @@ class Gpt35Turbo16K(Gpt35Turbo):
   model = 'gpt-3.5-turbo-16k'
 
 
-class Gpt35Turbo16K_0613(Gpt35Turbo):   # pylint:disable=invalid-name
+class Gpt35Turbo16K_20230613(Gpt35Turbo):   # pylint:disable=invalid-name
   """Gtp 3.5 Turbo 16K 0613."""
   model = 'gpt-3.5-turbo-16k-0613'
 
