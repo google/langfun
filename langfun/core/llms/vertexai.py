@@ -99,7 +99,7 @@ class VertexAI(lf.LanguageModel):
 
     credentials = self.credentials
     # Placeholder for Google-internal credentials.
-    from google.cloud.aiplatform import vertexai  # pylint: disable=g-import-not-at-top
+    import vertexai
     vertexai.init(project=project, location=location, credentials=credentials)
     return True
 
@@ -125,7 +125,7 @@ class VertexAI(lf.LanguageModel):
       self, options: lf.LMSamplingOptions
   ) -> Any:  # generative_models.GenerationConfig
     """Creates generation config from langfun sampling options."""
-    from google.cloud.aiplatform.vertexai.preview import generative_models  # pylint: disable=g-import-not-at-top
+    from vertexai import generative_models
     return generative_models.GenerationConfig(
         temperature=options.temperature,
         top_p=options.top_p,
@@ -138,7 +138,7 @@ class VertexAI(lf.LanguageModel):
       self, prompt: lf.Message
   ) -> list[str | Any]:
     """Gets generation input from langfun message."""
-    from google.cloud.aiplatform.vertexai.preview import generative_models  # pylint: disable=g-import-not-at-top
+    from vertexai import generative_models
     chunks = []
     for lf_chunk in prompt.chunk():
       if isinstance(lf_chunk, str):
@@ -239,7 +239,7 @@ class _ModelHub:
     """Gets a generative model by model id."""
     model = self._generative_model_cache.get(model_id, None)
     if model is None:
-      from google.cloud.aiplatform.vertexai.preview import generative_models  # pylint: disable=g-import-not-at-top
+      from vertexai import generative_models
       model = generative_models.GenerativeModel(model_id)
       self._generative_model_cache[model_id] = model
     return model
@@ -250,7 +250,7 @@ class _ModelHub:
     """Gets a text generation model by model id."""
     model = self._text_generation_model_cache.get(model_id, None)
     if model is None:
-      from google.cloud.aiplatform.vertexai import language_models  # pylint: disable=g-import-not-at-top
+      from vertexai import language_models
       model = language_models.TextGenerationModel.from_pretrained(model_id)
       self._text_generation_model_cache[model_id] = model
     return model

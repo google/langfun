@@ -17,7 +17,7 @@ import os
 import unittest
 from unittest import mock
 
-from google.cloud.aiplatform.vertexai.preview import generative_models
+from vertexai import generative_models
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 from langfun.core.llms import vertexai
@@ -39,7 +39,6 @@ example_image = (
 def mock_generate_content(content, generation_config, **kwargs):
   del kwargs
   c = pg.Dict(generation_config.to_dict())
-  print('zzz', c)
   return generative_models.GenerationResponse.from_dict({
       'candidates': [
           {
@@ -111,7 +110,7 @@ class VertexAITest(unittest.TestCase):
 
   def test_model_hub(self):
     with mock.patch(
-        'google.cloud.aiplatform.vertexai.preview.generative_models.'
+        'vertexai.generative_models.'
         'GenerativeModel.__init__'
     ) as mock_model_init:
       mock_model_init.side_effect = lambda *args, **kwargs: None
@@ -125,7 +124,7 @@ class VertexAITest(unittest.TestCase):
       )
 
     with mock.patch(
-        'google.cloud.aiplatform.vertexai.language_models.'
+        'vertexai.language_models.'
         'TextGenerationModel.from_pretrained'
     ) as mock_model_init:
 
@@ -163,13 +162,13 @@ class VertexAITest(unittest.TestCase):
 
   def test_call_generative_model(self):
     with mock.patch(
-        'google.cloud.aiplatform.vertexai.preview.generative_models.'
+        'vertexai.generative_models.'
         'GenerativeModel.__init__'
     ) as mock_model_init:
       mock_model_init.side_effect = lambda *args, **kwargs: None
 
       with mock.patch(
-          'google.cloud.aiplatform.vertexai.preview.generative_models.'
+          'vertexai.generative_models.'
           'GenerativeModel.generate_content'
       ) as mock_generate:
         mock_generate.side_effect = mock_generate_content
@@ -192,7 +191,7 @@ class VertexAITest(unittest.TestCase):
 
   def test_call_text_generation_model(self):
     with mock.patch(
-        'google.cloud.aiplatform.vertexai.language_models.'
+        'vertexai.language_models.'
         'TextGenerationModel.from_pretrained'
     ) as mock_model_init:
 
