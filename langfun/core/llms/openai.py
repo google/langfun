@@ -33,17 +33,18 @@ _DEFAULT_RPM = 3000
 SUPPORTED_MODELS_AND_SETTINGS = {
     # Models from https://platform.openai.com/docs/models
     # RPM is from https://platform.openai.com/docs/guides/rate-limits
-    'gpt-4o': pg.Dict(rpm=10000, tpm=1500000),
-    'gpt-4o-2024-05-13': pg.Dict(rpm=10000, tpm=1500000),
-    # GPT-4-Turbo models.
-    'gpt-4-turbo': pg.Dict(rpm=10000, tpm=1500000),
-    'gpt-4-turbo-2024-04-09': pg.Dict(rpm=10000, tpm=1500000),
-    'gpt-4-turbo-preview': pg.Dict(rpm=10000, tpm=1500000),
-    'gpt-4-0125-preview': pg.Dict(rpm=10000, tpm=1500000),
-    'gpt-4-1106-preview': pg.Dict(rpm=10000, tpm=1500000),
-    'gpt-4-vision-preview': pg.Dict(rpm=10000, tpm=1500000),
+    # GPT-4o models
+    'gpt-4o': pg.Dict(rpm=10000, tpm=5000000),
+    'gpt-4o-2024-05-13': pg.Dict(rpm=10000, tpm=5000000),
+    # GPT-4-Turbo models
+    'gpt-4-turbo': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-4-turbo-2024-04-09': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-4-turbo-preview': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-4-0125-preview': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-4-1106-preview': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-4-vision-preview': pg.Dict(rpm=10000, tpm=2000000),
     'gpt-4-1106-vision-preview': pg.Dict(
-        rpm=10000, tpm=1500000
+        rpm=10000, tpm=2000000
     ),
     # GPT-4 models
     'gpt-4': pg.Dict(rpm=10000, tpm=300000),
