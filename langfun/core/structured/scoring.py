@@ -23,7 +23,7 @@ import pyglove as pg
 
 
 def score(
-    prompt: Union[str, pg.Symbolic],
+    prompt: Union[str, pg.Symbolic] | list[str | pg.Symbolic],
     completions: list[str | pg.Symbolic],
     schema: Union[
         schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
@@ -49,15 +49,27 @@ def score(
             f'{[type(c) for c in completions]}.'
         )
 
-  input_message = prompting.query(
-      prompt,
-      schema,
-      examples=examples,
-      protocol=protocol,
-      skip_lm=True,
-      returns_message=True,
-      **kwargs,
-  )
+  if isinstance(prompt, list):
+    prompts = []
+    for p in prompt:
+      prompts.append(
+          prompting.query_prompt(
+              p,
+              schema,
+              examples=examples,
+              protocol=protocol,
+              **kwargs,
+          )
+      )
+    input_message = prompts
+  else:
+    input_message = prompting.query_prompt(
+        prompt,
+        schema,
+        examples=examples,
+        protocol=protocol,
+        **kwargs,
+    )
   if lm is None:
     lm_override = lf.get_contextual_override('lm')
     if lm_override is None:

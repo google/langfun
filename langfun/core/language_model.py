@@ -566,12 +566,19 @@ class LanguageModel(component.Component):
 
   def score(
       self,
-      prompt: str | message_lib.Message,
+      prompt: str | message_lib.Message | list[message_lib.Message],
       completions: list[str | message_lib.Message],
       **kwargs,
   ) -> list[LMScoringResult]:
     """Scores the given prompt."""
-    prompt = message_lib.UserMessage.from_value(prompt)
+    if isinstance(prompt, list):
+      if len(prompt) != len(completions):
+        raise ValueError(
+            'prompt and completions must have the same length.'
+        )
+      prompt = [message_lib.UserMessage.from_value(p) for p in prompt]
+    else:
+      prompt = message_lib.UserMessage.from_value(prompt)
     completions = [message_lib.UserMessage.from_value(c) for c in completions]
 
     call_counter = self._call_counter
@@ -587,7 +594,8 @@ class LanguageModel(component.Component):
       return scoring_results
 
   def _score(
-      self, prompt: message_lib.Message, completions: list[message_lib.Message]
+      self, prompt: message_lib.Message | list[message_lib.Message],
+      completions: list[message_lib.Message]
   ) -> list[LMScoringResult]:
     """Subclass to implement."""
     raise NotImplementedError(
@@ -596,7 +604,7 @@ class LanguageModel(component.Component):
 
   def _debug_score(
       self,
-      prompt: message_lib.Message,
+      prompt: message_lib.Message | list[message_lib.Message],
       completions: list[message_lib.Message],
       scoring_results: list[LMScoringResult],
       call_counter: int,
@@ -615,15 +623,19 @@ class LanguageModel(component.Component):
           title=f'\n[{call_counter}] SCORING LM WITH PROMPT:',
           color='green',
       )
-      referred_modalities = prompt.referred_modalities()
-      if referred_modalities:
-        console.write(
-            pg.object_utils.kvlist_str(
-                [(k, repr(v), None) for k, v in referred_modalities.items()]
-            ),
-            title=f'\n[{call_counter}] MODALITY OBJECTS SENT TO LM:',
-            color='green',
-        )
+      if isinstance(prompt, list):
+        referred_modalities_lst = [p.referred_modalities() for p in prompt]
+      else:
+        referred_modalities_lst = [prompt.referred_modalities(),]
+      if referred_modalities_lst:
+        for referred_modalities in referred_modalities_lst:
+          console.write(
+              pg.object_utils.kvlist_str(
+                  [(k, repr(v), None) for k, v in referred_modalities.items()]
+              ),
+              title=f'\n[{call_counter}] MODALITY OBJECTS SENT TO LM:',
+              color='green',
+          )
 
     if debug & LMDebugMode.RESPONSE:
       console.write(

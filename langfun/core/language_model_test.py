@@ -68,7 +68,7 @@ class MockScoringModel(MockModel):
 
   def _score(
       self,
-      prompt: message_lib.Message,
+      prompt: message_lib.Message | list[message_lib.Message],
       completions: list[message_lib.Message],
       **kwargs
   ) -> list[lm_lib.LMScoringResult]:
@@ -508,6 +508,17 @@ class LanguageModelTest(unittest.TestCase):
             ],
         )
 
+        self.assertEqual(
+            lm.score(
+                [message_lib.UserMessage('hi {{image}}', image=Image()),
+                 message_lib.UserMessage('hi {{image}}', image=Image())],
+                ['1', '2'], debug=debug_mode),
+            [
+                lm_lib.LMScoringResult(score=-0.0),
+                lm_lib.LMScoringResult(score=-1.0),
+            ],
+        )
+
       debug_info = string_io.getvalue()
       expected_included = [
           debug_prints[f]
@@ -527,6 +538,10 @@ class LanguageModelTest(unittest.TestCase):
 
       if debug_mode & lm_lib.LMDebugMode.PROMPT:
         self.assertIn('[0] MODALITY OBJECTS SENT TO LM', debug_info)
+
+  def test_score_with_unmatched_prompt_and_completions(self):
+    with self.assertRaises(ValueError):
+      MockScoringModel().score(['hi',], ['1', '2', '3'])
 
   def test_score_with_unsupported_model(self):
     with self.assertRaises(NotImplementedError):

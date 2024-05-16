@@ -21,7 +21,8 @@ import langfun.core as lf
 class Fake(lf.LanguageModel):
   """The base class for all fake language models."""
 
-  def _score(self, prompt: lf.Message, completions: list[lf.Message]):
+  def _score(self, prompt: lf.Message| list[lf.Message],
+             completions: list[lf.Message]):
     return [lf.LMScoringResult(score=-i * 1.0) for i in range(len(completions))]
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
