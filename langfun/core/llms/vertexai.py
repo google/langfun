@@ -25,6 +25,7 @@ import pyglove as pg
 
 SUPPORTED_MODELS_AND_SETTINGS = {
     'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=5),
+    'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=5),
     'gemini-1.0-pro': pg.Dict(api='gemini', rpm=300),
     'gemini-1.0-pro-vision': pg.Dict(api='gemini', rpm=100),
     # PaLM APIs.
@@ -263,6 +264,13 @@ class VertexAIGeminiPro1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-preview-0409'
+  multimodal = True
+
+
+class VertexAIGeminiFlash1_5(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model."""
+
+  model = 'gemini-1.5-flash-preview-0514'
   multimodal = True
 
 
