@@ -260,15 +260,18 @@ class ClassDependenciesTest(unittest.TestCase):
     class A(pg.Object):
       foo: tuple[Foo, int]
 
-    class X(pg.Object):
-      k: int
+    class B(pg.Object):
+      pass
 
-    class B(A):
+    class X(pg.Object):
+      k: dict[str, B]
+
+    class C(A):
       bar: Bar
       foo2: Foo | X
 
     a = A(foo=(Foo(1), 0))
-    self.assertEqual(schema_lib.class_dependencies(a), [Foo, A, Bar, X, B])
+    self.assertEqual(schema_lib.class_dependencies(a), [Foo, A, Bar, B, X, C])
 
     self.assertEqual(schema_lib.class_dependencies(1), [])
 
@@ -393,6 +396,15 @@ class SchemaPythonReprTest(unittest.TestCase):
     self.assert_annotation(
         pg.typing.Dict(),
         'dict[str, Any]',
+        strict=False,
+    )
+
+    class DictValue(pg.Object):
+      pass
+
+    self.assert_annotation(
+        pg.typing.Dict([(pg.typing.StrKey(), DictValue)]),
+        'dict[str, DictValue]',
         strict=False,
     )
     self.assert_annotation(

@@ -262,7 +262,7 @@ def class_dependencies(
         _fill_dependencies(elem.value, include_subclasses)
     elif isinstance(vs, pg.typing.Dict) and vs.schema:
       for v in vs.schema.values():
-        _fill_dependencies(v, include_subclasses)
+        _fill_dependencies(v.value, include_subclasses)
     elif isinstance(vs, pg.typing.Union):
       for v in vs.candidates:
         _fill_dependencies(v, include_subclasses)
@@ -508,6 +508,9 @@ def annotation(
       x = '{' + kv_str + '}'
       if strict:
         x = f'pg.typing.Dict({x})'
+    elif vs.schema and vs.schema.dynamic_field:
+      v = annotation(vs.schema.dynamic_field.value, strict=strict)
+      x = f'dict[str, {v}]'
     else:
       x = 'dict[str, Any]'
 
