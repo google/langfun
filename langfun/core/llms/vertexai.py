@@ -160,14 +160,16 @@ class VertexAI(lf.LanguageModel):
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized, 'Vertex AI API is not initialized.'
+    # TODO(yifenglu): It seems this exception is due to the instability of the
+    # API. We should revisit this later.
+    retry_on_errors = [(Exception, 'InternalServerError')]
+
     return lf.concurrent_execute(
         self._sample_single,
         prompts,
         executor=self.resource_id,
         max_workers=self.max_concurrency,
-        # NOTE(daiyip): Vertex has its own policy on handling
-        # with rate limit, so we do not retry on errors.
-        retry_on_errors=None,
+        retry_on_errors=retry_on_errors,
     )
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
