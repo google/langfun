@@ -35,6 +35,7 @@ class GenAI(lf.LanguageModel):
           'text-bison-001',
           'chat-bison-001',
           'gemini-1.5-pro-latest',
+          'gemini-1.5-flash-latest'
       ],
       'Model name.',
   ]
@@ -267,6 +268,13 @@ class GeminiPro1_5(GenAI):  # pylint: disable=invalid-name
   """Gemini Pro latest model."""
 
   model = 'gemini-1.5-pro-latest'
+  multimodal = True
+
+
+class GeminiFlash1_5(GenAI):  # pylint: disable=invalid-name
+  """Gemini Flash latest model."""
+
+  model = 'gemini-1.5-flash-latest'
   multimodal = True
 
 
