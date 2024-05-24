@@ -86,7 +86,7 @@ class VertexAITest(unittest.TestCase):
     chunks = model._content_from_message(message)
     self.maxDiff = None
     self.assertEqual([chunks[0], chunks[2]], ['This is an', ', what is it?'])
-    self.assertIsInstance(chunks[1], generative_models.Image)
+    self.assertIsInstance(chunks[1], generative_models.Part)
 
   def test_generation_response_to_message_text_only(self):
     response = generative_models.GenerationResponse.from_dict({

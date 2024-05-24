@@ -24,6 +24,7 @@ import pyglove as pg
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
+    'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=5),
     'gemini-1.0-pro': pg.Dict(api='gemini', rpm=300),
@@ -144,8 +145,10 @@ class VertexAI(lf.LanguageModel):
     for lf_chunk in prompt.chunk():
       if isinstance(lf_chunk, str):
         chunk = lf_chunk
-      elif self.multimodal and isinstance(lf_chunk, lf_modalities.Image):
-        chunk = generative_models.Image.from_bytes(lf_chunk.to_bytes())
+      elif self.multimodal and isinstance(lf_chunk, lf_modalities.MimeType):
+        chunk = generative_models.Part.from_data(
+            lf_chunk.to_bytes(), lf_chunk.mime_type
+        )
       else:
         raise ValueError(f'Unsupported modality: {lf_chunk!r}')
       chunks.append(chunk)
@@ -263,6 +266,13 @@ _VERTEXAI_MODEL_HUB = _ModelHub()
 
 
 class VertexAIGeminiPro1_5(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model."""
+
+  model = 'gemini-1.5-pro-preview-0514'
+  multimodal = True
+
+
+class VertexAIGeminiPro1_5_0409(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-preview-0409'
