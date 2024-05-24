@@ -11,18 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Modalities for LLM."""
+"""PDF modality."""
 
-# pylint: disable=g-importing-member
-# pylint: disable=g-bad-import-order
-# pylint: disable=g-import-not-at-top
+from langfun.core.modalities import mime
 
-from langfun.core.modalities.mime import MimeType
-from langfun.core.modalities.mime import Custom
-from langfun.core.modalities.image import Image
-from langfun.core.modalities.pdf import PDF
-from langfun.core.modalities.video import Video
 
-# pylint: enable=g-import-not-at-top
-# pylint: enable=g-bad-import-order
-# pylint: enable=g-importing-member
+class PDF(mime.MimeType):
+  """PDF document."""
+
+  MIME_PREFIX = 'application/pdf'

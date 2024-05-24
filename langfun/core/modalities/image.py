@@ -13,26 +13,18 @@
 # limitations under the License.
 """Image modality."""
 
-import imghdr
-from typing import cast
+import functools
 from langfun.core.modalities import mime
 
 
 class Image(mime.MimeType):
-  """Base class for image."""
+  """Image."""
 
-  @property
+  MIME_PREFIX = 'image'
+
+  @functools.cached_property
   def image_format(self) -> str:
-    iformat = imghdr.what(None, self.to_bytes())
-    if iformat not in ['png', 'jpeg']:
-      raise ValueError(f'Unsupported image format: {iformat!r}.')
-    return cast(str, iformat)
+    return self.mime_type.removeprefix(self.MIME_PREFIX + '/')
 
-  @property
-  def mime_type(self) -> str:
-    return f'image/{self.image_format}'
-
-  def _repr_html_(self) -> str:
-    if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
-      return f'<img src="{self.uri}">'
-    return f'<img src="{self.content_uri}">'
+  def _html(self, uri: str) -> str:
+    return f'<img src="{uri}">'

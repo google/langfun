@@ -42,13 +42,13 @@ class CustomMimeTest(unittest.TestCase):
       mime.Custom('text/plain')
 
   def test_from_uri(self):
-    content = mime.Custom.from_uri('http://mock/web/a.txt', type='text/plain')
+    content = mime.Custom.from_uri('http://mock/web/a.txt', mime='text/plain')
     with mock.patch('requests.get') as mock_requests_stub:
       mock_requests_stub.side_effect = mock_request
       self.assertEqual(content.to_bytes(), 'foo')
       self.assertEqual(content.mime_type, 'text/plain')
 
-    content = mime.Custom.from_uri('a.txt', type='text/plain')
+    content = mime.Custom.from_uri('a.txt', mime='text/plain')
     with mock.patch('pyglove.io.readfile') as mock_readfile_stub:
       mock_readfile_stub.side_effect = mock_readfile
       self.assertEqual(content.to_bytes(), 'bar')

@@ -46,7 +46,7 @@ class ImageContentTest(unittest.TestCase):
 
   def test_bad_image(self):
     image = image_lib.Image.from_bytes(b'bad')
-    with self.assertRaisesRegex(ValueError, 'Unsupported image format'):
+    with self.assertRaisesRegex(ValueError, 'Expected MIME type'):
       _ = image.image_format
 
 

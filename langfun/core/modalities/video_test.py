@@ -43,7 +43,7 @@ class VideoContentTest(unittest.TestCase):
 
   def test_bad_video(self):
     video = video_lib.Video.from_bytes(b'bad')
-    with self.assertRaisesRegex(ValueError, 'Not a video'):
+    with self.assertRaisesRegex(ValueError, 'Expected MIME type'):
       _ = video.video_format
 
 

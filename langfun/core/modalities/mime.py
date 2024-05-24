@@ -13,10 +13,11 @@
 # limitations under the License.
 """MIME type data."""
 
-import abc
 import base64
+import functools
 from typing import Annotated, Union
 import langfun.core as lf
+import magic
 import pyglove as pg
 import requests
 
@@ -24,16 +25,25 @@ import requests
 class MimeType(lf.Modality):
   """Base for MIME type data."""
 
-  @property
-  @abc.abstractmethod
-  def mime_type(self) -> str:
-    """Returns the MIME type."""
+  # The regular expression that describes the MIME type str.
+  # If None, the MIME type is dynamic. Subclass could override.
+  MIME_PREFIX = None
 
   uri: Annotated[str | None, 'The URI for locating the MIME data. '] = None
 
   content: Annotated[
       Union[str, bytes, None], 'The raw content of the MIME type.'
   ] = None
+
+  @functools.cached_property
+  def mime_type(self) -> str:
+    """Returns the MIME type."""
+    mime = magic.from_buffer((self.to_bytes()), mime=True)
+    if self.MIME_PREFIX and not mime.lower().startswith(self.MIME_PREFIX):
+      raise ValueError(
+          f'Expected MIME type: {self.MIME_PREFIX}, Encountered: {mime}'
+      )
+    return mime
 
   def _on_bound(self):
     super()._on_bound()
@@ -68,20 +78,25 @@ class MimeType(lf.Modality):
   def from_bytes(cls, content: bytes | str, **kwargs) -> 'MimeType':
     return cls(content=content, **kwargs)
 
+  def _repr_html_(self) -> str:
+    if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
+      uri = self.uri
+    else:
+      uri = self.content_uri
+    return self._html(uri)
 
-@pg.use_init_args(['type', 'content', 'uri'])
+  def _html(self, uri) -> str:
+    return f'<embed type="{self.mime_type}" src="{uri}"/>'
+
+
+@pg.use_init_args(['mime', 'content', 'uri'])
 class Custom(MimeType):
   """Custom MIME data."""
 
-  type: Annotated[
+  mime: Annotated[
       str, 'The MIME type of the data. E.g. text/plain, or image/png. '
   ]
 
   @property
   def mime_type(self) -> str:
-    return self.type
-
-
-class PDF(Custom):
-  """PDF document."""
-  type = 'application/pdf'
+    return self.mime

@@ -13,33 +13,18 @@
 # limitations under the License.
 """Video modality."""
 
-from typing import cast
+import functools
 from langfun.core.modalities import mime
 
 
 class Video(mime.MimeType):
-  """Base class for Video."""
+  """Video."""
 
-  @property
+  MIME_PREFIX = 'video'
+
+  @functools.cached_property
   def video_format(self) -> str:
-    return cast(str, self.mime_type.lstrip('video/'))
+    return self.mime_type.removeprefix(self.MIME_PREFIX + '/')
 
-  @property
-  def mime_type(self) -> str:
-    # TODO(daiyip): after cl/619658455, LaunchPad binaries cannot import `magic`
-    # correctly. This is to mitigate the issue for major Langfun users who do
-    # not use Video. We shall move this import out once the issue is fixed.
-    import magic  # pylint: disable=g-import-not-at-top
-
-    video_mime_type = magic.from_buffer(self.to_bytes(), mime=True)
-    if 'video/' not in video_mime_type:
-      raise ValueError(f'Not a video: {video_mime_type!r}.')
-    return video_mime_type
-
-  def _repr_html_(self) -> str:
-    if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
-      return f'<video controls> <source src="{self.uri}"> </video>'
-    return (
-        '<video controls> <source'
-        f' src="data:video/{self.content_uri}"> </video>'
-    )
+  def _html(self, uri: str) -> str:
+    return f'<video controls> <source src="{uri}"> </video>'
