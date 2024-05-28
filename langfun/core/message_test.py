@@ -54,7 +54,7 @@ class MessageTest(unittest.TestCase):
     self.assertTrue(
         pg.eq(
             message.UserMessage.from_value(CustomModality('foo')),
-            message.UserMessage('{{object}}', object=CustomModality('foo')),
+            message.UserMessage('<<[[object]]>>', object=CustomModality('foo')),
         )
     )
     m = message.UserMessage('hi')
@@ -258,13 +258,16 @@ class MessageTest(unittest.TestCase):
 
   def test_referred_modalities(self):
     m1 = message.UserMessage(
-        'hi, this is a {{img1}} and {{x.img2}}',
+        'hi, this is a <<[[img1]]>> and <<[[x.img2]]>>',
         img1=CustomModality('foo'),
         x=dict(img2=CustomModality('bar')),
     )
     m2 = message.SystemMessage('class Question:\n  image={{img1}}', source=m1)
     m3 = message.AIMessage(
-        'This is the {{output_image}} based on {{x.img2}}, {{unknown_var}}',
+        (
+            'This is the <<[[output_image]]>> based on <<[[x.img2]]>>, '
+            '{{unknown_var}}'
+        ),
         output_image=CustomModality('bar'),
         source=m2,
     )
@@ -279,8 +282,8 @@ class MessageTest(unittest.TestCase):
   def test_chunking(self):
     m = message.UserMessage(
         inspect.cleandoc("""
-            Hi, this is {{a}} and this is {{b}}.
-            {{x.c}} {{something else
+            Hi, this is <<[[a]]>> and this is {{b}}.
+            <<[[x.c]]>> {{something else
             """),
         a=CustomModality('foo'),
         x=dict(c=CustomModality('bar')),
@@ -294,7 +297,7 @@ class MessageTest(unittest.TestCase):
                 CustomModality('foo'),
                 'and this is {{b}}.',
                 CustomModality('bar'),
-                ' {{something else',
+                '{{something else',
             ],
         )
     )
@@ -304,10 +307,10 @@ class MessageTest(unittest.TestCase):
             message.AIMessage(
                 inspect.cleandoc("""
                     Hi, this is
-                    {{obj0}}
+                    <<[[obj0]]>>
                     and this is {{b}}.
-                    {{obj1}}
-                     {{something else
+                    <<[[obj1]]>>
+                    {{something else
                     """),
                 obj0=pg.Ref(m.a),
                 obj1=pg.Ref(m.x.c),

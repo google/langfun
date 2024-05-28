@@ -208,7 +208,7 @@ class QueryTest(unittest.TestCase):
         modalities.Image.from_bytes(b'mock_image'),
         int,
         lm=lm,
-        expected_snippet='\n\nINPUT_OBJECT:\n  {{input}}\n\n',
+        expected_snippet='\n\nINPUT_OBJECT:\n  <<[[input]]>>\n\n',
         expected_modalities=1,
     )
 
@@ -218,7 +218,7 @@ class QueryTest(unittest.TestCase):
         modalities.Image.from_bytes(b'mock_image'),
         None,
         lm=lm,
-        expected_snippet='{{input}}',
+        expected_snippet='<<[[input]]>>',
         exact_match=True,
         expected_modalities=1,
     )
@@ -231,7 +231,9 @@ class QueryTest(unittest.TestCase):
         this_image=modalities.Image.from_bytes(b'cat_image'),
         that_image=modalities.Image.from_bytes(b'mouse_image'),
         lm=lm,
-        expected_snippet='What are these? {{this_image}} and {{that_image}}',
+        expected_snippet=(
+            'What are these? <<[[this_image]]>> and <<[[that_image]]>>'
+        ),
         exact_match=True,
         expected_modalities=2,
     )
@@ -245,7 +247,7 @@ class QueryTest(unittest.TestCase):
         ],
         None,
         lm=lm,
-        expected_snippet='`[{{input[0]}}, {{input[1]}}]`',
+        expected_snippet='`[<<[[input[0]]]>>, <<[[input[1]]]>>]`',
         exact_match=True,
         expected_modalities=2,
     )
@@ -274,8 +276,8 @@ class QueryTest(unittest.TestCase):
 
             MODALITY_REFERENCES:
               {
-                'input[0]': {{input[0]}},
-                'input[1]': {{input[1]}}
+                'input[0]': <<[[input[0]]]>>,
+                'input[1]': <<[[input[1]]]>>
               }
             """),
         expected_modalities=2,

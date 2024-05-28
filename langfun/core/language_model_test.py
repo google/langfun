@@ -418,8 +418,9 @@ class LanguageModelTest(unittest.TestCase):
     with contextlib.redirect_stdout(string_io):
       self.assertEqual(
           lm(message_lib.UserMessage(
-              'hi {{image}}', image=Image()), debug=True),
-          'hi {{image}}')
+              'hi <<[[image]]>>', image=Image()), debug=True),
+          'hi <<[[image]]>>'
+      )
 
     debug_info = string_io.getvalue()
     self.assertIn('[0] LM INFO', debug_info)

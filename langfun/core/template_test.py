@@ -309,7 +309,7 @@ class RenderTest(unittest.TestCase):
         Template(
             'This is {{ x }} and {{ a }}', x=1, a=CustomModality('foo')
         ).render(),
-        'This is 1 and {{a}}',
+        'This is 1 and <<[[a]]>>',
     )
 
   def test_render_with_default(self):

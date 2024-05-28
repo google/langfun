@@ -464,7 +464,7 @@ class CompleteStructureTest(unittest.TestCase):
 
             MODALITY_REFERENCES:
               {
-                'examples[0].input.image': {{examples[0].input.image}}
+                'examples[0].input.image': <<[[examples[0].input.image]]>>
               }
 
             OUTPUT_OBJECT:
@@ -490,7 +490,7 @@ class CompleteStructureTest(unittest.TestCase):
 
             MODALITY_REFERENCES:
               {
-                'input.image': {{input.image}}
+                'input.image': <<[[input.image]]>>
               }
 
             OUTPUT_OBJECT:

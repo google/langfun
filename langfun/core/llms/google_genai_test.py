@@ -102,7 +102,7 @@ class GenAITest(unittest.TestCase):
 
   def test_content_from_message_mm(self):
     message = lf.UserMessage(
-        'This is an {{image}}, what is it?',
+        'This is an <<[[image]]>>, what is it?',
         image=lf_modalities.Image.from_bytes(example_image),
     )
 

@@ -32,8 +32,8 @@ def format_modality_as_ref(enabled: bool = True) -> ContextManager[None]:
 class Modality(component.Component):
   """Base class for multimodal object."""
 
-  REF_START = '{{'
-  REF_END = '}}'
+  REF_START = '<<[['
+  REF_END = ']]>>'
 
   def format(self, *args, **kwargs) -> str:
     if self.referred_name is None or not pg.object_utils.thread_local_get(

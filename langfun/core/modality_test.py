@@ -37,7 +37,7 @@ class ModalityTest(unittest.TestCase):
     self.assertEqual(v.referred_name, 'x.metadata.y')
     self.assertEqual(str(v), "CustomModality(\n  content = 'a'\n)")
     with modality.format_modality_as_ref():
-      self.assertEqual(str(v), '{{x.metadata.y}}')
+      self.assertEqual(str(v), '<<[[x.metadata.y]]>>')
 
 
 class ModalityRefTest(unittest.TestCase):

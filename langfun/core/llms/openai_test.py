@@ -164,7 +164,7 @@ class OpenAITest(unittest.TestCase):
         self.assertEqual(
             lm(
                 lf.UserMessage(
-                    'hello {{image}}',
+                    'hello <<[[image]]>>',
                     image=lf_modalities.Image.from_uri('https://fake/image')
                 ),
                 sampling_options=lf.LMSamplingOptions(n=2)
