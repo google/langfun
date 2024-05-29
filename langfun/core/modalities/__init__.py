@@ -17,8 +17,12 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-import-not-at-top
 
+from langfun.core.modalities.audio import Audio
 from langfun.core.modalities.mime import MimeType
 from langfun.core.modalities.mime import Custom
+from langfun.core.modalities.ms_office import Docx
+from langfun.core.modalities.ms_office import Pptx
+from langfun.core.modalities.ms_office import Xlsx
 from langfun.core.modalities.image import Image
 from langfun.core.modalities.pdf import PDF
 from langfun.core.modalities.video import Video
