@@ -16,6 +16,8 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-importing-member
 
+from langfun.core.structured.schema import include_method_in_prompt
+
 from langfun.core.structured.schema import Missing
 from langfun.core.structured.schema import MISSING
 from langfun.core.structured.schema import Unknown

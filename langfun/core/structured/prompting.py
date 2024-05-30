@@ -114,7 +114,6 @@ def query(
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     protocol: schema_lib.SchemaProtocol = 'python',
-    include_methods: bool = False,
     returns_message: bool = False,
     skip_lm: bool = False,
     **kwargs,
@@ -174,8 +173,6 @@ def query(
       will use `lm`.
     protocol: The protocol for schema/value representation. Applicable values
       are 'json' and 'python'. By default `python` will be used.
-    include_methods: If True, include method definitions in the output type
-      during prompting.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     skip_lm: If True, returns the rendered prompt as a UserMessage object.
@@ -225,7 +222,6 @@ def query(
       schema=schema,
       default=default,
       examples=examples,
-      include_methods=include_methods,
       response_postprocess=response_postprocess,
       autofix=autofix if protocol == 'python' else 0,
       **kwargs,

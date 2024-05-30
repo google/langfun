@@ -16,12 +16,24 @@
 import abc
 import inspect
 import io
+import re
 import textwrap
 import typing
 from typing import Any, Literal, Sequence, Type, Union
 import langfun.core as lf
 from langfun.core.coding.python import correction
 import pyglove as pg
+
+
+def include_method_in_prompt(method):
+  """Decorator to include a method in the class definition of the prompt."""
+  setattr(method, '__show_in_prompt__', True)
+  return method
+
+
+def should_include_method_in_prompt(method):
+  """Returns true if the method should be shown in the prompt."""
+  return getattr(method, '__show_in_prompt__', False)
 
 
 def parse_value_spec(value) -> pg.typing.ValueSpec:
@@ -163,9 +175,12 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
 
   def class_dependencies(
       self,
+      include_base_classes: bool = True,
       include_subclasses: bool = True) -> list[Type[Any]]:
     """Returns a list of class dependencies for current schema."""
-    return class_dependencies(self.spec, include_subclasses)
+    return class_dependencies(
+        self.spec, include_base_classes, include_subclasses
+    )
 
   @classmethod
   def from_value(cls, value) -> 'Schema':
@@ -198,11 +213,12 @@ def class_dependencies(
         Type[pg.Object],
         tuple[Union[pg.typing.ValueSpec, Type[pg.Object]], ...],
     ],
+    include_base_classes: bool = True,
     include_subclasses: bool = True,
 ) -> list[Type[Any]]:
   """Returns a list of class dependencies from a value or specs."""
   if isinstance(value_or_spec, Schema):
-    return value_or_spec.class_dependencies(include_subclasses)
+    value_or_spec = value_or_spec.spec
 
   if inspect.isclass(value_or_spec) or isinstance(
       value_or_spec, pg.typing.ValueSpec
@@ -236,13 +252,14 @@ def class_dependencies(
       if vs.cls not in seen:
         seen.add(vs.cls)
 
-        # Add base classes as dependencies.
-        for base_cls in vs.cls.__bases__:
-          # We only keep track of user-defined symbolic classes.
-          if base_cls is not object and base_cls is not pg.Object:
-            _fill_dependencies(
-                pg.typing.Object(base_cls), include_subclasses=False
-            )
+        if include_base_classes:
+          # Add base classes as dependencies.
+          for base_cls in vs.cls.__bases__:
+            # We only keep track of user-defined symbolic classes.
+            if base_cls is not object and base_cls is not pg.Object:
+              _fill_dependencies(
+                  pg.typing.Object(base_cls), include_subclasses=False
+              )
 
         # Add members as dependencies.
         for field in _pg_schema(vs.cls).values():
@@ -301,7 +318,6 @@ class SchemaPythonRepr(SchemaRepr):
       schema: Schema,
       *,
       include_result_definition: bool = True,
-      include_methods: bool = False,
       markdown: bool = True,
       **kwargs,
   ) -> str:
@@ -309,15 +325,27 @@ class SchemaPythonRepr(SchemaRepr):
     if include_result_definition:
       ret += self.result_definition(schema)
     class_definition_str = self.class_definitions(
-        schema, markdown=markdown, include_methods=include_methods, **kwargs
+        schema, markdown=markdown, **kwargs
     )
     if class_definition_str:
       ret += f'\n\n{class_definition_str}'
     return ret.strip()
 
-  def class_definitions(self, schema: Schema, **kwargs) -> str | None:
-    deps = schema.class_dependencies(include_subclasses=True)
-    return class_definitions(deps, **kwargs)
+  def class_definitions(
+      self,
+      schema: Schema,
+      additional_dependencies: list[Type[Any]] | None = None,
+      **kwargs
+  ) -> str | None:
+    """Returns a string containing of class definitions from a schema."""
+    deps = schema.class_dependencies(
+        include_base_classes=False, include_subclasses=True
+    )
+    allowed_dependencies = set(deps)
+    if additional_dependencies:
+      allowed_dependencies.update(additional_dependencies)
+    return class_definitions(
+        deps, allowed_dependencies=allowed_dependencies, **kwargs)
 
   def result_definition(self, schema: Schema) -> str:
     return annotation(schema.spec)
@@ -331,8 +359,7 @@ def source_form(value, markdown: bool = False) -> str:
 def class_definitions(
     classes: Sequence[Type[Any]],
     *,
-    include_pg_object_as_base: bool = False,
-    include_methods: bool = False,
+    allowed_dependencies: set[Type[Any]] | None = None,
     strict: bool = False,
     markdown: bool = False,
 ) -> str | None:
@@ -347,8 +374,7 @@ def class_definitions(
         class_definition(
             cls,
             strict=strict,
-            include_pg_object_as_base=include_pg_object_as_base,
-            include_methods=include_methods,
+            allowed_dependencies=allowed_dependencies,
         )
     )
   ret = def_str.getvalue()
@@ -360,8 +386,7 @@ def class_definitions(
 def class_definition(
     cls,
     strict: bool = False,
-    include_pg_object_as_base: bool = False,
-    include_methods: bool = False,
+    allowed_dependencies: set[Type[Any]] | None = None,
 ) -> str:
   """Returns the Python class definition."""
   out = io.StringIO()
@@ -369,7 +394,7 @@ def class_definition(
   eligible_bases = []
   for base_cls in cls.__bases__:
     if base_cls is not object:
-      if include_pg_object_as_base or base_cls is not pg.Object:
+      if allowed_dependencies is None or base_cls in allowed_dependencies:
         eligible_bases.append(base_cls.__name__)
 
   if eligible_bases:
@@ -406,32 +431,41 @@ def class_definition(
             out.write('  # ')
             out.write(line)
             out.write('\n')
-      out.write(f'  {field.key}: {annotation(field.value, strict=strict)}')
+
+      annotation_str = annotation(
+          field.value, strict=strict, allowed_dependencies=allowed_dependencies
+      )
+      out.write(f'  {field.key}: {annotation_str}')
       out.write('\n')
       empty_class = False
 
-  if include_methods:
-    for method in _iter_newly_defined_methods(cls):
-      out.write('\n')
-      out.write(
-          textwrap.indent(
-              inspect.cleandoc('\n' + inspect.getsource(method)), ' ' * 2)
-      )
-      out.write('\n')
-      empty_class = False
+  for method in _iter_newly_defined_methods(cls, allowed_dependencies):
+    source = inspect.getsource(method)
+    # Remove decorators from the method definition.
+    source = re.sub(r'\s*@.*\.include_method_in_prompt.*\n', '', source)
+    out.write('\n')
+    out.write(
+        textwrap.indent(
+            inspect.cleandoc('\n' + source), ' ' * 2)
+    )
+    out.write('\n')
+    empty_class = False
 
   if empty_class:
     out.write('  pass\n')
   return out.getvalue()
 
 
-def _iter_newly_defined_methods(cls):
-  names = set(dir(cls))
+def _iter_newly_defined_methods(
+    cls, allowed_dependencies: set[Type[Any]] | None):
+  names = {attr_name: True for attr_name in dir(cls)}
   for base in cls.__bases__:
-    names -= set(dir(base))
-  for name in names:
+    if allowed_dependencies is None or base in allowed_dependencies:
+      for name in dir(base):
+        names.pop(name, None)
+  for name in names.keys():
     attr = getattr(cls, name)
-    if callable(attr):
+    if callable(attr) and should_include_method_in_prompt(attr):
       yield attr
 
 
@@ -439,8 +473,12 @@ def annotation(
     vs: pg.typing.ValueSpec,
     annotate_optional: bool = True,
     strict: bool = False,
+    allowed_dependencies: set[Type[Any]] | None = None,
 ) -> str:
   """Returns the annotation string for a value spec."""
+  child_annotation_kwargs = dict(
+      strict=strict, allowed_dependencies=allowed_dependencies
+  )
   if isinstance(vs, pg.typing.Any):
     return 'Any'
   elif isinstance(vs, pg.typing.Enum):
@@ -449,7 +487,7 @@ def annotation(
   elif isinstance(vs, pg.typing.Union):
     candidate_str = ', '.join(
         [
-            annotation(c, annotate_optional=False, strict=strict)
+            annotation(c, annotate_optional=False, **child_annotation_kwargs)
             for c in vs.candidates
         ]
     )
@@ -485,20 +523,23 @@ def annotation(
         )
       x += '(' + ', '.join(constraints) + ')'
   elif isinstance(vs, pg.typing.Object):
-    x = vs.cls.__name__
+    if allowed_dependencies is None or vs.cls in allowed_dependencies:
+      x = vs.cls.__name__
+    else:
+      x = 'Any'
   elif isinstance(vs, pg.typing.List):
-    item_str = annotation(vs.element.value, strict=strict)
+    item_str = annotation(vs.element.value, **child_annotation_kwargs)
     x = f'list[{item_str}]'
   elif isinstance(vs, pg.typing.Tuple):
     elem_str = ', '.join(
-        [annotation(el.value, strict=strict) for el in vs.elements]
+        [annotation(el.value, **child_annotation_kwargs) for el in vs.elements]
     )
     x = f'tuple[{elem_str}]'
   elif isinstance(vs, pg.typing.Dict):
     kv_pairs = None
     if vs.schema is not None:
       kv_pairs = [
-          (k, annotation(f.value, strict=strict))
+          (k, annotation(f.value, **child_annotation_kwargs))
           for k, f in vs.schema.items()
           if isinstance(k, pg.typing.ConstStrKey)
       ]
@@ -509,7 +550,7 @@ def annotation(
       if strict:
         x = f'pg.typing.Dict({x})'
     elif vs.schema and vs.schema.dynamic_field:
-      v = annotation(vs.schema.dynamic_field.value, strict=strict)
+      v = annotation(vs.schema.dynamic_field.value, **child_annotation_kwargs)
       x = f'dict[str, {v}]'
     else:
       x = 'dict[str, Any]'
@@ -604,7 +645,12 @@ class ValuePythonRepr(ValueRepr):
       cls_schema = Schema.from_value(value)
       if isinstance(cls_schema.spec, pg.typing.Object):
         object_code = SchemaPythonRepr().class_definitions(
-            cls_schema, markdown=markdown, include_pg_object_as_base=True
+            cls_schema,
+            markdown=markdown,
+            # We add `pg.Object` as additional dependencies to the class
+            # definition so exemplars for class generation could show
+            # pg.Object as their bases.
+            additional_dependencies=[pg.Object]
         )
         assert object_code is not None
         return object_code

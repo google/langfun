@@ -107,7 +107,9 @@ class CompleteStructure(mapping.Mapping):
 
   def class_defs_repr(self, value: Any) -> str | None:
     return schema_lib.class_definitions(
-        self.missing_type_dependencies(value), markdown=True
+        self.missing_type_dependencies(value),
+        markdown=True,
+        allowed_dependencies=set()
     )
 
   def postprocess_result(self, result: Any) -> Any:

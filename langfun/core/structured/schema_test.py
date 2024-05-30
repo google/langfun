@@ -283,9 +283,10 @@ class SchemaPythonReprTest(unittest.TestCase):
       value_spec: pg.typing.ValueSpec,
       expected_annotation: str,
       strict: bool = False,
+      **kwargs,
   ) -> None:
     self.assertEqual(
-        schema_lib.annotation(value_spec, strict=strict),
+        schema_lib.annotation(value_spec, strict=strict, **kwargs),
         expected_annotation,
     )
 
@@ -361,10 +362,26 @@ class SchemaPythonReprTest(unittest.TestCase):
     self.assert_annotation(
         pg.typing.Object(Activity).noneable(), 'Activity | None'
     )
+    self.assert_annotation(
+        pg.typing.Object(Activity).noneable(), 'Activity | None',
+        allowed_dependencies=set([Activity]),
+    )
+    self.assert_annotation(
+        pg.typing.Object(Activity).noneable(), 'Any | None',
+        allowed_dependencies=set(),
+    )
 
     # List.
     self.assert_annotation(
         pg.typing.List(pg.typing.Object(Activity)), 'list[Activity]'
+    )
+    self.assert_annotation(
+        pg.typing.List(pg.typing.Object(Activity)), 'list[Activity]',
+        allowed_dependencies=set([Activity]),
+    )
+    self.assert_annotation(
+        pg.typing.List(pg.typing.Object(Activity)), 'list[Any]',
+        allowed_dependencies=set(),
     )
     self.assert_annotation(
         pg.typing.List(pg.typing.Object(Activity)).noneable(),
@@ -377,16 +394,35 @@ class SchemaPythonReprTest(unittest.TestCase):
 
     # Tuple.
     self.assert_annotation(
-        pg.typing.Tuple([pg.typing.Int(), pg.typing.Str()]), 'tuple[int, str]'
+        pg.typing.Tuple([Activity, pg.typing.Str()]), 'tuple[Activity, str]'
     )
     self.assert_annotation(
-        pg.typing.Tuple([pg.typing.Int(), pg.typing.Str()]).noneable(),
-        'tuple[int, str] | None',
+        pg.typing.Tuple([Activity, pg.typing.Str()]), 'tuple[Activity, str]',
+        allowed_dependencies=set([Activity]),
+    )
+    self.assert_annotation(
+        pg.typing.Tuple([Activity, pg.typing.Str()]), 'tuple[Any, str]',
+        allowed_dependencies=set(),
+    )
+    self.assert_annotation(
+        pg.typing.Tuple([Activity, pg.typing.Str()]).noneable(),
+        'tuple[Activity, str] | None',
     )
 
     # Dict.
     self.assert_annotation(
-        pg.typing.Dict({'x': int, 'y': str}), '{\'x\': int, \'y\': str}'
+        pg.typing.Dict({'x': Activity, 'y': str}),
+        '{\'x\': Activity, \'y\': str}'
+    )
+    self.assert_annotation(
+        pg.typing.Dict({'x': Activity, 'y': str}),
+        '{\'x\': Activity, \'y\': str}',
+        allowed_dependencies=set([Activity]),
+    )
+    self.assert_annotation(
+        pg.typing.Dict({'x': Activity, 'y': str}),
+        '{\'x\': Any, \'y\': str}',
+        allowed_dependencies=set(),
     )
     self.assert_annotation(
         pg.typing.Dict({'x': int, 'y': str}),
@@ -420,6 +456,13 @@ class SchemaPythonReprTest(unittest.TestCase):
         ).noneable(),
         'Union[Activity, Itinerary, None]',
     )
+    self.assert_annotation(
+        pg.typing.Union(
+            [pg.typing.Object(Activity), pg.typing.Object(Itinerary)]
+        ).noneable(),
+        'Union[Activity, Any, None]',
+        allowed_dependencies=set([Activity]),
+    )
 
     # Any.
     self.assert_annotation(pg.typing.Any(), 'Any')
@@ -427,13 +470,13 @@ class SchemaPythonReprTest(unittest.TestCase):
 
   def test_class_definition(self):
     self.assertEqual(
-        schema_lib.class_definition(Activity),
+        schema_lib.class_definition(Activity, allowed_dependencies=set()),
         'class Activity:\n  description: str\n',
     )
     self.assertEqual(
         schema_lib.class_definition(Itinerary),
         inspect.cleandoc("""
-            class Itinerary:
+            class Itinerary(Object):
               \"\"\"A travel itinerary for a day.\"\"\"
               day: int(min=1)
               type: Literal['daytime', 'nighttime']
@@ -443,7 +486,9 @@ class SchemaPythonReprTest(unittest.TestCase):
             """) + '\n',
     )
     self.assertEqual(
-        schema_lib.class_definition(PlaceOfInterest),
+        schema_lib.class_definition(
+            PlaceOfInterest, allowed_dependencies=set()
+        ),
         inspect.cleandoc("""
             class PlaceOfInterest:
               \"\"\"The name of a place of interest.
@@ -459,11 +504,11 @@ class SchemaPythonReprTest(unittest.TestCase):
       pass
 
     self.assertEqual(
-        schema_lib.class_definition(A),
+        schema_lib.class_definition(A, allowed_dependencies=set()),
         'class A:\n  pass\n',
     )
     self.assertEqual(
-        schema_lib.class_definition(A, include_pg_object_as_base=True),
+        schema_lib.class_definition(A),
         'class A(Object):\n  pass\n',
     )
 
@@ -471,18 +516,21 @@ class SchemaPythonReprTest(unittest.TestCase):
       x: str
       __kwargs__: typing.Any
 
-    self.assertEqual(schema_lib.class_definition(C), 'class C:\n  x: str\n')
+    self.assertEqual(
+        schema_lib.class_definition(C), 'class C(Object):\n  x: str\n'
+    )
 
     class D(pg.Object):
       x: str
+      @schema_lib.include_method_in_prompt
       def __call__(self, y: int) -> int:
         return len(self.x) + y
 
     self.assertEqual(
-        schema_lib.class_definition(D, include_methods=True),
+        schema_lib.class_definition(D),
         inspect.cleandoc(
             """
-            class D:
+            class D(Object):
               x: str
 
               def __call__(self, y: int) -> int:
@@ -506,30 +554,27 @@ class SchemaPythonReprTest(unittest.TestCase):
     class A(pg.Object):
       foo: Foo
 
+      @schema_lib.include_method_in_prompt
       def foo_value(self) -> int:
         return self.foo.x
+
+      def baz_value(self) -> str:
+        return 'baz'
 
     class B(A):
       bar: Bar
       foo2: Foo
 
+      @schema_lib.include_method_in_prompt
       def bar_value(self) -> str:
         return self.bar.y
 
     schema = schema_lib.Schema([B])
     self.assertEqual(
-        schema_lib.SchemaPythonRepr().class_definitions(
-            schema, include_methods=True
-        ),
+        schema_lib.SchemaPythonRepr().class_definitions(schema),
         inspect.cleandoc('''
             class Foo:
               x: int
-
-            class A:
-              foo: Foo
-
-              def foo_value(self) -> int:
-                return self.foo.x
 
             class Bar:
               """Class Bar."""
@@ -539,13 +584,16 @@ class SchemaPythonReprTest(unittest.TestCase):
               """Baz(y: str)"""
               y: str
 
-            class B(A):
+            class B:
               foo: Foo
               bar: Bar
               foo2: Foo
 
               def bar_value(self) -> str:
                 return self.bar.y
+
+              def foo_value(self) -> int:
+                return self.foo.x
             ''') + '\n',
     )
 
@@ -562,9 +610,6 @@ class SchemaPythonReprTest(unittest.TestCase):
             class Foo:
               x: int
 
-            class A:
-              foo: Foo
-
             class Bar:
               """Class Bar."""
               y: str
@@ -573,10 +618,16 @@ class SchemaPythonReprTest(unittest.TestCase):
               """Baz(y: str)"""
               y: str
 
-            class B(A):
+            class B:
               foo: Foo
               bar: Bar
               foo2: Foo
+
+              def bar_value(self) -> str:
+                return self.bar.y
+
+              def foo_value(self) -> int:
+                return self.foo.x
             ```
             '''),
     )
@@ -584,15 +635,11 @@ class SchemaPythonReprTest(unittest.TestCase):
         schema_lib.SchemaPythonRepr().repr(
             schema,
             include_result_definition=False,
-            include_pg_object_as_base=True,
             markdown=False,
         ),
         inspect.cleandoc('''
-            class Foo(Object):
+            class Foo:
               x: int
-
-            class A(Object):
-              foo: Foo
 
             class Bar:
               """Class Bar."""
@@ -602,10 +649,16 @@ class SchemaPythonReprTest(unittest.TestCase):
               """Baz(y: str)"""
               y: str
 
-            class B(A):
+            class B:
               foo: Foo
               bar: Bar
               foo2: Foo
+
+              def bar_value(self) -> str:
+                return self.bar.y
+
+              def foo_value(self) -> int:
+                return self.foo.x
             '''),
     )
 
@@ -653,7 +706,7 @@ class ValuePythonReprTest(unittest.TestCase):
             ```python
             class Foo(Object):
               x: int
-            
+
             class A(Object):
               foo: list[Foo]
               y: str | None

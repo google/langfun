@@ -23,6 +23,8 @@ Schema = structured.Schema
 MISSING = structured.MISSING
 UNKNOWN = structured.UNKNOWN
 
+include_method_in_prompt = structured.include_method_in_prompt
+
 MappingExample = structured.MappingExample
 
 call = structured.call
