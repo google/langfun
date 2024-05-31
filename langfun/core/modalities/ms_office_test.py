@@ -286,9 +286,12 @@ class DocxTest(unittest.TestCase):
 
   def test_from_bytes(self):
     content = ms_office_lib.Docx.from_bytes(docx_bytes)
-    self.assertEqual(
+    self.assertIn(
         content.mime_type,
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        (
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/octet-stream',
+        ),
     )
     self.assertEqual(content.to_bytes(), docx_bytes)
     self.assertTrue(content.is_compatible('text/plain'))
@@ -302,9 +305,12 @@ class DocxTest(unittest.TestCase):
     content = ms_office_lib.Docx.from_uri('http://mock/web/a.docx')
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = docx_mock_request
-      self.assertEqual(
+      self.assertIn(
           content.mime_type,
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          (
+              'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'application/octet-stream',
+          ),
       )
       self.assertEqual(content.to_bytes(), docx_bytes)
       self.assertEqual(content.to_xml(), expected_docx_xml)
@@ -314,9 +320,12 @@ class XlsxTest(unittest.TestCase):
 
   def test_from_bytes(self):
     content = ms_office_lib.Xlsx.from_bytes(xlsx_bytes)
-    self.assertEqual(
+    self.assertIn(
         content.mime_type,
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        (
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/octet-stream',
+        ),
     )
     self.assertEqual(content.to_bytes(), xlsx_bytes)
     self.assertTrue(content.is_compatible('text/plain'))
@@ -330,9 +339,12 @@ class XlsxTest(unittest.TestCase):
     content = ms_office_lib.Xlsx.from_uri('http://mock/web/a.xlsx')
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = xlsx_mock_request
-      self.assertEqual(
+      self.assertIn(
           content.mime_type,
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          (
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'application/octet-stream',
+          ),
       )
       self.assertEqual(content.to_bytes(), xlsx_bytes)
       self.assertEqual(content.to_html(), expected_xlsx_html)
@@ -342,9 +354,12 @@ class PptxTest(unittest.TestCase):
 
   def test_content(self):
     content = ms_office_lib.Pptx.from_bytes(pptx_bytes)
-    self.assertEqual(
+    self.assertIn(
         content.mime_type,
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        (
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/octet-stream',
+        ),
     )
     self.assertEqual(content.to_bytes(), pptx_bytes)
 
@@ -354,9 +369,12 @@ class PptxTest(unittest.TestCase):
     self.assertTrue(content.is_compatible('application/pdf'))
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = pptx_mock_request
-      self.assertEqual(
+      self.assertIn(
           content.mime_type,
-          'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          (
+              'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              'application/octet-stream',
+          ),
       )
       self.assertEqual(content.to_bytes(), pptx_bytes)
 

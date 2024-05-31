@@ -39,7 +39,13 @@ class Mime(lf.Modality):
   def mime_type(self) -> str:
     """Returns the MIME type."""
     mime = magic.from_buffer((self.to_bytes()), mime=True)
-    if self.MIME_PREFIX and not mime.lower().startswith(self.MIME_PREFIX):
+    if (
+        self.MIME_PREFIX
+        and not mime.lower().startswith(self.MIME_PREFIX)
+        # NOTE(daiyip): libmagic fails to detect the MIME type of some binary
+        # files.
+        and mime != 'application/octet-stream'
+    ):
       raise ValueError(
           f'Expected MIME type: {self.MIME_PREFIX}, Encountered: {mime}'
       )
