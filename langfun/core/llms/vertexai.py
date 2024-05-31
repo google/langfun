@@ -75,9 +75,10 @@ class VertexAI(lf.LanguageModel):
       ),
   ] = None
 
-  multimodal: Annotated[bool, 'Whether this model has multimodal support.'] = (
-      False
-  )
+  supported_modalities: Annotated[
+      list[str],
+      'A list of MIME types for supported modalities'
+  ] = []
 
   def _on_bound(self):
     super()._on_bound()
@@ -142,16 +143,29 @@ class VertexAI(lf.LanguageModel):
     """Gets generation input from langfun message."""
     from vertexai import generative_models
     chunks = []
+
     for lf_chunk in prompt.chunk():
       if isinstance(lf_chunk, str):
-        chunk = lf_chunk
-      elif self.multimodal and isinstance(lf_chunk, lf_modalities.MimeType):
-        chunk = generative_models.Part.from_data(
-            lf_chunk.to_bytes(), lf_chunk.mime_type
-        )
+        chunks.append(lf_chunk)
+      elif isinstance(lf_chunk, lf_modalities.Mime):
+        try:
+          modalities = lf_chunk.make_compatible(
+              self.supported_modalities + ['text/plain']
+          )
+          if isinstance(modalities, lf_modalities.Mime):
+            modalities = [modalities]
+          for modality in modalities:
+            if modality.is_text:
+              chunk = modality.to_text()
+            else:
+              chunk = generative_models.Part.from_data(
+                  modality.to_bytes(), modality.mime_type
+              )
+            chunks.append(chunk)
+        except lf.ModalityError as e:
+          raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}') from e
       else:
-        raise ValueError(f'Unsupported modality: {lf_chunk!r}')
-      chunks.append(chunk)
+        raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}')
     return chunks
 
   def _generation_response_to_message(
@@ -265,25 +279,64 @@ class _ModelHub:
 _VERTEXAI_MODEL_HUB = _ModelHub()
 
 
+_IMAGE_TYPES = [
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+]
+
+_AUDIO_TYPES = [
+    'audio/aac',
+    'audio/flac',
+    'audio/mp3',
+    'audio/m4a',
+    'audio/mpeg',
+    'audio/mpga',
+    'audio/mp4',
+    'audio/opus',
+    'audio/pcm',
+    'audio/wav',
+    'audio/webm'
+]
+
+_VIDEO_TYPES = [
+    'video/mov',
+    'video/mpeg',
+    'video/mpegps',
+    'video/mpg',
+    'video/mp4',
+    'video/webm',
+    'video/wmv',
+    'video/x-flv',
+    'video/3gpp',
+]
+
+_PDF = [
+    'application/pdf',
+]
+
+
 class VertexAIGeminiPro1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-preview-0514'
-  multimodal = True
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class VertexAIGeminiPro1_5_0409(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-preview-0409'
-  multimodal = True
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class VertexAIGeminiFlash1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash-preview-0514'
-  multimodal = True
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class VertexAIGeminiPro1(VertexAI):  # pylint: disable=invalid-name
@@ -296,7 +349,7 @@ class VertexAIGeminiPro1Vision(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.0 Pro model."""
 
   model = 'gemini-1.0-pro-vision'
-  multimodal = True
+  supported_modalities = _IMAGE_TYPES + _VIDEO_TYPES
 
 
 class VertexAIPalm2(VertexAI):  # pylint: disable=invalid-name

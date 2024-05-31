@@ -57,6 +57,8 @@ from langfun.core import memories
 
 from langfun.core import modalities
 
+Mime = modalities.Mime
+MimeType = Mime  # For backwards compatibility.
 Image = modalities.Image
 Video = modalities.Video
 PDF = modalities.PDF

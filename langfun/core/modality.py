@@ -108,3 +108,7 @@ class ModalityRef(pg.Object, pg.typing.CustomTyping):
         return ModalityRef(name=value.sym_path + k)
       return v
     return value.clone().rebind(_placehold, raise_on_no_change=False)
+
+
+class ModalityError(RuntimeError):  # pylint: disable=g-bad-exception-name
+  """Exception raised when modality is not supported."""

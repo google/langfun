@@ -15,6 +15,7 @@
 import unittest
 from unittest import mock
 
+import langfun.core as lf
 from langfun.core.modalities import mime
 import pyglove as pg
 
@@ -31,10 +32,24 @@ def mock_readfile(*args, **kwargs):
 
 class CustomMimeTest(unittest.TestCase):
 
-  def test_content(self):
-    content = mime.Custom('text/plain', 'foo')
-    self.assertEqual(content.to_bytes(), 'foo')
+  def test_from_byes(self):
+    content = mime.Mime.from_bytes(b'hello')
+    self.assertIs(content.__class__, mime.Mime)
+
+    content = mime.Custom('text/plain', b'foo')
+    self.assertEqual(content.to_bytes(), b'foo')
     self.assertEqual(content.mime_type, 'text/plain')
+    self.assertTrue(content.is_text)
+    self.assertFalse(content.is_binary)
+    self.assertEqual(content.to_text(), 'foo')
+    self.assertTrue(content.is_compatible('text/plain'))
+    self.assertFalse(content.is_compatible('text/xml'))
+    self.assertIs(content.make_compatible('text/plain'), content)
+
+    with self.assertRaisesRegex(
+        lf.ModalityError, '.* cannot be converted to supported types'
+    ):
+      content.make_compatible('application/pdf')
 
     with self.assertRaisesRegex(
         ValueError, 'Either uri or content must be provided.'

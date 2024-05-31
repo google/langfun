@@ -107,7 +107,7 @@ class GenAITest(unittest.TestCase):
     )
 
     # Non-multimodal model.
-    with self.assertRaisesRegex(ValueError, 'Unsupported modality'):
+    with self.assertRaisesRegex(lf.ModalityError, 'Unsupported modality'):
       google_genai.GeminiPro()._content_from_message(message)
 
     model = google_genai.GeminiProVision()

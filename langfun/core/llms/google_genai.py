@@ -49,9 +49,10 @@ class GenAI(lf.LanguageModel):
       ),
   ] = None
 
-  multimodal: Annotated[bool, 'Whether this model has multimodal support.'] = (
-      False
-  )
+  supported_modalities: Annotated[
+      list[str],
+      'A list of MIME types for supported modalities'
+  ] = []
 
   # Set the default max concurrency to 8 workers.
   max_concurrency = 8
@@ -118,14 +119,27 @@ class GenAI(lf.LanguageModel):
     chunks = []
     for lf_chunk in formatted.chunk():
       if isinstance(lf_chunk, str):
-        chunk = lf_chunk
-      elif self.multimodal and isinstance(lf_chunk, lf_modalities.MimeType):
-        chunk = genai.types.BlobDict(
-            data=lf_chunk.to_bytes(), mime_type=lf_chunk.mime_type
-        )
+        chunks.append(lf_chunk)
+      elif isinstance(lf_chunk, lf_modalities.Mime):
+        try:
+          modalities = lf_chunk.make_compatible(
+              self.supported_modalities + ['text/plain']
+          )
+          if isinstance(modalities, lf_modalities.Mime):
+            modalities = [modalities]
+          for modality in modalities:
+            if modality.is_text:
+              chunk = modality.to_text()
+            else:
+              chunk = genai.types.BlobDict(
+                  data=modality.to_bytes(),
+                  mime_type=modality.mime_type
+              )
+            chunks.append(chunk)
+        except lf.ModalityError as e:
+          raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}') from e
       else:
-        raise ValueError(f'Unsupported modality: {lf_chunk!r}')
-      chunks.append(chunk)
+        raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}')
     return chunks
 
   def _response_to_result(
@@ -264,18 +278,57 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 #
 
 
+_IMAGE_TYPES = [
+    'image/png',
+    'image/jpeg',
+    'image/webp',
+    'image/heic',
+    'image/heif',
+]
+
+_AUDIO_TYPES = [
+    'audio/aac',
+    'audio/flac',
+    'audio/mp3',
+    'audio/m4a',
+    'audio/mpeg',
+    'audio/mpga',
+    'audio/mp4',
+    'audio/opus',
+    'audio/pcm',
+    'audio/wav',
+    'audio/webm'
+]
+
+_VIDEO_TYPES = [
+    'video/mov',
+    'video/mpeg',
+    'video/mpegps',
+    'video/mpg',
+    'video/mp4',
+    'video/webm',
+    'video/wmv',
+    'video/x-flv',
+    'video/3gpp',
+]
+
+_PDF = [
+    'application/pdf',
+]
+
+
 class GeminiPro1_5(GenAI):  # pylint: disable=invalid-name
   """Gemini Pro latest model."""
 
   model = 'gemini-1.5-pro-latest'
-  multimodal = True
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class GeminiFlash1_5(GenAI):  # pylint: disable=invalid-name
   """Gemini Flash latest model."""
 
   model = 'gemini-1.5-flash-latest'
-  multimodal = True
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class GeminiPro(GenAI):
@@ -288,7 +341,7 @@ class GeminiProVision(GenAI):
   """Gemini Pro vision model."""
 
   model = 'gemini-pro-vision'
-  multimodal = True
+  supported_modalities = _IMAGE_TYPES + _VIDEO_TYPES
 
 
 class Palm2(GenAI):

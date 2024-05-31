@@ -16,7 +16,7 @@
 from langfun.core.modalities import mime
 
 
-class PDF(mime.MimeType):
+class PDF(mime.Mime):
   """PDF document."""
 
   MIME_PREFIX = 'application/pdf'

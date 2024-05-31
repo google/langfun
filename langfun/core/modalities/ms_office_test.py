@@ -12,11 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Video tests."""
+import base64
 import io
 import unittest
 from unittest import mock
 
 from langfun.core.modalities import ms_office as ms_office_lib
+from langfun.core.modalities import pdf as pdf_lib
 import pyglove as pg
 
 
@@ -243,17 +245,60 @@ def pptx_mock_request(*args, **kwargs):
   return pg.Dict(content=pptx_bytes)
 
 
+pdf_bytes = (
+    b'%PDF-1.1\n%\xc2\xa5\xc2\xb1\xc3\xab\n\n1 0 obj\n'
+    b'<< /Type /Catalog\n     /Pages 2 0 R\n  >>\nendobj\n\n2 0 obj\n '
+    b'<< /Type /Pages\n     /Kids [3 0 R]\n     '
+    b'/Count 1\n     /MediaBox [0 0 300 144]\n  '
+    b'>>\nendobj\n\n3 0 obj\n  '
+    b'<<  /Type /Page\n      /Parent 2 0 R\n      /Resources\n       '
+    b'<< /Font\n'
+    b'<< /F1\n'
+    b'<< /Type /Font\n'
+    b'/Subtype /Type1\n'
+    b'/BaseFont /Times-Roman\n'
+    b'>>\n>>\n>>\n      '
+    b'/Contents 4 0 R\n  >>\nendobj\n\n4 0 obj\n  '
+    b'<< /Length 55 >>\nstream\n  BT\n    /F1 18 Tf\n    0 0 Td\n    '
+    b'(Hello World) Tj\n  ET\nendstream\nendobj\n\nxref\n0 5\n0000000000 '
+    b'65535 f \n0000000018 00000 n \n0000000077 00000 n \n0000000178 00000 n '
+    b'\n0000000457 00000 n \ntrailer\n  <<  /Root 1 0 R\n      /Size 5\n  '
+    b'>>\nstartxref\n565\n%%EOF\n'
+)
+
+
+def convert_mock_request(*args, **kwargs):
+  del args, kwargs
+
+  class Result:
+    def json(self):
+      return {
+          'Files': [
+              {
+                  'FileData': base64.b64encode(pdf_bytes).decode()
+              }
+          ]
+      }
+  return Result()
+
+
 class DocxTest(unittest.TestCase):
 
-  def test_content(self):
+  def test_from_bytes(self):
     content = ms_office_lib.Docx.from_bytes(docx_bytes)
     self.assertEqual(
         content.mime_type,
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     )
     self.assertEqual(content.to_bytes(), docx_bytes)
+    self.assertTrue(content.is_compatible('text/plain'))
+    self.assertFalse(content.is_compatible('application/pdf'))
+    self.assertEqual(
+        content.make_compatible(['image/png', 'text/plain']).mime_type,
+        'text/plain'
+    )
 
-  def test_file(self):
+  def test_from_uri(self):
     content = ms_office_lib.Docx.from_uri('http://mock/web/a.docx')
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = docx_mock_request
@@ -267,15 +312,21 @@ class DocxTest(unittest.TestCase):
 
 class XlsxTest(unittest.TestCase):
 
-  def test_content(self):
+  def test_from_bytes(self):
     content = ms_office_lib.Xlsx.from_bytes(xlsx_bytes)
     self.assertEqual(
         content.mime_type,
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     )
     self.assertEqual(content.to_bytes(), xlsx_bytes)
+    self.assertTrue(content.is_compatible('text/plain'))
+    self.assertFalse(content.is_compatible('application/pdf'))
+    self.assertEqual(
+        content.make_compatible('text/plain').mime_type,
+        'text/html'
+    )
 
-  def test_file(self):
+  def test_from_uri(self):
     content = ms_office_lib.Xlsx.from_uri('http://mock/web/a.xlsx')
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = xlsx_mock_request
@@ -299,6 +350,8 @@ class PptxTest(unittest.TestCase):
 
   def test_file(self):
     content = ms_office_lib.Pptx.from_uri('http://mock/web/a.pptx')
+    self.assertFalse(content.is_compatible('text/plain'))
+    self.assertTrue(content.is_compatible('application/pdf'))
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = pptx_mock_request
       self.assertEqual(
@@ -306,6 +359,12 @@ class PptxTest(unittest.TestCase):
           'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       )
       self.assertEqual(content.to_bytes(), pptx_bytes)
+
+    with mock.patch('requests.post') as mock_requests_post:
+      mock_requests_post.side_effect = convert_mock_request
+      self.assertIsInstance(
+          content.make_compatible('application/pdf'), pdf_lib.PDF
+      )
 
 
 if __name__ == '__main__':

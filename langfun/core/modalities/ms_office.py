@@ -16,12 +16,13 @@
 import base64
 import io
 import os
+from typing import Iterable
 from langfun.core.modalities import mime
 from langfun.core.modalities import pdf
 import requests
 
 
-class Xlsx(mime.MimeType):
+class Xlsx(mime.Mime):
   """Xlsx file type."""
 
   MIME_PREFIX = (
@@ -37,8 +38,19 @@ class Xlsx(mime.MimeType):
   def _repr_html_(self) -> str:
     return self.to_html()
 
+  def _is_compatible(self, mime_types: Iterable[str]) -> bool:
+    return bool(set(mime_types).intersection([
+        'text/html',
+        'text/plain',
+    ]))
 
-class Docx(mime.MimeType):
+  def _make_compatible(self, mime_types: Iterable[str]) -> mime.Mime:
+    """Returns the MimeType of the converted file."""
+    del mime_types
+    return mime.Mime(uri=self.uri, content=self.to_html())
+
+
+class Docx(mime.Mime):
   """Docx file type."""
 
   MIME_PREFIX = (
@@ -54,17 +66,26 @@ class Docx(mime.MimeType):
   def _repr_html_(self) -> str:
     return self.to_xml()
 
+  def _is_compatible(self, mime_types: Iterable[str]) -> bool:
+    return bool(set(mime_types).intersection([
+        'application/xml',
+        'text/xml',
+        'text/plain',
+    ]))
 
-class Pptx(mime.MimeType):
+  def _make_compatible(self, mime_types: Iterable[str]) -> mime.Mime:
+    """Returns the MimeType of the converted file."""
+    del mime_types
+    return mime.Mime(uri=self.uri, content=self.to_xml())
+
+
+class Pptx(mime.Mime):
   """Pptx file type."""
 
   MIME_PREFIX = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
   API_URL = 'https://v2.convertapi.com/convert/pptx/to/pdf'
 
   def to_pdf(self, convert_api_key: str | None = None) -> pdf.PDF:
-    filename = os.path.basename(self.uri)
-    file_bytes = self.to_bytes()
-
     api_key = convert_api_key or os.environ.get('CONVERT_API_KEY')
     url = f'{self.API_URL}?Secret={api_key}'
 
@@ -72,12 +93,19 @@ class Pptx(mime.MimeType):
         'Parameters': [{
             'Name': 'File',
             'FileValue': {
-                'Name': filename,
-                'Data': base64.b64encode(file_bytes),
+                'Name': os.path.basename(self.uri) if self.uri else 'tmp.pptx',
+                'Data': base64.b64encode(self.to_bytes()).decode('utf-8'),
             },
         }]
     }
     response = requests.post(url, json=json).json()
     base64_pdf = response['Files'][0]['FileData']
-    pdf_bytes = base64.b64decode(base64_pdf)
-    return pdf.PDF.from_bytes(content=pdf_bytes)
+    return pdf.PDF.from_bytes(base64.b64decode(base64_pdf))
+
+  def _is_compatible(self, mime_types: Iterable[str]) -> bool:
+    return 'application/pdf' in mime_types
+
+  def _make_compatible(self, mime_types: Iterable[str]) -> mime.Mime:
+    """Returns the MimeType of the converted file."""
+    del mime_types
+    return self.to_pdf()

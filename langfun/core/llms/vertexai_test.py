@@ -79,7 +79,7 @@ class VertexAITest(unittest.TestCase):
     )
 
     # Non-multimodal model.
-    with self.assertRaisesRegex(ValueError, 'Unsupported modality'):
+    with self.assertRaisesRegex(lf.ModalityError, 'Unsupported modality'):
       vertexai.VertexAIGeminiPro1()._content_from_message(message)
 
     model = vertexai.VertexAIGeminiPro1Vision()

@@ -17,7 +17,7 @@ import functools
 from langfun.core.modalities import mime
 
 
-class Image(mime.MimeType):
+class Image(mime.Mime):
   """Image."""
 
   MIME_PREFIX = 'image'

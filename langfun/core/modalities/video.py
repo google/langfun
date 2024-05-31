@@ -17,7 +17,7 @@ import functools
 from langfun.core.modalities import mime
 
 
-class Video(mime.MimeType):
+class Video(mime.Mime):
   """Video."""
 
   MIME_PREFIX = 'video'

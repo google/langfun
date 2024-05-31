@@ -17,7 +17,7 @@ import functools
 from langfun.core.modalities import mime
 
 
-class Audio(mime.MimeType):
+class Audio(mime.Mime):
   """Audio."""
 
   MIME_PREFIX = 'audio'
