@@ -17,7 +17,6 @@ import typing
 import unittest
 from unittest import mock
 
-import langfun.core as lf
 from langfun.core.llms import llama_cpp
 
 
@@ -25,6 +24,9 @@ def mock_requests_post(url: str, json: typing.Dict[str, typing.Any], **kwargs):
   del kwargs
 
   class TEMP:
+    @property
+    def status_code(self):
+      return 200
 
     def json(self):
       return {"content": json["prompt"] + "\n" + url}
@@ -36,19 +38,23 @@ class LlamaCppRemoteTest(unittest.TestCase):
   """Tests for the LlamaCppRemote model."""
 
   def test_call_completion(self):
-    with mock.patch("requests.post") as mock_request:
+    with mock.patch("requests.Session.post") as mock_request:
       mock_request.side_effect = mock_requests_post
-      lm = llama_cpp.LlamaCppRemote(url="http://127.0.0.1:8080")
-      response = lm("hello", sampling_options=lf.LMSamplingOptions(n=1))
+      lm = llama_cpp.LlamaCppRemote("http://127.0.0.1:8080")
+      [result] = lm.sample(["hello"], n=2)
       self.assertEqual(
-          response.text,
+          len(result.samples),
+          2
+      )
+      self.assertEqual(
+          str(result.samples[0].response),
           "hello\nhttp://127.0.0.1:8080/completion",
       )
 
-  def test_name(self):
-    lm = llama_cpp.LlamaCppRemote()
+  def test_model_id(self):
+    lm = llama_cpp.LlamaCppRemote("http://127.0.0.1:8080")
     self.assertEqual(lm.model_id, "LLaMAC++()")
-    lm = llama_cpp.LlamaCppRemote(url="xxx", name="x")
+    lm = llama_cpp.LlamaCppRemote("xxx", model="x")
     self.assertEqual(lm.model_id, "LLaMAC++(x)")
 
 

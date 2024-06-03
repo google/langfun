@@ -13,62 +13,72 @@
 # limitations under the License.
 """Language models from llama.cpp."""
 
-from typing import Annotated
+from typing import Any
 
 import langfun.core as lf
-import requests
+from langfun.core.llms import rest
+import pyglove as pg
 
 
-@lf.use_init_args(["url"])
-class LlamaCppRemote(lf.LanguageModel):
+class LlamaCppRemote(rest.REST):
   """The remote LLaMA C++ model.
 
   The Remote LLaMA C++ models can be launched via
   https://github.com/ggerganov/llama.cpp/tree/master/examples/server
   """
 
-  url: Annotated[
-      str,
-      "The name of the model to use.",
-  ] = ""
-
-  name: Annotated[
-      str,
-      "The abbreviation for the LLaMA CPP-based model name.",
-  ] = ""
+  @pg.explicit_method_override
+  def __init__(self, url: str, model: str | None = None, **kwargs):
+    super().__init__(api_endpoint=f'{url}/completion', model=model, **kwargs)
 
   @property
   def model_id(self) -> str:
     """Returns a string to identify the model."""
-    return f"LLaMAC++({self.name})"
+    return f'LLaMAC++({self.model or ""})'
 
-  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
-    def _complete_fn(cur_prompts):
-      results = []
-      for prompt in cur_prompts:
-        result = lf.LMSamplingResult()
-        for _ in range(self.sampling_options.n or 1):
-          data = {
-              "prompt": prompt.text,
-              "n_predict": self.sampling_options.max_tokens,
-              "top_k": self.sampling_options.top_k or 50,
-              "top_p": self.sampling_options.top_p or 0.95,
-          }
-          if self.sampling_options.temperature is not None:
-            data["temperature"] = self.sampling_options.temperature
+  def request(
+      self, prompt: lf.Message, sampling_options: lf.LMSamplingOptions
+  ) -> dict[str, Any]:
+    """Returns the JSON input for a message."""
+    request = dict()
+    request.update(self._request_args(sampling_options))
+    # NOTE(daiyip): multi-modal is current not supported.
+    request['prompt'] = prompt.text
+    return request
 
-          response = requests.post(
-              f"{self.url}/completion",
-              json=data,
-              headers={"Content-Type": "application/json"},
-              timeout=self.timeout,
-          )
-          decoded_response = response.json()
-          response = decoded_response["content"]
-          result.samples.append(lf.LMSample(response, score=0.0))
-        results.append(result)
-      return results
+  def _request_args(self, options: lf.LMSamplingOptions) -> dict[str, Any]:
+    """Returns a dict as request arguments."""
+    args = dict(
+        n_predict=options.max_tokens or 1024,
+        top_k=options.top_k or 50,
+        top_p=options.top_p or 0.95,
+    )
+    if options.temperature is not None:
+      args['temperature'] = options.temperature
+    return args
 
-    return self._parallel_execute_with_currency_control(
-        _complete_fn, [prompts]
-    )[0]
+  def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    return lf.LMSamplingResult(
+        [lf.LMSample(item['content'], score=0.0) for item in json['items']]
+    )
+
+  def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
+    request = self.request(prompt, self.sampling_options)
+
+    def _sample_one_example(request):
+      response = self._session.post(
+          self.api_endpoint,
+          json=request,
+          timeout=self.timeout,
+      )
+      if response.status_code == 200:
+        return response.json()
+      else:
+        error_cls = self._error_cls_from_status(response.status_code)
+        raise error_cls(f'{response.status_code}: {response.content}')
+
+    items = self._parallel_execute_with_currency_control(
+        _sample_one_example,
+        [request] * (self.sampling_options.n or 1),
+    )
+    return self.result(dict(items=items))

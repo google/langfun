@@ -29,6 +29,32 @@ TOKENS_PER_REQUEST = 250  # Estimated num tokens for a single request
 DEFAULT_MAX_CONCURRENCY = 1  # Use this as max concurrency if no RPM or TPM data
 
 
+#
+# Common errors during calling language models.
+#
+
+
+class LMError(RuntimeError):
+  """Base class for language model errors."""
+
+
+class RetryableLMError(LMError):
+  """Base class for LLM errors that can be solved by retrying."""
+
+
+class RateLimitError(RetryableLMError):
+  """Error for rate limit reached."""
+
+
+class TemporaryLMError(RetryableLMError):
+  """Error for temporary service issues that can be retried."""
+
+
+#
+# Language model input/output interfaces.
+#
+
+
 class LMSample(pg.Object):
   """Response candidate."""
 
@@ -445,7 +471,7 @@ class LanguageModel(component.Component):
           None,
           Union[Type[Exception], Tuple[Type[Exception], str]],
           Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]],
-      ] = None,
+      ] = RetryableLMError,
   ) -> Any:
     """Helper method for subclasses for implementing _sample."""
     return concurrent.concurrent_execute(

@@ -160,7 +160,7 @@ class AnthropicTest(unittest.TestCase):
         with self.assertRaisesRegex(
             Exception, f'.*{status_code}: .*{error_message}'
         ):
-          lm('hello', lm=lm, max_attempts=1)
+          lm('hello', max_attempts=1)
 
 
 if __name__ == '__main__':

@@ -13,14 +13,13 @@
 # limitations under the License.
 """Language models from Groq."""
 
-import functools
 import os
 from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+from langfun.core.llms import rest
 import pyglove as pg
-import requests
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
@@ -33,23 +32,8 @@ SUPPORTED_MODELS_AND_SETTINGS = {
 }
 
 
-class GroqError(Exception):  # pylint: disable=g-bad-exception-name
-  """Base class for Groq errors."""
-
-
-class RateLimitError(GroqError):
-  """Error for rate limit reached."""
-
-
-class OverloadedError(GroqError):
-  """Groq's server is temporarily overloaded."""
-
-
-_CHAT_COMPLETE_API_ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions'
-
-
 @lf.use_init_args(['model'])
-class Groq(lf.LanguageModel):
+class Groq(rest.REST):
   """Groq LLMs through REST APIs (OpenAI compatible).
 
   See https://platform.openai.com/docs/api-reference/chat
@@ -74,14 +58,13 @@ class Groq(lf.LanguageModel):
       ),
   ] = None
 
+  api_endpoint: str = 'https://api.groq.com/openai/v1/chat/completions'
+
   def _on_bound(self):
     super()._on_bound()
     self._api_key = None
-    self.__dict__.pop('_api_initialized', None)
-    self.__dict__.pop('_session', None)
 
-  @functools.cached_property
-  def _api_initialized(self):
+  def _initialize(self):
     api_key = self.api_key or os.environ.get('GROQ_API_KEY', None)
     if not api_key:
       raise ValueError(
@@ -89,17 +72,13 @@ class Groq(lf.LanguageModel):
           'variable `GROQ_API_KEY` with your Groq API key.'
       )
     self._api_key = api_key
-    return True
 
-  @functools.cached_property
-  def _session(self) -> requests.Session:
-    assert self._api_initialized
-    s = requests.Session()
-    s.headers.update({
+  @property
+  def headers(self) -> dict[str, Any]:
+    return {
         'Authorization': f'Bearer {self._api_key}',
         'Content-Type': 'application/json',
-    })
-    return s
+    }
 
   @property
   def model_id(self) -> str:
@@ -110,7 +89,24 @@ class Groq(lf.LanguageModel):
   def max_concurrency(self) -> int:
     return SUPPORTED_MODELS_AND_SETTINGS[self.model].max_concurrency
 
-  def _get_request_args(self, options: lf.LMSamplingOptions) -> dict[str, Any]:
+  def request(
+      self,
+      prompt: lf.Message,
+      sampling_options: lf.LMSamplingOptions
+  ) -> dict[str, Any]:
+    """Returns the JSON input for a message."""
+    request = dict()
+    request.update(self._request_args(sampling_options))
+    request.update(
+        dict(
+            messages=[
+                dict(role='user', content=self._content_from_message(prompt))
+            ]
+        )
+    )
+    return request
+
+  def _request_args(self, options: lf.LMSamplingOptions) -> dict[str, Any]:
     """Returns a dict as request arguments."""
     # `logprobs` and `top_logprobs` flags are not supported on Groq yet.
     args = dict(
@@ -148,6 +144,21 @@ class Groq(lf.LanguageModel):
       content.append(item)
     return content
 
+  def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    samples = [
+        lf.LMSample(self._message_from_choice(choice), score=0.0)
+        for choice in json['choices']
+    ]
+    usage = json['usage']
+    return lf.LMSamplingResult(
+        samples,
+        usage=lf.LMSamplingUsage(
+            prompt_tokens=usage['prompt_tokens'],
+            completion_tokens=usage['completion_tokens'],
+            total_tokens=usage['total_tokens'],
+        ),
+    )
+
   def _message_from_choice(self, choice: dict[str, Any]) -> lf.Message:
     """Converts Groq's content protocol to message."""
     # Refer: https://platform.openai.com/docs/api-reference/chat/create
@@ -157,62 +168,6 @@ class Groq(lf.LanguageModel):
     return lf.AIMessage.from_chunks(
         [x['text'] for x in content if x['type'] == 'text']
     )
-
-  def _parse_response(self, response: requests.Response) -> lf.LMSamplingResult:
-    """Parses Groq's response."""
-    # Refer: https://platform.openai.com/docs/api-reference/chat/object
-    if response.status_code == 200:
-      output = response.json()
-      samples = [
-          lf.LMSample(self._message_from_choice(choice), score=0.0)
-          for choice in output['choices']
-      ]
-      usage = output['usage']
-      return lf.LMSamplingResult(
-          samples,
-          usage=lf.LMSamplingUsage(
-              prompt_tokens=usage['prompt_tokens'],
-              completion_tokens=usage['completion_tokens'],
-              total_tokens=usage['total_tokens'],
-          ),
-      )
-    else:
-      # https://platform.openai.com/docs/guides/error-codes/api-errors
-      if response.status_code == 429:
-        error_cls = RateLimitError
-      elif response.status_code in (500, 502, 503):
-        error_cls = OverloadedError
-      else:
-        error_cls = GroqError
-      raise error_cls(f'{response.status_code}: {response.content}')
-
-  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
-    assert self._api_initialized
-    return self._parallel_execute_with_currency_control(
-        self._sample_single,
-        prompts,
-        retry_on_errors=(RateLimitError, OverloadedError),
-    )
-
-  def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
-    request = dict()
-    request.update(self._get_request_args(self.sampling_options))
-    request.update(
-        dict(
-            messages=[
-                dict(role='user', content=self._content_from_message(prompt))
-            ]
-        )
-    )
-    try:
-      response = self._session.post(
-          _CHAT_COMPLETE_API_ENDPOINT,
-          json=request,
-          timeout=self.timeout,
-      )
-      return self._parse_response(response)
-    except ConnectionError as e:
-      raise OverloadedError(str(e)) from e
 
 
 class GroqLlama3_8B(Groq):  # pylint: disable=invalid-name

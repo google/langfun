@@ -63,7 +63,7 @@ Image = modalities.Image
 Video = modalities.Video
 PDF = modalities.PDF
 
-# Error types.
+# Additional error types.
 MappingError = structured.MappingError
 SchemaError = structured.SchemaError
 JsonError = structured.JsonError

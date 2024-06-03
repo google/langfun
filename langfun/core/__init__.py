@@ -106,6 +106,11 @@ from langfun.core.language_model import LMScoringResult
 from langfun.core.language_model import LMCache
 from langfun.core.language_model import LMDebugMode
 
+from langfun.core.language_model import LMError
+from langfun.core.language_model import RetryableLMError
+from langfun.core.language_model import RateLimitError
+from langfun.core.language_model import TemporaryLMError
+
 # Components for building agents.
 from langfun.core.memory import Memory
 

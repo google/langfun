@@ -24,6 +24,9 @@ from langfun.core.llms.fake import StaticMapping
 from langfun.core.llms.fake import StaticResponse
 from langfun.core.llms.fake import StaticSequence
 
+# REST-based models.
+from langfun.core.llms.rest import REST
+
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
 from langfun.core.llms.google_genai import GeminiPro
