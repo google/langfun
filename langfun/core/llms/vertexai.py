@@ -179,7 +179,16 @@ class VertexAI(lf.LanguageModel):
     assert self._api_initialized, 'Vertex AI API is not initialized.'
     # TODO(yifenglu): It seems this exception is due to the instability of the
     # API. We should revisit this later.
-    retry_on_errors = [(Exception, 'InternalServerError')]
+    retry_on_errors = [
+        (Exception, 'InternalServerError'),
+        (
+            Exception,
+            (
+                'ValueError: Response candidate content has no parts (and thus'
+                ' no text).'
+            ),
+        ),
+    ]
 
     return lf.concurrent_execute(
         self._sample_single,
