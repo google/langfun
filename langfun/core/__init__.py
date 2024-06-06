@@ -117,6 +117,9 @@ from langfun.core.memory import Memory
 # Utility for console output.
 from langfun.core import console
 
+# Utility for event logging.
+from langfun.core import logging
+
 # Import internal modules.
 
 # pylint: enable=g-import-not-at-top
