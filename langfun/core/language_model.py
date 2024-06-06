@@ -14,10 +14,11 @@
 """Interface for language model."""
 
 import abc
+import contextlib
 import dataclasses
 import enum
 import time
-from typing import Annotated, Any, Callable, Sequence, Tuple, Type, Union
+from typing import Annotated, Any, Callable, Iterator, Sequence, Tuple, Type, Union
 from langfun.core import component
 from langfun.core import concurrent
 from langfun.core import console
@@ -83,6 +84,13 @@ class LMSamplingUsage(pg.Object):
   prompt_tokens: int
   completion_tokens: int
   total_tokens: int
+
+  def __add__(self, other: 'LMSamplingUsage') -> 'LMSamplingUsage':
+    return LMSamplingUsage(
+        prompt_tokens=self.prompt_tokens + other.prompt_tokens,
+        completion_tokens=self.completion_tokens + other.completion_tokens,
+        total_tokens=self.total_tokens + other.total_tokens,
+    )
 
 
 class LMSamplingResult(pg.Object):
@@ -408,6 +416,16 @@ class LanguageModel(component.Component):
                 total_tokens=usage.total_tokens // n,
             )
 
+          # Track usage.
+          if usage:
+            tracked_usages = component.context_value('__tracked_usages__', [])
+            model_id = self.model_id
+            for usage_dict in tracked_usages:
+              if model_id in usage_dict:
+                usage_dict[model_id] += usage
+              else:
+                usage_dict[model_id] = usage
+
           # Track the prompt for corresponding response.
           response.source = prompt
 
@@ -692,3 +710,15 @@ class LanguageModel(component.Component):
       return max(int(requests_per_min / 60), 1)  # Max concurrency can't be zero
     else:
       return DEFAULT_MAX_CONCURRENCY  # Default of 1
+
+
+@contextlib.contextmanager
+def track_usages() -> Iterator[dict[str, LMSamplingUsage]]:
+  """Context manager to track the usage of language models by model ID."""
+  tracked_usages = component.context_value('__tracked_usages__', [])
+  current_usage = dict()
+  with component.context(__tracked_usages__=tracked_usages + [current_usage]):
+    try:
+      yield current_usage
+    finally:
+      pass

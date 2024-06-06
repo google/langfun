@@ -111,6 +111,9 @@ from langfun.core.language_model import RetryableLMError
 from langfun.core.language_model import RateLimitError
 from langfun.core.language_model import TemporaryLMError
 
+# Context manager for tracking usages.
+from langfun.core.language_model import track_usages
+
 # Components for building agents.
 from langfun.core.memory import Memory
 

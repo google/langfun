@@ -580,6 +580,18 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(lm.rate_to_max_concurrency(requests_per_min=1), 1)
     self.assertEqual(lm.rate_to_max_concurrency(tokens_per_min=1), 1)
 
+  def test_track_usages(self):
+    with lm_lib.track_usages() as usages1:
+      lm = MockModel()
+      _ = lm('hi')
+      with lm_lib.track_usages() as usages2:
+        _ = lm('hi')
+    self.assertEqual(usages2, {
+        'MockModel': lm_lib.LMSamplingUsage(100, 100, 200),
+    })
+    self.assertEqual(usages1, {
+        'MockModel': lm_lib.LMSamplingUsage(200, 200, 400),
+    })
 
 if __name__ == '__main__':
   unittest.main()

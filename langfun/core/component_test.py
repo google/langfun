@@ -84,6 +84,11 @@ class ComponentContextTest(unittest.TestCase):
           lf.get_contextual_override('y'),
           lf.ContextualOverride(3, cascade=False, override_attrs=False),
       )
+      self.assertEqual(lf.context_value('x'), 3)
+      self.assertIsNone(lf.context_value('f', None))
+      with self.assertRaisesRegex(KeyError, '.* does not exist'):
+        lf.context_value('f')
+
       self.assertEqual(lf.all_contextual_values(), dict(x=3, y=3, z=3))
 
       # Member attributes take precedence over `lf.context`.

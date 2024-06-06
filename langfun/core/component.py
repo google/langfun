@@ -210,6 +210,16 @@ def get_contextual_override(var_name: str) -> ContextualOverride | None:
   return _get_scoped_value(_global_tls, _CONTEXT_OVERRIDES, var_name)
 
 
+def context_value(var_name: str, default: Any = RAISE_IF_HAS_ERROR) -> Any:
+  """Returns the value of a variable defined in `lf.context`."""
+  override = get_contextual_override(var_name)
+  if override is None:
+    if default == RAISE_IF_HAS_ERROR:
+      raise KeyError(f'{var_name!r} does not exist in current context.')
+    return default
+  return override.value
+
+
 def all_contextual_values() -> dict[str, Any]:
   """Returns all contextual values provided from `lf.context` in scope."""
   overrides = getattr(_global_tls, _CONTEXT_OVERRIDES, {})
