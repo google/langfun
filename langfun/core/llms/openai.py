@@ -202,15 +202,14 @@ class OpenAI(lf.LanguageModel):
             lf.LMSample(choice.text.strip(), score=choice.logprobs or 0.0)
         )
 
+      n = len(samples_by_index)
       usage = lf.LMSamplingUsage(
-          prompt_tokens=response.usage.prompt_tokens,
-          completion_tokens=response.usage.completion_tokens,
-          total_tokens=response.usage.total_tokens,
+          prompt_tokens=response.usage.prompt_tokens // n,
+          completion_tokens=response.usage.completion_tokens // n,
+          total_tokens=response.usage.total_tokens // n,
       )
       return [
-          lf.LMSamplingResult(
-              samples_by_index[index], usage=usage if index == 0 else None
-          )
+          lf.LMSamplingResult(samples_by_index[index], usage=usage)
           for index in sorted(samples_by_index.keys())
       ]
 

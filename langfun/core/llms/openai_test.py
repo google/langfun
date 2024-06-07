@@ -191,9 +191,9 @@ class OpenAITest(unittest.TestCase):
                         score=0.0,
                         logprobs=None,
                         usage=lf.LMSamplingUsage(
-                            prompt_tokens=33,
-                            completion_tokens=33,
-                            total_tokens=66
+                            prompt_tokens=16,
+                            completion_tokens=16,
+                            total_tokens=33
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -206,9 +206,9 @@ class OpenAITest(unittest.TestCase):
                         score=0.1,
                         logprobs=None,
                         usage=lf.LMSamplingUsage(
-                            prompt_tokens=33,
-                            completion_tokens=33,
-                            total_tokens=66
+                            prompt_tokens=16,
+                            completion_tokens=16,
+                            total_tokens=33
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -221,9 +221,9 @@ class OpenAITest(unittest.TestCase):
                         score=0.2,
                         logprobs=None,
                         usage=lf.LMSamplingUsage(
-                            prompt_tokens=33,
-                            completion_tokens=33,
-                            total_tokens=66
+                            prompt_tokens=16,
+                            completion_tokens=16,
+                            total_tokens=33
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -232,7 +232,7 @@ class OpenAITest(unittest.TestCase):
                 ),
             ],
             usage=lf.LMSamplingUsage(
-                prompt_tokens=100, completion_tokens=100, total_tokens=200
+                prompt_tokens=50, completion_tokens=50, total_tokens=100
             ),
         ),
     )
@@ -245,7 +245,11 @@ class OpenAITest(unittest.TestCase):
                         'Sample 0 for prompt 1.',
                         score=0.0,
                         logprobs=None,
-                        usage=None,
+                        usage=lf.LMSamplingUsage(
+                            prompt_tokens=16,
+                            completion_tokens=16,
+                            total_tokens=33
+                        ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
                     score=0.0,
@@ -256,7 +260,11 @@ class OpenAITest(unittest.TestCase):
                         'Sample 1 for prompt 1.',
                         score=0.1,
                         logprobs=None,
-                        usage=None,
+                        usage=lf.LMSamplingUsage(
+                            prompt_tokens=16,
+                            completion_tokens=16,
+                            total_tokens=33
+                        ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
                     score=0.1,
@@ -267,13 +275,20 @@ class OpenAITest(unittest.TestCase):
                         'Sample 2 for prompt 1.',
                         score=0.2,
                         logprobs=None,
-                        usage=None,
+                        usage=lf.LMSamplingUsage(
+                            prompt_tokens=16,
+                            completion_tokens=16,
+                            total_tokens=33
+                        ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
                     score=0.2,
                     logprobs=None,
                 ),
             ],
+            usage=lf.LMSamplingUsage(
+                prompt_tokens=50, completion_tokens=50, total_tokens=100
+            ),
         ),
     )
 

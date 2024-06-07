@@ -27,8 +27,8 @@ import pyglove as pg
 @pg.use_init_args(['failures_before_attempt'])
 class MockModel(lm_lib.LanguageModel):
   """A mock model that echo back user prompts."""
-
   failures_before_attempt: int = 0
+  name: str = 'MockModel'
 
   def _sample(self,
               prompts: list[message_lib.Message]
@@ -62,6 +62,10 @@ class MockModel(lm_lib.LanguageModel):
         max_attempts=self.max_attempts,
         retry_interval=1,
     )(prompts)
+
+  @property
+  def model_id(self) -> str:
+    return self.name
 
 
 class MockScoringModel(MockModel):
@@ -581,17 +585,33 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(lm.rate_to_max_concurrency(tokens_per_min=1), 1)
 
   def test_track_usages(self):
+    lm = MockModel(name='model1')
+    lm2 = MockModel(name='model2')
     with lm_lib.track_usages() as usages1:
-      lm = MockModel()
       _ = lm('hi')
-      with lm_lib.track_usages() as usages2:
-        _ = lm('hi')
+      with lm_lib.track_usages(lm2) as usages2:
+        with lm_lib.track_usages('model1') as usages3:
+          with lm_lib.track_usages('model1', lm2) as usages4:
+            def call_lm(prompt):
+              _ = lm.sample([prompt] * 2)
+            lm2('hi')
+            list(concurrent.concurrent_map(call_lm, ['hi', 'hello']))
+
     self.assertEqual(usages2, {
-        'MockModel': lm_lib.LMSamplingUsage(100, 100, 200),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200),
+    })
+    self.assertEqual(usages3, {
+        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4),
+    })
+    self.assertEqual(usages4, {
+        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200),
     })
     self.assertEqual(usages1, {
-        'MockModel': lm_lib.LMSamplingUsage(200, 200, 400),
+        'model1': lm_lib.LMSamplingUsage(100 * 5, 100 * 5, 200 * 5),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200),
     })
+
 
 if __name__ == '__main__':
   unittest.main()

@@ -89,7 +89,7 @@ class RestTest(unittest.TestCase):
               "max_tokens=4096, stop=['\\n']."
           ),
       )
-      self.assertIsNone(response.usage)
+      self.assertEqual(response.usage, lf.UsageNotAvailable())
 
   def test_call_errors(self):
     for status_code, error_type, error_message in [

@@ -549,7 +549,7 @@ class Evaluable(lf.Component):
         )
         s.write(html.escape(pg.format(m.result)))
         s.write('</div>')
-      if 'usage' in m.metadata and m.usage is not None:
+      if m.metadata.get('usage', None):
         s.write(
             '<div style="background-color: #EEEEEE; color: black; '
             'white-space: pre-wrap; padding: 10px; border: 0px solid; '
@@ -1321,7 +1321,7 @@ class Evaluation(Evaluable):
       self._render_summary_metrics(s)
 
       # Summarize average usage.
-      if self.result.usage is not None:
+      if self.result.usage:
         self._render_summary_usage(s)
 
     s.write('</td></tr></table></div>')
@@ -1441,9 +1441,10 @@ class Evaluation(Evaluable):
   def audit_usage(self, message: lf.Message, dryrun: bool = False) -> None:
     del dryrun
     for m in message.trace():
-      if m.metadata.get('usage', None) is not None:
-        self._total_prompt_tokens += m.usage.prompt_tokens
-        self._total_completion_tokens += m.usage.completion_tokens
+      usage = m.metadata.get('usage', None)
+      if usage:
+        self._total_prompt_tokens += usage.prompt_tokens
+        self._total_completion_tokens += usage.completion_tokens
         self._num_usages += 1
 
   def audit_processed(
@@ -1504,7 +1505,7 @@ class Evaluation(Evaluable):
         '<td>Schema</td>'
         '<td>Additional Args</td>'
     )
-    if self.result.usage is not None:
+    if self.result.usage:
       s.write('<td>Usage</td>')
     s.write('<td>OOP Failures</td>')
     s.write('<td>Non-OOP Failures</td>')
@@ -1533,7 +1534,7 @@ class Evaluation(Evaluable):
         f'{_html_repr(self.additional_args, compact=False)}</td>'
     )
     # Usage.
-    if self.result.usage is not None:
+    if self.result.usage:
       s.write('<td>')
       self._render_summary_usage(s)
       s.write('</td>')

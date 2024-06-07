@@ -93,6 +93,16 @@ class LMSamplingUsage(pg.Object):
     )
 
 
+class UsageNotAvailable(LMSamplingUsage):
+  """Usage information not available."""
+  prompt_tokens: pg.typing.Int(0).freeze()        # pytype: disable=invalid-annotation
+  completion_tokens: pg.typing.Int(0).freeze()   # pytype: disable=invalid-annotation
+  total_tokens: pg.typing.Int(0).freeze()        # pytype: disable=invalid-annotation
+
+  def __bool__(self) -> bool:
+    return False
+
+
 class LMSamplingResult(pg.Object):
   """Language model response."""
 
@@ -105,9 +115,9 @@ class LMSamplingResult(pg.Object):
   ] = []
 
   usage: Annotated[
-      LMSamplingUsage | None,
+      LMSamplingUsage,
       'Usage information. Currently only OpenAI models are supported.',
-  ] = None
+  ] = UsageNotAvailable()
 
 
 class LMSamplingOptions(component.Component):
@@ -406,7 +416,7 @@ class LanguageModel(component.Component):
           # which is accurate when n=1. For n > 1, we average the usage across
           # multiple samples.
           usage = result.usage
-          if len(result.samples) == 1 or usage is None:
+          if len(result.samples) == 1 or not usage:
             response.metadata.usage = usage
           else:
             n = len(result.samples)
@@ -417,14 +427,11 @@ class LanguageModel(component.Component):
             )
 
           # Track usage.
-          if usage:
-            tracked_usages = component.context_value('__tracked_usages__', [])
+          trackers = component.context_value('__usage_trackers__', [])
+          if trackers:
             model_id = self.model_id
-            for usage_dict in tracked_usages:
-              if model_id in usage_dict:
-                usage_dict[model_id] += usage
-              else:
-                usage_dict[model_id] = usage
+            for tracker in trackers:
+              tracker.track(model_id, usage)
 
           # Track the prompt for corresponding response.
           response.source = prompt
@@ -529,7 +536,7 @@ class LanguageModel(component.Component):
       prompt: message_lib.Message,
       response: message_lib.Message,
       call_counter: int,
-      usage: LMSamplingUsage | None,
+      usage: LMSamplingUsage,
       elapse: float,
   ) -> None:
     """Outputs debugging information."""
@@ -547,12 +554,13 @@ class LanguageModel(component.Component):
       self._debug_response(response, call_counter, usage, elapse)
 
   def _debug_model_info(
-      self, call_counter: int, usage: LMSamplingUsage | None) -> None:
+      self, call_counter: int, usage: LMSamplingUsage) -> None:
     """Outputs debugging information about the model."""
     title_suffix = ''
-    if usage and usage.total_tokens != 0:
+    if usage.total_tokens != 0:
       title_suffix = console.colored(
-          f' (total {usage.total_tokens} tokens)', 'red')
+          f' (total {usage.total_tokens} tokens)', 'red'
+      )
 
     console.write(
         self.format(compact=True, use_inferred=True),
@@ -564,11 +572,11 @@ class LanguageModel(component.Component):
       self,
       prompt: message_lib.Message,
       call_counter: int,
-      usage: LMSamplingUsage | None,
+      usage: LMSamplingUsage,
   ) -> None:
     """Outputs debugging information about the prompt."""
     title_suffix = ''
-    if usage and usage.prompt_tokens != 0:
+    if usage.prompt_tokens != 0:
       title_suffix = console.colored(f' ({usage.prompt_tokens} tokens)', 'red')
 
     console.write(
@@ -592,12 +600,12 @@ class LanguageModel(component.Component):
       self,
       response: message_lib.Message,
       call_counter: int,
-      usage: LMSamplingUsage | None,
+      usage: LMSamplingUsage,
       elapse: float
   ) -> None:
     """Outputs debugging information about the response."""
     title_suffix = ' ('
-    if usage and usage.completion_tokens != 0:
+    if usage.completion_tokens != 0:
       title_suffix += f'{usage.completion_tokens} tokens '
     title_suffix += f'in {elapse:.2f} seconds)'
     title_suffix = console.colored(title_suffix, 'red')
@@ -659,7 +667,7 @@ class LanguageModel(component.Component):
       debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
 
     if debug & LMDebugMode.INFO:
-      self._debug_model_info(call_counter, None)
+      self._debug_model_info(call_counter, UsageNotAvailable())
 
     if debug & LMDebugMode.PROMPT:
       console.write(
@@ -712,13 +720,58 @@ class LanguageModel(component.Component):
       return DEFAULT_MAX_CONCURRENCY  # Default of 1
 
 
+class _UsageTracker:
+  """Usage tracker."""
+
+  def __init__(self, model_ids: set[str] | None):
+    self.model_ids = model_ids
+    self.usages = {
+        m: LMSamplingUsage(0, 0, 0) for m in model_ids
+    } if model_ids else {}
+
+  def track(self, model_id: str, usage: LMSamplingUsage):
+    if self.model_ids is not None and model_id not in self.model_ids:
+      return
+    if not isinstance(usage, UsageNotAvailable) and model_id in self.usages:
+      self.usages[model_id] += usage
+    else:
+      self.usages[model_id] = usage
+
+
 @contextlib.contextmanager
-def track_usages() -> Iterator[dict[str, LMSamplingUsage]]:
-  """Context manager to track the usage of language models by model ID."""
-  tracked_usages = component.context_value('__tracked_usages__', [])
-  current_usage = dict()
-  with component.context(__tracked_usages__=tracked_usages + [current_usage]):
+def track_usages(
+    *lm: Union[str, LanguageModel]
+) -> Iterator[dict[str, LMSamplingUsage]]:
+  """Context manager to track the usages of all language models in scope.
+
+  `lf.track_usages` works with threads spawned by `lf.concurrent_map` and
+  `lf.concurrent_execute`.
+
+  Example:
+    ```
+    lm = lf.llms.GeminiPro1()
+    with lf.track_usages() as usages:
+      # invoke any code that will call LLMs.
+
+    print(usages[lm.model_id])
+    ```
+
+  Args:
+    *lm: The language model(s) to track. If None, track all models in scope.
+
+  Yields:
+    A dictionary of model ID to usage. If a model does not supports usage
+    counting, the dict entry will be None.
+  """
+  if not lm:
+    model_ids = None
+  else:
+    model_ids = [m.model_id if isinstance(m, LanguageModel) else m for m in lm]
+
+  trackers = component.context_value('__usage_trackers__', [])
+  tracker = _UsageTracker(set(model_ids) if model_ids else None)
+  with component.context(__usage_trackers__=trackers + [tracker]):
     try:
-      yield current_usage
+      yield tracker.usages
     finally:
       pass
