@@ -121,6 +121,9 @@ from langfun.core.memory import Memory
 # Utility for console output.
 from langfun.core import console
 
+# Helpers for implementing _repr_xxx_ methods.
+from langfun.core import repr_utils
+
 # Utility for event logging.
 from langfun.core import logging
 
