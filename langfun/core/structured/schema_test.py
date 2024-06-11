@@ -18,6 +18,7 @@ import inspect
 import typing
 import unittest
 
+import langfun.core as lf
 from langfun.core.llms import fake
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
@@ -693,6 +694,10 @@ class ValuePythonReprTest(unittest.TestCase):
     self.assertEqual(
         schema_lib.ValuePythonRepr().repr(1, schema_lib.Schema(int)),
         '```python\n1\n```'
+    )
+    self.assertEqual(
+        schema_lib.ValuePythonRepr().repr(lf.Template('hi, {{a}}', a='foo')),
+        'hi, foo'
     )
     self.assertEqual(
         schema_lib.ValuePythonRepr().repr(

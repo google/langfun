@@ -656,6 +656,8 @@ class ValuePythonRepr(ValueRepr):
         return object_code
       else:
         object_code = SchemaPythonRepr().result_definition(cls_schema)
+    elif isinstance(value, lf.Template):
+      return str(value)
     else:
       object_code = pg.format(
           value, compact=compact, verbose=verbose, python_format=True

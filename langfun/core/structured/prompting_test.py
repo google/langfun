@@ -41,13 +41,17 @@ class QueryTest(unittest.TestCase):
       self,
       prompt,
       schema,
+      examples: list[mapping.MappingExample] | None = None,
       *,
       expected_snippet: str,
       exact_match: bool = False,
       expected_modalities: int = 0,
       **kwargs,
   ):
-    m = prompting.query(prompt, schema=schema, **kwargs, returns_message=True)
+    m = prompting.query(
+        prompt, schema=schema, examples=examples,
+        **kwargs, returns_message=True
+    )
     self.assertIsNotNone(m.lm_input)
     if exact_match:
       self.assertEqual(expected_snippet, m.lm_input.text)
@@ -265,22 +269,58 @@ class QueryTest(unittest.TestCase):
             INPUT_OBJECT:
               ```python
               [
-                ModalityRef(
-                  name='input[0]'
-                ),
-                ModalityRef(
-                  name='input[1]'
-                )
+                <<[[input[0]]]>>,
+                <<[[input[1]]]>>
+              ]
+              ```
+            """),
+        expected_modalities=2,
+    )
+
+  def test_structure_with_modality_and_examples_to_structure_render(self):
+    lm = fake.StaticResponse('["cat", "mouse"]')
+    self.assert_render(
+        [
+            modalities.Image.from_bytes(b'cat_image'),
+            modalities.Image.from_bytes(b'mouse_image'),
+        ],
+        list[str],
+        examples=[
+            mapping.MappingExample(
+                input=[modalities.Image.from_bytes(b'dog_image')],
+                schema=list[str],
+                output=['dog'],
+            ),
+        ],
+        lm=lm,
+        expected_snippet=inspect.cleandoc("""
+            INPUT_OBJECT:
+              ```python
+              [
+                <<[[examples[0].input[0]]]>>
               ]
               ```
 
-            MODALITY_REFERENCES:
-              {
-                'input[0]': <<[[input[0]]]>>,
-                'input[1]': <<[[input[1]]]>>
-              }
+            OUTPUT_TYPE:
+              list[str]
+
+            OUTPUT_OBJECT:
+              ```python
+              [
+                'dog'
+              ]
+              ```
+
+
+            INPUT_OBJECT:
+              ```python
+              [
+                <<[[input[0]]]>>,
+                <<[[input[1]]]>>
+              ]
+              ```
             """),
-        expected_modalities=2,
+        expected_modalities=3,
     )
 
   def test_bad_protocol(self):

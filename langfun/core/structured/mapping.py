@@ -107,7 +107,11 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
 
   @classmethod
   def value_repr(
-      cls, value: Any, protocol: schema_lib.SchemaProtocol = 'python', **kwargs
+      cls,
+      value: Any,
+      protocol: schema_lib.SchemaProtocol = 'python',
+      use_modality_ref: bool = False,
+      **kwargs
   ) -> str:
     if isinstance(value, str):
       return value
@@ -116,7 +120,7 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
         return str(value)
 
     # Placehold modalities if they are present.
-    if pg.contains(value, type=lf.Modality):
+    if use_modality_ref and pg.contains(value, type=lf.Modality):
       value = lf.ModalityRef.placehold(value)
     return schema_lib.value_repr(protocol).repr(value, **kwargs)
 
@@ -243,13 +247,7 @@ class Mapping(lf.LangFunc):
       {{ input_title }}:
       {{ example.input_repr(protocol, compact=False) | indent(2, True) }}
 
-      {% if has_modality_refs(example.input) -%}
-      {{ modality_refs_title }}:
-      {{ modality_refs_repr(example.input) | indent(2, True) }}
-
-      {% endif -%}
-
-      {%- if example.schema -%}
+      {% if example.schema -%}
       {{ schema_title }}:
       {{ example.schema_repr(protocol) | indent(2, True) }}
 
@@ -269,10 +267,6 @@ class Mapping(lf.LangFunc):
   context_title: Annotated[str, 'The section title for context.'] = 'CONTEXT'
 
   schema_title: Annotated[str, 'The section title for schema.'] = 'SCHEMA'
-
-  modality_refs_title: Annotated[
-      str, 'The section title for modality refs.'
-  ] = 'MODALITY_REFERENCES'
 
   protocol: Annotated[
       schema_lib.SchemaProtocol,
@@ -378,24 +372,3 @@ class Mapping(lf.LangFunc):
     """Gets additional symbol definitions besides schema as globals."""
     return {'ModalityRef': lf.modality.ModalityRef}
 
-  #
-  # Helper methods for handling modalities.
-  #
-
-  def has_modality_refs(self, value: Any) -> bool:
-    """Returns true if the value has modalities."""
-    return not isinstance(value, lf.Modality) and pg.contains(
-        value, type=lf.Modality
-    )
-
-  def modalities(self, value: Any) -> dict[str, lf.Modality]:
-    return lf.Modality.from_value(value)
-
-  def modality_refs_repr(self, value: Any) -> str:
-    with lf.modality.format_modality_as_ref(True):
-      return pg.format(
-          self.modalities(value),
-          compact=False,
-          verbose=False,
-          python_format=True,
-      )

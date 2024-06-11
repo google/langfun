@@ -30,7 +30,7 @@ class CompleteStructure(mapping.Mapping):
 
   mapping_template = lf.Template("""
       {{ input_title }}:
-      {{ example.input_repr() | indent(2, True) }}
+      {{ example.input_repr(use_modality_ref=True) | indent(2, True) }}
 
       {%- if missing_type_dependencies(example.input) %}
 
@@ -45,13 +45,16 @@ class CompleteStructure(mapping.Mapping):
 
       {{ output_title }}:
       {%- if example.has_output %}
-      {{ example.output_repr() | indent(2, True) }}
+      {{ example.output_repr(use_modality_ref=True) | indent(2, True) }}
       {% endif -%}
       """)
 
   input_title = 'INPUT_OBJECT'
   output_title = 'OUTPUT_OBJECT'
   schema_title = 'CLASS_DEFINITIONS'
+  modality_refs_title: Annotated[
+      str, 'The section title for modality refs.'
+  ] = 'MODALITY_REFERENCES'
 
   preamble = lf.LangFunc(
       """
@@ -147,6 +150,28 @@ class CompleteStructure(mapping.Mapping):
         context[cls.__name__] = cls
     pg.traverse(self.input, _visit)
     return context
+
+  #
+  # Helper methods for handling modalities.
+  #
+
+  def has_modality_refs(self, value: Any) -> bool:
+    """Returns true if the value has modalities."""
+    return not isinstance(value, lf.Modality) and pg.contains(
+        value, type=lf.Modality
+    )
+
+  def modalities(self, value: Any) -> dict[str, lf.Modality]:
+    return lf.Modality.from_value(value)
+
+  def modality_refs_repr(self, value: Any) -> str:
+    with lf.modality.format_modality_as_ref(True):
+      return pg.format(
+          self.modalities(value),
+          compact=False,
+          verbose=False,
+          python_format=True,
+      )
 
 
 def complete(
