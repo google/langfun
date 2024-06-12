@@ -1,4 +1,4 @@
-# Copyright 2023 The Langfun Authors
+# Copyright 2024 The Langfun Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -53,19 +53,21 @@ class Mime(lf.Modality):
 
   @functools.cached_property
   def is_text(self) -> bool:
-    return self.mime_type.startswith(
-        (
-            'text/',
-            'application/javascript',
-            'application/json',
-            'application/ld+json',
-            'application/plain',
-            'application/xhtml+xml',
-            'application/xml',
-            'application/x-tex',
-            'application/x-yaml',
-        )
-    )
+    return self.mime_type.startswith((
+        'text/',
+        'application/javascript',
+        'application/json',
+        'application/ld+json',
+        'application/plain',
+        'application/rtf',
+        'application/xhtml+xml',
+        'application/xml',
+        'application/x-javascript',
+        'application/x-python-code',
+        'application/x-tex',
+        'application/x-typescript',
+        'application/x-yaml',
+    ))
 
   @property
   def is_binary(self) -> bool:

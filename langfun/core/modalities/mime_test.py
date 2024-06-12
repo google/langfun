@@ -32,6 +32,14 @@ def mock_readfile(*args, **kwargs):
 
 class CustomMimeTest(unittest.TestCase):
 
+  def test_is_text(self):
+    self.assertTrue(mime.Custom('text/plain', b'foo').is_text)
+    self.assertTrue(mime.Custom('text/xml', b'foo').is_text)
+    self.assertTrue(mime.Custom('application/json', b'foo').is_text)
+    self.assertTrue(mime.Custom('application/x-python-code', b'foo').is_text)
+    self.assertFalse(mime.Custom('application/pdf', b'foo').is_text)
+    self.assertFalse(mime.Custom('application/octet-stream', b'foo').is_text)
+
   def test_from_byes(self):
     content = mime.Mime.from_bytes(b'hello')
     self.assertIs(content.__class__, mime.Mime)
