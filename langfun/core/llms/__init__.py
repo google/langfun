@@ -80,6 +80,7 @@ from langfun.core.llms.openai import Gpt3Babbage
 from langfun.core.llms.openai import Gpt3Ada
 
 from langfun.core.llms.anthropic import Anthropic
+from langfun.core.llms.anthropic import Claude35Sonnet
 from langfun.core.llms.anthropic import Claude3Opus
 from langfun.core.llms.anthropic import Claude3Sonnet
 from langfun.core.llms.anthropic import Claude3Haiku

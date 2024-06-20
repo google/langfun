@@ -28,6 +28,9 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # Rate limits from https://docs.anthropic.com/claude/reference/rate-limits
     #     RPM/TPM for Claude-2.1, Claude-2.0, and Claude-Instant-1.2 estimated
     #     as RPM/TPM of the largest-available model (Claude-3-Opus).
+    'claude-3-5-sonnet-20240620': pg.Dict(
+        max_tokens=4096, rpm=4000, tpm=400000
+    ),
     'claude-3-opus-20240229': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
     'claude-3-sonnet-20240229': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
     'claude-3-haiku-20240307': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
@@ -192,6 +195,12 @@ class Anthropic(rest.REST):
 class Claude3(Anthropic):
   """Base class for Claude 3 models. 200K input tokens and 4K output tokens."""
   multimodal = True
+
+
+class Claude35Sonnet(Claude3):
+  """A balance between between Opus and Haiku."""
+
+  model = 'claude-3-5-sonnet-20240620'
 
 
 class Claude3Opus(Claude3):
