@@ -26,7 +26,9 @@ import pyglove as pg
 SUPPORTED_MODELS_AND_SETTINGS = {
     'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=5),
+    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=5),
+    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=5),
     'gemini-1.0-pro': pg.Dict(api='gemini', rpm=300),
     'gemini-1.0-pro-vision': pg.Dict(api='gemini', rpm=100),
     # PaLM APIs.
