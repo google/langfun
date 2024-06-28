@@ -24,6 +24,8 @@ import pyglove as pg
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
+    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=5),
+    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=5),
     'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=5),
@@ -330,12 +332,19 @@ _PDF = [
 class VertexAIGeminiPro1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
+  model = 'gemini-1.5-pro-001'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
+class VertexAIGeminiPro1_5_0514(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro preview model."""
+
   model = 'gemini-1.5-pro-preview-0514'
   supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class VertexAIGeminiPro1_5_0409(VertexAI):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Pro model."""
+  """Vertex AI Gemini 1.5 Pro preview model."""
 
   model = 'gemini-1.5-pro-preview-0409'
   supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
@@ -343,6 +352,12 @@ class VertexAIGeminiPro1_5_0409(VertexAI):  # pylint: disable=invalid-name
 
 class VertexAIGeminiFlash1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
+  model = 'gemini-1.5-flash-001'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
+class VertexAIGeminiFlash1_5_0514(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash preview model."""
 
   model = 'gemini-1.5-flash-preview-0514'
   supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
