@@ -598,18 +598,18 @@ class LanguageModelTest(unittest.TestCase):
             list(concurrent.concurrent_map(call_lm, ['hi', 'hello']))
 
     self.assertEqual(usages2, {
-        'model2': lm_lib.LMSamplingUsage(100, 100, 200),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1),
     })
     self.assertEqual(usages3, {
-        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4),
+        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4, 4),
     })
     self.assertEqual(usages4, {
-        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4),
-        'model2': lm_lib.LMSamplingUsage(100, 100, 200),
+        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4, 4),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1),
     })
     self.assertEqual(usages1, {
-        'model1': lm_lib.LMSamplingUsage(100 * 5, 100 * 5, 200 * 5),
-        'model2': lm_lib.LMSamplingUsage(100, 100, 200),
+        'model1': lm_lib.LMSamplingUsage(100 * 5, 100 * 5, 200 * 5, 5),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1),
     })
 
 

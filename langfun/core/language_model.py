@@ -84,20 +84,23 @@ class LMSamplingUsage(pg.Object):
   prompt_tokens: int
   completion_tokens: int
   total_tokens: int
+  num_requests: int = 1
 
   def __add__(self, other: 'LMSamplingUsage') -> 'LMSamplingUsage':
     return LMSamplingUsage(
         prompt_tokens=self.prompt_tokens + other.prompt_tokens,
         completion_tokens=self.completion_tokens + other.completion_tokens,
         total_tokens=self.total_tokens + other.total_tokens,
+        num_requests=self.num_requests + other.num_requests,
     )
 
 
 class UsageNotAvailable(LMSamplingUsage):
   """Usage information not available."""
-  prompt_tokens: pg.typing.Int(0).freeze()        # pytype: disable=invalid-annotation
+  prompt_tokens: pg.typing.Int(0).freeze()       # pytype: disable=invalid-annotation
   completion_tokens: pg.typing.Int(0).freeze()   # pytype: disable=invalid-annotation
   total_tokens: pg.typing.Int(0).freeze()        # pytype: disable=invalid-annotation
+  num_requests: pg.typing.Int(1).freeze()        # pytype: disable=invalid-annotation
 
   def __bool__(self) -> bool:
     return False
@@ -726,7 +729,7 @@ class _UsageTracker:
   def __init__(self, model_ids: set[str] | None):
     self.model_ids = model_ids
     self.usages = {
-        m: LMSamplingUsage(0, 0, 0) for m in model_ids
+        m: LMSamplingUsage(0, 0, 0, 0) for m in model_ids
     } if model_ids else {}
 
   def track(self, model_id: str, usage: LMSamplingUsage):
