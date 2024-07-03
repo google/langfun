@@ -196,7 +196,9 @@ def sandbox_call(
     p.start()
     p.join(timeout=timeout)
     if p.is_alive():
-      p.terminate()
+      # We use `kill` instead of `terminate` to release process resources
+      # right away.
+      p.kill()
       raise TimeoutError(f'Execution time exceed {timeout} seconds.')
     x = q.get()
     if isinstance(x, Exception):
