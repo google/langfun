@@ -168,6 +168,28 @@ class Foo(pg.Object):
   y: int
 
 
+class TimeLimitTest(unittest.TestCase):
+
+  def test_time_limit_reached(self):
+    timed_out = False
+    try:
+      with execution.time_limit(1):
+        for _ in range(10):
+          time.sleep(1)
+    except TimeoutError:
+      timed_out = True
+    self.assertTrue(timed_out)
+
+  def test_time_limit_not_reached(self):
+    timed_out = False
+    try:
+      with execution.time_limit(10):
+        time.sleep(1)
+    except TimeoutError:
+      timed_out = True
+    self.assertFalse(timed_out)
+
+
 class SandboxCallTest(unittest.TestCase):
 
   def test_basics(self):
@@ -207,6 +229,15 @@ class CallTest(unittest.TestCase):
 
     self.assertEqual(
         execution.call(foo, 1, y=2, sandbox=False),
+        3
+    )
+
+  def test_call_without_sandboxing_but_with_timeout(self):
+    def foo(x, y):
+      return x + y
+
+    self.assertEqual(
+        execution.call(foo, 1, y=2, sandbox=False, timeout=1),
         3
     )
 

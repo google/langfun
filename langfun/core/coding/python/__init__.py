@@ -27,6 +27,7 @@ from langfun.core.coding.python.parsing import PythonCodeParser
 from langfun.core.coding.python.execution import context
 from langfun.core.coding.python.execution import get_context
 from langfun.core.coding.python.execution import evaluate
+from langfun.core.coding.python.execution import time_limit
 from langfun.core.coding.python.execution import sandbox_call
 from langfun.core.coding.python.execution import call
 from langfun.core.coding.python.execution import run

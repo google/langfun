@@ -17,6 +17,7 @@ import ast
 import contextlib
 import io
 import multiprocessing
+import signal
 from typing import Any, Callable
 
 from langfun.core.coding.python import errors
@@ -149,6 +150,21 @@ def evaluate(
   return global_vars[RESULT_KEY]
 
 
+@contextlib.contextmanager
+def time_limit(seconds: float):
+  """Context manager for apply time limit under current thread."""
+  def signal_handler(signum, frame):
+    del signum, frame
+    raise TimeoutError(f'Execution time exceed {seconds} seconds.')
+
+  signal.signal(signal.SIGALRM, signal_handler)
+  signal.alarm(int(seconds))
+  try:
+    yield
+  finally:
+    signal.alarm(0)
+
+
 def sandbox_call(
     func: Callable[..., Any],
     *args,
@@ -250,7 +266,10 @@ def call(
   elif sandbox:
     return sandbox_call(func, *args, timeout=timeout, **kwargs)
   else:
-    return func(*args, **kwargs)
+    if timeout is None:
+      return func(*args, **kwargs)
+    with time_limit(timeout):
+      return func(*args, **kwargs)
 
 
 def run(
