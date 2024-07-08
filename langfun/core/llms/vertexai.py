@@ -190,6 +190,7 @@ class VertexAI(lf.LanguageModel):
                 ' no text).'
             ),
         ),
+        (Exception, 'ValueError: Cannot get the Candidate text.'),
     ]
 
     return lf.concurrent_execute(
