@@ -330,6 +330,14 @@ class Mapping(lf.LangFunc):
     )
     if isinstance(self.input, lf.Message):
       lm_input.source = self.input
+
+    # Check if boolean exists, add this line to ensure the output is True or False,
+    # not containing other local variables to make the output more stable.
+    if self.schema is not None:
+      schema_str = self.schema.schema_str('python')
+      if 'bool' in schema_str:
+        lm_input.text += "\n\nEnsure the boolean field explicitly returns either True or False, never None."
+
     return lm_input
 
   def transform_output(self, lm_output: lf.Message) -> lf.Message:
