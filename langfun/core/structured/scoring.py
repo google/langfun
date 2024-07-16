@@ -76,14 +76,19 @@ def score(
       raise ValueError('`lm` must be specified or provided from `lf.context`.')
     lm = lm_override.value
 
+  completion_reprs = []
+  for c in completions:
+    if isinstance(c, mapping.MappingError):
+      rep = c.lm_response
+    else:
+      rep = mapping.MappingExample.value_repr(
+          c, protocol=protocol, compact=False, verbose=False
+      )
+    completion_reprs.append(rep)
+
   results = lm.score(
       input_message,
-      [
-          mapping.MappingExample.value_repr(
-              c, protocol=protocol, compact=False, verbose=False
-          )
-          for c in completions
-      ],
+      completion_reprs,
   )
   if return_scoring_results:
     return results
