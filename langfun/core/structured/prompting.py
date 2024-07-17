@@ -193,6 +193,11 @@ def query(
   if isinstance(prompt, pg.Symbolic) and prompt.sym_partial and schema is None:
     schema = prompt.__class__
 
+  # Create a copy of the prompt if it has a parent object, so all child modality
+  # objects could be referred by path relative to the prompt.
+  if isinstance(prompt, lf.Template) and prompt.sym_parent:
+    prompt = prompt.clone()
+
   if schema in (None, str):
     # Query with natural language output.
     output = lf.LangFunc.from_value(prompt, **kwargs)(

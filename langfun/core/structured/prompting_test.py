@@ -361,6 +361,17 @@ class QueryTest(unittest.TestCase):
             """),
     )
 
+  def test_query_prompt_with_unrooted_template(self):
+    output = prompting.query_prompt(
+        pg.Dict(
+            input=lf.Template(
+                'what is {{image}}',
+                image=modalities.Image.from_bytes(b'mock_image')
+            )
+        ).input,
+    )
+    self.assertIsNotNone(output.get_modality('image'))
+
   def test_query_output(self):
     self.assertEqual(
         prompting.query_output(
