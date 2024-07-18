@@ -77,6 +77,12 @@ class ImageTest(unittest.TestCase):
       self.assertEqual(image._repr_html_(), '<img src="http://mock/web/a.png">')
       self.assertEqual(image.to_bytes(), image_content)
 
+  def test_image_size(self):
+    image = image_lib.Image.from_uri('http://mock/web/a.png')
+    with mock.patch('requests.get') as mock_requests_get:
+      mock_requests_get.side_effect = mock_request
+      self.assertEqual(image.size(), (24, 24))
+
 
 if __name__ == '__main__':
   unittest.main()

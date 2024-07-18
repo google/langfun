@@ -14,7 +14,9 @@
 """Image modality."""
 
 import functools
+import io
 from langfun.core.modalities import mime
+from PIL import Image as pil_image
 
 
 class Image(mime.Mime):
@@ -28,3 +30,7 @@ class Image(mime.Mime):
 
   def _html(self, uri: str) -> str:
     return f'<img src="{uri}">'
+
+  def size(self) -> tuple[int, int]:
+    img = pil_image.open(io.BytesIO(self.to_bytes()))
+    return img.size

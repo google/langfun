@@ -10,3 +10,4 @@ python-magic>=0.4.27
 requests>=2.31.0
 termcolor==1.1.0
 tqdm>=4.64.1
+pillow>=10.1.0
