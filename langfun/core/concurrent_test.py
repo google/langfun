@@ -256,18 +256,18 @@ class ProgressBarTest(unittest.TestCase):
     with contextlib.redirect_stderr(string_io):
       bar_id = concurrent.ProgressBar.install(None, 4)
       concurrent.ProgressBar.update(bar_id, 1, postfix=None)
-      self.assertIn('1/4', string_io.getvalue())
       concurrent.ProgressBar.update(bar_id, 1, postfix='hello')
-      self.assertIn('2/4', string_io.getvalue())
-      self.assertIn('hello', string_io.getvalue())
       concurrent.ProgressBar.update(bar_id, color='lightgreen')
-      self.assertIn('2/4', string_io.getvalue())
       concurrent.ProgressBar.update(bar_id, 2, postfix=dict(x=1))
-      self.assertIn('4/4', string_io.getvalue())
-      self.assertIn('x=1', string_io.getvalue())
       with self.assertRaisesRegex(ValueError, 'Unsupported postfix'):
         concurrent.ProgressBar.update(bar_id, 0, postfix=1)
       concurrent.ProgressBar.uninstall(bar_id)
+    self.assertIn('1/4', string_io.getvalue())
+    self.assertIn('2/4', string_io.getvalue())
+    self.assertIn('hello', string_io.getvalue())
+    self.assertNotIn('3/4', string_io.getvalue())
+    self.assertIn('4/4', string_io.getvalue())
+    self.assertIn('x=1', string_io.getvalue())
 
 
 class ConcurrentMapTest(unittest.TestCase):

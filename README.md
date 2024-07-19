@@ -45,12 +45,11 @@ Langfun is *simple and elegant*:
 import langfun as lf
 import pyglove as pg
 
-from typing import Literal
 from IPython import display
 
 class Item(pg.Object):
   name: str
-  size: Literal['large', 'medium', 'small']
+  color: str
 
 class ImageDescription(pg.Object):
   items: list[Item]
