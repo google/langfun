@@ -75,4 +75,4 @@ CodeError = coding.CodeError
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-bad-import-order
 
-__version__ = "0.0.2"
+__version__ = "0.1.0"
