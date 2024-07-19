@@ -161,7 +161,8 @@ class PythonCodeParser(lf.Component):
 
           # Peek forward to see if it could be a valid string.
           nt, nnt_start = _next_token(code_text, i + 1)
-          if nt in (',', '[', ']', '}', ')', '+', '*', '%', '\n', ':'):
+          if (len(c) == 3
+              or nt in (',', '[', ']', '}', ')', '+', '*', '%', '\n', ':')):
             end_quote = True
           elif nt == ' ':
             # Detect if . could be a method invocation.
