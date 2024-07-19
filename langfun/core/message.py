@@ -318,7 +318,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     while chunk_start < len(text):
       ref_start = text.find(modality.Modality.REF_START, ref_end)
       if ref_start == -1:
-        add_text_chunk(text[chunk_start:].strip())
+        add_text_chunk(text[chunk_start:].strip(' '))
         break
 
       var_start = ref_start + len(modality.Modality.REF_START)
@@ -330,29 +330,31 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
       var_name = text[var_start:ref_end].strip()
       var_value = self.get_modality(var_name)
       if var_value is not None:
-        add_text_chunk(text[chunk_start:ref_start].strip())
+        add_text_chunk(text[chunk_start:ref_start].strip(' '))
         chunks.append(var_value)
         chunk_start = ref_end + len(modality.Modality.REF_END)
     return chunks
 
   @classmethod
   def from_chunks(
-      cls, chunks: list[str | modality.Modality], separator: str = '\n'
+      cls, chunks: list[str | modality.Modality], separator: str = ' '
   ) -> 'Message':
     """Assembly a message from a list of string or modality objects."""
     fused_text = io.StringIO()
     ref_index = 0
     metadata = dict()
-
+    last_char = None
     for i, chunk in enumerate(chunks):
-      if i > 0:
+      if i > 0 and last_char not in ('\t', ' ', '\n'):
         fused_text.write(separator)
       if isinstance(chunk, str):
         fused_text.write(chunk)
+        last_char = chunk[-1]
       else:
         assert isinstance(chunk, modality.Modality), chunk
         var_name = f'obj{ref_index}'
         fused_text.write(modality.Modality.text_marker(var_name))
+        last_char = modality.Modality.REF_END[-1]
         # Make a reference if the chunk is already owned by another object
         # to avoid copy.
         metadata[var_name] = pg.maybe_ref(chunk)

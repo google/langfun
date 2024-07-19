@@ -295,7 +295,7 @@ class MessageTest(unittest.TestCase):
             [
                 'Hi, this is',
                 CustomModality('foo'),
-                'and this is {{b}}.',
+                'and this is {{b}}.\n',
                 CustomModality('bar'),
                 '{{something else',
             ],
@@ -306,11 +306,8 @@ class MessageTest(unittest.TestCase):
             message.AIMessage.from_chunks(chunks),
             message.AIMessage(
                 inspect.cleandoc("""
-                    Hi, this is
-                    <<[[obj0]]>>
-                    and this is {{b}}.
-                    <<[[obj1]]>>
-                    {{something else
+                    Hi, this is <<[[obj0]]>> and this is {{b}}.
+                    <<[[obj1]]>> {{something else
                     """),
                 obj0=pg.Ref(m.a),
                 obj1=pg.Ref(m.x.c),
