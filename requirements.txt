@@ -3,11 +3,11 @@ google-generativeai>=0.3.2
 jinja2>=3.1.2
 openai==0.27.2
 openpyxl>=3.1.0
-pandas>=2.1.4
+pandas>=2.0.3
 pyglove>=0.4.5.dev20240423
 python-docx>=0.8.11
 python-magic>=0.4.27
 requests>=2.31.0
 termcolor==1.1.0
 tqdm>=4.64.1
-pillow>=10.1.0
+pillow>=10.0.0
