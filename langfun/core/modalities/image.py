@@ -34,3 +34,12 @@ class Image(mime.Mime):
   def size(self) -> tuple[int, int]:
     img = pil_image.open(io.BytesIO(self.to_bytes()))
     return img.size
+
+  def to_pil_image(self) -> pil_image.Image:
+    return pil_image.open(io.BytesIO(self.to_bytes()))
+
+  @classmethod
+  def from_pil_image(cls, img: pil_image.Image) -> 'Image':
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return cls.from_bytes(buf.getvalue())

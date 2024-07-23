@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image tests."""
+import io
 import unittest
 from unittest import mock
 
 import langfun.core as lf
 from langfun.core.modalities import image as image_lib
 from langfun.core.modalities import mime as mime_lib
+import PIL.Image as pil_image
 import pyglove as pg
 
 
@@ -82,6 +84,18 @@ class ImageTest(unittest.TestCase):
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = mock_request
       self.assertEqual(image.size(), (24, 24))
+
+  def test_to_pil_image(self):
+    image = image_lib.Image.from_uri('http://mock/web/a.png')
+    with mock.patch('requests.get') as mock_requests_get:
+      mock_requests_get.side_effect = mock_request
+      self.assertIsInstance(image.to_pil_image(), pil_image.Image)
+
+  def test_from_pil_image(self):
+    image = pil_image.open(io.BytesIO(image_content))
+    self.assertIsInstance(
+        image_lib.Image.from_pil_image(image), image_lib.Image
+    )
 
 
 if __name__ == '__main__':
