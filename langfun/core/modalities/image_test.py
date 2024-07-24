@@ -83,7 +83,7 @@ class ImageTest(unittest.TestCase):
     image = image_lib.Image.from_uri('http://mock/web/a.png')
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = mock_request
-      self.assertEqual(image.size(), (24, 24))
+      self.assertEqual(image.size, (24, 24))
 
   def test_to_pil_image(self):
     image = image_lib.Image.from_uri('http://mock/web/a.png')
