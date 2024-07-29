@@ -239,24 +239,20 @@ class Matching(base.Evaluation):
     """Renders metrics in HTML."""
     assert self.result is not None
     m = self.result.metrics
-    s.write(
-        '<a title="Matches (%d/%d)" href="%s" style="color:green">%s</a>'
-        % (
-            m.num_matches,
-            m.total,
-            self.matches_link,
-            self._format_rate(m.match_rate),
-        )
+    self._render_link(
+        s,
+        'Matches (%d/%d)' % (m.num_matches, m.total),
+        self._format_rate(m.match_rate),
+        'color:green',
+        lambda: self.matches_link,
     )
     s.write(' | ')
-    s.write(
-        '<a title="Mismatches (%d/%d)" href="%s" style="color:orange">%s</a>'
-        % (
-            m.num_mismatches,
-            m.total,
-            self.mismatches_link,
-            self._format_rate(m.mismatch_rate),
-        )
+    self._render_link(
+        s,
+        'Mismatches (%d/%d)' % (m.num_mismatches, m.total),
+        self._format_rate(m.mismatch_rate),
+        'color:orange',
+        lambda: self.mismatches_link,
     )
     s.write(' | ')
     super()._render_summary_metrics(s)

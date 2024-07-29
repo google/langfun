@@ -1304,20 +1304,22 @@ class Evaluation(Evaluable):
     s = io.StringIO()
     definition = _html_repr(self, compact=False, escape=True)
     s.write('<div><table><tr><td>')
+    self._render_link(
+        s,
+        definition,
+        self.hash,
+        '',
+        lambda: self.link(self.dir),
+    )
     if self.result is None:
       s.write(
-          f'<a target="_blank" title="{definition}" '
-          f'href="{self.link(self.dir)}">{self.hash}</a>'
           '</td></tr><tr><td>'
           '<span style="color: gray">(IN-PROGRESS...)</span>'
       )
     else:
-      s.write(
-          f'<a target="_blank" title="{definition}" '
-          f'href="{self.index_link}">{self.hash}</a>'
-          f' &nbsp;[<a href="{self.link(self.dir)}">dir</a>]'
-          '</td></tr><tr><td>'
-      )
+      if self.dir:
+        s.write(f' &nbsp;[<a href="{self.link(self.dir)}">dir</a>]')
+      s.write('</td></tr><tr><td>')
       self._render_summary_metrics(s)
 
       # Summarize average usage.
@@ -1341,6 +1343,20 @@ class Evaluation(Evaluable):
         f'" style="color:gray">({total} tokens)</a>'
     )
 
+  def _render_link(self,
+                   s: io.StringIO,
+                   title: str,
+                   text: str,
+                   style: str,
+                   url_fn: Callable[[], str]) -> None:
+    """Renders a link in HTML."""
+    s.write(
+        f'<a target="_blank" title="{title}" style="{style}"'
+    )
+    if self.dir:
+      s.write(f' href="{url_fn()}"')
+    s.write(f'>{text}</a>')
+
   def _render_summary_metrics(self, s: io.StringIO) -> None:
     """Renders metrics in HTML."""
     assert self.result is not None
@@ -1362,14 +1378,12 @@ class Evaluation(Evaluable):
     extra_style = ''
     if m.oop_failure_rate > 0.1 and m.oop_failures > 3:
       extra_style = ';font-weight:bold'
-    s.write(
-        '<a title="%s" href="%s" style="color:magenta%s">%s</a>'
-        % (
-            oop_failure_title,
-            self.oop_failures_link,
-            extra_style,
-            self._format_rate(m.oop_failure_rate),
-        )
+    self._render_link(
+        s,
+        oop_failure_title,
+        self._format_rate(m.oop_failure_rate),
+        f'color:magenta{extra_style}',
+        lambda: self.oop_failures_link,
     )
     s.write(' | ')
 
@@ -1387,14 +1401,12 @@ class Evaluation(Evaluable):
           )
 
     extra_style = ';font-weight:bold' if m.non_oop_failures > 0 else ''
-    s.write(
-        '<a title="%s" href="%s" style="color:red%s">%s</a>'
-        % (
-            non_oop_failure_title,
-            self.non_oop_failures_link,
-            extra_style,
-            self._format_rate(m.non_oop_failure_rate),
-        )
+    self._render_link(
+        s,
+        non_oop_failure_title,
+        self._format_rate(m.non_oop_failure_rate),
+        f'color:red{extra_style}',
+        lambda: self.non_oop_failures_link,
     )
 
   def _format_rate(self, rate: float) -> str:

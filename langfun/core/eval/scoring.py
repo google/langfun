@@ -172,14 +172,12 @@ class Scoring(base.Evaluation):
     """Renders metrics in HTML."""
     assert self.result is not None
     m = self.result.metrics
-    s.write(
-        '<a title="Average score (%d/%d)" href="%s" style="color:green">%s</a>'
-        % (
-            m.num_scored,
-            m.total,
-            self.scored_link,
-            '%.2f%%' % (m.score_rate * 100),
-        )
+    self._render_link(
+        s,
+        'Average score (%d/%d)' % (m.num_scored, m.total),
+        '%.2f (%.2f%%)' % (m.avg_score, m.score_rate * 100),
+        'color:green',
+        lambda: self.scored_link,
     )
     s.write(' | ')
     super()._render_summary_metrics(s)
