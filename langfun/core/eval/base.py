@@ -542,6 +542,8 @@ class Evaluable(lf.Component):
           'padding: 10px; border: 1px solid; margin-top: 10px">'
       )
       s.write(html.escape(m.get('formatted_text', m.text)))
+
+      # Write output.
       if m.result is not None:
         s.write(
             '<div style="color: magenta; white-space: pre-wrap;'
@@ -549,6 +551,23 @@ class Evaluable(lf.Component):
         )
         s.write(html.escape(pg.format(m.result)))
         s.write('</div>')
+
+      # Write modality information.
+      if 'lm-input' in m.tags or 'lm-response' in m.tags:
+        modalities = m.referred_modalities()
+        if modalities:
+          s.write(f'<div style="color: {text_color}; white-space: pre-wrap;'
+                  'padding: 10px; border: 1px solid; margin-top: 10px"><table>')
+          for name, modality in modalities.items():
+            s.write(f'<tr><td>{name}</td><td>')
+            if hasattr(modality, '_repr_html_'):
+              s.write(modality._repr_html_())   # pylint: disable=protected-access
+            else:
+              s.write(html.escape(pg.format(modality, max_bytes_len=32)))
+            s.write('</td></tr>')
+          s.write('</table></div>')
+
+      # Write usage information.
       if m.metadata.get('usage', None):
         s.write(
             '<div style="background-color: #EEEEEE; color: black; '

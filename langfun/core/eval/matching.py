@@ -271,9 +271,9 @@ class Matching(base.Evaluation):
     for i, (example, output, message) in enumerate(self.matches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
-      input_str = pg.format(example, verbose=False)
+      input_str = pg.format(example, verbose=False, max_bytes_len=32)
       s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
-      output_str = pg.format(output, verbose=False)
+      output_str = pg.format(output, verbose=False, max_bytes_len=32)
       s.write(f'<td style="color:blue;white-space:pre-wrap">{output_str}</td>')
       s.write('<td>')
       self._render_message(message, s)
@@ -296,9 +296,9 @@ class Matching(base.Evaluation):
     for i, (example, output, message) in enumerate(self.mismatches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
-      input_str = pg.format(example, verbose=False)
+      input_str = pg.format(example, verbose=False, max_bytes_len=32)
       s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
-      output_str = pg.format(output, verbose=False)
+      output_str = pg.format(output, verbose=False, max_bytes_len=32)
       s.write(
           f'<td style="color:magenta;white-space:pre-wrap">{output_str}</td>'
       )
