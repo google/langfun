@@ -34,6 +34,8 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # Models from https://platform.openai.com/docs/models
     # RPM is from https://platform.openai.com/docs/guides/rate-limits
     # GPT-4o models
+    'gpt-4o-mini': pg.Dict(rpm=10000, tpm=5000000),
+    'gpt-4o-mini-2024-07-18': pg.Dict(rpm=10000, tpm=5000000),
     'gpt-4o': pg.Dict(rpm=10000, tpm=5000000),
     'gpt-4o-2024-05-13': pg.Dict(rpm=10000, tpm=5000000),
     # GPT-4-Turbo models
@@ -345,6 +347,18 @@ class Gpt4_32K(Gpt4):       # pylint:disable=invalid-name
 class Gpt4_32K_20230613(Gpt4_32K):    # pylint:disable=invalid-name
   """GPT-4 @20230613. 32K context window. Knowledge up to 9-2021."""
   model = 'gpt-4-32k-0613'
+
+
+class Gpt4oMini(OpenAI):
+  """GPT-4o Mini."""
+  model = 'gpt-4o-mini'
+  multimodal = True
+
+
+class Gpt4oMini_20240718(OpenAI):  # pylint:disable=invalid-name
+  """GPT-4o Mini."""
+  model = 'gpt-4o-mini-2024-07-18'
+  multimodal = True
 
 
 class Gpt4o(OpenAI):

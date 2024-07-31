@@ -39,6 +39,8 @@ from langfun.core.llms.google_genai import Palm2_IT
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
 
+from langfun.core.llms.openai import Gpt4oMini
+from langfun.core.llms.openai import Gpt4oMini_20240718
 from langfun.core.llms.openai import Gpt4o
 from langfun.core.llms.openai import Gpt4o_20240513
 
