@@ -18,6 +18,7 @@ import os
 from typing import Annotated, Any
 
 from google.auth import credentials as credentials_lib
+from google.cloud.aiplatform import aiplatform
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 import pyglove as pg
@@ -35,6 +36,9 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     'text-bison': pg.Dict(api='palm', rpm=1600),
     'text-bison-32k': pg.Dict(api='palm', rpm=300),
     'text-unicorn': pg.Dict(api='palm', rpm=100),
+    # Endpoint
+    # TODO(chengrun): Set a more proper rpm for endpoint.
+    'endpoint': pg.Dict(api='endpoint', rpm=20),
 }
 
 
@@ -51,6 +55,10 @@ class VertexAI(lf.LanguageModel):
           'https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models '
           'for details.'
       ),
+  ]
+
+  endpoint_name: pg.typing.Annotated[
+      str | None, 'Vertex Endpoint name or ID.',
   ]
 
   project: Annotated[
@@ -212,6 +220,8 @@ class VertexAI(lf.LanguageModel):
         return self._sample_generative_model(prompt)
       case 'palm':
         return self._sample_text_generation_model(prompt)
+      case 'endpoint':
+        return self._sample_endpoint_model(prompt)
       case _:
         raise ValueError(f'Unsupported API: {api}')
 
@@ -255,6 +265,32 @@ class VertexAI(lf.LanguageModel):
     return lf.LMSamplingResult([
         # Scoring is not supported.
         lf.LMSample(lf.AIMessage(response.text), score=0.0)
+    ])
+
+  def _sample_endpoint_model(
+      self, prompt: lf.Message
+  ) -> lf.LMSamplingResult:
+    """Samples a text generation model."""
+    model = aiplatform.Endpoint(self.endpoint_name)
+    # TODO(chengrun): Add support for max_output_tokens and stop_sequences.
+    predict_options = dict(
+        temperature=self.sampling_options.temperature or 1.0,
+        top_k=self.sampling_options.top_k or 32,
+        top_p=self.sampling_options.top_p or 1,
+    )
+    instances = [{'prompt': prompt.text, **predict_options}]
+    response = model.predict(instances=instances)
+
+    def _extract_output(response):
+      try:
+        # for models whose outputs formatted like "Prompt:\n...\nOutput:\n..."
+        return response.predictions[0].split('Output:')[-1].strip()
+      except:  # pylint: disable=bare-except
+        return response
+
+    return lf.LMSamplingResult([
+        # Scoring is not supported.
+        lf.LMSample(lf.AIMessage(_extract_output(response)), score=0.0)
     ])
 
 

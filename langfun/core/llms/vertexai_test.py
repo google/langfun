@@ -227,6 +227,42 @@ class VertexAITest(unittest.TestCase):
           ),
       )
 
+  def test_call_endpoint_model(self):
+    with mock.patch(
+        'google.cloud.aiplatform.aiplatform.Endpoint.predict'
+    ) as mock_model_predict:
+
+      class Endpoint:
+
+        def predict(self, instances):
+          response = f'This is a response to instances {instances}.'
+          return response
+
+      mock_model_predict.side_effect = lambda *args, **kw: Endpoint()
+      lm = vertexai.VertexAI(
+          'endpoint',
+          endpoint_name='dummy',
+          project='abc',
+          location='us-central1',
+      )
+      print(
+          lm(
+              'hello',
+              temperature=2.0,
+              top_p=1.0,
+              top_k=20,
+          ).text
+      )
+      self.assertEqual(
+          lm(
+              'hello',
+              temperature=2.0,
+              top_p=1.0,
+              top_k=20,
+          ).text,
+          'This is a response to instances [(hello, 2.0, .',
+      )
+
 
 if __name__ == '__main__':
   unittest.main()
