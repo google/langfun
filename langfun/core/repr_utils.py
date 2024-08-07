@@ -16,9 +16,18 @@
 import collections
 import contextlib
 import io
-from typing import Iterator
+from typing import Any, Callable, Iterator
 
 from langfun.core import component
+import pyglove as pg
+
+
+class Html(pg.Object):
+  """A HTML adapter for rendering."""
+  content: str
+
+  def _repr_html_(self) -> str:
+    return self.content
 
 
 @contextlib.contextmanager
@@ -81,3 +90,84 @@ def write_maybe_shared(s: io.StringIO, content: str) -> bool:
     s.write(content)
   context[content] += 1
   return not written
+
+
+def html_repr(
+    value: Any,
+    item_color: Callable[
+        [str, str],
+        tuple[
+            str | None,   # Label text color
+            str | None,   # Label background color
+            str | None,   # Value text color
+            str | None,   # Value background color
+        ]
+    ] | None = None    # pylint: disable=bad-whitespace
+) -> str:
+  """Writes a list of key-value pairs to an string stream.
+
+  Args:
+    value: A value to be rendered in HTML.
+    item_color: A function that takes the key and value and returns a tuple
+      of four strings, the text color and background color of the label and
+      value respectively. If None, a default color scheme will be used.
+
+  Returns:
+    The HTML representation of the value.
+  """
+  s = io.StringIO()
+  s.write('<div style="padding-left: 20px; margin-top: 10px">')
+  s.write('<table style="border-top: 1px solid #EEEEEE;">')
+  item_color = item_color or (lambda k, v: (None, '#F1C40F', None, None))
+
+  for k, v in pg.object_utils.flatten(value).items():
+    if isinstance(v, pg.Ref):
+      v = v.value
+    if hasattr(v, '_repr_html_'):
+      cs = v._repr_html_()  # pylint: disable=protected-access
+    else:
+      cs = f'<span style="white-space: pre-wrap">{str(v)}</span>'
+
+    key_color, key_bg_color, value_color, value_bg_color = item_color(k, v)
+    key_span = html_round_text(
+        k,
+        text_color=key_color,
+        background_color=key_bg_color,
+        margin_bottom='0px'
+    )
+    value_color_style = f'color: {value_color};' if value_color else ''
+    value_bg_color_style = (
+        f'background-color: {value_bg_color};' if value_bg_color else ''
+    )
+    s.write(
+        '<tr>'
+        '<td style="padding: 5px; vertical-align: top; '
+        f'border-bottom: 1px solid #EEEEEE">{key_span}</td>'
+        '<td style="padding: 15px 5px 5px 5px; vertical-align: top; '
+        'border-bottom: 1px solid #EEEEEE;'
+        f'{value_color_style}{value_bg_color_style}">{cs}</td></tr>'
+    )
+  s.write('</table></div>')
+  return s.getvalue()
+
+
+def html_round_text(
+    text: str,
+    *,
+    text_color: str = 'black',
+    background_color: str = '#EEEEEE',
+    display: str = 'inline-block',
+    margin_top: str = '5px',
+    margin_bottom: str = '5px',
+    whitespace: str = 'pre-wrap') -> str:
+  """Renders a HTML span with rounded corners."""
+  color_style = f'color: {text_color};' if text_color else ''
+  bg_color_style = (
+      f'background-color: {background_color};' if background_color else ''
+  )
+  return (
+      f'<span style="{color_style}{bg_color_style}'
+      f'display:{display}; border-radius:10px; padding:5px; '
+      f'margin-top: {margin_top}; margin-bottom: {margin_bottom}; '
+      f'white-space: {whitespace}">{text}</span>'
+  )

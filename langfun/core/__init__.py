@@ -123,6 +123,7 @@ from langfun.core import console
 
 # Helpers for implementing _repr_xxx_ methods.
 from langfun.core import repr_utils
+Html = repr_utils.Html
 
 # Utility for event logging.
 from langfun.core import logging

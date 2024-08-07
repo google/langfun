@@ -26,6 +26,9 @@ class CustomModality(modality.Modality):
   def to_bytes(self):
     return self.content.encode()
 
+  def _repr_html_(self):
+    return f'<div>CustomModality: {self.content}</div>'
+
 
 class MessageTest(unittest.TestCase):
 
@@ -313,6 +316,52 @@ class MessageTest(unittest.TestCase):
                 obj1=pg.Ref(m.x.c),
             ),
         )
+    )
+
+  def test_html(self):
+    m = message.UserMessage(
+        'hi, this is a <<[[img1]]>> and <<[[x.img2]]>>',
+        img1=CustomModality('foo'),
+        x=dict(img2=CustomModality('bar')),
+    )
+    self.assertEqual(
+        m._repr_html_(),
+        (
+            '<div style="padding:0px 10px 0px 10px;"><span style="color: white;'
+            'background-color: green;display:inline-block; border-radius:10px; '
+            'padding:5px; margin-top: 5px; margin-bottom: 5px; white-space: '
+            'pre-wrap">UserMessage</span><hr><span style="color: green; '
+            'white-space: pre-wrap;">hi, this is a&nbsp;<span style="color: '
+            'black;background-color: #f7dc6f;display:inline-block; '
+            'border-radius:10px; padding:5px; margin-top: 5px; margin-bottom: '
+            '5px; white-space: pre-wrap">img1</span>&nbsp;and&nbsp;<span style'
+            '="color: black;background-color: #f7dc6f;display:inline-block; '
+            'border-radius:10px; padding:5px; margin-top: 5px; margin-bottom: '
+            '5px; white-space: pre-wrap">x.img2</span>&nbsp;</span><div style='
+            '"padding-left: 20px; margin-top: 10px"><table style="border-top: '
+            '1px solid #EEEEEE;"><tr><td style="padding: 5px; vertical-align: '
+            'top; border-bottom: 1px solid #EEEEEE"><span style="color: black;'
+            'background-color: #f7dc6f;display:inline-block; border-radius:'
+            '10px; padding:5px; margin-top: 5px; margin-bottom: 0px; '
+            'white-space: pre-wrap">img1</span></td><td style="padding: 15px '
+            '5px 5px 5px; vertical-align: top; border-bottom: 1px solid '
+            '#EEEEEE;"><div>CustomModality: foo</div></td></tr><tr><td style='
+            '"padding: 5px; vertical-align: top; border-bottom: 1px solid '
+            '#EEEEEE"><span style="color: black;background-color: #f7dc6f;'
+            'display:inline-block; border-radius:10px; padding:5px; margin-top:'
+            ' 5px; margin-bottom: 0px; white-space: pre-wrap">x.img2</span>'
+            '</td><td style="padding: 15px 5px 5px 5px; vertical-align: top; '
+            'border-bottom: 1px solid #EEEEEE;"><div>CustomModality: bar</div>'
+            '</td></tr></table></div></div>'
+        )
+    )
+    self.assertIn(
+        'background-color: blue',
+        message.AIMessage('hi').to_html().content,
+    )
+    self.assertIn(
+        'background-color: black',
+        message.SystemMessage('hi').to_html().content,
     )
 
 

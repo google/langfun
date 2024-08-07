@@ -14,11 +14,13 @@
 """Messages that are exchanged between users and agents."""
 
 import contextlib
+import html
 import io
 from typing import Annotated, Any, Optional, Union
 
 from langfun.core import modality
 from langfun.core import natural_language
+from langfun.core import repr_utils
 import pyglove as pg
 
 
@@ -304,15 +306,16 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
         m.referred_name: m for m in chunks if isinstance(m, modality.Modality)
     }
 
-  def chunk(self) -> list[str | modality.Modality]:
+  def chunk(self, text: str | None = None) -> list[str | modality.Modality]:
     """Chunk a message into a list of str or modality objects."""
     chunks = []
 
     def add_text_chunk(text_piece: str) -> None:
       if text_piece:
         chunks.append(text_piece)
+    if text is None:
+      text = self.text
 
-    text = self.text
     chunk_start = 0
     ref_end = 0
     while chunk_start < len(text):
@@ -490,6 +493,79 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     v = self.metadata[key]
     return v.value if isinstance(v, pg.Ref) else v
 
+  def _repr_html_(self):
+    return self.to_html().content
+
+  def to_html(
+      self,
+      include_message_type: bool = True
+  ) -> repr_utils.Html:
+    """Returns the HTML representation of the message."""
+    s = io.StringIO()
+    s.write('<div style="padding:0px 10px 0px 10px;">')
+    # Title bar.
+    if include_message_type:
+      s.write(
+          repr_utils.html_round_text(
+              self.__class__.__name__,
+              text_color='white',
+              background_color=self._text_color(),
+          )
+      )
+      s.write('<hr>')
+
+    # Body.
+    s.write(
+        f'<span style="color: {self._text_color()}; white-space: pre-wrap;">'
+    )
+
+    # NOTE(daiyip): LLM may reformat the text from the input, therefore
+    # we proritize the formatted text if it's available.
+    maybe_reformatted = self.get('formatted_text')
+    referred_chunks = {}
+    for chunk in self.chunk(maybe_reformatted):
+      if isinstance(chunk, str):
+        s.write(html.escape(chunk))
+      else:
+        assert isinstance(chunk, modality.Modality), chunk
+        s.write('&nbsp;')
+        s.write(repr_utils.html_round_text(
+            chunk.referred_name,
+            text_color='black',
+            background_color='#f7dc6f'
+        ))
+        s.write('&nbsp;')
+        referred_chunks[chunk.referred_name] = chunk
+    s.write('</span>')
+
+    def item_color(k, v):
+      if isinstance(v, modality.Modality):
+        return ('black', '#f7dc6f', None, None)   # Light yellow
+      elif k == 'result':
+        return ('white', 'purple', 'purple', None)      # Blue.
+      elif k in ('usage',):
+        return ('white', '#e74c3c', None, None)   # Red.
+      else:
+        return ('white', '#17202a', None, None)   # Dark gray
+
+    # TODO(daiyip): Revisit the logic in deciding what metadata keys to
+    # expose to the user.
+    if referred_chunks:
+      s.write(repr_utils.html_repr(referred_chunks, item_color))
+
+    if 'lm-response' in self.tags:
+      s.write(repr_utils.html_repr(self.metadata, item_color))
+    s.write('</div>')
+    return repr_utils.Html(s.getvalue())
+
+  def _text_color(self) -> str:
+    match self.__class__.__name__:
+      case 'UserMessage':
+        return 'green'
+      case 'AIMessage':
+        return 'blue'
+      case _:
+        return 'black'
 
 #
 # Messages of different roles.

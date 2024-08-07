@@ -17,6 +17,7 @@ import io
 import unittest
 
 from langfun.core import repr_utils
+import pyglove as pg
 
 
 class SharingContentTest(unittest.TestCase):
@@ -52,6 +53,19 @@ class SharingContentTest(unittest.TestCase):
     self.assertEqual(ctx1['<style></style>'], 4)
     self.assertEqual(ctx1['<style>b</style>'], 2)
     self.assertEqual(ctx1['<style>a</style>'], 4)
+
+  def test_html(self):
+    html = repr_utils.Html('<div>foo</div>')
+    self.assertEqual(html.content, '<div>foo</div>')
+    self.assertEqual(html._repr_html_(), '<div>foo</div>')
+
+  def test_html_repr(self):
+    class Foo(pg.Object):
+      x: int
+
+    html = repr_utils.html_repr({'foo': pg.Ref(Foo(1))})
+    self.assertIn('foo</span>', html)
+    self.assertNotIn('Ref', html)
 
 
 if __name__ == '__main__':

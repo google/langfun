@@ -19,6 +19,7 @@ import typing
 from typing import Any, Literal, ContextManager
 
 from langfun.core import console
+from langfun.core import repr_utils
 import pyglove as pg
 
 
@@ -55,31 +56,19 @@ class LogEntry(pg.Object):
     s.write(f'<div style="padding-left: {padding_left}px;">')
     s.write(self._message_display)
     if self.metadata:
-      s.write('<div style="padding-left: 20px; margin-top: 10px">')
-      s.write('<table style="border-top: 1px solid #EEEEEE;">')
-      for k, v in self.metadata.items():
-        if hasattr(v, '_repr_html_'):
-          cs = v._repr_html_()  # pylint: disable=protected-access
-        else:
-          cs = f'<span style="white-space: pre-wrap">{str(v)}</span>'
-        key_span = self._round_text(k, color='#F1C40F', margin_bottom='0px')
-        s.write(
-            '<tr>'
-            '<td style="padding: 5px; vertical-align: top; '
-            f'border-bottom: 1px solid #EEEEEE">{key_span}</td>'
-            '<td style="padding: 5px; vertical-align: top; '
-            f'border-bottom: 1px solid #EEEEEE">{cs}</td></tr>'
-        )
-      s.write('</table></div>')
+      s.write(repr_utils.html_repr(self.metadata))
+    s.write('</div>')
     return s.getvalue()
 
   @property
-  def _message_text_color(self) -> str:
+  def _message_text_bgcolor(self) -> str:
     match self.level:
       case 'debug':
         return '#EEEEEE'
       case 'info':
         return '#A3E4D7'
+      case 'warning':
+        return '#F8C471'
       case 'error':
         return '#F5C6CB'
       case 'fatal':
@@ -99,25 +88,9 @@ class LogEntry(pg.Object):
 
   @property
   def _message_display(self) -> str:
-    return self._round_text(
+    return repr_utils.html_round_text(
         self._time_display + '&nbsp;' + self.message,
-        color=self._message_text_color,
-    )
-
-  def _round_text(
-      self,
-      text: str,
-      *,
-      color: str = '#EEEEEE',
-      display: str = 'inline-block',
-      margin_top: str = '5px',
-      margin_bottom: str = '5px',
-      whitespace: str = 'pre-wrap') -> str:
-    return (
-        f'<span style="background:{color}; display:{display};'
-        f'border-radius:10px; padding:5px; '
-        f'margin-top: {margin_top}; margin-bottom: {margin_bottom}; '
-        f'white-space: {whitespace}">{text}</span>'
+        background_color=self._message_text_bgcolor,
     )
 
 

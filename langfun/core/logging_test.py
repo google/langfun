@@ -43,8 +43,14 @@ class LoggingTest(unittest.TestCase):
     self.assertEqual(logging.fatal('hi').level, 'fatal')
 
   def test_repr_html(self):
-    entry = logging.log('info', 'hi', indent=1, x=1, y=2)
-    self.assertIn('<div', entry._repr_html_())
+    def assert_color(entry, color):
+      self.assertIn(f'background-color: {color}', entry._repr_html_())
+
+    assert_color(logging.debug('hi', indent=0), '#EEEEEE')
+    assert_color(logging.info('hi', indent=1), '#A3E4D7')
+    assert_color(logging.warning('hi', x=1, y=2), '#F8C471')
+    assert_color(logging.error('hi', indent=2, x=1, y=2), '#F5C6CB')
+    assert_color(logging.fatal('hi', indent=2, x=1, y=2), '#F19CBB')
 
 
 if __name__ == '__main__':

@@ -18,7 +18,6 @@ import collections
 import dataclasses
 import functools
 import hashlib
-import html
 import inspect
 import io
 import os
@@ -531,53 +530,16 @@ class Evaluable(lf.Component):
   def _render_message(self, message: lf.Message, s: io.StringIO) -> None:
     for m in message.trace():
       if 'lm-input' in m.tags:
-        text_color = 'green'
+        color = 'green'
       elif 'lm-response' in m.tags:
-        text_color = 'blue'
+        color = 'blue'
       else:
-        text_color = 'black'
+        continue
 
       s.write(
-          f'<div style="color: {text_color}; white-space: pre-wrap;'
-          'padding: 10px; border: 1px solid; margin-top: 10px">'
+          f'<div style="color: {color}; border: 1px solid; margin-top: 10px">'
       )
-      s.write(html.escape(m.get('formatted_text', m.text)))
-
-      # Write output.
-      if m.result is not None:
-        s.write(
-            '<div style="color: magenta; white-space: pre-wrap;'
-            'padding: 10px; border: 1px solid; margin: 10px">'
-        )
-        s.write(html.escape(pg.format(m.result)))
-        s.write('</div>')
-
-      # Write modality information.
-      if 'lm-input' in m.tags or 'lm-response' in m.tags:
-        modalities = m.referred_modalities()
-        if modalities:
-          s.write(f'<div style="color: {text_color}; white-space: pre-wrap;'
-                  'padding: 10px; border: 1px solid; margin-top: 10px"><table>')
-          for name, modality in modalities.items():
-            s.write(f'<tr><td>{name}</td><td>')
-            if hasattr(modality, '_repr_html_'):
-              s.write(modality._repr_html_())   # pylint: disable=protected-access
-            else:
-              s.write(html.escape(pg.format(modality, max_bytes_len=32)))
-            s.write('</td></tr>')
-          s.write('</table></div>')
-
-      # Write usage information.
-      if m.metadata.get('usage', None):
-        s.write(
-            '<div style="background-color: #EEEEEE; color: black; '
-            'white-space: pre-wrap; padding: 10px; border: 0px solid; '
-            'margin: 10px">'
-            f'prompt: {m.usage.prompt_tokens} tokens, '
-            f'response: {m.usage.completion_tokens} tokens, '
-            f'total: {m.usage.total_tokens} tokens'
-            '</div>'
-        )
+      s.write(m._repr_html_())    # pylint: disable=protected-access
       s.write('</div>')
 
   @classmethod
