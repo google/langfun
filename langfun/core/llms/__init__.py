@@ -105,6 +105,7 @@ from langfun.core.llms.vertexai import VertexAIGeminiPro1
 from langfun.core.llms.vertexai import VertexAIGeminiPro1Vision
 from langfun.core.llms.vertexai import VertexAIPalm2
 from langfun.core.llms.vertexai import VertexAIPalm2_32K
+from langfun.core.llms.vertexai import VertexAICustom
 
 
 # LLaMA C++ models.

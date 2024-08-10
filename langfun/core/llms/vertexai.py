@@ -18,6 +18,7 @@ import os
 from typing import Annotated, Any
 
 from google.auth import credentials as credentials_lib
+from google.cloud.aiplatform import aiplatform
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 import pyglove as pg
@@ -35,6 +36,9 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     'text-bison': pg.Dict(api='palm', rpm=1600),
     'text-bison-32k': pg.Dict(api='palm', rpm=300),
     'text-unicorn': pg.Dict(api='palm', rpm=100),
+    # Endpoint
+    # TODO(chengrun): Set a more appropriate rpm for endpoint.
+    'custom': pg.Dict(api='endpoint', rpm=20),
 }
 
 
@@ -51,6 +55,11 @@ class VertexAI(lf.LanguageModel):
           'https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models '
           'for details.'
       ),
+  ]
+
+  endpoint_name: pg.typing.Annotated[
+      str | None,
+      'Vertex Endpoint name or ID.',
   ]
 
   project: Annotated[
@@ -177,6 +186,13 @@ class VertexAI(lf.LanguageModel):
     """Parses generative response into message."""
     return lf.AIMessage(response.text)
 
+  def _generation_endpoint_response_to_message(
+      self,
+      response: Any,  # google.cloud.aiplatform.aiplatform.models.Prediction
+  ) -> lf.Message:
+    """Parses Endpoint response into message."""
+    return lf.AIMessage(response.predictions[0])
+
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized, 'Vertex AI API is not initialized.'
     # TODO(yifenglu): It seems this exception is due to the instability of the
@@ -212,6 +228,8 @@ class VertexAI(lf.LanguageModel):
         return self._sample_generative_model(prompt)
       case 'palm':
         return self._sample_text_generation_model(prompt)
+      case 'endpoint':
+        return self._sample_endpoint_model(prompt)
       case _:
         raise ValueError(f'Unsupported API: {api}')
 
@@ -255,6 +273,34 @@ class VertexAI(lf.LanguageModel):
     return lf.LMSamplingResult([
         # Scoring is not supported.
         lf.LMSample(lf.AIMessage(response.text), score=0.0)
+    ])
+
+  def _sample_endpoint_model(self, prompt: lf.Message) -> lf.LMSamplingResult:
+    """Samples a text generation model."""
+    model = aiplatform.Endpoint(self.endpoint_name)
+    # TODO(chengrun): Add support for stop_sequences.
+    predict_options = dict(
+        temperature=self.sampling_options.temperature
+        if self.sampling_options.temperature is not None
+        else 1.0,
+        top_k=self.sampling_options.top_k
+        if self.sampling_options.top_k is not None
+        else 32,
+        top_p=self.sampling_options.top_p
+        if self.sampling_options.top_p is not None
+        else 1,
+        max_tokens=self.sampling_options.max_tokens
+        if self.sampling_options.max_tokens is not None
+        else 8192,
+    )
+    instances = [{'prompt': prompt.text, **predict_options}]
+    response = model.predict(instances=instances)
+
+    return lf.LMSamplingResult([
+        # Scoring is not supported.
+        lf.LMSample(
+            self._generation_endpoint_response_to_message(response), score=0.0
+        )
     ])
 
 
@@ -387,3 +433,9 @@ class VertexAIPalm2_32K(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI PaLM2 text generation model (32K context length)."""
 
   model = 'text-bison-32k'
+
+
+class VertexAICustom(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Custom model (Endpoint)."""
+
+  model = 'custom'

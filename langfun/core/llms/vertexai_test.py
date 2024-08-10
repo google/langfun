@@ -17,6 +17,7 @@ import os
 import unittest
 from unittest import mock
 
+from google.cloud.aiplatform.aiplatform import models as aiplatform_models
 from vertexai import generative_models
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
@@ -61,6 +62,20 @@ def mock_generate_content(content, generation_config, **kwargs):
           },
       ]
   })
+
+
+def mock_endpoint_predict(instances, **kwargs):
+  del kwargs
+  assert len(instances) == 1
+  return aiplatform_models.Prediction(
+      predictions=[
+          f"This is a response to {instances[0]['prompt']} with"
+          f" temperature={instances[0]['temperature']},"
+          f" top_p={instances[0]['top_p']}, top_k={instances[0]['top_k']},"
+          f" max_tokens={instances[0]['max_tokens']}."
+      ],
+      deployed_model_id='',
+  )
 
 
 class VertexAITest(unittest.TestCase):
@@ -225,6 +240,30 @@ class VertexAITest(unittest.TestCase):
               'This is a response to hello with temperature=2.0, '
               'top_p=1.0, top_k=20, max_tokens=1024, stop=\n.'
           ),
+      )
+
+  def test_call_endpoint_model(self):
+    with mock.patch(
+        'google.cloud.aiplatform.aiplatform.Endpoint.predict'
+    ) as mock_model_predict:
+
+      mock_model_predict.side_effect = mock_endpoint_predict
+      lm = vertexai.VertexAI(
+          'custom',
+          endpoint_name='123',
+          project='abc',
+          location='us-central1',
+      )
+      self.assertEqual(
+          lm(
+              'hello',
+              temperature=2.0,
+              top_p=1.0,
+              top_k=20,
+              max_tokens=50,
+          ),
+          'This is a response to hello with temperature=2.0, top_p=1.0,'
+          ' top_k=20, max_tokens=50.',
       )
 
 
