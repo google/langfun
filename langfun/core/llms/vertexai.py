@@ -18,18 +18,17 @@ import os
 from typing import Annotated, Any
 
 from google.auth import credentials as credentials_lib
-from google.cloud.aiplatform import aiplatform
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 import pyglove as pg
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
-    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=5),
-    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=5),
-    'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=5),
-    'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=5),
-    'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=5),
+    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=50),
+    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=200),
+    'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=50),
+    'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=50),
+    'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=200),
     'gemini-1.0-pro': pg.Dict(api='gemini', rpm=300),
     'gemini-1.0-pro-vision': pg.Dict(api='gemini', rpm=100),
     # PaLM APIs.
@@ -136,16 +135,34 @@ class VertexAI(lf.LanguageModel):
     )
 
   def _generation_config(
-      self, options: lf.LMSamplingOptions
+      self, prompt: lf.Message, options: lf.LMSamplingOptions
   ) -> Any:  # generative_models.GenerationConfig
     """Creates generation config from langfun sampling options."""
     from vertexai import generative_models
+    # Users could use `metadata_json_schema` to pass additional
+    # request arguments.
+    json_schema = prompt.metadata.get('json_schema')
+    response_mime_type = None
+    if json_schema is not None:
+      if not isinstance(json_schema, dict):
+        raise ValueError(
+            f'`json_schema` must be a dict, got {json_schema!r}.'
+        )
+      response_mime_type = 'application/json'
+      prompt.metadata.formatted_text = (
+          prompt.text
+          + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
+          + pg.to_json_str(json_schema, json_indent=2)
+      )
+
     return generative_models.GenerationConfig(
         temperature=options.temperature,
         top_p=options.top_p,
         top_k=options.top_k,
         max_output_tokens=options.max_tokens,
         stop_sequences=options.stop,
+        response_mime_type=response_mime_type,
+        response_schema=json_schema,
     )
 
   def _content_from_message(
@@ -239,7 +256,9 @@ class VertexAI(lf.LanguageModel):
     input_content = self._content_from_message(prompt)
     response = model.generate_content(
         input_content,
-        generation_config=self._generation_config(self.sampling_options),
+        generation_config=self._generation_config(
+            prompt, self.sampling_options
+        ),
     )
     usage_metadata = response.usage_metadata
     usage = lf.LMSamplingUsage(
@@ -277,7 +296,8 @@ class VertexAI(lf.LanguageModel):
 
   def _sample_endpoint_model(self, prompt: lf.Message) -> lf.LMSamplingResult:
     """Samples a text generation model."""
-    model = aiplatform.Endpoint(self.endpoint_name)
+    from google.cloud.aiplatform import models
+    model = models.Endpoint(self.endpoint_name)
     # TODO(chengrun): Add support for stop_sequences.
     predict_options = dict(
         temperature=self.sampling_options.temperature

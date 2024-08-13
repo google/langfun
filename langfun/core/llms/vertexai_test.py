@@ -17,7 +17,7 @@ import os
 import unittest
 from unittest import mock
 
-from google.cloud.aiplatform.aiplatform import models as aiplatform_models
+from google.cloud.aiplatform import models as aiplatform_models
 from vertexai import generative_models
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
@@ -175,6 +175,53 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_PROJECT']
     del os.environ['VERTEXAI_LOCATION']
 
+  def test_generation_config(self):
+    model = vertexai.VertexAIGeminiPro1()
+    json_schema = {
+        'type': 'object',
+        'properties': {
+            'name': {'type': 'string'},
+        },
+        'required': ['name'],
+        'title': 'Person',
+    }
+    config = model._generation_config(
+        lf.UserMessage('hi', json_schema=json_schema),
+        lf.LMSamplingOptions(
+            temperature=2.0,
+            top_p=1.0,
+            top_k=20,
+            max_tokens=1024,
+            stop=['\n'],
+        ),
+    )
+    self.assertEqual(
+        config.to_dict(),
+        dict(
+            temperature=2.0,
+            top_p=1.0,
+            top_k=20.0,
+            max_output_tokens=1024,
+            stop_sequences=['\n'],
+            response_mime_type='application/json',
+            response_schema={
+                'type_': 'OBJECT',
+                'properties': {
+                    'name': {'type_': 'STRING'}
+                },
+                'required': ['name'],
+                'title': 'Person',
+            }
+        ),
+    )
+    with self.assertRaisesRegex(
+        ValueError, '`json_schema` must be a dict, got'
+    ):
+      model._generation_config(
+          lf.UserMessage('hi', json_schema='not a dict'),
+          lf.LMSamplingOptions(),
+      )
+
   def test_call_generative_model(self):
     with mock.patch(
         'vertexai.generative_models.'
@@ -244,27 +291,31 @@ class VertexAITest(unittest.TestCase):
 
   def test_call_endpoint_model(self):
     with mock.patch(
-        'google.cloud.aiplatform.aiplatform.Endpoint.predict'
-    ) as mock_model_predict:
+        'google.cloud.aiplatform.models.Endpoint.__init__'
+    ) as mock_model_init:
+      mock_model_init.side_effect = lambda *args, **kwargs: None
+      with mock.patch(
+          'google.cloud.aiplatform.models.Endpoint.predict'
+      ) as mock_model_predict:
 
-      mock_model_predict.side_effect = mock_endpoint_predict
-      lm = vertexai.VertexAI(
-          'custom',
-          endpoint_name='123',
-          project='abc',
-          location='us-central1',
-      )
-      self.assertEqual(
-          lm(
-              'hello',
-              temperature=2.0,
-              top_p=1.0,
-              top_k=20,
-              max_tokens=50,
-          ),
-          'This is a response to hello with temperature=2.0, top_p=1.0,'
-          ' top_k=20, max_tokens=50.',
-      )
+        mock_model_predict.side_effect = mock_endpoint_predict
+        lm = vertexai.VertexAI(
+            'custom',
+            endpoint_name='123',
+            project='abc',
+            location='us-central1',
+        )
+        self.assertEqual(
+            lm(
+                'hello',
+                temperature=2.0,
+                top_p=1.0,
+                top_k=20,
+                max_tokens=50,
+            ),
+            'This is a response to hello with temperature=2.0, top_p=1.0,'
+            ' top_k=20, max_tokens=50.',
+        )
 
 
 if __name__ == '__main__':
