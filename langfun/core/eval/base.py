@@ -2159,14 +2159,17 @@ class _NamedEvaluationRegistry:
     """Returns all registered names."""
     return sorted(self._registry.keys())
 
-  def get(self, name: str) -> Type[Evaluable]:
+  def get(self, name: str) -> list[Type[Evaluable]]:
     """Gets an evaluation by name."""
-    if name not in self._registry:
-      raise ValueError(
-          f'Evaluation {name!r} not found. '
-          'Did you forget to import the module that registers it?'
-      )
-    return self._registry[name]
+    matches = []
+    if name in self._registry:
+      matches.append(self._registry[name])
+    else:
+      regex = re.compile(name)
+      for key, cls in self._registry.items():
+        if regex.match(key):
+          matches.append(cls)
+    return matches
 
   def register(
       self,
@@ -2185,11 +2188,11 @@ def registered_names() -> list[str]:
   return _eval_registry.names()
 
 
-def get_evaluation(evaluation: str | Evaluable) -> Evaluable:
+def get_evaluations(evaluation: str | Evaluable) -> list[Evaluable]:
   """Gets an evaluation experiment by name."""
   if isinstance(evaluation, str):
-    return _eval_registry.get(evaluation)()
-  return evaluation
+    return [e() for e in _eval_registry.get(evaluation)]
+  return [evaluation]
 
 
 def register(name: str):
@@ -2257,8 +2260,14 @@ def get(
   Returns:
     A suite of selected `lf.eval.Evaluation` objects.
   """
-  evaluations = [get_evaluation(e) for e in evaluations]
-  suite = Suite(evaluations, root_dir=root_dir)
+  matches = []
+  for e in evaluations:
+    matches.extend(get_evaluations(e))
+
+  if not matches:
+    raise ValueError('No evaluations found.')
+
+  suite = Suite(matches, root_dir=root_dir)
   if patches:
     suite = pg.patch(suite, patches)
 

@@ -765,7 +765,7 @@ class NamedEvaluationTest(unittest.TestCase):
       ])
       schema_fn = answer_schema()
 
-    evaluation = base.get_evaluation('named_eval/class_test')
+    [evaluation] = base.get_evaluations('named_eval/class_test')
     self.assertIsInstance(evaluation, MyEval)
     self.assertIsNone(evaluation.dir)
     self.assertIsNone(evaluation.root_dir)
@@ -793,13 +793,15 @@ class NamedEvaluationTest(unittest.TestCase):
       )
 
     self.assertTrue(issubclass(my_eval, base.Evaluable))
-    evaluation = base.get_evaluation('named_eval/functor_test')
+    [evaluation] = base.get_evaluations('named_eval/functor_test')
     self.assertIn('named_eval/functor_test', base.registered_names())
     self.assertIsInstance(evaluation, my_eval)
     self.assertIsNone(evaluation.root_dir, None)
 
-    with self.assertRaisesRegex(ValueError, 'Evaluation .* not found'):
-      base.get_evaluation('named_eval/non_existent')
+    self.assertTrue(
+        pg.eq(base.get_evaluations('named_eval/functor.*'), [evaluation])
+    )
+    self.assertEqual(base.get_evaluations('named_eval/non_existent'), [])
 
     with self.assertRaisesRegex(TypeError, 'The return value .*'):
       @base.register('named_eval/bad_return_type')
@@ -840,6 +842,9 @@ class NamedEvaluationTest(unittest.TestCase):
         patches=['bad_lm']
     )
     self.assertTrue(pg.eq(e.leaf_nodes[0].lm, fake.StaticResponse('efg')))
+
+    with self.assertRaisesRegex(ValueError, 'No evaluations found'):
+      base.run(tempfile.gettempdir(), ['test/non_existent'])
 
 
 if __name__ == '__main__':

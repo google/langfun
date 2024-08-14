@@ -18,7 +18,7 @@
 
 from langfun.core.eval.base import register
 from langfun.core.eval.base import registered_names
-from langfun.core.eval.base import get_evaluation
+from langfun.core.eval.base import get_evaluations
 from langfun.core.eval.base import get
 from langfun.core.eval.base import run
 
