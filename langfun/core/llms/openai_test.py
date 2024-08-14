@@ -43,12 +43,23 @@ def mock_completion_query(prompt, *, n=1, **kwargs):
 
 
 def mock_chat_completion_query(messages, *, n=1, **kwargs):
-  del messages, kwargs
+  if len(messages) > 1:
+    system_message = f' system={messages[0]["content"]}'
+  else:
+    system_message = ''
+
+  if 'response_format' in kwargs:
+    response_format = f' format={kwargs["response_format"]["type"]}'
+  else:
+    response_format = ''
+
   choices = []
   for k in range(n):
     choices.append(pg.Dict(
         message=pg.Dict(
-            content=f'Sample {k} for message.'
+            content=(
+                f'Sample {k} for message.{system_message}{response_format}'
+            )
         ),
         logprobs=None,
     ))
@@ -123,7 +134,9 @@ class OpenAITest(unittest.TestCase):
     )
     self.assertEqual(
         openai.Gpt4(api_key='test_key')._get_request_args(
-            lf.LMSamplingOptions(temperature=1.0, stop=['\n'], n=1)
+            lf.LMSamplingOptions(
+                temperature=1.0, stop=['\n'], n=1, random_seed=123
+            )
         ),
         dict(
             model='gpt-4',
@@ -134,6 +147,7 @@ class OpenAITest(unittest.TestCase):
             stream=False,
             timeout=120.0,
             stop=['\n'],
+            seed=123,
         ),
     )
 
@@ -460,6 +474,52 @@ class OpenAITest(unittest.TestCase):
             ),
         ),
     )
+
+  def test_call_with_system_message(self):
+    with mock.patch('openai.ChatCompletion.create') as mock_chat_completion:
+      mock_chat_completion.side_effect = mock_chat_completion_query
+      lm = openai.OpenAI(api_key='test_key', model='gpt-4')
+      self.assertEqual(
+          lm(
+              lf.UserMessage(
+                  'hello',
+                  system_message='hi',
+              ),
+              sampling_options=lf.LMSamplingOptions(n=2)
+          ),
+          'Sample 0 for message. system=hi',
+      )
+
+  def test_call_with_json_schema(self):
+    with mock.patch('openai.ChatCompletion.create') as mock_chat_completion:
+      mock_chat_completion.side_effect = mock_chat_completion_query
+      lm = openai.OpenAI(api_key='test_key', model='gpt-4')
+      self.assertEqual(
+          lm(
+              lf.UserMessage(
+                  'hello',
+                  json_schema={
+                      'type': 'object',
+                      'properties': {
+                          'name': {'type': 'string'},
+                      },
+                      'required': ['name'],
+                      'title': 'Person',
+                  }
+              ),
+              sampling_options=lf.LMSamplingOptions(n=2)
+          ),
+          'Sample 0 for message. format=json_schema',
+      )
+
+    # Test bad json schema.
+    with self.assertRaisesRegex(ValueError, '`json_schema` must be a dict'):
+      lm(lf.UserMessage('hello', json_schema='foo'))
+
+    with self.assertRaisesRegex(
+        ValueError, 'The root of `json_schema` must have a `title` field'
+    ):
+      lm(lf.UserMessage('hello', json_schema={}))
 
 
 if __name__ == '__main__':

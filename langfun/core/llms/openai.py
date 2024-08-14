@@ -37,6 +37,7 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     'gpt-4o-mini': pg.Dict(rpm=10000, tpm=5000000),
     'gpt-4o-mini-2024-07-18': pg.Dict(rpm=10000, tpm=5000000),
     'gpt-4o': pg.Dict(rpm=10000, tpm=5000000),
+    'gpt-4o-2024-08-06': pg.Dict(rpm=10000, tpm=5000000),
     'gpt-4o-2024-05-13': pg.Dict(rpm=10000, tpm=5000000),
     # GPT-4-Turbo models
     'gpt-4-turbo': pg.Dict(rpm=10000, tpm=2000000),
@@ -178,6 +179,8 @@ class OpenAI(lf.LanguageModel):
       args['top_p'] = options.top_p
     if options.stop:
       args['stop'] = options.stop
+    if options.random_seed is not None:
+      args['seed'] = options.random_seed
     return args
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
@@ -231,10 +234,10 @@ class OpenAI(lf.LanguageModel):
   def _chat_complete_batch(
       self, prompts: list[lf.Message]
   ) -> list[lf.LMSamplingResult]:
-    def _open_ai_chat_completion(prompt: lf.Message):
+    def _content_from_message(message: lf.Message):
       if self.multimodal:
         content = []
-        for chunk in prompt.chunk():
+        for chunk in message.chunk():
           if isinstance(chunk, str):
             item = dict(type='text', text=chunk)
           elif isinstance(chunk, lf_modalities.Image):
@@ -244,14 +247,56 @@ class OpenAI(lf.LanguageModel):
             raise ValueError(f'Unsupported modality object: {chunk!r}.')
           content.append(item)
       else:
-        content = prompt.text
+        content = message.text
+      return content
 
-      response = openai.ChatCompletion.create(
-          # TODO(daiyip): support conversation history and system prompt.
-          messages=[{'role': 'user', 'content': content}],
-          **self._get_request_args(self.sampling_options),
+    def _open_ai_chat_completion(prompt: lf.Message):
+      request_args = self._get_request_args(self.sampling_options)
+      # Users could use `metadata_json_schema` to pass additional
+      # request arguments.
+      json_schema = prompt.metadata.get('json_schema')
+      if json_schema is not None:
+        if not isinstance(json_schema, dict):
+          raise ValueError(
+              f'`json_schema` must be a dict, got {json_schema!r}.'
+          )
+        if 'title' not in json_schema:
+          raise ValueError(
+              f'The root of `json_schema` must have a `title` field, '
+              f'got {json_schema!r}.'
+          )
+        request_args.update(
+            response_format=dict(
+                type='json_schema',
+                json_schema=dict(
+                    schema=json_schema,
+                    name=json_schema['title'],
+                    strict=True,
+                )
+            )
+        )
+        prompt.metadata.formatted_text = (
+            prompt.text
+            + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
+            + pg.to_json_str(request_args['response_format'], json_indent=2)
+        )
+
+      # Prepare messages.
+      messages = []
+      # Users could use `metadata_system_message` to pass system message.
+      system_message = prompt.metadata.get('system_message')
+      if system_message:
+        system_message = lf.SystemMessage.from_value(system_message)
+        messages.append(
+            dict(role='system', content=_content_from_message(system_message))
+        )
+      messages.append(dict(role='user', content=_content_from_message(prompt)))
+
+      response = cast(
+          openai_object.OpenAIObject,
+          openai.ChatCompletion.create(messages=messages, **request_args)
       )
-      response = cast(openai_object.OpenAIObject, response)
+
       samples = []
       for choice in response.choices:
         logprobs = None
@@ -367,8 +412,14 @@ class Gpt4o(OpenAI):
   multimodal = True
 
 
+class Gpt4o_20240806(OpenAI):     # pylint:disable=invalid-name
+  """GPT-4o version 2024-08-06."""
+  model = 'gpt-4o-2024-08-06'
+  multimodal = True
+
+
 class Gpt4o_20240513(OpenAI):     # pylint:disable=invalid-name
-  """GPT-4o."""
+  """GPT-4o version 2024-05-13."""
   model = 'gpt-4o-2024-05-13'
   multimodal = True
 
