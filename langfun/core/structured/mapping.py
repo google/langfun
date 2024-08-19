@@ -92,6 +92,15 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       'The natural language context for this mapping. ',
   ] = None
 
+  metadata: Annotated[
+      dict[str, Any],
+      (
+          'The metadata associated with the mapping example, '
+          'which chould carry structured data, such as tool function input. '
+          'It is a `pg.Dict` object whose keys can be accessed by attributes.'
+      ),
+  ] = pg.Dict()
+
   def schema_repr(
       self, protocol: schema_lib.SchemaProtocol = 'python', **kwargs
   ) -> str:
@@ -157,16 +166,21 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
 
     result.write(lf.colored('[INPUT]\n', styles=['bold']))
     result.write(lf.colored(self.input_repr(), color='green'))
-    result.write('\n\n')
 
     if self.schema is not None:
+      result.write('\n\n')
       result.write(lf.colored('[SCHEMA]\n', styles=['bold']))
       result.write(lf.colored(self.schema_repr(), color='red'))
-      result.write('\n\n')
 
     if schema_lib.MISSING != self.output:
+      result.write('\n\n')
       result.write(lf.colored('[OUTPUT]\n', styles=['bold']))
       result.write(lf.colored(self.output_repr(), color='blue'))
+
+    if self.metadata:
+      result.write('\n\n')
+      result.write(lf.colored('[METADATA]\n', styles=['bold']))
+      result.write(lf.colored(str(self.metadata), color='cyan'))
     return result.getvalue().strip()
 
 

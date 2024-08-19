@@ -129,6 +129,33 @@ class MappingExampleTest(unittest.TestCase):
             """),
     )
 
+  def test_str_with_metadata(self):
+    self.assertEqual(
+        str(
+            mapping.MappingExample(
+                '1 + 1 = 2',
+                schema=int,
+                context='Give the answer.',
+                metadata={'foo': 'bar'},
+            )
+        ),
+        inspect.cleandoc("""
+            \x1b[1m[CONTEXT]
+            \x1b[0m\x1b[35mGive the answer.\x1b[0m
+
+            \x1b[1m[INPUT]
+            \x1b[0m\x1b[32m1 + 1 = 2\x1b[0m
+
+            \x1b[1m[SCHEMA]
+            \x1b[0m\x1b[31mint\x1b[0m
+
+            \x1b[1m[METADATA]
+            \x1b[0m\x1b[36m{
+              foo = 'bar'
+            }\x1b[0m
+            """),
+    )
+
   def test_serialization(self):
     example = mapping.MappingExample(
         'the answer is 2', 2, int, context='compute 1 + 1'
