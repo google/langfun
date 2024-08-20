@@ -1061,6 +1061,8 @@ class Evaluation(Evaluable):
     try:
       with lf.use_settings(debug=debug):
         output_message = copy.process(example, **(self.additional_args or {}))
+        self.process_output(example, output_message)
+
         if self.schema is None:
           output = output_message.text
         else:
@@ -1123,7 +1125,9 @@ class Evaluation(Evaluable):
         # generated code with calls to `input` will raise an error, thus not
         # blocking the evaluation.
         with lf_coding.context(input=None):
-          return self.process(example, **(self.additional_args or {}))
+          output_message = self.process(example, **(self.additional_args or {}))
+          self.process_output(example, output_message)
+          return output_message
 
       try:
         for example, message, error in lf.concurrent_map(
@@ -1200,6 +1204,29 @@ class Evaluation(Evaluable):
           returns_message=True,
           **kwargs,
       )
+
+  def process_output(self, example: Any, output: lf.Message) -> None:
+    """Process the output for an example.
+
+    Subclasses can override this method to generate and attach additional
+    metadata for debugging purpose. For example, draw bounding boxes on the
+    input image based on LLM predicted boxes and attach to output_message's
+    metadata.
+
+    Example:
+
+      class BoundingBoxEval(lf.eval.Matching):
+        ...
+        def process_output(example, output):
+          output.metadata.image_with_bbox = draw_bboxes(
+              example.image, output.result)
+
+    Args:
+      example: User input.
+      output: LLM's output message. Users could attach additional
+        information to the message, which will be shown in debugging
+    """
+    del example, output
 
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     return {
