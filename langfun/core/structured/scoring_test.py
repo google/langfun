@@ -16,6 +16,11 @@ import unittest
 import langfun.core as lf
 from langfun.core.llms import fake
 from langfun.core.structured import scoring
+import pyglove as pg
+
+
+class Answer(pg.Object):
+  result: int
 
 
 class ScoringTest(unittest.TestCase):
@@ -32,8 +37,27 @@ class ScoringTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, '`lm` must be specified'):
       scoring.score('hi', [1, 2])
 
+    with self.assertRaisesRegex(
+        ValueError,
+        'Scoring on object fields using `pg.oneof` must share the same prompt',
+    ):
+      scoring.score(
+          ['1 + 1=', '2 + 3='],
+          [Answer(pg.oneof([1, 2, 3]))],
+          lm=fake.Echo(),
+      )
+
   def test_score(self):
     self.assertEqual(scoring.score('hi', [1, 2], lm=fake.Echo()), [0.0, -1.0])
+
+  def test_score_on_field_values(self):
+    self.assertEqual(
+        scoring.score(
+            '1 + 1=',
+            [Answer(pg.oneof([1, 2, 3]))], lm=fake.Echo()
+        ),
+        [0.0, -1.0, -2.0]
+    )
 
   def test_score_returning_scoring_results(self):
     self.assertEqual(scoring.score(
