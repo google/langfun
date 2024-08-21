@@ -15,6 +15,7 @@
 
 import collections
 import contextlib
+import html
 import io
 from typing import Any, Callable, Iterator
 
@@ -126,7 +127,7 @@ def html_repr(
     if hasattr(v, '_repr_html_'):
       cs = v._repr_html_()  # pylint: disable=protected-access
     else:
-      cs = f'<span style="white-space: pre-wrap">{str(v)}</span>'
+      cs = f'<span style="white-space: pre-wrap">{html.escape(str(v))}</span>'
 
     key_color, key_bg_color, value_color, value_bg_color = item_color(k, v)
     key_span = html_round_text(

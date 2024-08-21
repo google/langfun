@@ -63,9 +63,12 @@ class SharingContentTest(unittest.TestCase):
     class Foo(pg.Object):
       x: int
 
-    html = repr_utils.html_repr({'foo': pg.Ref(Foo(1))})
+    html = repr_utils.html_repr(
+        {'foo': pg.Ref(Foo(1)), 'bar': '<lf_image>'}
+    )
     self.assertIn('foo</span>', html)
     self.assertNotIn('Ref', html)
+    self.assertIn('&lt;lf_image&gt;', html)
 
 
 if __name__ == '__main__':
