@@ -81,6 +81,13 @@ class MockScoringModel(MockModel):
     ]
 
 
+class MockTokenizeModel(MockModel):
+
+  def _tokenize(
+      self, prompt: message_lib.Message) -> list[tuple[str | bytes, int]]:
+    return [(w, i) for i, w in enumerate(prompt.text.split(' '))]
+
+
 class LMSamplingOptionsTest(unittest.TestCase):
   """Tests for LMSamplingOptions."""
 
@@ -551,6 +558,65 @@ class LanguageModelTest(unittest.TestCase):
   def test_score_with_unsupported_model(self):
     with self.assertRaises(NotImplementedError):
       MockModel().score('hi', ['1', '2'])
+
+  def test_tokenize(self):
+    info_flag = lm_lib.LMDebugMode.INFO
+    prompt_flag = lm_lib.LMDebugMode.PROMPT
+    response_flag = lm_lib.LMDebugMode.RESPONSE
+    debug_prints = {
+        info_flag: 'LM INFO',
+        prompt_flag: 'PROMPT TO TOKENIZE',
+        response_flag: 'TOKENS RETURNED',
+    }
+    debug_modes = [
+        info_flag,
+        prompt_flag,
+        response_flag,
+        info_flag | prompt_flag,
+        info_flag | response_flag,
+        prompt_flag | response_flag,
+        info_flag | prompt_flag | response_flag,
+    ]
+
+    class Image(modality.Modality):
+      def to_bytes(self):
+        return b'fake_image'
+
+    for debug_mode in debug_modes:
+      string_io = io.StringIO()
+      lm = MockTokenizeModel()
+
+      with contextlib.redirect_stdout(string_io):
+        self.assertEqual(
+            lm.tokenize(
+                message_lib.UserMessage('hi <<[[image]]>>', image=Image()),
+                debug=debug_mode),
+            [('hi', 0), ('<<[[image]]>>', 1)],
+        )
+
+      debug_info = string_io.getvalue()
+      expected_included = [
+          debug_prints[f]
+          for f in lm_lib.LMDebugMode
+          if f != lm_lib.LMDebugMode.NONE and f in debug_mode
+      ]
+      expected_excluded = [
+          debug_prints[f]
+          for f in lm_lib.LMDebugMode
+          if f != lm_lib.LMDebugMode.NONE and f not in debug_mode
+      ]
+
+      for expected_include in expected_included:
+        self.assertIn(expected_include, debug_info)
+      for expected_exclude in expected_excluded:
+        self.assertNotIn(expected_exclude, debug_info)
+
+      if debug_mode & lm_lib.LMDebugMode.PROMPT:
+        self.assertIn('[0] MODALITY OBJECTS SENT TO LM', debug_info)
+
+  def test_tokenize_with_unsupported_model(self):
+    with self.assertRaises(NotImplementedError):
+      MockModel().tokenize('hi')
 
   def test_rate_to_max_concurrency_no_rpm_no_tpm(self) -> None:
     lm = MockModel()

@@ -77,6 +77,8 @@ from langfun.core.structured.completion import complete
 
 from langfun.core.structured.scoring import score
 
+from langfun.core.structured.tokenization import tokenize
+
 # Expose default examples for structured operations so users could refer to
 # them.
 from langfun.core.structured.parsing import default_parse_examples

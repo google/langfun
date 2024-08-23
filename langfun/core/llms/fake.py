@@ -25,6 +25,9 @@ class Fake(lf.LanguageModel):
              completions: list[lf.Message]):
     return [lf.LMScoringResult(score=-i * 1.0) for i in range(len(completions))]
 
+  def _tokenize(self, prompt: lf.Message) -> list[tuple[str | bytes, int]]:
+    return [(w, i) for i, w in enumerate(prompt.text.split(' '))]
+
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     results = []
     for prompt in prompts:

@@ -62,6 +62,13 @@ class EchoTest(unittest.TestCase):
         [lf.LMScoringResult(0.0), lf.LMScoringResult(-1.0)],
     )
 
+  def test_tokenize(self):
+    lm = fakelm.Echo()
+    self.assertEqual(
+        lm.tokenize('hi'),
+        [('hi', 0)]
+    )
+
 
 class StaticResponseTest(unittest.TestCase):
 

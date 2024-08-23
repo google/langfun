@@ -712,6 +712,72 @@ class LanguageModel(component.Component):
             color='blue',
         )
 
+  def tokenize(
+      self,
+      prompt: str | message_lib.Message,
+      **kwargs,
+  ) -> list[tuple[str | bytes, int]]:
+    """Tokenizes the given prompt."""
+    prompt = message_lib.UserMessage.from_value(prompt)
+    call_counter = self._call_counter
+    self._call_counter += 1
+
+    with component.context(override_attrs=True, **kwargs):
+      request_start = time.time()
+      tokens = self._tokenize(prompt)
+      elapse = time.time() - request_start
+      self._debug_tokenize(prompt, tokens, call_counter, elapse)
+      return tokens
+
+  def _tokenize(
+      self, prompt: message_lib.Message
+  ) -> list[tuple[str | bytes, int]]:
+    """Subclass to implement."""
+    raise NotImplementedError(
+        f'{self.__class__.__name__} does not support tokenization.'
+    )
+
+  def _debug_tokenize(
+      self,
+      prompt: message_lib.Message,
+      tokens: list[tuple[str | bytes, int]],
+      call_counter: int,
+      elapse: float,
+  ):
+    debug = self.debug
+    if isinstance(debug, bool):
+      debug = LMDebugMode.ALL if debug else LMDebugMode.NONE
+
+    if debug & LMDebugMode.INFO:
+      self._debug_model_info(call_counter, UsageNotAvailable())
+
+    if debug & LMDebugMode.PROMPT:
+      console.write(
+          prompt,
+          title=f'\n[{call_counter}] PROMPT TO TOKENIZE:',
+          color='green',
+      )
+      referred_modalities_lst = [prompt.referred_modalities(),]
+      if referred_modalities_lst:
+        for referred_modalities in referred_modalities_lst:
+          console.write(
+              pg.object_utils.kvlist_str(
+                  [(k, repr(v), None) for k, v in referred_modalities.items()]
+              ),
+              title=f'\n[{call_counter}] MODALITY OBJECTS SENT TO LM:',
+              color='green',
+          )
+
+    if debug & LMDebugMode.RESPONSE:
+      console.write(
+          tokens,
+          title=(
+              f'\n[{call_counter}] {len(tokens)} TOKENS RETURNED '
+              f'(in {elapse:.2f} seconds):'
+          ),
+          color='blue',
+      )
+
   def rate_to_max_concurrency(
       self, requests_per_min: float = 0, tokens_per_min: float = 0
   ) -> int:
