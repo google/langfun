@@ -14,6 +14,8 @@
 """Interface for modality (e.g. Image, Video, etc.)."""
 
 import abc
+import functools
+import hashlib
 from typing import Any, ContextManager
 from langfun.core import component
 import pyglove as pg
@@ -35,6 +37,11 @@ class Modality(component.Component):
   REF_START = '<<[['
   REF_END = ']]>>'
 
+  def _on_bound(self):
+    super()._on_bound()
+    # Invalidate cached hash if modality member is changed.
+    self.__dict__.pop('hash', None)
+
   def format(self, *args, **kwargs) -> str:
     if self.referred_name is None or not pg.object_utils.thread_local_get(
         _TLS_MODALITY_AS_REF, False
@@ -45,6 +52,11 @@ class Modality(component.Component):
   @abc.abstractmethod
   def to_bytes(self) -> bytes:
     """Returns content in bytes."""
+
+  @functools.cached_property
+  def hash(self) -> str:
+    """Returns a 8-byte MD5 hash as the identifier for this modality object."""
+    return hashlib.md5(self.to_bytes()).hexdigest()[:8]
 
   @classmethod
   def text_marker(cls, var_name: str) -> str:

@@ -32,6 +32,7 @@ class ModalityTest(unittest.TestCase):
     v = CustomModality('a')
     self.assertIsNone(v.referred_name)
     self.assertEqual(str(v), "CustomModality(\n  content = 'a'\n)")
+    self.assertEqual(v.hash, '0cc175b9')
 
     _ = pg.Dict(metadata=pg.Dict(x=pg.Dict(metadata=pg.Dict(y=v))))
     self.assertEqual(v.referred_name, 'x.metadata.y')

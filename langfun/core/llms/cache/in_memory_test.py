@@ -164,6 +164,34 @@ class InMemoryLMCacheTest(unittest.TestCase):
     )
     self.assertEqual(cache.stats.num_deletes, 1)
 
+  def test_cache_with_modalities(self):
+
+    class CustomModality(lf.Modality):
+      content: str
+
+      def to_bytes(self):
+        return self.content.encode()
+
+    cache = in_memory.InMemory()
+    lm = fake.StaticSequence(['1', '2', '3', '4', '5', '6'], cache=cache)
+    lm(lf.UserMessage('hi <<[[image]]>>', image=CustomModality('foo')))
+    lm(lf.UserMessage('hi <<[[image]]>>', image=CustomModality('bar')))
+    self.assertEqual(
+        list(cache.keys()),
+        [
+            (
+                'hi <<[[image]]>><image>acbd18db</image>',
+                (None, None, 1, 40, None, None),
+                0,
+            ),
+            (
+                'hi <<[[image]]>><image>37b51d19</image>',
+                (None, None, 1, 40, None, None),
+                0,
+            ),
+        ],
+    )
+
   def test_ttl(self):
     cache = in_memory.InMemory(ttl=1)
     lm = fake.StaticSequence(['1', '2', '3'], cache=cache)

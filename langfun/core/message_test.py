@@ -282,6 +282,20 @@ class MessageTest(unittest.TestCase):
         },
     )
 
+  def test_text_with_modality_hash(self):
+    m = message.UserMessage(
+        'hi, this is a <<[[img1]]>> and <<[[x.img2]]>>',
+        img1=CustomModality('foo'),
+        x=dict(img2=CustomModality('bar')),
+    )
+    self.assertEqual(
+        m.text_with_modality_hash,
+        (
+            'hi, this is a <<[[img1]]>> and <<[[x.img2]]>>'
+            '<img1>acbd18db</img1><x.img2>37b51d19</x.img2>'
+        )
+    )
+
   def test_chunking(self):
     m = message.UserMessage(
         inspect.cleandoc("""

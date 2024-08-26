@@ -278,6 +278,16 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
   # API for supporting modalities.
   #
 
+  @property
+  def text_with_modality_hash(self) -> str:
+    """Returns text with modality object placeheld by their 8-byte MD5 hash."""
+    parts = [self.text]
+    for name, modality_obj in self.referred_modalities().items():
+      parts.append(
+          f'<{name}>{modality_obj.hash}</{name}>'
+      )
+    return ''.join(parts)
+
   def get_modality(
       self, var_name: str, default: Any = None, from_message_chain: bool = True
   ) -> modality.Modality | None:

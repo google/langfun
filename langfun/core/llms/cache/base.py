@@ -121,4 +121,4 @@ class LMCacheBase(lf.LMCache):
 
 def default_key(lm: lf.LanguageModel, prompt: lf.Message, seed: int) -> Any:
   """Default key for LM cache."""
-  return (prompt.text, lm.sampling_options.cache_key(), seed)
+  return (prompt.text_with_modality_hash, lm.sampling_options.cache_key(), seed)
