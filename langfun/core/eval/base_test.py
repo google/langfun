@@ -564,7 +564,7 @@ class SuiteTest(unittest.TestCase):
                 schema_fn='answer_schema()',
             ),
             cache_stats=dict(
-                use_cache=True, num_queries=4, num_hits=1, num_updates=3
+                use_cache=True, num_queries=4, num_hits=0, num_updates=4
             ),
             metrics=dict(
                 total=2,

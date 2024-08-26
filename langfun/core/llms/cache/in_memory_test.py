@@ -148,6 +148,22 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertIs(copy.deepcopy(cache)._cache, cache._cache)
     self.assertIs(copy.deepcopy(cache)._stats, cache._stats)
 
+    self.assertFalse(
+        cache.delete(fake.StaticResponse('hi'), lf.UserMessage('c'), seed=0)
+    )
+    self.assertFalse(cache.delete(lm, lf.UserMessage('c'), seed=1))
+    self.assertFalse(cache.delete(lm, lf.UserMessage('d'), seed=0))
+    self.assertTrue(cache.delete(lm, lf.UserMessage('c'), seed=0))
+    self.assertEqual(
+        list(cache.keys('StaticSequence')),
+        [
+            ('a', (None, None, 1, 40, None, None), 0),
+            ('a', (None, None, 1, 40, None, None), 1),
+            ('b', (None, None, 1, 40, None, None), 0),
+        ],
+    )
+    self.assertEqual(cache.stats.num_deletes, 1)
+
   def test_ttl(self):
     cache = in_memory.InMemory(ttl=1)
     lm = fake.StaticSequence(['1', '2', '3'], cache=cache)
@@ -160,6 +176,7 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(cache.stats.num_hits, 1)
     self.assertEqual(cache.stats.num_hit_expires, 1)
     self.assertEqual(cache.stats.num_misses, 1)
+    self.assertEqual(cache.stats.num_deletes, 1)
 
   def test_different_sampling_options(self):
     cache = in_memory.InMemory()

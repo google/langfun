@@ -269,6 +269,9 @@ class LangFunc(
         # Send rendered text to LM.
         lm_output = self.lm(lm_input, cache_seed=cache_seed)
 
+        # Attach cache seed.
+        lm_input.metadata.cache_seed = cache_seed
+
         # Transform the output message.
         lm_output = self.transform_output(lm_output)
         lm_output.tag(message_lib.Message.TAG_LM_OUTPUT)

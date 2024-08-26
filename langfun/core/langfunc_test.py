@@ -94,11 +94,13 @@ class LangFuncCallTest(unittest.TestCase):
         )
     )
     self.assertEqual(r.tags, ['lm-response', 'lm-output'])
-    self.assertEqual(r.source, message.UserMessage('Hello'))
+    self.assertEqual(
+        r.source,
+        message.UserMessage('Hello', metadata=dict(cache_seed=0))
+    )
     self.assertEqual(r.source.tags, ['rendered', 'lm-input'])
 
     self.assertEqual(str(l), 'Hello')
-    print(repr(l))
     self.assertEqual(
         repr(l),
         "LangFunc(template_str='Hello', clean=True,"
@@ -114,7 +116,7 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(l, 'Hello')
       self.assertEqual(l.natural_language_format(), 'Hello')
       self.assertEqual(l.render(), 'Hello')
-      r = l()
+      r = l(cache_seed=1)
       self.assertEqual(
           r,
           message.AIMessage(
@@ -123,6 +125,7 @@ class LangFuncCallTest(unittest.TestCase):
           )
       )
       self.assertEqual(r.tags, ['lm-response', 'lm-output'])
+      self.assertEqual(r.source.metadata.cache_seed, 1)
 
     self.assertEqual(str(l), 'Hello')
 

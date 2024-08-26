@@ -1261,7 +1261,7 @@ class Evaluation(Evaluable):
 
   def finalize(self) -> pg.Dict:
     """Finalizes the evaluation result."""
-    if self.cache:
+    if self.cache is not None:
       cache_stats = dict(
           use_cache=True,
           num_queries=self.cache.stats.num_queries,

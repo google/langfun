@@ -99,6 +99,13 @@ class InMemory(base.LMCacheBase):
     """Puts a LM cache entry associated with the key."""
     self._cache[model_id][key] = entry
 
+  def _delete(self, model_id: str, key: str) -> bool:
+    """Deletes a LM cache entry associated with the key."""
+    model_cache = self._cache.get(model_id, None)
+    if model_cache is None:
+      return False
+    return model_cache.pop(key, None) is not None
+
   def reset(self, model_id: str | None = None) -> None:
     """Resets the cache."""
     if model_id is not None:

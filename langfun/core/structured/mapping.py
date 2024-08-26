@@ -352,6 +352,12 @@ class Mapping(lf.LangFunc):
       lm_output = self.postprocess_response(lm_output)
       lm_output.result = self.postprocess_result(self.parse_result(lm_output))
     except Exception as e:  # pylint: disable=broad-exception-caught
+      if (self.lm.cache is not None
+          and lm_output.lm_input.cache_seed is not None):
+        success = self.lm.cache.delete(
+            self.lm, lm_output.lm_input, lm_output.lm_input.cache_seed
+        )
+        assert success
       if self.default == lf.RAISE_IF_HAS_ERROR:
         raise MappingError(lm_output, e) from e
       lm_output.result = self.default

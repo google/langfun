@@ -19,6 +19,7 @@ import unittest
 import langfun.core as lf
 from langfun.core import modalities
 from langfun.core.llms import fake
+from langfun.core.llms.cache import in_memory
 from langfun.core.structured import mapping
 from langfun.core.structured import prompting
 import pyglove as pg
@@ -799,15 +800,18 @@ class QueryStructureJsonTest(unittest.TestCase):
       self.assertIsNone(r.result[0].hotel)
 
   def test_bad_transform(self):
-    with lf.context(
-        lm=fake.StaticSequence(['3']),
-        override_attrs=True,
-    ):
-      with self.assertRaisesRegex(
-          mapping.MappingError,
-          'No JSON dict in the output',
+    with in_memory.lm_cache() as cache:
+      with lf.context(
+          lm=fake.StaticSequence(['3']),
+          override_attrs=True,
       ):
-        prompting.query('Compute 1 + 2', int, protocol='json')
+        with self.assertRaisesRegex(
+            mapping.MappingError,
+            'No JSON dict in the output',
+        ):
+          prompting.query('Compute 1 + 2', int, protocol='json', cache_seed=1)
+      # Make sure bad mapping does not impact cache.
+      self.assertEqual(len(cache), 0)
 
   def test_query(self):
     lm = fake.StaticSequence(['{"result": 1}'])
