@@ -16,7 +16,11 @@
 import io
 import re
 from typing import Any
-import termcolor
+
+try:
+  import termcolor      # pylint: disable=g-import-not-at-top
+except ImportError:
+  termcolor = None
 
 
 # Regular expression for ANSI color characters.
@@ -49,6 +53,8 @@ def colored(
   Returns:
     A string with ANSI color characters embracing the entire text.
   """
+  if not termcolor:
+    return text
   return termcolor.colored(
       text,
       color=color,

@@ -233,6 +233,57 @@ class ProgressTest(unittest.TestCase):
     self.assertIs(p.last_error, job2.error)
 
 
+class ProgressControlTest(unittest.TestCase):
+
+  def test_noop(self):
+    concurrent.progress_bar = None
+    ctrl = concurrent._progress_control(100, 'noop', 'blue', None)
+    self.assertIsInstance(ctrl, concurrent._NoopProgressControl)
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      ctrl.update(1)
+      ctrl.refresh()
+    self.assertEqual(string_io.getvalue(), '')
+    concurrent.progress_bar = 'tqdm'
+
+  def test_console(self):
+    concurrent.progress_bar = 'console'
+    ctrl = concurrent._progress_control(100, 'foo', 'blue', None)
+    self.assertIsInstance(ctrl, concurrent._ConsoleProgressControl)
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      ctrl.set_status('bar')
+      ctrl.update(10)
+      ctrl.refresh()
+    self.assertEqual(
+        string_io.getvalue(),
+        '\x1b[1m\x1b[31mfoo\x1b[0m: \x1b[34m10% (10/100)\x1b[0m : bar\n'
+    )
+    concurrent.progress_bar = 'tqdm'
+
+  def test_tqdm(self):
+    concurrent.progress_bar = 'tqdm'
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      ctrl = concurrent._progress_control(100, 'foo', 'blue', None)
+      self.assertIsInstance(ctrl, concurrent._TqdmProgressControl)
+      ctrl.update(10)
+      ctrl.refresh()
+    self.assertIn('10/100', string_io.getvalue())
+
+    tqdm = concurrent.tqdm
+    concurrent.tqdm = None
+    with self.assertRaisesRegex(RuntimeError, 'install package "tqdm"'):
+      _ = concurrent._progress_control(100, 'foo', 'blue', None)
+    concurrent.tqdm = tqdm
+
+  def test_unsupported(self):
+    concurrent.progress_bar = 'unknown'
+    with self.assertRaisesRegex(ValueError, 'Unsupported progress bar type'):
+      _ = concurrent._progress_control(100, 'foo', 'blue', None)
+    concurrent.progress_bar = 'tqdm'
+
+
 class ProgressBarTest(unittest.TestCase):
 
   def test_multithread_support(self):
@@ -241,13 +292,12 @@ class ProgressBarTest(unittest.TestCase):
       bar_id = concurrent.ProgressBar.install(None, 5)
       def fun(x):
         del x
-        concurrent.ProgressBar.update(bar_id, 1, postfix=None)
+        concurrent.ProgressBar.update(bar_id, 1, status=None)
 
       for _ in concurrent.concurrent_execute(fun, range(5)):
         concurrent.ProgressBar.refresh()
       concurrent.ProgressBar.uninstall(bar_id)
     output_str = string_io.getvalue()
-    print(output_str)
     self.assertIn('100%', output_str)
     self.assertIn('5/5', output_str)
 
@@ -255,12 +305,12 @@ class ProgressBarTest(unittest.TestCase):
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
       bar_id = concurrent.ProgressBar.install(None, 4)
-      concurrent.ProgressBar.update(bar_id, 1, postfix=None)
-      concurrent.ProgressBar.update(bar_id, 1, postfix='hello')
-      concurrent.ProgressBar.update(bar_id, color='lightgreen')
-      concurrent.ProgressBar.update(bar_id, 2, postfix=dict(x=1))
-      with self.assertRaisesRegex(ValueError, 'Unsupported postfix'):
-        concurrent.ProgressBar.update(bar_id, 0, postfix=1)
+      concurrent.ProgressBar.update(bar_id, 1, status=None)
+      concurrent.ProgressBar.update(bar_id, 1, status='hello')
+      concurrent.ProgressBar.update(bar_id, color='green')
+      concurrent.ProgressBar.update(bar_id, 2, status=dict(x=1))
+      with self.assertRaisesRegex(ValueError, 'Unsupported status'):
+        concurrent.ProgressBar.update(bar_id, 0, status=1)
       concurrent.ProgressBar.uninstall(bar_id)
     self.assertIn('1/4', string_io.getvalue())
     self.assertIn('2/4', string_io.getvalue())

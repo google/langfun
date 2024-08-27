@@ -242,7 +242,7 @@ class Evaluable(lf.Component):
       ):
         if show_progress:
           lf.concurrent.ProgressBar.update(
-              progress_bar, postfix='LOADING SAVED RESULTS...', color='yellow'
+              progress_bar, status='LOADING SAVED RESULTS...', color='yellow'
           )
         if self.try_load_result():
           run_status = 'CACHED'
@@ -271,7 +271,7 @@ class Evaluable(lf.Component):
         if should_save:
           if show_progress:
             lf.concurrent.ProgressBar.update(
-                progress_bar, postfix='SAVING RESULTS...', color='yellow'
+                progress_bar, status='SAVING RESULTS...', color='yellow'
             )
 
           # Save evaluation results.
@@ -284,7 +284,7 @@ class Evaluable(lf.Component):
       if show_progress:
         lf.concurrent.ProgressBar.update(
             progress_bar,
-            postfix=self._completion_status(run_status),
+            status=self._completion_status(run_status),
             color='green',
         )
     else:
@@ -340,7 +340,7 @@ class Evaluable(lf.Component):
               f'[#{leaf.index} - {leaf.node.id}]',
               total=leaf.node.num_examples if leaf.enabled else 0,
               color='cyan' if leaf.enabled else 'yellow',
-              postfix=None if leaf.enabled else 'SKIPPED.')
+              status=None if leaf.enabled else 'SKIPPED.')
 
         # Run leaf groups in parallel.
         try:
@@ -354,7 +354,7 @@ class Evaluable(lf.Component):
           # Save results for non-leaf nodes.
           lf.concurrent.ProgressBar.update(
               overview_bar,
-              postfix='SAVING RESULTS...',
+              status='SAVING RESULTS...',
               color='yellow')
 
           for node in self.nonleaf_nodes:
@@ -364,7 +364,7 @@ class Evaluable(lf.Component):
 
           if should_save and summary:
             lf.concurrent.ProgressBar.update(
-                overview_bar, postfix='FINALIZING SUMMARY...'
+                overview_bar, status='FINALIZING SUMMARY...'
             )
 
             summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
@@ -378,7 +378,7 @@ class Evaluable(lf.Component):
           # Signal all task completed by making the bar green.
           lf.concurrent.ProgressBar.update(
               overview_bar,
-              postfix='COMPLETED',
+              status='COMPLETED',
               color='green')
 
         finally:

@@ -42,6 +42,24 @@ class TextFormattingTest(unittest.TestCase):
     )
     self.assertEqual(text_formatting.decolored(colored_text), original_text)
 
+  def test_colored_without_termcolor(self):
+    termcolor = text_formatting.termcolor
+    text_formatting.termcolor = None
+    original_text = inspect.cleandoc("""
+        Hi {{ foo }}
+        {# print x if x is present #}
+        {% if x %}
+        {{ x }}
+        {% endif %}
+        """)
+
+    colored_text = text_formatting.colored_template(
+        text_formatting.colored(original_text, color='blue')
+    )
+    self.assertEqual(colored_text, original_text)
+    self.assertEqual(text_formatting.decolored(colored_text), original_text)
+    text_formatting.termcolor = termcolor
+
 
 if __name__ == '__main__':
   unittest.main()
