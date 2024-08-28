@@ -33,7 +33,7 @@ def _get_version():
   if version is None:
     raise ValueError('`__version__` not defined in `langfun/__init__.py`')
   if '--nightly' in sys.argv:
-    nightly_label = datetime.datetime.now().strftime('%Y%m%d')
+    nightly_label = datetime.datetime.now().strftime('%Y%m%d%H%M')
     version = f'{version}.dev{nightly_label}'
     sys.argv.remove('--nightly')
   return version
