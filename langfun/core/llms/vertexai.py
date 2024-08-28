@@ -17,10 +17,27 @@ import functools
 import os
 from typing import Annotated, Any
 
-from google.auth import credentials as credentials_lib
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 import pyglove as pg
+
+try:
+  # pylint: disable=g-import-not-at-top
+  from google.auth import credentials as credentials_lib
+  import vertexai
+  from google.cloud.aiplatform import models as aiplatform_models
+  from vertexai import generative_models
+  from vertexai import language_models
+  # pylint: enable=g-import-not-at-top
+
+  Credentials = credentials_lib.Credentials
+except ImportError:
+  credentials_lib = None   # pylint: disable=invalid-name
+  vertexai = None
+  generative_models = None
+  language_models = None
+  aiplatform_models = None
+  Credentials = Any
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
@@ -78,7 +95,7 @@ class VertexAI(lf.LanguageModel):
   ] = None
 
   credentials: Annotated[
-      credentials_lib.Credentials | None,
+      Credentials | None,
       (
           'Credentials to use. If None, the default credentials to the '
           'environment will be used.'
@@ -93,6 +110,10 @@ class VertexAI(lf.LanguageModel):
   def _on_bound(self):
     super()._on_bound()
     self.__dict__.pop('_api_initialized', None)
+    if generative_models is None:
+      raise RuntimeError(
+          'Please install "langfun[llm-google-vertex]" to use Vertex AI models.'
+      )
 
   @functools.cached_property
   def _api_initialized(self):
@@ -112,7 +133,7 @@ class VertexAI(lf.LanguageModel):
 
     credentials = self.credentials
     # Placeholder for Google-internal credentials.
-    import vertexai
+    assert vertexai is not None
     vertexai.init(project=project, location=location, credentials=credentials)
     return True
 
@@ -138,7 +159,7 @@ class VertexAI(lf.LanguageModel):
       self, prompt: lf.Message, options: lf.LMSamplingOptions
   ) -> Any:  # generative_models.GenerationConfig
     """Creates generation config from langfun sampling options."""
-    from vertexai import generative_models
+    assert generative_models is not None
     # Users could use `metadata_json_schema` to pass additional
     # request arguments.
     json_schema = prompt.metadata.get('json_schema')
@@ -169,7 +190,7 @@ class VertexAI(lf.LanguageModel):
       self, prompt: lf.Message
   ) -> list[str | Any]:
     """Gets generation input from langfun message."""
-    from vertexai import generative_models
+    assert generative_models is not None
     chunks = []
 
     for lf_chunk in prompt.chunk():
@@ -296,8 +317,8 @@ class VertexAI(lf.LanguageModel):
 
   def _sample_endpoint_model(self, prompt: lf.Message) -> lf.LMSamplingResult:
     """Samples a text generation model."""
-    from google.cloud.aiplatform import models
-    model = models.Endpoint(self.endpoint_name)
+    assert aiplatform_models is not None
+    model = aiplatform_models.Endpoint(self.endpoint_name)
     # TODO(chengrun): Add support for stop_sequences.
     predict_options = dict(
         temperature=self.sampling_options.temperature
@@ -337,7 +358,7 @@ class _ModelHub:
     """Gets a generative model by model id."""
     model = self._generative_model_cache.get(model_id, None)
     if model is None:
-      from vertexai import generative_models
+      assert generative_models is not None
       model = generative_models.GenerativeModel(model_id)
       self._generative_model_cache[model_id] = model
     return model
@@ -348,7 +369,7 @@ class _ModelHub:
     """Gets a text generation model by model id."""
     model = self._text_generation_model_cache.get(model_id, None)
     if model is None:
-      from vertexai import language_models
+      assert language_models is not None
       model = language_models.TextGenerationModel.from_pretrained(model_id)
       self._text_generation_model_cache[model_id] = model
     return model

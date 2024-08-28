@@ -18,10 +18,27 @@ import functools
 import os
 from typing import Annotated, Any, Literal
 
-import google.generativeai as genai
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 import pyglove as pg
+
+
+try:
+  import google.generativeai as genai   # pylint: disable=g-import-not-at-top
+  BlobDict = genai.types.BlobDict
+  GenerativeModel = genai.GenerativeModel
+  Completion = genai.types.Completion
+  GenerationConfig = genai.GenerationConfig
+  GenerateContentResponse = genai.types.GenerateContentResponse
+  ChatResponse = genai.types.ChatResponse
+except ImportError:
+  genai = None
+  BlobDict = Any
+  GenerativeModel = Any
+  Completion = Any
+  GenerationConfig = Any
+  GenerateContentResponse = Any
+  ChatResponse = Any
 
 
 @lf.use_init_args(['model'])
@@ -59,10 +76,16 @@ class GenAI(lf.LanguageModel):
 
   def _on_bound(self):
     super()._on_bound()
+    if genai is None:
+      raise RuntimeError(
+          'Please install "langfun[llm-google-genai]" to use '
+          'Google Generative AI models.'
+      )
     self.__dict__.pop('_api_initialized', None)
 
   @functools.cached_property
   def _api_initialized(self):
+    assert genai is not None
     api_key = self.api_key or os.environ.get('GOOGLE_API_KEY', None)
     if not api_key:
       raise ValueError(
@@ -78,6 +101,7 @@ class GenAI(lf.LanguageModel):
   @classmethod
   def dir(cls) -> list[str]:
     """Lists generative models."""
+    assert genai is not None
     return [
         m.name.lstrip('models/')
         for m in genai.list_models()
@@ -100,7 +124,7 @@ class GenAI(lf.LanguageModel):
 
   def _generation_config(self, options: lf.LMSamplingOptions) -> dict[str, Any]:
     """Creates generation config from langfun sampling options."""
-    return genai.GenerationConfig(
+    return GenerationConfig(
         candidate_count=options.n,
         temperature=options.temperature,
         top_p=options.top_p,
@@ -111,7 +135,7 @@ class GenAI(lf.LanguageModel):
 
   def _content_from_message(
       self, prompt: lf.Message
-  ) -> list[str | genai.types.BlobDict]:
+  ) -> list[str | BlobDict]:
     """Gets Evergreen formatted content from langfun message."""
     formatted = lf.UserMessage(prompt.text)
     formatted.source = prompt
@@ -131,7 +155,7 @@ class GenAI(lf.LanguageModel):
             if modality.is_text:
               chunk = modality.to_text()
             else:
-              chunk = genai.types.BlobDict(
+              chunk = BlobDict(
                   data=modality.to_bytes(),
                   mime_type=modality.mime_type
               )
@@ -143,7 +167,7 @@ class GenAI(lf.LanguageModel):
     return chunks
 
   def _response_to_result(
-      self, response: genai.types.GenerateContentResponse | pg.Dict
+      self, response: GenerateContentResponse | pg.Dict
   ) -> lf.LMSamplingResult:
     """Parses generative response into message."""
     samples = []
@@ -182,8 +206,8 @@ class _LegacyGenerativeModel(pg.Object):
 
   def generate_content(
       self,
-      input_content: list[str | genai.types.BlobDict],
-      generation_config: genai.GenerationConfig,
+      input_content: list[str | BlobDict],
+      generation_config: GenerationConfig,
   ) -> pg.Dict:
     """Generate content."""
     segments = []
@@ -195,7 +219,7 @@ class _LegacyGenerativeModel(pg.Object):
 
   @abc.abstractmethod
   def generate(
-      self, prompt: str, generation_config: genai.GenerationConfig) -> pg.Dict:
+      self, prompt: str, generation_config: GenerationConfig) -> pg.Dict:
     """Generate response based on prompt."""
 
 
@@ -203,9 +227,10 @@ class _LegacyCompletionModel(_LegacyGenerativeModel):
   """Legacy GenAI completion model."""
 
   def generate(
-      self, prompt: str, generation_config: genai.GenerationConfig
+      self, prompt: str, generation_config: GenerationConfig
   ) -> pg.Dict:
-    completion: genai.types.Completion = genai.generate_text(
+    assert genai is not None
+    completion: Completion = genai.generate_text(
         model=f'models/{self.model}',
         prompt=prompt,
         temperature=generation_config.temperature,
@@ -227,9 +252,10 @@ class _LegacyChatModel(_LegacyGenerativeModel):
   """Legacy GenAI chat model."""
 
   def generate(
-      self, prompt: str, generation_config: genai.GenerationConfig
+      self, prompt: str, generation_config: GenerationConfig
   ) -> pg.Dict:
-    response: genai.types.ChatResponse = genai.chat(
+    assert genai is not None
+    response: ChatResponse = genai.chat(
         model=f'models/{self.model}',
         messages=prompt,
         temperature=generation_config.temperature,
@@ -253,8 +279,9 @@ class _ModelHub:
 
   def get(
       self, model_name: str
-  ) -> genai.GenerativeModel | _LegacyGenerativeModel:
+  ) -> GenerativeModel | _LegacyGenerativeModel:
     """Gets a generative model by model id."""
+    assert genai is not None
     model = self._model_cache.get(model_name, None)
     if model is None:
       model_info = genai.get_model(f'models/{model_name}')
