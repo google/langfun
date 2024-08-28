@@ -1,13 +1,24 @@
-google-cloud-aiplatform>=1.5.0
-google-generativeai>=0.3.2
+pyglove>=0.4.5.dev20240824
 jinja2>=3.1.2
-openai==0.27.2
-openpyxl>=3.1.0
-pandas>=2.0.3
-pyglove>=0.4.5.dev20240423
-python-docx>=0.8.11
-python-magic>=0.4.27
 requests>=2.31.0
+
+# extras:ui
 termcolor==1.1.0
 tqdm>=4.64.1
+
+# extras:llm-google-vertex
+google-cloud-aiplatform>=1.5.0
+# extras:llm-google-genai
+google-generativeai>=0.3.2
+# extras:llm-openai
+openai>=0.27.2
+
+# extras:mime-auto
+python-magic>=0.4.27
+# extras:mime-docx
+python-docx>=0.8.11
+# extras:mime-pil
 pillow>=10.0.0
+# extras:mime-xlsx
+openpyxl>=3.1.0
+pandas>=2.0.3

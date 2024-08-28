@@ -13,6 +13,7 @@
 # limitations under the License.
 """Setup for pip package."""
 
+import collections
 import datetime
 import sys
 from setuptools import find_namespace_packages
@@ -38,25 +39,46 @@ def _get_version():
   return version
 
 
-def _parse_requirements(requirements_txt_path: str) -> list[str]:
-  """Returns a list of dependencies for setup() from requirements.txt."""
-
-  def _strip_comments_from_line(s: str) -> str:
-    """Parses a line of a requirements.txt file."""
-    requirement, *_ = s.split('#')
-    return requirement.strip()
+def _parse_requirements(
+    requirements_txt_path: str
+) -> tuple[list[str], dict[str, list[str]]]:
+  """Parses the require and extras_require for setup() from requirements.txt."""
 
   # Currently a requirements.txt is being used to specify dependencies. In order
   # to avoid specifying it in two places, we're going to use that file as the
   # source of truth.
-  with open(requirements_txt_path) as fp:
-    # Parse comments.
-    lines = [_strip_comments_from_line(line) for line in fp.read().splitlines()]
-    # Remove empty lines and direct github repos (not allowed in PyPI setups)
-    return [l for l in lines if (l and 'github.com' not in l)]
+  extras = collections.defaultdict(list)
+  paths = ['require']
+
+  def add_requirement(requirement: str, extra_key: str) -> None:
+    if requirement not in extras[extra_key]:
+      extras[extra_key].append(requirement)
+
+  with open(requirements_txt_path) as file:
+    for line in file:
+      line = line.strip()
+      if not line:
+        continue
+
+      if line.startswith('# extras:'):
+        extra_path = line[line.find(':') + 1:].split('-')
+        paths = [
+            '-'.join(extra_path[:i + 1]) for i in range(len(extra_path))
+        ]
+      else:
+        requirement, *_ = line.split('#')
+        if requirement:
+          for p in paths:
+            add_requirement(requirement, p)
+          add_requirement(requirement, 'all')
+
+  require = extras.pop('require')
+  return require, dict(extras)
 
 
 _VERSION = _get_version()
+
+install_requires, extras_require = _parse_requirements('requirements.txt')
 
 setup(
     name='langfun',
@@ -70,8 +92,8 @@ setup(
     author_email='langfun-authors@google.com',
     # Contained modules and scripts.
     packages=find_namespace_packages(include=['langfun*']),
-    install_requires=_parse_requirements('requirements.txt'),
-    extras_require={},
+    install_requires=install_requires,
+    extras_require=extras_require,
     requires_python='>=3.10',
     include_package_data=True,
     # PyPI package information.

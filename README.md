@@ -115,16 +115,45 @@ See [Langfun 101](https://colab.research.google.com/github/google/langfun/blob/m
 
 ## Install
 
+Langfun offers a range of features through [Extras](https://packaging.python.org/en/latest/tutorials/installing-packages/#installing-extras), allowing users to install only what they need. The minimal installation of Langfun requires only [PyGlove](https://github.com/google/pyglove), [Jinja2](https://github.com/pallets/jinja/), and [requests](https://github.com/psf/requests). To install Langfun with its minimal dependencies, use:
+
 ```
 pip install langfun
 ```
 
-Or install nightly build with:
+For a complete installation with all dependencies, use:
 
 ```
-pip install langfun --pre
+pip install langfun[all]
 ```
 
+To install a nightly build, include the `--pre` flag, like this:
 
+```
+pip install langfun[all] --pre
+```
+
+If you want to customize your installation, you can select specific features using package names like `langfun[X1, X2, ..., Xn]`, where `Xi` corresponds to a tag from the list below:
+
+| Tag                 |  Description                             |
+| ------------------- | ---------------------------------------- |
+| all                 | All Langfun features.                    |
+| llm                 | All supported LLMs.                      |
+| llm-google          | All supported Google-powered LLMs.       |
+| llm-google-vertexai | LLMs powered by Google Cloud VertexAI    |
+| llm-google-genai    | LLMs powered by Google Generative AI API |
+| llm-openai          | LLMs powered by OpenAI                   |
+| mime                | All MIME supports.                       |
+| mime-auto           | Automatic MIME type detection.           |
+| mime-docx           | DocX format support.                     |
+| mime-pil            | Image support for PIL.                   |
+| mime-xlsx           | XlsX format support.                     |
+| ui                  | UI enhancements                          |
+
+
+For example, to install a nightly build that includes Google-powered LLMs, full modality support, and UI enhancements, use:
+```
+pip install langfun[llm-google,mime,ui] --pre
+```
 
 *Disclaimer: this is not an officially supported Google product.*
