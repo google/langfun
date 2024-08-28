@@ -30,10 +30,15 @@ class Xlsx(mime.Mime):
   )
 
   def to_html(self) -> str:
-    import pandas as pd  # pylint: disable=g-import-not-at-top
-
-    df = pd.read_excel(io.BytesIO(self.to_bytes()))
-    return df.to_html()
+    try:
+      import pandas as pd  # pylint: disable=g-import-not-at-top
+      import openpyxl      # pylint: disable=g-import-not-at-top, unused-import
+      df = pd.read_excel(io.BytesIO(self.to_bytes()))
+      return df.to_html()
+    except ImportError as e:
+      raise RuntimeError(
+          'Please install "langfun[mime-xlsx]" to enable XLSX support.'
+      ) from e
 
   def _repr_html_(self) -> str:
     return self.to_html()
@@ -58,10 +63,14 @@ class Docx(mime.Mime):
   )
 
   def to_xml(self) -> str:
-    import docx  # pylint: disable=g-import-not-at-top
-
-    doc = docx.Document(io.BytesIO(self.to_bytes()))
-    return str(doc.element.xml)
+    try:
+      import docx  # pylint: disable=g-import-not-at-top
+      doc = docx.Document(io.BytesIO(self.to_bytes()))
+      return str(doc.element.xml)
+    except ImportError as e:
+      raise RuntimeError(
+          'Please install "langfun[mime-docx]" to enable Docx support.'
+      ) from e
 
   def _repr_html_(self) -> str:
     return self.to_xml()

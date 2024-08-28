@@ -15,9 +15,21 @@
 
 import functools
 import io
+from typing import Any
 
 from langfun.core.modalities import mime
-from PIL import Image as pil_image
+
+try:
+  from PIL import Image as pil_image    # pylint: disable=g-import-not-at-top
+  PILImage = pil_image.Image
+  pil_open = pil_image.open
+except ImportError:
+  PILImage = Any
+
+  def pil_open(*unused_args, **unused_kwargs):
+    raise RuntimeError(
+        'Please install "langfun[mime-pil]" to enable PIL image support.'
+    )
 
 
 class Image(mime.Mime):
@@ -34,14 +46,14 @@ class Image(mime.Mime):
 
   @functools.cached_property
   def size(self) -> tuple[int, int]:
-    img = pil_image.open(io.BytesIO(self.to_bytes()))
+    img = pil_open(io.BytesIO(self.to_bytes()))
     return img.size
 
-  def to_pil_image(self) -> pil_image.Image:
-    return pil_image.open(io.BytesIO(self.to_bytes()))
+  def to_pil_image(self) -> PILImage:   # pytype: disable=invalid-annotation
+    return pil_open(io.BytesIO(self.to_bytes()))
 
   @classmethod
-  def from_pil_image(cls, img: pil_image.Image) -> 'Image':
+  def from_pil_image(cls, img: PILImage) -> 'Image':  # pytype: disable=invalid-annotation
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     return cls.from_bytes(buf.getvalue())

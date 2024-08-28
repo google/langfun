@@ -17,9 +17,18 @@ import base64
 import functools
 from typing import Annotated, Iterable, Type, Union
 import langfun.core as lf
-import magic
 import pyglove as pg
 import requests
+
+
+try:
+  import magic    # pylint: disable=g-import-not-at-top
+  from_buffer = magic.from_buffer
+except ImportError:
+  def from_buffer(*unused_args, **unused_kwargs):
+    raise RuntimeError(
+        'Please install "langfun[mime-auto]" to enable automatic MIME support.'
+    )
 
 
 class Mime(lf.Modality):
@@ -38,7 +47,7 @@ class Mime(lf.Modality):
   @functools.cached_property
   def mime_type(self) -> str:
     """Returns the MIME type."""
-    mime = magic.from_buffer((self.to_bytes()), mime=True)
+    mime = from_buffer((self.to_bytes()), mime=True)
     if (
         self.MIME_PREFIX
         and not mime.lower().startswith(self.MIME_PREFIX)
@@ -136,14 +145,14 @@ class Mime(lf.Modality):
   def from_uri(cls, uri: str, **kwargs) -> 'Mime':
     if cls is Mime:
       content = cls.download(uri)
-      mime = magic.from_buffer(content, mime=True).lower()
+      mime = from_buffer(content, mime=True).lower()
       return cls.class_from_mime_type(mime)(uri=uri, content=content, **kwargs)
     return cls(uri=uri, content=None, **kwargs)
 
   @classmethod
   def from_bytes(cls, content: bytes | str, **kwargs) -> 'Mime':
     if cls is Mime:
-      mime = magic.from_buffer(content, mime=True).lower()
+      mime = from_buffer(content, mime=True).lower()
       return cls.class_from_mime_type(mime)(content=content, **kwargs)
     return cls(content=content, **kwargs)
 
