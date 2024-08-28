@@ -16,14 +16,30 @@
 import collections
 import functools
 import os
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
-import openai
-from openai import error as openai_error
-from openai import openai_object
 import pyglove as pg
+
+try:
+  import openai  # pylint: disable=g-import-not-at-top
+
+  if hasattr(openai, 'error'):
+    # For lower versions.
+    ServiceUnavailableError = openai.error.ServiceUnavailableError
+    RateLimitError = openai.error.RateLimitError
+    APITimeoutError = (
+        openai.error.APIError,
+        '.*The server had an error processing your request'
+    )
+  else:
+    # For higher versions.
+    ServiceUnavailableError = getattr(openai, 'InternalServerError')
+    RateLimitError = getattr(openai, 'RateLimitError')
+    APITimeoutError = getattr(openai, 'APITimeoutError')
+except ImportError:
+  openai = None
 
 
 # From https://platform.openai.com/settings/organization/limits
@@ -119,6 +135,10 @@ class OpenAI(lf.LanguageModel):
   def _on_bound(self):
     super()._on_bound()
     self.__dict__.pop('_api_initialized', None)
+    if openai is None:
+      raise RuntimeError(
+          'Please install "langfun[llm-openai]" to use OpenAI models.'
+      )
 
   @functools.cached_property
   def _api_initialized(self):
@@ -149,6 +169,7 @@ class OpenAI(lf.LanguageModel):
 
   @classmethod
   def dir(cls):
+    assert openai is not None
     return openai.Model.list()
 
   @property
@@ -195,11 +216,11 @@ class OpenAI(lf.LanguageModel):
   ) -> list[lf.LMSamplingResult]:
 
     def _open_ai_completion(prompts):
+      assert openai is not None
       response = openai.Completion.create(
           prompt=[p.text for p in prompts],
           **self._get_request_args(self.sampling_options),
       )
-      response = cast(openai_object.OpenAIObject, response)
       # Parse response.
       samples_by_index = collections.defaultdict(list)
       for choice in response.choices:
@@ -222,12 +243,9 @@ class OpenAI(lf.LanguageModel):
         _open_ai_completion,
         [prompts],
         retry_on_errors=(
-            openai_error.ServiceUnavailableError,
-            openai_error.RateLimitError,
-            # Handling transient OpenAI server error (code 500). Check out
-            # https://platform.openai.com/docs/guides/error-codes/error-codes
-            (openai_error.APIError,
-             '.*The server had an error processing your request'),
+            ServiceUnavailableError,
+            RateLimitError,
+            APITimeoutError,
         ),
     )[0]
 
@@ -292,10 +310,8 @@ class OpenAI(lf.LanguageModel):
         )
       messages.append(dict(role='user', content=_content_from_message(prompt)))
 
-      response = cast(
-          openai_object.OpenAIObject,
-          openai.ChatCompletion.create(messages=messages, **request_args)
-      )
+      assert openai is not None
+      response = openai.ChatCompletion.create(messages=messages, **request_args)
 
       samples = []
       for choice in response.choices:
@@ -330,8 +346,9 @@ class OpenAI(lf.LanguageModel):
         _open_ai_chat_completion,
         prompts,
         retry_on_errors=(
-            openai_error.ServiceUnavailableError,
-            openai_error.RateLimitError,
+            ServiceUnavailableError,
+            RateLimitError,
+            APITimeoutError
         ),
     )
 
