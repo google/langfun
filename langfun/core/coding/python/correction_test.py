@@ -19,6 +19,7 @@ import unittest
 from langfun.core.coding.python import correction
 from langfun.core.coding.python import errors
 from langfun.core.llms import fake
+import pyglove as pg
 
 
 class RunWithCorrectionTest(unittest.TestCase):
@@ -44,6 +45,32 @@ class RunWithCorrectionTest(unittest.TestCase):
         ]),
     )
     self.assertEqual(result, 4)
+
+  def test_run_with_correction_upon_custom_validation(self):
+
+    class Foo(pg.Object):
+      x: int
+
+      def __validate__(self):
+        if self.x > 1:
+          raise ValueError('value should be less or equal than 1.')
+        if self.x < 0:
+          self.rebind(x=0, skip_notification=True)
+
+    result = correction.run_with_correction(
+        inspect.cleandoc("""
+            Foo(x=2)
+            """),
+        global_vars=dict(Foo=Foo),
+        lm=fake.StaticSequence([
+            inspect.cleandoc("""
+                CorrectedCode(
+                    corrected_code='Foo(x=-1)',
+                )
+                """),
+        ]),
+    )
+    self.assertEqual(result, Foo(0))
 
   def test_run_without_correction(self):
     result = correction.run_with_correction(

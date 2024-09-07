@@ -81,23 +81,27 @@ def run_with_correction(
   # pylint: enable=g-import-not-at-top
 
   if max_attempts == 0:
-    result = execution.run(
-        code,
-        global_vars=global_vars,
-        sandbox=sandbox,
-        timeout=timeout,
-        outputs_intermediate=outputs_intermediate,
+    result = _maybe_custom_validate(
+        execution.run(
+            code,
+            global_vars=global_vars,
+            sandbox=sandbox,
+            timeout=timeout,
+            outputs_intermediate=outputs_intermediate,
+        )
     )
     return (result, code) if returns_code else result
 
   def result_and_error(code: str) -> tuple[Any, str | None]:
     try:
-      result = execution.run(
-          code,
-          global_vars=global_vars,
-          sandbox=sandbox,
-          timeout=timeout,
-          outputs_intermediate=outputs_intermediate,
+      result = _maybe_custom_validate(
+          execution.run(
+              code,
+              global_vars=global_vars,
+              sandbox=sandbox,
+              timeout=timeout,
+              outputs_intermediate=outputs_intermediate,
+          )
       )
       return (result, None)
     except Exception as e:  # pylint: disable=broad-exception-caught
@@ -190,3 +194,15 @@ def _error_feedback_str(error: Exception) -> str:
     )
   else:
     return f"Encountered {error.__class__.__name__}: {error}"
+
+
+def _maybe_custom_validate(result: Any) -> Any:
+  """Apply custom validation through __validate_generation__ method."""
+  if isinstance(result, dict) and "__result__" in result:
+    r = result["__result__"]
+  else:
+    r = result
+
+  if hasattr(r, "__validate__"):
+    r.__validate__()
+  return result
