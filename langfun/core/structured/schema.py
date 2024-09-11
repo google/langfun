@@ -262,7 +262,7 @@ def class_dependencies(
               )
 
         # Add members as dependencies.
-        for field in _pg_schema(vs.cls).values():
+        for field in pg.schema(vs.cls).values():
           _fill_dependencies(field.value, include_subclasses)
       _add_dependency(vs.cls)
 
@@ -390,7 +390,7 @@ def class_definition(
 ) -> str:
   """Returns the Python class definition."""
   out = io.StringIO()
-  schema = _pg_schema(cls)
+  schema = pg.schema(cls)
   eligible_bases = []
   for base_cls in cls.__bases__:
     if base_cls is not object:
@@ -913,13 +913,3 @@ class Unknown(pg.Object, pg.typing.CustomTyping):
 
 
 UNKNOWN = Unknown()
-
-
-def _pg_schema(cls: Type[Any]) -> pg.Schema:
-  """Returns PyGlove schema for the constructor of a class."""
-  schema = getattr(cls, '__schema__', None)
-  if schema is None:
-    schema = pg.symbolic.callable_schema(
-        cls.__init__, auto_typing=True, auto_doc=True, remove_self=True
-    )
-  return schema

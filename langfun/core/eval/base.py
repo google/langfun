@@ -941,7 +941,7 @@ class Evaluation(Evaluable):
 
     fields = list(cls.__schema__.values())
     fields.insert(0, (self.completion_prompt_field, pg.typing.Str()))
-    pg.symbolic.update_schema(cls, fields, extend=False)
+    cls.update_schema(fields, extend=False)
 
   def _maybe_adjust_examples_for_completion(
       self,

@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/google/langfun/branch/main/graph/badge.svg)](https://codecov.io/gh/google/langfun)
 ![pytest](https://github.com/google/langfun/actions/workflows/ci.yaml/badge.svg)
 
-[**Installation**](#install) | [**Getting started**](#hello-langfun) | [**Tutorial**](https://colab.research.google.com/github/google/langfun/blob/main/docs/notebooks/langfun101.ipynb) | [**Discord community**](https://discord.gg/U6wPN9R68k)
+[**Installation**](#install) | [**Getting started**](#hello-langfun) | [**Tutorial**](https://colab.research.google.com/github/google/langfun/blob/main/docs/notebooks/langfun101.ipynb)
 
 ## Introduction
 

@@ -73,7 +73,7 @@ class Component(pg.Object):
         field.value.set_default(attr_value)
         additional_fields.append(field)
     if additional_fields:
-      pg.symbolic.update_schema(cls, additional_fields)
+      cls.update_schema(additional_fields)
 
   def _on_bound(self):
     super()._on_bound()
