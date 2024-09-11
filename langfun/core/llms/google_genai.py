@@ -27,18 +27,18 @@ try:
   import google.generativeai as genai   # pylint: disable=g-import-not-at-top
   BlobDict = genai.types.BlobDict
   GenerativeModel = genai.GenerativeModel
-  Completion = genai.types.Completion
+  Completion = getattr(genai.types, 'Completion', Any)
+  ChatResponse = getattr(genai.types, 'ChatResponse', Any)
+  GenerateContentResponse = getattr(genai.types, 'GenerateContentResponse', Any)
   GenerationConfig = genai.GenerationConfig
-  GenerateContentResponse = genai.types.GenerateContentResponse
-  ChatResponse = genai.types.ChatResponse
 except ImportError:
   genai = None
   BlobDict = Any
   GenerativeModel = Any
   Completion = Any
+  ChatResponse = Any
   GenerationConfig = Any
   GenerateContentResponse = Any
-  ChatResponse = Any
 
 
 @lf.use_init_args(['model'])

@@ -192,39 +192,41 @@ class GenAITest(unittest.TestCase):
   def test_call_with_legacy_completion_model(self):
     orig_get_model = genai.get_model
     genai.get_model = mock_get_model
-    orig_generate_text = genai.generate_text
-    genai.generate_text = mock_generate_text
+    orig_generate_text = getattr(genai, 'generate_text', None)
+    if orig_generate_text is not None:
+      genai.generate_text = mock_generate_text
 
-    lm = google_genai.Palm2(api_key='test_key')
-    self.maxDiff = None
-    self.assertEqual(
-        lm('hello', temperature=2.0, top_k=20).text,
-        (
-            "hello to models/text-bison-001 with {'temperature': 2.0, "
-            "'top_k': 20, 'top_p': None, 'candidate_count': 1, "
-            "'max_output_tokens': None, 'stop_sequences': None}"
-        ),
-    )
+      lm = google_genai.Palm2(api_key='test_key')
+      self.maxDiff = None
+      self.assertEqual(
+          lm('hello', temperature=2.0, top_k=20).text,
+          (
+              "hello to models/text-bison-001 with {'temperature': 2.0, "
+              "'top_k': 20, 'top_p': None, 'candidate_count': 1, "
+              "'max_output_tokens': None, 'stop_sequences': None}"
+          ),
+      )
+      genai.generate_text = orig_generate_text
     genai.get_model = orig_get_model
-    genai.generate_text = orig_generate_text
 
   def test_call_with_legacy_chat_model(self):
     orig_get_model = genai.get_model
     genai.get_model = mock_get_model
-    orig_chat = genai.chat
-    genai.chat = mock_chat
+    orig_chat = getattr(genai, 'chat', None)
+    if orig_chat is not None:
+      genai.chat = mock_chat
 
-    lm = google_genai.Palm2_IT(api_key='test_key')
-    self.maxDiff = None
-    self.assertEqual(
-        lm('hello', temperature=2.0, top_k=20).text,
-        (
-            "hello to models/chat-bison-001 with {'temperature': 2.0, "
-            "'top_k': 20, 'top_p': None, 'candidate_count': 1}"
-        ),
-    )
+      lm = google_genai.Palm2_IT(api_key='test_key')
+      self.maxDiff = None
+      self.assertEqual(
+          lm('hello', temperature=2.0, top_k=20).text,
+          (
+              "hello to models/chat-bison-001 with {'temperature': 2.0, "
+              "'top_k': 20, 'top_p': None, 'candidate_count': 1}"
+          ),
+      )
+      genai.chat = orig_chat
     genai.get_model = orig_get_model
-    genai.chat = orig_chat
 
 
 if __name__ == '__main__':
