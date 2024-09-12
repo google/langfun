@@ -576,8 +576,8 @@ class ConcurrentMapTest(unittest.TestCase):
             (3, pg.MISSING_VALUE),
         ],
     )
-    self.assertIn('100%', string_io.getvalue())
     concurrent.ProgressBar.uninstall(bar_id)
+    self.assertIn('100%', string_io.getvalue())
 
 
 class ExecutorPoolTest(unittest.TestCase):

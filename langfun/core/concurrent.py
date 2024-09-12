@@ -469,7 +469,9 @@ class ProgressBar:
       # Process uninstall requests.
       if cls._uninstall_requests:
         for bar_id in cls._uninstall_requests:
-          cls._progress_bars.pop(bar_id, None)
+          bar = cls._progress_bars.pop(bar_id, None)
+          if bar is not None:
+            bar.close()
         cls._uninstall_requests.clear()
 
 
@@ -765,6 +767,10 @@ class _ProgressControl(pg.Object):
   def refresh(self) -> None:
     """Refresh progress bar."""
 
+  @abc.abstractmethod
+  def close(self) -> None:
+    """Close progress bar."""
+
 
 class _TqdmProgressControl(_ProgressControl):
   """Tqdm-based progress control."""
@@ -790,6 +796,9 @@ class _TqdmProgressControl(_ProgressControl):
       self._tqdm.set_postfix(self.status, refresh=False)
     self._tqdm.colour = self.color
     self._tqdm.refresh()
+
+  def close(self):
+    self._tqdm.close()
 
 
 class _ConsoleProgressControl(_ProgressControl):
@@ -824,6 +833,9 @@ class _ConsoleProgressControl(_ProgressControl):
       s.write(f' : {status}')
     sys.stderr.write(s.getvalue() + '\n')
 
+  def close(self):
+    sys.stderr.flush()
+
 
 class _NoopProgressControl(_ProgressControl):
   """No-op progress control."""
@@ -832,6 +844,9 @@ class _NoopProgressControl(_ProgressControl):
     pass
 
   def refresh(self) -> None:
+    pass
+
+  def close(self) -> None:
     pass
 
 
