@@ -14,6 +14,8 @@
 """Tests for structured prompting."""
 
 import inspect
+import math
+from typing import Any
 import unittest
 
 import langfun.core as lf
@@ -381,6 +383,128 @@ class QueryTest(unittest.TestCase):
         ),
         1,
     )
+
+  def test_query_reward(self):
+
+    class Answer(pg.Object):
+      final_answer: int
+
+      def __reward__(self, inputs: lf.Template) -> None:
+        diff = abs(self.final_answer - (inputs.x + inputs.y))
+        # Center screwed sigmoid scaled to [-1.0 and 1.0].
+        return 4 / (1 + math.exp(diff)) - 1.0
+
+    # Case 1: Reward function based on input and output.
+    self.assertEqual(
+        prompting.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+                schema=Answer,
+                output=Answer(final_answer=2),
+            ),
+            'Answer(2)'
+        ),
+        1.0
+    )
+    self.assertEqual(
+        prompting.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=2, y=3),
+                output=Answer(final_answer=2),
+            ).to_json_str(),
+            'Answer(5)'
+        ),
+        1.0
+    )
+
+    # Case 2: Reward function based on input, result and expected output.
+    class Answer2(pg.Object):
+      final_answer: int
+
+      def __reward__(self, inputs: lf.Template, expected_output: 'Answer2'):
+        return (
+            1.0 if self.final_answer == expected_output.final_answer else -1.0
+        )
+
+    self.assertEqual(
+        prompting.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+                output=Answer2(final_answer=2),
+            ),
+            'Answer2(3)'
+        ),
+        -1.0
+    )
+
+    # Case 3: Reward function based on input, result, expected output
+    # and metadata.
+    class Answer3(pg.Object):
+      final_answer: int
+
+      def __reward__(self,
+                     inputs: lf.Template,
+                     expected_output: 'Answer3',
+                     metadata: dict[str, Any]):
+        del inputs
+        return (
+            1.0 if self.final_answer == expected_output.final_answer else -1.0
+        ) * metadata['weight']
+
+    self.assertEqual(
+        prompting.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+                output=Answer3(final_answer=2),
+                metadata=dict(weight=0.5)
+            ),
+            'Answer3(3)'
+        ),
+        -0.5
+    )
+
+    # Case 4: No reward function is provided.
+    class Answer4(pg.Object):
+      final_answer: int
+
+    self.assertIsNone(
+        prompting.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+                output=Answer4(final_answer=2),
+            ),
+            'Answer2(2)'
+        )
+    )
+
+    # Case 5: Not a structured output.
+    self.assertIsNone(
+        prompting.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+                output='2',
+            ),
+            '2'
+        )
+    )
+
+    # Case 6: Bad reward function.
+    class Answer5(pg.Object):
+      final_answer: int
+
+      def __reward__(self):
+        return 0.0
+
+    with self.assertRaisesRegex(
+        TypeError, '.*Answer5.__reward__` should have signature'
+    ):
+      prompting.query_reward(
+          mapping.MappingExample(
+              input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+              output=Answer5(final_answer=2),
+          ),
+          'Answer5(2)'
+      )
 
 
 class QueryStructurePythonTest(unittest.TestCase):

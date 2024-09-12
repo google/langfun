@@ -13,6 +13,7 @@
 # limitations under the License.
 """Symbolic query."""
 
+import functools
 from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
@@ -265,3 +266,57 @@ def query_output(
   return query(
       'Unused prompt', schema, lm=fake.StaticResponse(response), **kwargs
   )
+
+
+def query_reward(
+    mapping_example: Union[str, mapping.MappingExample],
+    response: Union[str, lf.Message],
+) -> float | None:
+  """Returns the reward of an LLM response based on an mapping example."""
+  if isinstance(mapping_example, str):
+    mapping_example = pg.from_json_str(mapping_example)
+    assert isinstance(mapping_example, mapping.MappingExample), mapping_example
+  schema = mapping_example.schema
+
+  if schema and isinstance(schema.spec, pg.typing.Object):
+    output_cls = schema.spec.cls
+  elif schema is None and isinstance(mapping_example.output, pg.Object):
+    output_cls = mapping_example.output.__class__
+  else:
+    output_cls = None
+
+  reward_fn = _reward_fn(output_cls)
+  if reward_fn is None:
+    return None
+
+  return reward_fn(
+      query_output(response, output_cls),
+      mapping_example.input,
+      mapping_example.output,
+      mapping_example.metadata,
+  )
+
+
+@functools.cache
+def _reward_fn(cls) -> Callable[
+    [
+        pg.Object,    # Actual output object.
+        Any,          # Input object.
+        pg.Object,    # Expected output object.
+        pg.Dict       # User metadata.
+    ], float] | None:
+  """Returns the reward function for a class that is being queried."""
+  if not callable(getattr(cls, '__reward__', None)):
+    return None
+
+  signature = pg.typing.signature(cls.__reward__)
+  num_args = len(signature.args)
+  if num_args < 2 or num_args > 4:
+    raise TypeError(
+        f'`{cls.__type_name__}.__reward__` should have signature: '
+        '`__reward__(self, input, [expected_output], [expected_metadata])`.'
+    )
+  def _reward(self, input, expected_output, metadata):  # pylint: disable=redefined-builtin
+    args = [self, input, expected_output, metadata]
+    return cls.__reward__(*args[:num_args])
+  return _reward

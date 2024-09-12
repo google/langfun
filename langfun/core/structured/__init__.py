@@ -68,6 +68,7 @@ from langfun.core.structured.prompting import QueryStructurePython
 from langfun.core.structured.prompting import query
 from langfun.core.structured.prompting import query_prompt
 from langfun.core.structured.prompting import query_output
+from langfun.core.structured.prompting import query_reward
 
 from langfun.core.structured.description import DescribeStructure
 from langfun.core.structured.description import describe
