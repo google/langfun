@@ -180,7 +180,7 @@ class OpenAI(lf.LanguageModel):
   @property
   def is_chat_model(self):
     """Returns True if the model is a chat model."""
-    return self.model.startswith(('gpt-4', 'gpt-3.5-turbo'))
+    return self.model.startswith(('o1', 'gpt-4', 'gpt-3.5-turbo'))
 
   def _get_request_args(
       self, options: lf.LMSamplingOptions) -> dict[str, Any]:
@@ -191,9 +191,14 @@ class OpenAI(lf.LanguageModel):
         n=options.n,
         stream=False,
         timeout=self.timeout,
-        logprobs=options.logprobs,
         top_logprobs=options.top_logprobs,
     )
+    if options.logprobs:
+      # Reasoning models (o1 series) does not support `logprobs` by 2024/09/12.
+      if self.model.startswith('o1-'):
+        raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
+      args['logprobs'] = options.logprobs
+
     # Completion and ChatCompletion uses different parameter name for model.
     args['model' if self.is_chat_model else 'engine'] = self.model
 
@@ -321,14 +326,15 @@ class OpenAI(lf.LanguageModel):
       samples = []
       for choice in response.choices:
         logprobs = None
-        if choice.logprobs:
+        choice_logprobs = getattr(choice, 'logprobs', None)
+        if choice_logprobs:
           logprobs = [
               (
                   t.token,
                   t.logprob,
                   [(tt.token, tt.logprob) for tt in t.top_logprobs],
               )
-              for t in choice.logprobs.content
+              for t in choice_logprobs.content
           ]
         samples.append(
             lf.LMSample(

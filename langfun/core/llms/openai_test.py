@@ -117,12 +117,13 @@ class OpenAITest(unittest.TestCase):
         openai.Gpt35(api_key='test_key', timeout=90.0)._get_request_args(
             lf.LMSamplingOptions(
                 temperature=2.0,
+                logprobs=True,
                 n=2,
                 max_tokens=4096,
                 top_p=1.0)),
         dict(
             engine='text-davinci-003',
-            logprobs=False,
+            logprobs=True,
             top_logprobs=None,
             n=2,
             temperature=2.0,
@@ -140,7 +141,6 @@ class OpenAITest(unittest.TestCase):
         ),
         dict(
             model='gpt-4',
-            logprobs=False,
             top_logprobs=None,
             n=1,
             temperature=1.0,
@@ -150,6 +150,12 @@ class OpenAITest(unittest.TestCase):
             seed=123,
         ),
     )
+    with self.assertRaisesRegex(RuntimeError, '`logprobs` is not supported.*'):
+      openai.GptO1Preview(api_key='test_key')._get_request_args(
+          lf.LMSamplingOptions(
+              temperature=1.0, logprobs=True
+          )
+      )
 
   def test_call_completion(self):
     with mock.patch('openai.Completion.create') as mock_completion:
