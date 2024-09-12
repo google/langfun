@@ -49,6 +49,11 @@ _DEFAULT_RPM = 3000
 SUPPORTED_MODELS_AND_SETTINGS = {
     # Models from https://platform.openai.com/docs/models
     # RPM is from https://platform.openai.com/docs/guides/rate-limits
+    # o1 (preview) models.
+    'o1-preview': pg.Dict(rpm=10000, tpm=5000000),
+    'o1-preview-2024-09-12': pg.Dict(rpm=10000, tpm=5000000),
+    'o1-mini': pg.Dict(rpm=10000, tpm=5000000),
+    'o1-mini-2024-09-12': pg.Dict(rpm=10000, tpm=5000000),
     # GPT-4o models
     'gpt-4o-mini': pg.Dict(rpm=10000, tpm=5000000),
     'gpt-4o-mini-2024-07-18': pg.Dict(rpm=10000, tpm=5000000),
@@ -351,6 +356,26 @@ class OpenAI(lf.LanguageModel):
             APITimeoutError
         ),
     )
+
+
+class GptO1Preview(OpenAI):
+  """GPT-O1."""
+  model = 'o1-preview'
+
+
+class GptO1Preview_20240912(OpenAI):   # pylint: disable=invalid-name
+  """GPT O1."""
+  model = 'o1-preview-2024-09-12'
+
+
+class GptO1Mini(OpenAI):
+  """GPT O1-mini."""
+  model = 'o1-mini'
+
+
+class GptO1Mini_20240912(OpenAI):   # pylint: disable=invalid-name
+  """GPT O1-mini."""
+  model = 'o1-mini-2024-09-12'
 
 
 class Gpt4(OpenAI):
