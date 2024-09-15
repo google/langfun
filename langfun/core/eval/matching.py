@@ -176,7 +176,9 @@ class Matching(base.Evaluation):
       # Save matches.
       pg.save(
           [
-              pg.Dict(input=input, output=output)
+              pg.symbolic.deref(
+                  pg.Dict(input=input, output=output), recursive=True
+              )
               for input, output, _ in self.matches
           ],
           os.path.join(self.dir, Matching.MATCHES_JSON),
@@ -190,7 +192,9 @@ class Matching(base.Evaluation):
           [
               # We force the output to be dict as its type may be defined
               # within functors which could be deserialized.
-              pg.Dict(input=input, output=output)
+              pg.symbolic.deref(
+                  pg.Dict(input=input, output=output), recursive=True
+              )
               for input, output, _ in self.mismatches
           ],
           os.path.join(self.dir, Matching.MISMATCHES_JSON),
