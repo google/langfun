@@ -45,6 +45,7 @@ use_context = context
 from langfun.core.component import use_settings
 
 from langfun.core.component import get_contextual_override
+from langfun.core.component import context_value
 
 # Value marker for attribute whose values will be provided from parent
 # objects or from the `pg.component_context` context manager.

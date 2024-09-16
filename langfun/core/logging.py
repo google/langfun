@@ -13,11 +13,14 @@
 # limitations under the License.
 """Langfun event logging."""
 
+from collections.abc import Iterator
+import contextlib
 import datetime
 import io
 import typing
-from typing import Any, Literal, ContextManager
+from typing import Any, Literal
 
+from langfun.core import component
 from langfun.core import console
 from langfun.core import repr_utils
 import pyglove as pg
@@ -25,18 +28,21 @@ import pyglove as pg
 
 LogLevel = Literal['debug', 'info', 'error', 'warning', 'fatal']
 _LOG_LEVELS = list(typing.get_args(LogLevel))
-_TLS_KEY_MIN_LOG_LEVEL = '_event_log_level'
 
 
-def use_log_level(log_level: LogLevel | None = 'info') -> ContextManager[None]:
+@contextlib.contextmanager
+def use_log_level(log_level: LogLevel = 'info') -> Iterator[None]:
   """Contextmanager to enable logging at a given level."""
-  return pg.object_utils.thread_local_value_scope(
-      _TLS_KEY_MIN_LOG_LEVEL, log_level, 'info')
+  with component.context(__event_log_level__=log_level):
+    try:
+      yield
+    finally:
+      pass
 
 
-def get_log_level() -> LogLevel | None:
+def get_log_level() -> LogLevel:
   """Gets the current minimum log level."""
-  return pg.object_utils.thread_local_get(_TLS_KEY_MIN_LOG_LEVEL, 'info')
+  return component.context_value('__event_log_level__', 'info')
 
 
 class LogEntry(pg.Object):
