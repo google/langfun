@@ -94,7 +94,7 @@ def write_maybe_shared(s: io.StringIO, content: str) -> bool:
 
 
 def html_repr(
-    value: Any,
+    value: dict[str, Any],
     item_color: Callable[
         [str, str],
         tuple[
@@ -121,35 +121,38 @@ def html_repr(
   s.write('<table style="border-top: 1px solid #EEEEEE;">')
   item_color = item_color or (lambda k, v: (None, '#F1C40F', None, None))
 
-  for k, v in pg.object_utils.flatten(value).items():
-    if isinstance(v, pg.Ref):
-      v = v.value
-    if hasattr(v, '_repr_html_'):
-      cs = v._repr_html_()  # pylint: disable=protected-access
-    else:
-      cs = f'<span style="white-space: pre-wrap">{html.escape(str(v))}</span>'
+  with (pg.str_format(custom_format='_repr_html_'),
+        pg.repr_format(custom_format='_repr_html_')):
+    for k, v in pg.object_utils.flatten(value).items():
+      if isinstance(v, pg.Ref):
+        v = v.value
+      if hasattr(v, '_repr_html_'):
+        cs = v._repr_html_()  # pylint: disable=protected-access
+      else:
+        cs = html.escape(v) if isinstance(v, str) else escape_quoted(str(v))
+        cs = f'<span style="white-space: pre-wrap">{cs}</span>'
 
-    key_color, key_bg_color, value_color, value_bg_color = item_color(k, v)
-    key_span = html_round_text(
-        k,
-        text_color=key_color,
-        background_color=key_bg_color,
-        margin_bottom='0px'
-    )
-    value_color_style = f'color: {value_color};' if value_color else ''
-    value_bg_color_style = (
-        f'background-color: {value_bg_color};' if value_bg_color else ''
-    )
-    s.write(
-        '<tr>'
-        '<td style="padding: 5px; vertical-align: top; '
-        f'border-bottom: 1px solid #EEEEEE">{key_span}</td>'
-        '<td style="padding: 15px 5px 5px 5px; vertical-align: top; '
-        'border-bottom: 1px solid #EEEEEE;'
-        f'{value_color_style}{value_bg_color_style}">{cs}</td></tr>'
-    )
-  s.write('</table></div>')
-  return s.getvalue()
+      key_color, key_bg_color, value_color, value_bg_color = item_color(k, v)
+      key_span = html_round_text(
+          k,
+          text_color=key_color,
+          background_color=key_bg_color,
+          margin_bottom='0px'
+      )
+      value_color_style = f'color: {value_color};' if value_color else ''
+      value_bg_color_style = (
+          f'background-color: {value_bg_color};' if value_bg_color else ''
+      )
+      s.write(
+          '<tr>'
+          '<td style="padding: 5px; vertical-align: top; '
+          f'border-bottom: 1px solid #EEEEEE">{key_span}</td>'
+          '<td style="padding: 15px 5px 5px 5px; vertical-align: top; '
+          'border-bottom: 1px solid #EEEEEE;'
+          f'{value_color_style}{value_bg_color_style}">{cs}</td></tr>'
+      )
+    s.write('</table></div>')
+    return s.getvalue()
 
 
 def html_round_text(
@@ -172,3 +175,23 @@ def html_round_text(
       f'margin-top: {margin_top}; margin-bottom: {margin_bottom}; '
       f'white-space: {whitespace}">{text}</span>'
   )
+
+
+def escape_quoted(s: str):
+  """Escape quoted parts within a string."""
+  r = io.StringIO()
+  quote_char = None
+  quote_start = -1
+  for i, c in enumerate(s):
+    if c in ('\'', '"'):
+      if quote_char is None:
+        quote_char = c
+        quote_start = i
+      elif quote_char == c:
+        r.write(c)
+        r.write(html.escape(s[quote_start + 1:i]))
+        r.write(c)
+        quote_char = None
+    elif quote_char is None:
+      r.write(c)
+  return r.getvalue()

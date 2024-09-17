@@ -54,6 +54,15 @@ class SharingContentTest(unittest.TestCase):
     self.assertEqual(ctx1['<style>b</style>'], 2)
     self.assertEqual(ctx1['<style>a</style>'], 4)
 
+  def test_escape_quoted(self):
+    self.assertEqual(
+        repr_utils.escape_quoted(str('<a>')), '<a>'
+    )
+    self.assertEqual(
+        repr_utils.escape_quoted('x=<a>, b="<a>"'),
+        'x=<a>, b="&lt;a&gt;"'
+    )
+
   def test_html(self):
     html = repr_utils.Html('<div>foo</div>')
     self.assertEqual(html.content, '<div>foo</div>')
@@ -63,12 +72,18 @@ class SharingContentTest(unittest.TestCase):
     class Foo(pg.Object):
       x: int
 
+    class Bar(pg.Object):
+
+      def _repr_html_(self):
+        return '<bar>'
+
     html = repr_utils.html_repr(
-        {'foo': pg.Ref(Foo(1)), 'bar': '<lf_image>'}
+        {'foo': pg.Ref(Foo(1)), 'bar': Bar(), 'baz': '<lf_image>'}
     )
     self.assertIn('foo</span>', html)
-    self.assertNotIn('Ref', html)
+    self.assertIn('<bar>', html)
     self.assertIn('&lt;lf_image&gt;', html)
+    self.assertNotIn('Ref', html)
 
 
 if __name__ == '__main__':
