@@ -98,6 +98,21 @@ class BasicTest(unittest.TestCase):
     self.assertEqual(d.z.render(), 'Bye, 1')
     self.assertEqual(d.p.render(), 'Again Hello, 1')
 
+  def test_raw_text(self):
+    self.assertEqual(
+        Template(
+            '{{a}}' + Template.raw_str('\n{{d}}, {%x%}\n') + '{{b}}',
+            a='hi', b=1
+        ).render().text,
+        'hi\n{{d}}, {%x%}\n1'
+    )
+
+  def test_from_raw_str(self):
+    self.assertEqual(
+        Template.from_raw_str('\n{{d}}, {%x%}\n').render().text,
+        '\n{{d}}, {%x%}\n'
+    )
+
 
 class DefinitionTest(unittest.TestCase):
 

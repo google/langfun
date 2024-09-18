@@ -231,6 +231,16 @@ class Template(
     """Returns the missing variable names."""
     return self.vars(closure=True, specified=False)
 
+  @classmethod
+  def raw_str(cls, text: str) -> str:
+    """Returns a template string that preserve the text as original."""
+    return '{% raw %}' + text + '{% endraw %}'
+
+  @classmethod
+  def from_raw_str(cls, text: str) -> 'Template':
+    """Returns a template that preserve the text as original."""
+    return cls(cls.raw_str(text), clean=False)
+
   def render(
       self,
       *,
