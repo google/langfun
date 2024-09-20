@@ -268,7 +268,7 @@ class EvaluationTest(unittest.TestCase):
         s.root_dir, base.Evaluation.SUMMARY_HTML.replace('.html', '.json')
     )
     self.assertTrue(os.path.exists(summary_json))
-    summary = pg.load(summary_json, force_dict=True)
+    summary = pg.load(summary_json, auto_dict=True)
     self.assertIn('Evaluation', summary)
     self.assertEqual(len(summary['Evaluation']), 1)
     self.assertIsNotNone(summary['Evaluation'][0].experiment)

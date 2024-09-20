@@ -137,9 +137,6 @@ class Scoring(base.Evaluation):
               for input, output, score, _ in self.scored
           ],
           os.path.join(self.dir, Scoring.SCORED_JSON),
-          # We force the input and output to be dict so it does not depend on
-          # the downstream to serialize.
-          force_dict=True,
       )
 
     if report:

@@ -182,9 +182,6 @@ class Matching(base.Evaluation):
               for input, output, _ in self.matches
           ],
           os.path.join(self.dir, Matching.MATCHES_JSON),
-          # We force the input and output to be dict so it does not depend on
-          # the downstream to serialize.
-          force_dict=True,
       )
 
       # Save mismatches.
@@ -198,9 +195,6 @@ class Matching(base.Evaluation):
               for input, output, _ in self.mismatches
           ],
           os.path.join(self.dir, Matching.MISMATCHES_JSON),
-          # We force the input and output to be dict so it does not depend on
-          # the downstream to serialize.
-          force_dict=True,
       )
 
     if report:
