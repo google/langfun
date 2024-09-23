@@ -215,6 +215,7 @@ class Evaluable(lf.Component):
       summary: bool = True,
       pivot_field: str = 'lm',
       from_root: bool = True,
+      timeout: int | None = None,
       **kwargs,
   ) -> Union['Summary', pg.Dict]:
     """Run the evaluation, which fills and returns the result."""
@@ -265,6 +266,7 @@ class Evaluable(lf.Component):
             verbose=verbose,
             progress_bar=progress_bar,
             label=label,
+            timeout=timeout,
             **kwargs,
         )
 
@@ -398,6 +400,7 @@ class Evaluable(lf.Component):
       verbose: bool,
       progress_bar: int | None,
       label: str | None,
+      timeout: int | None = None,
       **kwargs,
   ) -> None:
     """Run the evaluate and fill `self.result`. Subclass to implement."""
@@ -1106,6 +1109,7 @@ class Evaluation(Evaluable):
       verbose: bool,
       progress_bar: int | None,
       label: str | None,
+      timeout: int | None = None,
       **kwargs,
   ) -> None:
     # Setup examples.
@@ -1136,6 +1140,7 @@ class Evaluation(Evaluable):
             max_workers=self.max_workers,
             show_progress=progress_bar or False,
             status_fn=self._status,
+            timeout=timeout,
         ):
           if error is not None:
             message = (
