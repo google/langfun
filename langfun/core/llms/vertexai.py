@@ -249,11 +249,9 @@ class VertexAI(lf.LanguageModel):
         (Exception, 'ValueError: Cannot get the Candidate text.'),
     ]
 
-    return lf.concurrent_execute(
+    return self._parallel_execute_with_currency_control(
         self._sample_single,
         prompts,
-        executor=self.resource_id,
-        max_workers=self.max_concurrency,
         retry_on_errors=retry_on_errors,
     )
 
