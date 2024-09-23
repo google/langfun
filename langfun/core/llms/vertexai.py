@@ -237,6 +237,8 @@ class VertexAI(lf.LanguageModel):
     # API. We should revisit this later.
     retry_on_errors = [
         (Exception, 'InternalServerError'),
+        (Exception, 'ResourceExhausted'),
+        (Exception, '_InactiveRpcError'),
         (
             Exception,
             (
