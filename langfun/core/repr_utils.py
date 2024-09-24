@@ -121,8 +121,15 @@ def html_repr(
   s.write('<table style="border-top: 1px solid #EEEEEE;">')
   item_color = item_color or (lambda k, v: (None, '#F1C40F', None, None))
 
-  with (pg.str_format(custom_format='_repr_html_'),
-        pg.repr_format(custom_format='_repr_html_')):
+  def maybe_html_format(v: Any, root_indent: int) -> str | None:
+    del root_indent
+    if hasattr(v, '_repr_html_'):
+      return v._repr_html_()  # pylint: disable=protected-access
+    # Fall back to the default format.
+    return None
+
+  with (pg.str_format(custom_format=maybe_html_format),
+        pg.repr_format(custom_format=maybe_html_format)):
     for k, v in pg.object_utils.flatten(value).items():
       if isinstance(v, pg.Ref):
         v = v.value

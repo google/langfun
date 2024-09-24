@@ -266,20 +266,27 @@ class Matching(base.Evaluation):
         '<td>Prompt/Response Chain</td>'
         '</tr>'
     )
+    def _maybe_html(v, root_indent: int):
+      del root_indent
+      if hasattr(v, '_repr_html_'):
+        return v._repr_html_()  # pylint: disable=protected-access
+      # Fall back to the default format.
+      return None
+
     for i, (example, output, message) in enumerate(self.matches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
       input_str = lf.repr_utils.escape_quoted(
           pg.format(
               example, verbose=False, max_bytes_len=32,
-              custom_format='_repr_html_'
+              custom_format=_maybe_html
           )
       )
       s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
       output_str = lf.repr_utils.escape_quoted(
           pg.format(
               output, verbose=False, max_bytes_len=32,
-              custom_format='_repr_html_'
+              custom_format=_maybe_html
           )
       )
       s.write(f'<td style="color:blue;white-space:pre-wrap">{output_str}</td>')

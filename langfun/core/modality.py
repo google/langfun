@@ -49,6 +49,13 @@ class Modality(component.Component):
       return super().format(*args, **kwargs)
     return Modality.text_marker(self.referred_name)
 
+  def __str_kwargs__(self) -> dict[str, Any]:
+    # For modality objects, we don't want to use markdown format when they
+    # are rendered as parts of the prompt.
+    kwargs = super().__str_kwargs__()
+    kwargs.pop('markdown', None)
+    return kwargs
+
   @abc.abstractmethod
   def to_bytes(self) -> bytes:
     """Returns content in bytes."""
