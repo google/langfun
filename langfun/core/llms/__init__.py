@@ -103,9 +103,15 @@ from langfun.core.llms.groq import GroqGemma7B_IT
 
 from langfun.core.llms.vertexai import VertexAI
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5
+from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_Latest
+from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_001
+from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_002
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_0514
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_0409
+from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_Latest
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5
+from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_001
+from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_002
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_0514
 from langfun.core.llms.vertexai import VertexAIGeminiPro1
 from langfun.core.llms.vertexai import VertexAIGeminiPro1Vision

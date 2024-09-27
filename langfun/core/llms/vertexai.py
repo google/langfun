@@ -41,8 +41,14 @@ except ImportError:
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
-    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=50),
-    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=200),
+    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-pro-002': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-flash-002': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-pro': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-flash': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-pro-latest': pg.Dict(api='gemini', rpm=500),
+    'gemini-1.5-flash-latest': pg.Dict(api='gemini', rpm=500),
     'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=50),
     'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=50),
     'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=200),
@@ -417,7 +423,28 @@ _PDF = [
 ]
 
 
+class VertexAIGeminiPro1_5_Latest(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model."""
+
+  model = 'gemini-1.5-pro-latest'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
 class VertexAIGeminiPro1_5(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model."""
+
+  model = 'gemini-1.5-pro'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
+class VertexAIGeminiPro1_5_002(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model."""
+
+  model = 'gemini-1.5-pro-002'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
+class VertexAIGeminiPro1_5_001(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-001'
@@ -438,7 +465,27 @@ class VertexAIGeminiPro1_5_0409(VertexAI):  # pylint: disable=invalid-name
   supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
+class VertexAIGeminiFlash1_5_Latest(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model."""
+
+  model = 'gemini-1.5-flash-latest'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
 class VertexAIGeminiFlash1_5(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model."""
+  model = 'gemini-1.5-flash'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
+class VertexAIGeminiFlash1_5_002(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model."""
+
+  model = 'gemini-1.5-flash-002'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+
+
+class VertexAIGeminiFlash1_5_001(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
   model = 'gemini-1.5-flash-001'
   supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
