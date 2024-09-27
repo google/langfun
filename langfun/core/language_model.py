@@ -508,8 +508,8 @@ class LanguageModel(component.Component):
       inputs: Sequence[Any],
       retry_on_errors: Union[
           None,
-          Union[Type[Exception], Tuple[Type[Exception], str]],
-          Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]],
+          Union[Type[BaseException], Tuple[Type[BaseException], str]],
+          Sequence[Union[Type[BaseException], Tuple[Type[BaseException], str]]],
       ] = RetryableLMError,
   ) -> Any:
     """Helper method for subclasses for implementing _sample."""

@@ -1234,8 +1234,17 @@ class Evaluation(Evaluable):
     del example, output
 
   def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
+    status = {'Model': self.lm.model_id}
+    status.update(self._eval_status(progress))
+
+    if progress.last_error is not None:
+      status['LastError'] = progress.last_error_str()
+    if progress.timeit_summary:
+      status['TimeIt'] = progress.timeit_summary_str()
+    return status
+
+  def _eval_status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     return {
-        'Model': self.lm.model_id,
         'Succeeded': '%s (%d/%d)' % (
             self._format_rate(progress.success_rate),
             progress.succeeded,

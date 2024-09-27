@@ -529,10 +529,11 @@ class ConcurrentMapTest(unittest.TestCase):
 
   def test_concurrent_map_with_showing_progress(self):
     def fun(x):
-      if x == 2:
-        raise ValueError('Intentional error.')
-      time.sleep(x)
-      return x
+      with pg.timeit('foo'):
+        if x == 2:
+          raise ValueError('Intentional error.')
+        time.sleep(x)
+        return x
 
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
@@ -549,7 +550,9 @@ class ConcurrentMapTest(unittest.TestCase):
             (3, pg.MISSING_VALUE),
         ],
     )
-    self.assertIn('100%', string_io.getvalue())
+    output = string_io.getvalue()
+    self.assertIn('100%', output)
+    self.assertIn('TimeIt=foo (', output)
 
   def test_concurrent_map_with_showing_progress_and_status_fn(self):
     def fun(x):

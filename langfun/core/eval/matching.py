@@ -115,10 +115,9 @@ class Matching(base.Evaluation):
     """Matches answer against the groundtruth. Subclasses can override."""
     return pg.eq(answer, groundtruth)
 
-  def _status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
+  def _eval_status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
     del progress
     return {
-        'Model': self.lm.model_id,
         'Matches': '%s (%d/%d)' % (
             self._format_rate(self.match_rate),
             self.num_matches,

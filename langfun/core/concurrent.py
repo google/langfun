@@ -34,7 +34,7 @@ progress_bar: Literal['tqdm', 'console', None] = None
 try:
   from tqdm import auto as tqdm   # pylint: disable=g-import-not-at-top
   progress_bar = 'tqdm'
-except ImportError as e:
+except ImportError:
   progress_bar = 'console'
   tqdm = None
 
@@ -57,7 +57,7 @@ class RetryError(RuntimeError):
   def __init__(
       self,
       func: Callable[..., Any],
-      errors: list[Exception],
+      errors: list[BaseException],
       wait_intervals: list[int],
   ):
     assert len(errors) == len(wait_intervals) + 1
@@ -112,8 +112,8 @@ class RetryError(RuntimeError):
 def with_retry(
     func: Callable[[Any], Any],
     retry_on_errors: Union[
-        Union[Type[Exception], Tuple[Type[Exception], str]],
-        Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]],
+        Union[Type[BaseException], Tuple[Type[BaseException], str]],
+        Sequence[Union[Type[BaseException], Tuple[Type[BaseException], str]]],
     ],
     max_attempts: int,
     retry_interval: int | tuple[int, int] = (5, 60),
@@ -186,8 +186,8 @@ def concurrent_execute(
     executor: Union[concurrent.futures.ThreadPoolExecutor, str, None] = None,
     max_workers: int = 32,
     retry_on_errors: Union[
-        Union[Type[Exception], Tuple[Type[Exception], str]],
-        Sequence[Union[Type[Exception], Tuple[Type[Exception], str]]],
+        Union[Type[BaseException], Tuple[Type[BaseException], str]],
+        Sequence[Union[Type[BaseException], Tuple[Type[BaseException], str]]],
         None,
     ] = None,
     max_attempts: int = 5,
@@ -251,34 +251,31 @@ class Job:
   func: Callable[[Any], Any]
   arg: Any
   result: Any = pg.MISSING_VALUE
-  error: Exception | None = None
-  start_time: float | None = None
-  end_time: float | None = None
-
-  def __call__(self) -> Any:
-    self.start_time = time.time()
-    try:
-      self.result = self.func(self.arg)
-      return self.result
-    except Exception as e:  # pylint: disable=broad-exception-caught
-      self.error = e
-      return e
-    finally:
-      self.end_time = time.time()
-
-  def mark_canceled(self, error: Exception) -> None:
-    """Marks the job as canceled."""
-    self.error = error
-    self.end_time = time.time()
+  timeit: pg.object_utils.TimeIt = dataclasses.field(
+      default_factory=lambda: pg.object_utils.TimeIt('job')
+  )
 
   @property
   def elapse(self) -> float:
     """Returns the running time in seconds since the job get started."""
-    if self.start_time is None:
-      return 0.0
-    if self.end_time is None:
-      return time.time() - self.start_time
-    return self.end_time - self.start_time
+    return self.timeit.elapse
+
+  @property
+  def error(self) -> BaseException | None:
+    """Returns the error if the job failed."""
+    return self.timeit.error
+
+  def __call__(self) -> Any:
+    try:
+      with self.timeit:
+        self.result = self.func(self.arg)
+        return self.result
+    except BaseException as e:  # pylint: disable=broad-exception-caught
+      return e
+
+  def mark_canceled(self, error: BaseException) -> None:
+    """Marks the job as canceled."""
+    self.timeit.end(error)
 
 
 @dataclasses.dataclass
@@ -286,11 +283,34 @@ class Progress:
   """Concurrent processing progress."""
   total: int
 
+  @dataclasses.dataclass
+  class TimeItSummary:
+    """Execution details for each `pg.timeit`."""
+
+    num_started: int = 0
+    num_ended: int = 0
+    num_failed: int = 0
+    avg_duration: float = 0.0
+
+    def aggregate(self, status: pg.object_utils.TimeIt.Status):
+      self.avg_duration = (
+          (self.avg_duration * self.num_started + status.elapse)
+          / (self.num_started + 1)
+      )
+      self.num_started += 1
+      if status.has_ended:
+        self.num_ended += 1
+      if status.has_error:
+        self.num_failed += 1
+
   _succeeded: int = 0
   _failed: int = 0
-  _last_error: Exception | None = None
+  _last_error: BaseException | None = None
   _total_duration: float = 0.0
   _job: Job | None = None
+  _timeit_summary: dict[str, TimeItSummary] = dataclasses.field(
+      default_factory=dict
+  )
 
   @property
   def succeeded(self) -> int:
@@ -308,7 +328,7 @@ class Progress:
     return self.succeeded + self.failed
 
   @property
-  def last_error(self) -> Exception | None:
+  def last_error(self) -> BaseException | None:
     """Returns last error."""
     return self._last_error
 
@@ -338,6 +358,28 @@ class Progress:
       return 0.0
     return self._total_duration / self.completed
 
+  @property
+  def timeit_summary(self) -> dict[str, TimeItSummary]:
+    """Returns the aggregated summary for each `pg.timeit`."""
+    return self._timeit_summary
+
+  def timeit_summary_str(self) -> str | None:
+    if not self.timeit_summary:
+      return None
+    return ', '.join([
+        '%s (%.2fs, %d/%d)' % (
+            k, v.avg_duration, v.num_ended, v.num_started
+        ) for k, v in self.timeit_summary.items()
+    ])
+
+  def last_error_str(self) -> str | None:
+    if self.last_error is None:
+      return None
+    error_text = repr(self.last_error)
+    if len(error_text) >= 64:
+      error_text = error_text[:64] + '...'
+    return error_text
+
   def update(self, job: Job) -> None:
     """Mark a job as completed."""
     self._job = job
@@ -347,6 +389,14 @@ class Progress:
       self._failed += 1
       self._last_error = job.error
     self._total_duration += job.elapse
+    self.merge_timeit_summary(job)
+
+  def merge_timeit_summary(self, job: Job):
+    for child in job.timeit.children:
+      for name, status in child.status().items():
+        if name not in self._timeit_summary:
+          self._timeit_summary[name] = Progress.TimeItSummary()
+        self._timeit_summary[name].aggregate(status)
 
 
 class ProgressBar:
@@ -498,17 +548,17 @@ def concurrent_map(
     status_fn: Callable[[Progress], dict[str, Any]] | None = None,
     timeout: int | None = None,
     silence_on_errors: Union[
-        Type[Exception], Tuple[Type[Exception], ...], None
+        Type[BaseException], Tuple[Type[BaseException], ...], None
     ] = Exception,
     retry_on_errors: Union[
-        Type[Exception],
-        Tuple[Type[Exception], ...],
+        Type[BaseException],
+        Tuple[Type[BaseException], ...],
         None,
     ] = None,
     max_attempts: int = 5,
     retry_interval: int | tuple[int, int] = (5, 60),
     exponential_backoff: bool = True,
-) -> Iterator[tuple[Any, Any, Exception | None]]:
+) -> Iterator[tuple[Any, Any, BaseException | None]]:
   """Maps inputs to outptus via func concurrently under current context.
 
   Args:
@@ -608,13 +658,13 @@ def concurrent_map(
     if show_progress:
       status = status_fn(progress)
       status.update({
-          'AvgDuration': '%.2f seconds' % progress.avg_duration
+          'AvgDuration': '%.2fs' % progress.avg_duration
       })
       if progress.last_error is not None:
-        error_text = repr(progress.last_error)
-        if len(error_text) >= 64:
-          error_text = error_text[:64] + '...'
-        status['LastError'] = error_text
+        status['LastError'] = progress.last_error_str()
+
+      if progress.timeit_summary:
+        status['TimeIt'] = progress.timeit_summary_str()
       ProgressBar.update(bar_id, delta=1, status=status)
 
   try:

@@ -28,14 +28,14 @@ def sweep(
     *,
     max_workers: int = 32,
     silence_on_errors: Union[
-        Type[Exception], Tuple[Type[Exception]], None
+        Type[BaseException], Tuple[Type[BaseException], ...], None
     ] = None,
     ignore_examples_with_errors: bool = True,
     **kwargs,
 ) -> Iterator[
     Tuple[
-        message_lib.Message | Exception,              # LM input.
-        Union[message_lib.Message, Exception, None],  # LM output.
+        message_lib.Message | BaseException,              # LM input.
+        Union[message_lib.Message, BaseException, None],  # LM output.
     ],
 ]:
   """Sweeps the input/output of this LangFunc concurrently.
@@ -73,15 +73,15 @@ def random_sample(
     *,
     max_workers: int = 32,
     silence_on_errors: Union[
-        Type[Exception], Tuple[Type[Exception]], None
+        Type[BaseException], Tuple[Type[BaseException], ...], None
     ] = None,
     ignore_examples_with_errors: bool = True,
     seed: int | None = None,
     **kwargs,
 ) -> Iterator[
     Tuple[
-        message_lib.Message | Exception,              # LM input.
-        Union[message_lib.Message, Exception, None],  # LM output.
+        message_lib.Message | BaseException,              # LM input.
+        Union[message_lib.Message, BaseException, None],  # LM output.
     ],
 ]:
   """Random samples the input/output of this LangFunc concurrently.
@@ -121,14 +121,14 @@ def _concurrent_sample(
     *,
     max_workers: int = 32,
     silence_on_errors: Union[
-        Type[Exception], Tuple[Type[Exception]], None
+        Type[BaseException], Tuple[Type[BaseException], ...], None
     ] = None,
     ignore_examples_with_errors: bool = True,
     **kwargs,
 ) -> Generator[
     Tuple[
-        message_lib.Message | Exception,              # LM input.
-        Union[message_lib.Message, Exception, None],  # LM output.
+        message_lib.Message | BaseException,              # LM input.
+        Union[message_lib.Message, BaseException, None],  # LM output.
     ],
     None,
     None,  # Sender type and return type.
@@ -177,6 +177,6 @@ def _concurrent_sample(
     else:
       lm_input, lm_output = error, error
     if (not ignore_examples_with_errors
-        or not (isinstance(lm_input, Exception)
-                or isinstance(lm_output, Exception))):
+        or not (isinstance(lm_input, BaseException)
+                or isinstance(lm_output, BaseException))):
       yield lm_input, lm_output
