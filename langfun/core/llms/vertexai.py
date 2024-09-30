@@ -245,14 +245,7 @@ class VertexAI(lf.LanguageModel):
         (Exception, 'InternalServerError'),
         (Exception, 'ResourceExhausted'),
         (Exception, '_InactiveRpcError'),
-        (
-            Exception,
-            (
-                'ValueError: Response candidate content has no parts (and thus'
-                ' no text).'
-            ),
-        ),
-        (Exception, 'ValueError: Cannot get the Candidate text.'),
+        (Exception, 'ValueError'),
     ]
 
     return self._parallel_execute_with_currency_control(
