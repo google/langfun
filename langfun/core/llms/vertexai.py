@@ -416,6 +416,9 @@ _DOCUMENT_TYPES = [
     'text/plain',
     'text/csv',
     'text/html',
+    'text/xml',
+    'text/x-script.python',
+    'application/json',
 ]
 
 

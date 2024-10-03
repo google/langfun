@@ -160,13 +160,6 @@ class MatchingTest(unittest.TestCase):
     self.assertTrue(
         os.path.exists(
             os.path.join(
-                s.dir, matching.Matching.MISMATCHES_JSON
-            )
-        )
-    )
-    self.assertTrue(
-        os.path.exists(
-            os.path.join(
                 s.dir, matching.Matching.OOP_FAILURES_JSON
             )
         )

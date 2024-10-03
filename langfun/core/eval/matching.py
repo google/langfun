@@ -183,19 +183,6 @@ class Matching(base.Evaluation):
           os.path.join(self.dir, Matching.MATCHES_JSON),
       )
 
-      # Save mismatches.
-      pg.save(
-          [
-              # We force the output to be dict as its type may be defined
-              # within functors which could be deserialized.
-              pg.symbolic.deref(
-                  pg.Dict(input=input, output=output), recursive=True
-              )
-              for input, output, _ in self.mismatches
-          ],
-          os.path.join(self.dir, Matching.MISMATCHES_JSON),
-      )
-
     if report:
       pg.save(
           self._html([self._render_result, self._render_matches]),
