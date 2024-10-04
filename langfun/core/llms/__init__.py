@@ -102,6 +102,7 @@ from langfun.core.llms.groq import GroqMistral_8x7B
 from langfun.core.llms.groq import GroqGemma7B_IT
 
 from langfun.core.llms.vertexai import VertexAI
+from langfun.core.llms.vertexai import VertexAIGemini1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_Latest
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_001
