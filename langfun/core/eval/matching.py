@@ -171,18 +171,6 @@ class Matching(base.Evaluation):
   ) -> None:
     super().save(definition, result, report)
 
-    if result:
-      # Save matches.
-      pg.save(
-          [
-              pg.symbolic.deref(
-                  pg.Dict(input=input, output=output), recursive=True
-              )
-              for input, output, _ in self.matches
-          ],
-          os.path.join(self.dir, Matching.MATCHES_JSON),
-      )
-
     if report:
       pg.save(
           self._html([self._render_result, self._render_matches]),
