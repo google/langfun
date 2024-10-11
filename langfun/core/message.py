@@ -518,9 +518,10 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
       include_message_metadata: bool = pg.View.PresetArgValue(True),
       collapse_modalities_in_text: bool = pg.View.PresetArgValue(True),
       collapse_llm_usage: bool = pg.View.PresetArgValue(False),
-      collapse_message_result_level: int = pg.View.PresetArgValue(1),
-      collapse_message_metadata_level: int = pg.View.PresetArgValue(0),
-      collapse_source_message_level: int = pg.View.PresetArgValue(1),
+      collapse_message_result_level: int | None = pg.View.PresetArgValue(1),
+      collapse_message_metadata_level: int | None = pg.View.PresetArgValue(0),
+      collapse_source_message_level: int | None = pg.View.PresetArgValue(1),
+      collapse_level: int | None = pg.View.PresetArgValue(1),
       **kwargs,
   ) -> pg.Html:
   # pytype: enable=annotation-type-mismatch
@@ -541,6 +542,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
         message.
       collapse_source_message_level: The level to collapse the source in the
         message.
+      collapse_level: The global collapse level.
       **kwargs: Other keyword arguments.
 
     Returns:
@@ -594,8 +596,10 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
                   self.result,
                   name='result',
                   root_path=child_path,
-                  collapse_level=(
-                      child_path.depth + collapse_message_result_level
+                  collapse_level=view.max_collapse_level(
+                      collapse_level,
+                      collapse_message_result_level,
+                      child_path,
                   )
               )
           ],
@@ -613,8 +617,10 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
                   self.usage,
                   name='llm usage',
                   root_path=child_path,
-                  collapse_level=child_path.depth + (
-                      0 if collapse_llm_usage else 1
+                  collapse_level=view.max_collapse_level(
+                      collapse_level,
+                      0 if collapse_llm_usage else 1,
+                      child_path,
                   )
               )
           ],
@@ -628,13 +634,16 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
              and not source.has_tag(source_tag)):
         source = source.source
       if source is not None:
+        child_path = root_path + 'source'
         return view.render(
             self.source,
             name='source',
-            root_path=root_path + 'source',
+            root_path=child_path,
             include_metadata=include_message_metadata,
-            collapse_level=(
-                root_path.depth + 1 + collapse_source_message_level
+            collapse_level=view.max_collapse_level(
+                collapse_level,
+                collapse_source_message_level,
+                child_path
             ),
             collapse_source_level=max(0, collapse_source_message_level - 1),
             collapse_modalities=collapse_modalities_in_text,
@@ -656,8 +665,10 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
                   css_class=['message-metadata'],
                   name='metadata',
                   root_path=child_path,
-                  collapse_level=(
-                      child_path.depth + collapse_message_metadata_level
+                  collapse_level=view.max_collapse_level(
+                      collapse_level,
+                      collapse_message_metadata_level,
+                      child_path,
                   )
               )
           ],

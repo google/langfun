@@ -89,8 +89,9 @@ class LogEntry(pg.Object):
       self,
       view: pg.views.HtmlTreeView,
       root_path: pg.KeyPath,
-      collapse_log_metadata_level: int = pg.View.PresetArgValue(0),
+      collapse_log_metadata_level: int | None = pg.View.PresetArgValue(0),
       max_str_len_for_summary: int = pg.View.PresetArgValue(80),
+      collapse_level: int | None = pg.View.PresetArgValue(1),
       **kwargs
   ) -> pg.Html:
     # pytype: enable=annotation-type-mismatch
@@ -106,16 +107,21 @@ class LogEntry(pg.Object):
     def render_metadata():
       if not self.metadata:
         return None
+      child_path = root_path + 'metadata'
       return pg.Html.element(
           'div',
           [
               view.render(
                   self.metadata,
                   name='metadata',
-                  root_path=root_path + 'metadata',
+                  root_path=child_path,
                   parent=self,
                   collapse_level=(
-                      root_path.depth + collapse_log_metadata_level + 1
+                      view.max_collapse_level(
+                          collapse_level,
+                          collapse_log_metadata_level,
+                          child_path
+                      )
                   )
               )
           ],

@@ -531,6 +531,8 @@ class Template(
       *,
       view: pg.views.HtmlTreeView,
       root_path: pg.KeyPath,
+      collapse_template_vars_level: int | None = pg.View.PresetArgValue(1),
+      collapse_level: int | None = pg.View.PresetArgValue(1),  # pytype: disable=annotation-type-mismatch
       **kwargs,
   ):
     def render_template_str():
@@ -574,7 +576,11 @@ class Template(
                   render_value_fn=render_value_fn,
                   exclude_keys=['template_str', 'clean'],
                   parent=self,
-                  collapse_level=root_path.depth + 1,
+                  collapse_level=view.max_collapse_level(
+                      collapse_level,
+                      collapse_template_vars_level,
+                      root_path
+                  ),
               ),
           ],
           css_class=['template-fields'],
@@ -628,10 +634,7 @@ class Template(
 
   # Additional CSS class to add to the root <details> element.
   def _html_element_class(self) -> Sequence[str] | None:
-    return [
-        pg.object_utils.camel_to_snake(self.__class__.__name__, '-'),
-        'lf-template'
-    ]
+    return super()._html_element_class() + ['lf-template']
 
 # Register converter from str to LangFunc, therefore we can always
 # pass strs to attributes that accept LangFunc.

@@ -218,7 +218,7 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
         **kwargs
     )
 
-  def _html_tree_view_collapse_level(self) -> int:
+  def _html_tree_view_uncollapse_level(self) -> int:
     return 2
 
 
