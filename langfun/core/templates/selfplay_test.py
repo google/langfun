@@ -59,7 +59,8 @@ class SelfPlayTest(unittest.TestCase):
       self.assertEqual(
           g(),
           lf.AIMessage(
-              '10', score=0.0, logprobs=None, usage=lf.UsageNotAvailable()
+              '10', score=0.0, logprobs=None, is_cached=False,
+              usage=lf.UsageNotAvailable()
           )
       )
 
@@ -72,7 +73,8 @@ class SelfPlayTest(unittest.TestCase):
       self.assertEqual(
           g(),
           lf.AIMessage(
-              '2', score=0.0, logprobs=None, usage=lf.UsageNotAvailable()
+              '2', score=0.0, logprobs=None, is_cached=False,
+              usage=lf.UsageNotAvailable()
           )
       )
 

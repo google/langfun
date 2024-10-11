@@ -66,14 +66,15 @@ class InMemoryLMCacheTest(unittest.TestCase):
               [
                   lf.LMSample(
                       lf.AIMessage(response_text, cache_seed=cache_seed),
-                      score=1.0
+                      score=1.0,
                   )
               ],
               usage=lf.LMSamplingUsage(
                   1,
                   len(response_text),
                   len(response_text) + 1,
-              )
+              ),
+              is_cached=True,
           )
       )
 

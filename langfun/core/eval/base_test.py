@@ -194,6 +194,7 @@ class EvaluationTest(unittest.TestCase):
             cache_seed=0,
             score=1.0,
             logprobs=None,
+            is_cached=False,
             usage=lf.LMSamplingUsage(387, 24, 411),
             tags=['lm-response', 'lm-output', 'transformed'],
         ),

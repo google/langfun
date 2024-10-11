@@ -28,15 +28,57 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # Rate limits from https://docs.anthropic.com/claude/reference/rate-limits
     #     RPM/TPM for Claude-2.1, Claude-2.0, and Claude-Instant-1.2 estimated
     #     as RPM/TPM of the largest-available model (Claude-3-Opus).
+    # Price in US dollars at https://www.anthropic.com/pricing
+    # as of 2024-10-10.
     'claude-3-5-sonnet-20240620': pg.Dict(
-        max_tokens=4096, rpm=4000, tpm=400000
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.015,
     ),
-    'claude-3-opus-20240229': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
-    'claude-3-sonnet-20240229': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
-    'claude-3-haiku-20240307': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
-    'claude-2.1': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
-    'claude-2.0': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
-    'claude-instant-1.2': pg.Dict(max_tokens=4096, rpm=4000, tpm=400000),
+    'claude-3-opus-20240229': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.015,
+        cost_per_1k_output_tokens=0.075,
+    ),
+    'claude-3-sonnet-20240229': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.015,
+    ),
+    'claude-3-haiku-20240307': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.00025,
+        cost_per_1k_output_tokens=0.00125,
+    ),
+    'claude-2.1': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.008,
+        cost_per_1k_output_tokens=0.024,
+    ),
+    'claude-2.0': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.008,
+        cost_per_1k_output_tokens=0.024,
+    ),
+    'claude-instant-1.2': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.0008,
+        cost_per_1k_output_tokens=0.0024,
+    ),
 }
 
 
@@ -106,6 +148,25 @@ class Anthropic(rest.REST):
     return self.rate_to_max_concurrency(
         requests_per_min=rpm, tokens_per_min=tpm
     )
+
+  def estimate_cost(
+      self,
+      num_input_tokens: int,
+      num_output_tokens: int
+  ) -> float | None:
+    """Estimate the cost based on usage."""
+    cost_per_1k_input_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_input_tokens', None
+    )
+    cost_per_1k_output_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_output_tokens', None
+    )
+    if cost_per_1k_output_tokens is None or cost_per_1k_input_tokens is None:
+      return None
+    return (
+        cost_per_1k_input_tokens * num_input_tokens
+        + cost_per_1k_output_tokens * num_output_tokens
+    ) / 1000
 
   def request(
       self,
@@ -181,6 +242,10 @@ class Anthropic(rest.REST):
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
+            estimated_cost=self.estimate_cost(
+                num_input_tokens=input_tokens,
+                num_output_tokens=output_tokens,
+            ),
         ),
     )
 

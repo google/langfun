@@ -210,6 +210,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 0 for prompt 0.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=16,
                             completion_tokens=16,
@@ -225,6 +226,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 1 for prompt 0.',
                         score=0.1,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=16,
                             completion_tokens=16,
@@ -240,6 +242,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 2 for prompt 0.',
                         score=0.2,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=16,
                             completion_tokens=16,
@@ -265,6 +268,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 0 for prompt 1.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=16,
                             completion_tokens=16,
@@ -280,6 +284,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 1 for prompt 1.',
                         score=0.1,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=16,
                             completion_tokens=16,
@@ -295,6 +300,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 2 for prompt 1.',
                         score=0.2,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=16,
                             completion_tokens=16,
@@ -315,12 +321,17 @@ class OpenAITest(unittest.TestCase):
   def test_sample_chat_completion(self):
     with mock.patch('openai.ChatCompletion.create') as mock_chat_completion:
       mock_chat_completion.side_effect = mock_chat_completion_query
+      openai.SUPPORTED_MODELS_AND_SETTINGS['gpt-4'].update({
+          'cost_per_1k_input_tokens': 1.0,
+          'cost_per_1k_output_tokens': 1.0,
+      })
       lm = openai.OpenAI(api_key='test_key', model='gpt-4')
       results = lm.sample(
           ['hello', 'bye'], sampling_options=lf.LMSamplingOptions(n=3)
       )
 
     self.assertEqual(len(results), 2)
+    print(results[0])
     self.assertEqual(
         results[0],
         lf.LMSamplingResult(
@@ -330,10 +341,12 @@ class OpenAITest(unittest.TestCase):
                         'Sample 0 for message.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=33,
                             completion_tokens=33,
-                            total_tokens=66
+                            total_tokens=66,
+                            estimated_cost=0.2 / 3,
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -345,10 +358,12 @@ class OpenAITest(unittest.TestCase):
                         'Sample 1 for message.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=33,
                             completion_tokens=33,
-                            total_tokens=66
+                            total_tokens=66,
+                            estimated_cost=0.2 / 3,
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -360,10 +375,12 @@ class OpenAITest(unittest.TestCase):
                         'Sample 2 for message.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=33,
                             completion_tokens=33,
-                            total_tokens=66
+                            total_tokens=66,
+                            estimated_cost=0.2 / 3,
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -372,7 +389,8 @@ class OpenAITest(unittest.TestCase):
                 ),
             ],
             usage=lf.LMSamplingUsage(
-                prompt_tokens=100, completion_tokens=100, total_tokens=200
+                prompt_tokens=100, completion_tokens=100, total_tokens=200,
+                estimated_cost=0.2,
             ),
         ),
     )
@@ -385,10 +403,12 @@ class OpenAITest(unittest.TestCase):
                         'Sample 0 for message.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=33,
                             completion_tokens=33,
-                            total_tokens=66
+                            total_tokens=66,
+                            estimated_cost=0.2 / 3,
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -400,10 +420,12 @@ class OpenAITest(unittest.TestCase):
                         'Sample 1 for message.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=33,
                             completion_tokens=33,
-                            total_tokens=66
+                            total_tokens=66,
+                            estimated_cost=0.2 / 3,
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -415,10 +437,12 @@ class OpenAITest(unittest.TestCase):
                         'Sample 2 for message.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=33,
                             completion_tokens=33,
-                            total_tokens=66
+                            total_tokens=66,
+                            estimated_cost=0.2 / 3,
                         ),
                         tags=[lf.Message.TAG_LM_RESPONSE],
                     ),
@@ -427,7 +451,8 @@ class OpenAITest(unittest.TestCase):
                 ),
             ],
             usage=lf.LMSamplingUsage(
-                prompt_tokens=100, completion_tokens=100, total_tokens=200
+                prompt_tokens=100, completion_tokens=100, total_tokens=200,
+                estimated_cost=0.2,
             ),
         ),
     )
@@ -449,6 +474,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 0 for prompt 0.',
                         score=0.0,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=50,
                             completion_tokens=50,
@@ -464,6 +490,7 @@ class OpenAITest(unittest.TestCase):
                         'Sample 1 for prompt 0.',
                         score=0.1,
                         logprobs=None,
+                        is_cached=False,
                         usage=lf.LMSamplingUsage(
                             prompt_tokens=50,
                             completion_tokens=50,

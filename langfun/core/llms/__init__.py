@@ -95,11 +95,18 @@ from langfun.core.llms.anthropic import Claude3Sonnet
 from langfun.core.llms.anthropic import Claude3Haiku
 
 from langfun.core.llms.groq import Groq
+from langfun.core.llms.groq import GroqLlama3_2_3B
+from langfun.core.llms.groq import GroqLlama3_2_1B
+from langfun.core.llms.groq import GroqLlama3_1_70B
+from langfun.core.llms.groq import GroqLlama3_1_8B
 from langfun.core.llms.groq import GroqLlama3_70B
 from langfun.core.llms.groq import GroqLlama3_8B
 from langfun.core.llms.groq import GroqLlama2_70B
 from langfun.core.llms.groq import GroqMistral_8x7B
-from langfun.core.llms.groq import GroqGemma7B_IT
+from langfun.core.llms.groq import GroqGemma2_9B_IT
+from langfun.core.llms.groq import GroqGemma_7B_IT
+from langfun.core.llms.groq import GroqWhisper_Large_v3
+from langfun.core.llms.groq import GroqWhisper_Large_v3Turbo
 
 from langfun.core.llms.vertexai import VertexAI
 from langfun.core.llms.vertexai import VertexAIGemini1_5

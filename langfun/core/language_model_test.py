@@ -49,6 +49,7 @@ class MockModel(lm_lib.LanguageModel):
                     prompt_tokens=100,
                     completion_tokens=100,
                     total_tokens=200,
+                    estimated_cost=1.0,
                 ),
             )
             for prompt in prompts
@@ -128,14 +129,15 @@ class LanguageModelTest(unittest.TestCase):
                             'foo',
                             score=-1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=-1.0,
                         logprobs=None,
                     )
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
             lm_lib.LMSamplingResult(
                 [
@@ -144,14 +146,15 @@ class LanguageModelTest(unittest.TestCase):
                             'bar',
                             score=-1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=-1.0,
                         logprobs=None,
                     )
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
         ],
     )
@@ -169,14 +172,15 @@ class LanguageModelTest(unittest.TestCase):
                             'foo' * 2,
                             score=0.5,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=0.5,
                         logprobs=None,
                     ),
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
             lm_lib.LMSamplingResult(
                 [
@@ -185,7 +189,8 @@ class LanguageModelTest(unittest.TestCase):
                             'bar' * 2,
                             score=0.5,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=0.5,
@@ -193,7 +198,8 @@ class LanguageModelTest(unittest.TestCase):
                     ),
                 ],
                 usage=lm_lib.LMSamplingUsage(
-                    prompt_tokens=100, completion_tokens=100, total_tokens=200
+                    prompt_tokens=100, completion_tokens=100, total_tokens=200,
+                    num_requests=1, estimated_cost=1.0,
                 ),
             ),
         ]
@@ -209,14 +215,15 @@ class LanguageModelTest(unittest.TestCase):
                             'foo',
                             score=1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=1.0,
                         logprobs=None,
                     ),
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
             lm_lib.LMSamplingResult(
                 [
@@ -225,7 +232,8 @@ class LanguageModelTest(unittest.TestCase):
                             'bar',
                             score=1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=1.0,
@@ -233,7 +241,8 @@ class LanguageModelTest(unittest.TestCase):
                     ),
                 ],
                 usage=lm_lib.LMSamplingUsage(
-                    prompt_tokens=100, completion_tokens=100, total_tokens=200
+                    prompt_tokens=100, completion_tokens=100, total_tokens=200,
+                    num_requests=1, estimated_cost=1.0,
                 ),
             ),
         ]
@@ -248,14 +257,15 @@ class LanguageModelTest(unittest.TestCase):
                             'foo' * 2,
                             score=0.7,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=0.7,
                         logprobs=None,
                     ),
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
             lm_lib.LMSamplingResult(
                 [
@@ -264,7 +274,8 @@ class LanguageModelTest(unittest.TestCase):
                             'bar' * 2,
                             score=0.7,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=0.7,
@@ -272,7 +283,8 @@ class LanguageModelTest(unittest.TestCase):
                     ),
                 ],
                 usage=lm_lib.LMSamplingUsage(
-                    prompt_tokens=100, completion_tokens=100, total_tokens=200
+                    prompt_tokens=100, completion_tokens=100, total_tokens=200,
+                    num_requests=1, estimated_cost=1.0,
                 ),
             ),
         ]
@@ -284,7 +296,9 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(response.text, 'foo')
     self.assertEqual(response.score, -1.0)
     self.assertIsNone(response.logprobs)
-    self.assertEqual(response.usage, lm_lib.LMSamplingUsage(100, 100, 200))
+    self.assertEqual(
+        response.usage, lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0)
+    )
 
     # Test override sampling_options.
     self.assertEqual(
@@ -307,14 +321,17 @@ class LanguageModelTest(unittest.TestCase):
                             cache_seed=0,
                             score=-1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(
+                                100, 100, 200, 1, 1.0
+                            ),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=-1.0,
                         logprobs=None,
                     )
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
             lm_lib.LMSamplingResult(
                 [
@@ -324,14 +341,15 @@ class LanguageModelTest(unittest.TestCase):
                             cache_seed=0,
                             score=-1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=-1.0,
                         logprobs=None,
                     )
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
         ],
     )
@@ -339,7 +357,9 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(cache.stats.num_hits, 0)
     self.assertEqual(cache.stats.num_updates, 2)
 
-    self.assertEqual(lm('foo'), 'foo')
+    result = lm('foo')
+    self.assertEqual(result, 'foo')
+    self.assertTrue(result.metadata.is_cached)
     self.assertEqual(lm('bar'), 'bar')
     self.assertEqual(cache.stats.num_queries, 4)
     self.assertEqual(cache.stats.num_hits, 2)
@@ -361,14 +381,15 @@ class LanguageModelTest(unittest.TestCase):
                             cache_seed=0,
                             score=1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=1.0,
                         logprobs=None,
                     )
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
             lm_lib.LMSamplingResult(
                 [
@@ -378,14 +399,15 @@ class LanguageModelTest(unittest.TestCase):
                             cache_seed=0,
                             score=1.0,
                             logprobs=None,
-                            usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                            is_cached=False,
+                            usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
                             tags=[message_lib.Message.TAG_LM_RESPONSE],
                         ),
                         score=1.0,
                         logprobs=None,
                     )
                 ],
-                usage=lm_lib.LMSamplingUsage(100, 100, 200),
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
             ),
         ],
     )
@@ -663,20 +685,128 @@ class LanguageModelTest(unittest.TestCase):
             lm2('hi')
             list(concurrent.concurrent_map(call_lm, ['hi', 'hello']))
 
-    self.assertEqual(usages2, {
-        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1),
+    print(usages2)
+    self.assertEqual(usages2.uncached.breakdown, {
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
     })
-    self.assertEqual(usages3, {
-        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4, 4),
+    self.assertFalse(usages2.cached)
+    self.assertEqual(usages3.uncached.breakdown, {
+        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4, 4, 4.0),
     })
-    self.assertEqual(usages4, {
-        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4, 4),
-        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1),
+    self.assertFalse(usages3.cached)
+    self.assertEqual(usages4.uncached.breakdown, {
+        'model1': lm_lib.LMSamplingUsage(100 * 4, 100 * 4, 200 * 4, 4, 4.0),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
     })
-    self.assertEqual(usages1, {
-        'model1': lm_lib.LMSamplingUsage(100 * 5, 100 * 5, 200 * 5, 5),
-        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1),
+    self.assertFalse(usages4.cached)
+    self.assertEqual(usages1.uncached.breakdown, {
+        'model1': lm_lib.LMSamplingUsage(100 * 5, 100 * 5, 200 * 5, 5, 5.0),
+        'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
     })
+    self.assertFalse(usages1.cached)
+    self.assertEqual(
+        usages1.total,
+        lm_lib.LMSamplingUsage(100 * 6, 100 * 6, 200 * 6, 6, 6.0),
+    )
+
+    cache = in_memory.InMemory()
+    lm = MockModel(cache=cache, name='model1')
+    with lm_lib.track_usages() as usages1:
+      _ = lm('hi')
+    self.assertEqual(usages1.uncached.breakdown, {
+        'model1': lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
+    })
+    self.assertFalse(usages1.cached)
+    with lm_lib.track_usages() as usages2:
+      _ = lm('hi')
+    self.assertEqual(usages2.cached.breakdown, {
+        'model1': lm_lib.LMSamplingUsage(100, 100, 200, 1, 0.0),
+    })
+    self.assertFalse(usages2.uncached)
+
+
+class LMSamplingUsageTest(unittest.TestCase):
+
+  def test_basics(self):
+    usage = lm_lib.LMSamplingUsage(100, 200, 300, 4, 5.0)
+    self.assertEqual(usage.num_requests, 4)
+    self.assertEqual(usage.prompt_tokens, 100)
+    self.assertEqual(usage.completion_tokens, 200)
+    self.assertEqual(usage.total_tokens, 300)
+    self.assertEqual(usage.estimated_cost, 5.0)
+    self.assertEqual(usage.average_prompt_tokens, 25)
+    self.assertEqual(usage.average_completion_tokens, 50)
+    self.assertEqual(usage.average_total_tokens, 75)
+    self.assertEqual(usage.average_estimated_cost, 1.25)
+
+  def test_add(self):
+    usage1 = lm_lib.LMSamplingUsage(100, 200, 300, 4, 5.0)
+    usage2 = lm_lib.LMSamplingUsage(100, 200, 300, 4, 5.0)
+    self.assertEqual(usage1 + usage2, usage1 + usage2)
+    self.assertIs(usage1 + None, usage1)
+    self.assertIs(None + usage1, usage1)
+
+  def test_usage_not_available(self):
+    usage_not_available = lm_lib.UsageNotAvailable()
+    self.assertEqual(usage_not_available.prompt_tokens, 0)
+    self.assertEqual(usage_not_available.completion_tokens, 0)
+    self.assertEqual(usage_not_available.total_tokens, 0)
+    self.assertEqual(usage_not_available.average_prompt_tokens, 0)
+    self.assertEqual(usage_not_available.average_completion_tokens, 0)
+    self.assertEqual(usage_not_available.average_total_tokens, 0)
+    self.assertIsNone(usage_not_available.average_estimated_cost)
+    self.assertTrue(usage_not_available)
+    self.assertEqual(
+        usage_not_available + lm_lib.LMSamplingUsage(1, 2, 3, 4, 5.0),
+        lm_lib.UsageNotAvailable(num_requests=5)
+    )
+    self.assertEqual(
+        lm_lib.LMSamplingUsage(1, 2, 3, 4, 5.0) + usage_not_available,
+        lm_lib.UsageNotAvailable(num_requests=5)
+    )
+    self.assertIs(None + usage_not_available, usage_not_available)
+    self.assertIs(usage_not_available + None, usage_not_available)
+
+
+class UsageSummaryTest(unittest.TestCase):
+
+  def test_basics(self):
+    usage_summary = lm_lib.UsageSummary()
+    self.assertFalse(usage_summary.total)
+    self.assertFalse(usage_summary.cached)
+    self.assertFalse(usage_summary.uncached)
+
+    # Add uncached.
+    usage_summary.update(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    self.assertEqual(
+        usage_summary.total, lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0)
+    )
+    self.assertEqual(
+        usage_summary.uncached.total, lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0)
+    )
+    # Add cached.
+    self.assertFalse(usage_summary.cached)
+    usage_summary.update(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), True
+    )
+    self.assertEqual(
+        usage_summary.total, lm_lib.LMSamplingUsage(2, 4, 6, 2, 5.0)
+    )
+    self.assertEqual(
+        usage_summary.cached.total, lm_lib.LMSamplingUsage(1, 2, 3, 1, 0.0)
+    )
+    # Add UsageNotAvailable.
+    usage_summary.update(
+        'model1', lm_lib.UsageNotAvailable(num_requests=1), False
+    )
+    self.assertEqual(
+        usage_summary.total, lm_lib.UsageNotAvailable(num_requests=3)
+    )
+    self.assertEqual(
+        usage_summary.uncached.total, lm_lib.UsageNotAvailable(num_requests=2)
+    )
 
 
 if __name__ == '__main__':

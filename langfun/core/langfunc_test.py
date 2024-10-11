@@ -89,7 +89,7 @@ class LangFuncCallTest(unittest.TestCase):
     self.assertEqual(
         r,
         message.AIMessage(
-            'Hello!!!', score=0.0, logprobs=None,
+            'Hello!!!', score=0.0, logprobs=None, is_cached=False,
             usage=language_model.UsageNotAvailable()
         )
     )
@@ -120,7 +120,7 @@ class LangFuncCallTest(unittest.TestCase):
       self.assertEqual(
           r,
           message.AIMessage(
-              'Hello!!!', score=0.0, logprobs=None,
+              'Hello!!!', score=0.0, logprobs=None, is_cached=False,
               usage=language_model.UsageNotAvailable()
           )
       )

@@ -19,7 +19,7 @@ import dataclasses
 import enum
 import threading
 import time
-from typing import Annotated, Any, Callable, Iterator, Sequence, Tuple, Type, Union
+from typing import Annotated, Any, Callable, Iterator, Optional, Sequence, Tuple, Type, Union
 from langfun.core import component
 from langfun.core import concurrent
 from langfun.core import console
@@ -86,14 +86,57 @@ class LMSamplingUsage(pg.Object):
   completion_tokens: int
   total_tokens: int
   num_requests: int = 1
+  estimated_cost: Annotated[
+      float | None,
+      (
+          'Estimated cost in US dollars. If None, cost estimating is not '
+          'suppported on the model being queried.'
+      )
+  ] = None
 
-  def __add__(self, other: 'LMSamplingUsage') -> 'LMSamplingUsage':
+  def __bool__(self) -> bool:
+    return self.num_requests > 0
+
+  @property
+  def average_prompt_tokens(self) -> int:
+    """Returns the average prompt tokens per request."""
+    return self.prompt_tokens // self.num_requests
+
+  @property
+  def average_completion_tokens(self) -> int:
+    """Returns the average completion tokens per request."""
+    return self.completion_tokens // self.num_requests
+
+  @property
+  def average_total_tokens(self) -> int:
+    """Returns the average total tokens per request."""
+    return self.total_tokens // self.num_requests
+
+  @property
+  def average_estimated_cost(self) -> float | None:
+    """Returns the average estimated cost per request."""
+    if self.estimated_cost is None:
+      return None
+    return self.estimated_cost / self.num_requests
+
+  def __add__(self, other: Optional['LMSamplingUsage']) -> 'LMSamplingUsage':
+    if other is None:
+      return self
     return LMSamplingUsage(
         prompt_tokens=self.prompt_tokens + other.prompt_tokens,
         completion_tokens=self.completion_tokens + other.completion_tokens,
         total_tokens=self.total_tokens + other.total_tokens,
         num_requests=self.num_requests + other.num_requests,
+        estimated_cost=(
+            self.estimated_cost + other.estimated_cost    # pylint: disable=g-long-ternary
+            if (self.estimated_cost is not None
+                and other.estimated_cost is not None)
+            else None
+        )
     )
+
+  def __radd__(self, other: Optional['LMSamplingUsage']) -> 'LMSamplingUsage':
+    return self + other
 
 
 class UsageNotAvailable(LMSamplingUsage):
@@ -101,10 +144,17 @@ class UsageNotAvailable(LMSamplingUsage):
   prompt_tokens: pg.typing.Int(0).freeze()       # pytype: disable=invalid-annotation
   completion_tokens: pg.typing.Int(0).freeze()   # pytype: disable=invalid-annotation
   total_tokens: pg.typing.Int(0).freeze()        # pytype: disable=invalid-annotation
-  num_requests: pg.typing.Int(1).freeze()        # pytype: disable=invalid-annotation
+  estimated_cost: pg.typing.Float(default=None, is_noneable=True).freeze()    # pytype: disable=invalid-annotation
 
-  def __bool__(self) -> bool:
-    return False
+  def __add__(self, other: Optional['LMSamplingUsage']) -> 'UsageNotAvailable':
+    if other is None:
+      return self
+    return UsageNotAvailable(
+        num_requests=self.num_requests + other.num_requests
+    )
+
+  def __radd__(self, other: Optional['LMSamplingUsage']) -> 'UsageNotAvailable':
+    return self + other
 
 
 class LMSamplingResult(pg.Object):
@@ -122,6 +172,11 @@ class LMSamplingResult(pg.Object):
       LMSamplingUsage,
       'Usage information. Currently only OpenAI models are supported.',
   ] = UsageNotAvailable()
+
+  is_cached: Annotated[
+      bool,
+      'Whether the result is from cache or not.'
+  ] = False
 
 
 class LMSamplingOptions(component.Component):
@@ -425,12 +480,13 @@ class LanguageModel(component.Component):
           response = sample.response
           response.metadata.score = sample.score
           response.metadata.logprobs = sample.logprobs
+          response.metadata.is_cached = result.is_cached
 
           # NOTE(daiyip): Current usage is computed at per-result level,
           # which is accurate when n=1. For n > 1, we average the usage across
           # multiple samples.
           usage = result.usage
-          if len(result.samples) == 1 or not usage:
+          if len(result.samples) == 1 or isinstance(usage, UsageNotAvailable):
             response.metadata.usage = usage
           else:
             n = len(result.samples)
@@ -438,6 +494,9 @@ class LanguageModel(component.Component):
                 prompt_tokens=usage.prompt_tokens // n,
                 completion_tokens=usage.completion_tokens // n,
                 total_tokens=usage.total_tokens // n,
+                estimated_cost=(
+                    usage.estimated_cost / n if usage.estimated_cost else None
+                )
             )
 
           # Track usage.
@@ -445,7 +504,7 @@ class LanguageModel(component.Component):
           if trackers:
             model_id = self.model_id
             for tracker in trackers:
-              tracker.track(model_id, usage)
+              tracker.track(model_id, usage, result.is_cached)
 
           # Track the prompt for corresponding response.
           response.source = prompt
@@ -474,7 +533,9 @@ class LanguageModel(component.Component):
         request_to_result_index[len(requests)] = i
         requests.append(prompt)
       else:
-        results[i] = r.clone()
+        result = r.clone()
+        assert result.is_cached, result
+        results[i] = result
 
     # Sample non-cache-hit prompts.
     if requests:
@@ -491,8 +552,12 @@ class LanguageModel(component.Component):
           sample.response.set('cache_seed', cache_seed)
 
         if cache_seed is not None:
-          self.cache.put(self, prompt, result.clone(), seed=cache_seed)
-
+          self.cache.put(
+              self,
+              prompt,
+              result.clone(override=dict(is_cached=True)),
+              seed=cache_seed
+          )
     return results  # pytype: disable=bad-return-type
 
   @abc.abstractmethod
@@ -800,30 +865,81 @@ class LanguageModel(component.Component):
       return DEFAULT_MAX_CONCURRENCY  # Default of 1
 
 
+class UsageSummary(pg.Object):
+  """Usage sumary."""
+
+  class AggregatedUsage(pg.Object):
+    """Aggregated usage."""
+
+    total: LMSamplingUsage = LMSamplingUsage(0, 0, 0, 0, 0.0)
+    breakdown: dict[str, LMSamplingUsage] = {}
+
+    def __bool__(self) -> bool:
+      """Returns True if the usage is non-empty."""
+      return bool(self.breakdown)
+
+    def add(
+        self,
+        model_id: str,
+        usage: LMSamplingUsage,
+    ) -> None:
+      """Adds an entry to the breakdown."""
+      aggregated = self.breakdown.get(model_id, None)
+      with pg.notify_on_change(False):
+        self.breakdown[model_id] = usage + aggregated
+        self.rebind(total=self.total + usage, skip_notification=True)
+
+  @property
+  def total(self) -> LMSamplingUsage:
+    return self.cached.total + self.uncached.total
+
+  def update(self, model_id: str, usage: LMSamplingUsage, is_cached: bool):
+    """Updates the usage summary."""
+    if is_cached:
+      usage.rebind(estimated_cost=0.0, skip_notification=True)
+      self.cached.add(model_id, usage)
+    else:
+      self.uncached.add(model_id, usage)
+
+
+pg.members(
+    dict(
+        cached=(
+            pg.typing.Object(
+                UsageSummary.AggregatedUsage,
+                default=UsageSummary.AggregatedUsage()
+            ),
+            'Aggregated usages for cached LLM calls.'
+        ),
+        uncached=(
+            pg.typing.Object(
+                UsageSummary.AggregatedUsage,
+                default=UsageSummary.AggregatedUsage()
+            ),
+            'Aggregated usages for uncached LLM calls.'
+        ),
+    )
+)(UsageSummary)
+
+
 class _UsageTracker:
   """Usage tracker."""
 
   def __init__(self, model_ids: set[str] | None):
     self.model_ids = model_ids
+    self.usage_summary = UsageSummary()
     self._lock = threading.Lock()
-    self.usages = {
-        m: LMSamplingUsage(0, 0, 0, 0) for m in model_ids
-    } if model_ids else {}
 
-  def track(self, model_id: str, usage: LMSamplingUsage):
-    if self.model_ids is not None and model_id not in self.model_ids:
-      return
-    with self._lock:
-      if not isinstance(usage, UsageNotAvailable) and model_id in self.usages:
-        self.usages[model_id] += usage
-      else:
-        self.usages[model_id] = usage
+  def track(self, model_id: str, usage: LMSamplingUsage, is_cached: bool):
+    if self.model_ids is None or model_id in self.model_ids:
+      with self._lock:
+        self.usage_summary.update(model_id, usage, is_cached)
 
 
 @contextlib.contextmanager
 def track_usages(
     *lm: Union[str, LanguageModel]
-) -> Iterator[dict[str, LMSamplingUsage]]:
+) -> Iterator[UsageSummary]:
   """Context manager to track the usages of all language models in scope.
 
   `lf.track_usages` works with threads spawned by `lf.concurrent_map` and
@@ -854,6 +970,6 @@ def track_usages(
   tracker = _UsageTracker(set(model_ids) if model_ids else None)
   with component.context(__usage_trackers__=trackers + [tracker]):
     try:
-      yield tracker.usages
+      yield tracker.usage_summary
     finally:
       pass

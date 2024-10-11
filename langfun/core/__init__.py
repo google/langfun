@@ -103,6 +103,7 @@ from langfun.core.language_model import LMSample
 from langfun.core.language_model import LMSamplingOptions
 from langfun.core.language_model import LMSamplingUsage
 from langfun.core.language_model import UsageNotAvailable
+from langfun.core.language_model import UsageSummary
 from langfun.core.language_model import LMSamplingResult
 from langfun.core.language_model import LMScoringResult
 from langfun.core.language_model import LMCache

@@ -24,11 +24,73 @@ import pyglove as pg
 
 SUPPORTED_MODELS_AND_SETTINGS = {
     # Refer https://console.groq.com/docs/models
-    'llama3-8b-8192': pg.Dict(max_tokens=8192, max_concurrency=16),
-    'llama3-70b-8192': pg.Dict(max_tokens=8192, max_concurrency=16),
-    'llama2-70b-4096': pg.Dict(max_tokens=4096, max_concurrency=16),
-    'mixtral-8x7b-32768': pg.Dict(max_tokens=32768, max_concurrency=16),
-    'gemma-7b-it': pg.Dict(max_tokens=8192, max_concurrency=16),
+    # Price in US dollars at https://groq.com/pricing/ as of 2024-10-10.
+    'llama-3.2-3b-preview': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=64,
+        cost_per_1k_input_tokens=0.00006,
+        cost_per_1k_output_tokens=0.00006,
+    ),
+    'llama-3.2-1b-preview': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=64,
+        cost_per_1k_input_tokens=0.00004,
+        cost_per_1k_output_tokens=0.00004,
+    ),
+    'llama-3.1-70b-versatile': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=16,
+        cost_per_1k_input_tokens=0.00059,
+        cost_per_1k_output_tokens=0.00079,
+    ),
+    'llama-3.1-8b-instant': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=32,
+        cost_per_1k_input_tokens=0.00005,
+        cost_per_1k_output_tokens=0.00008,
+    ),
+    'llama3-70b-8192': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=16,
+        cost_per_1k_input_tokens=0.00059,
+        cost_per_1k_output_tokens=0.00079,
+    ),
+    'llama3-8b-8192': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=32,
+        cost_per_1k_input_tokens=0.00005,
+        cost_per_1k_output_tokens=0.00008,
+    ),
+    'llama2-70b-4096': pg.Dict(
+        max_tokens=4096,
+        max_concurrency=16,
+    ),
+    'mixtral-8x7b-32768': pg.Dict(
+        max_tokens=32768,
+        max_concurrency=16,
+        cost_per_1k_input_tokens=0.00024,
+        cost_per_1k_output_tokens=0.00024,
+    ),
+    'gemma2-9b-it': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=32,
+        cost_per_1k_input_tokens=0.0002,
+        cost_per_1k_output_tokens=0.0002,
+    ),
+    'gemma-7b-it': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=32,
+        cost_per_1k_input_tokens=0.00007,
+        cost_per_1k_output_tokens=0.00007,
+    ),
+    'whisper-large-v3': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=16,
+    ),
+    'whisper-large-v3-turbo': pg.Dict(
+        max_tokens=8192,
+        max_concurrency=16,
+    )
 }
 
 
@@ -88,6 +150,25 @@ class Groq(rest.REST):
   @property
   def max_concurrency(self) -> int:
     return SUPPORTED_MODELS_AND_SETTINGS[self.model].max_concurrency
+
+  def estimate_cost(
+      self,
+      num_input_tokens: int,
+      num_output_tokens: int
+  ) -> float | None:
+    """Estimate the cost based on usage."""
+    cost_per_1k_input_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_input_tokens', None
+    )
+    cost_per_1k_output_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_output_tokens', None
+    )
+    if cost_per_1k_input_tokens is None or cost_per_1k_output_tokens is None:
+      return None
+    return (
+        cost_per_1k_input_tokens * num_input_tokens
+        + cost_per_1k_output_tokens * num_output_tokens
+    ) / 1000
 
   def request(
       self,
@@ -156,6 +237,10 @@ class Groq(rest.REST):
             prompt_tokens=usage['prompt_tokens'],
             completion_tokens=usage['completion_tokens'],
             total_tokens=usage['total_tokens'],
+            estimated_cost=self.estimate_cost(
+                num_input_tokens=usage['prompt_tokens'],
+                num_output_tokens=usage['completion_tokens'],
+            ),
         ),
     )
 
@@ -170,6 +255,24 @@ class Groq(rest.REST):
     )
 
 
+class GroqLlama3_2_3B(Groq):  # pylint: disable=invalid-name
+  """Llama3.2-3B with 8K context window.
+
+  See: https://huggingface.co/meta-llama/Llama-3.2-3B
+  """
+
+  model = 'llama-3.2-3b-preview'
+
+
+class GroqLlama3_2_1B(Groq):  # pylint: disable=invalid-name
+  """Llama3.2-1B with 8K context window.
+
+  See: https://huggingface.co/meta-llama/Llama-3.2-1B
+  """
+
+  model = 'llama-3.2-3b-preview'
+
+
 class GroqLlama3_8B(Groq):  # pylint: disable=invalid-name
   """Llama3-8B with 8K context window.
 
@@ -177,6 +280,24 @@ class GroqLlama3_8B(Groq):  # pylint: disable=invalid-name
   """
 
   model = 'llama3-8b-8192'
+
+
+class GroqLlama3_1_70B(Groq):  # pylint: disable=invalid-name
+  """Llama3.1-70B with 8K context window.
+
+  See: https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/MODEL_CARD.md   # pylint: disable=line-too-long
+  """
+
+  model = 'llama-3.1-70b-versatile'
+
+
+class GroqLlama3_1_8B(Groq):  # pylint: disable=invalid-name
+  """Llama3.1-8B with 8K context window.
+
+  See: https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/MODEL_CARD.md   # pylint: disable=line-too-long
+  """
+
+  model = 'llama-3.1-8b-instant'
 
 
 class GroqLlama3_70B(Groq):  # pylint: disable=invalid-name
@@ -206,10 +327,37 @@ class GroqMistral_8x7B(Groq):  # pylint: disable=invalid-name
   model = 'mixtral-8x7b-32768'
 
 
-class GroqGemma7B_IT(Groq):  # pylint: disable=invalid-name
+class GroqGemma2_9B_IT(Groq):  # pylint: disable=invalid-name
+  """Gemma2 9B with 8K context window.
+
+  See: https://huggingface.co/google/gemma-2-9b-it
+  """
+
+  model = 'gemma2-9b-it'
+
+
+class GroqGemma_7B_IT(Groq):  # pylint: disable=invalid-name
   """Gemma 7B with 8K context window.
 
   See: https://huggingface.co/google/gemma-1.1-7b-it
   """
 
   model = 'gemma-7b-it'
+
+
+class GroqWhisper_Large_v3(Groq):  # pylint: disable=invalid-name
+  """Whisper Large V3 with 8K context window.
+
+  See: https://huggingface.co/openai/whisper-large-v3
+  """
+
+  model = 'whisper-large-v3'
+
+
+class GroqWhisper_Large_v3Turbo(Groq):  # pylint: disable=invalid-name
+  """Whisper Large V3 Turbo with 8K context window.
+
+  See: https://huggingface.co/openai/whisper-large-v3-turbo
+  """
+
+  model = 'whisper-large-v3-turbo'

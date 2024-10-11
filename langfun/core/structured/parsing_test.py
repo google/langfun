@@ -285,7 +285,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     self.assertEqual(
         r,
         lf.AIMessage(
-            '1', score=1.0, result=1, logprobs=None,
+            '1', score=1.0, result=1, logprobs=None, is_cached=False,
             usage=lf.LMSamplingUsage(652, 1, 653),
             tags=['lm-response', 'lm-output', 'transformed']
         ),
@@ -645,6 +645,7 @@ class CallTest(unittest.TestCase):
             result=3,
             score=1.0,
             logprobs=None,
+            is_cached=False,
             usage=lf.LMSamplingUsage(315, 1, 316),
             tags=['lm-response', 'lm-output', 'transformed']
         ),

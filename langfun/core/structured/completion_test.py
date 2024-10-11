@@ -581,6 +581,7 @@ class CompleteStructureTest(unittest.TestCase):
             text='Activity(description="foo")',
             result=Activity(description='foo'),
             score=1.0,
+            is_cached=False,
             logprobs=None,
             usage=lf.LMSamplingUsage(553, 27, 580),
             tags=['lm-response', 'lm-output', 'transformed']

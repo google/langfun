@@ -50,57 +50,285 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # Models from https://platform.openai.com/docs/models
     # RPM is from https://platform.openai.com/docs/guides/rate-limits
     # o1 (preview) models.
-    'o1-preview': pg.Dict(rpm=10000, tpm=5000000),
-    'o1-preview-2024-09-12': pg.Dict(rpm=10000, tpm=5000000),
-    'o1-mini': pg.Dict(rpm=10000, tpm=5000000),
-    'o1-mini-2024-09-12': pg.Dict(rpm=10000, tpm=5000000),
+    # Pricing in US dollars, from https://openai.com/api/pricing/
+    # as of 2024-10-10.
+    'o1-preview': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.015,
+        cost_per_1k_output_tokens=0.06,
+    ),
+    'o1-preview-2024-09-12': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.015,
+        cost_per_1k_output_tokens=0.06,
+    ),
+    'o1-mini': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.012,
+    ),
+    'o1-mini-2024-09-12': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.012,
+    ),
     # GPT-4o models
-    'gpt-4o-mini': pg.Dict(rpm=10000, tpm=5000000),
-    'gpt-4o-mini-2024-07-18': pg.Dict(rpm=10000, tpm=5000000),
-    'gpt-4o': pg.Dict(rpm=10000, tpm=5000000),
-    'gpt-4o-2024-08-06': pg.Dict(rpm=10000, tpm=5000000),
-    'gpt-4o-2024-05-13': pg.Dict(rpm=10000, tpm=5000000),
+    'gpt-4o-mini': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.00015,
+        cost_per_1k_output_tokens=0.0006,
+    ),
+    'gpt-4o-mini-2024-07-18': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.00015,
+        cost_per_1k_output_tokens=0.0006,
+    ),
+    'gpt-4o': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.0025,
+        cost_per_1k_output_tokens=0.01,
+    ),
+    'gpt-4o-2024-08-06': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.0025,
+        cost_per_1k_output_tokens=0.01,
+    ),
+    'gpt-4o-2024-05-13': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.005,
+        cost_per_1k_output_tokens=0.015,
+    ),
     # GPT-4-Turbo models
-    'gpt-4-turbo': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-4-turbo-2024-04-09': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-4-turbo-preview': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-4-0125-preview': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-4-1106-preview': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-4-vision-preview': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-4-turbo': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
+    ),
+    'gpt-4-turbo-2024-04-09': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
+    ),
+    'gpt-4-turbo-preview': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
+    ),
+    'gpt-4-0125-preview': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
+    ),
+    'gpt-4-1106-preview': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
+    ),
+    'gpt-4-vision-preview': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
+    ),
     'gpt-4-1106-vision-preview': pg.Dict(
-        rpm=10000, tpm=2000000
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.01,
+        cost_per_1k_output_tokens=0.03,
     ),
     # GPT-4 models
-    'gpt-4': pg.Dict(rpm=10000, tpm=300000),
-    'gpt-4-0613': pg.Dict(rpm=10000, tpm=300000),
-    'gpt-4-0314': pg.Dict(rpm=10000, tpm=300000),
-    'gpt-4-32k': pg.Dict(rpm=10000, tpm=300000),
-    'gpt-4-32k-0613': pg.Dict(rpm=10000, tpm=300000),
-    'gpt-4-32k-0314': pg.Dict(rpm=10000, tpm=300000),
+    'gpt-4': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=300000,
+        cost_per_1k_input_tokens=0.03,
+        cost_per_1k_output_tokens=0.06,
+    ),
+    'gpt-4-0613': pg.Dict(
+        in_service=False,
+        rpm=10000,
+        tpm=300000,
+        cost_per_1k_input_tokens=0.03,
+        cost_per_1k_output_tokens=0.06,
+    ),
+    'gpt-4-0314': pg.Dict(
+        in_service=False,
+        rpm=10000,
+        tpm=300000,
+        cost_per_1k_input_tokens=0.03,
+        cost_per_1k_output_tokens=0.06,
+    ),
+    'gpt-4-32k': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=300000,
+        cost_per_1k_input_tokens=0.06,
+        cost_per_1k_output_tokens=0.12,
+    ),
+    'gpt-4-32k-0613': pg.Dict(
+        in_service=False,
+        rpm=10000,
+        tpm=300000,
+        cost_per_1k_input_tokens=0.06,
+        cost_per_1k_output_tokens=0.12,
+    ),
+    'gpt-4-32k-0314': pg.Dict(
+        in_service=False,
+        rpm=10000,
+        tpm=300000,
+        cost_per_1k_input_tokens=0.06,
+        cost_per_1k_output_tokens=0.12,
+    ),
     # GPT-3.5-Turbo models
-    'gpt-3.5-turbo': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-0125': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-1106': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-0613': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-0301': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-16k': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-16k-0613': pg.Dict(rpm=10000, tpm=2000000),
-    'gpt-3.5-turbo-16k-0301': pg.Dict(rpm=10000, tpm=2000000),
+    'gpt-3.5-turbo': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.0005,
+        cost_per_1k_output_tokens=0.0015,
+    ),
+    'gpt-3.5-turbo-0125': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.0005,
+        cost_per_1k_output_tokens=0.0015,
+    ),
+    'gpt-3.5-turbo-1106': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.001,
+        cost_per_1k_output_tokens=0.002,
+    ),
+    'gpt-3.5-turbo-0613': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.0015,
+        cost_per_1k_output_tokens=0.002,
+    ),
+    'gpt-3.5-turbo-0301': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.0015,
+        cost_per_1k_output_tokens=0.002,
+    ),
+    'gpt-3.5-turbo-16k': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.004,
+    ),
+    'gpt-3.5-turbo-16k-0613': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.004,
+    ),
+    'gpt-3.5-turbo-16k-0301': pg.Dict(
+        in_service=False,
+        rpm=10000,
+        tpm=2000000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.004,
+    ),
     # GPT-3.5 models
-    'text-davinci-003': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'text-davinci-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'code-davinci-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'text-davinci-003': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
+    'text-davinci-002': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
+    'code-davinci-002': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
     # GPT-3 instruction-tuned models
-    'text-curie-001': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'text-babbage-001': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'text-ada-001': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'davinci': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'curie': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'babbage': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'ada': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'text-curie-001': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
+    'text-babbage-001': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM,
+    ),
+    'text-ada-001': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM,
+    ),
+    'davinci': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM,
+    ),
+    'curie': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
+    'babbage': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
+    'ada': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
     # GPT-3 base models
-    'babbage-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
-    'davinci-002': pg.Dict(rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'babbage-002': pg.Dict(
+        in_service=False,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
+    'davinci-002': pg.Dict(
+        in_service=True,
+        rpm=_DEFAULT_RPM,
+        tpm=_DEFAULT_TPM
+    ),
 }
 
 
@@ -172,6 +400,25 @@ class OpenAI(lf.LanguageModel):
         requests_per_min=rpm, tokens_per_min=tpm
     )
 
+  def estimate_cost(
+      self,
+      num_input_tokens: int,
+      num_output_tokens: int
+  ) -> float | None:
+    """Estimate the cost based on usage."""
+    cost_per_1k_input_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_input_tokens', None
+    )
+    cost_per_1k_output_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_output_tokens', None
+    )
+    if cost_per_1k_output_tokens is None or cost_per_1k_input_tokens is None:
+      return None
+    return (
+        cost_per_1k_input_tokens * num_input_tokens
+        + cost_per_1k_output_tokens * num_output_tokens
+    ) / 1000
+
   @classmethod
   def dir(cls):
     assert openai is not None
@@ -239,10 +486,17 @@ class OpenAI(lf.LanguageModel):
         )
 
       n = len(samples_by_index)
+      estimated_cost = self.estimate_cost(
+          num_input_tokens=response.usage.prompt_tokens,
+          num_output_tokens=response.usage.completion_tokens,
+      )
       usage = lf.LMSamplingUsage(
           prompt_tokens=response.usage.prompt_tokens // n,
           completion_tokens=response.usage.completion_tokens // n,
           total_tokens=response.usage.total_tokens // n,
+          estimated_cost=(
+              None if estimated_cost is None else (estimated_cost // n)
+          )
       )
       return [
           lf.LMSamplingResult(samples_by_index[index], usage=usage)
@@ -350,6 +604,10 @@ class OpenAI(lf.LanguageModel):
               prompt_tokens=response.usage.prompt_tokens,
               completion_tokens=response.usage.completion_tokens,
               total_tokens=response.usage.total_tokens,
+              estimated_cost=self.estimate_cost(
+                  num_input_tokens=response.usage.prompt_tokens,
+                  num_output_tokens=response.usage.completion_tokens,
+              )
           ),
       )
 

@@ -40,24 +40,106 @@ except ImportError:
   Credentials = Any
 
 
+# https://cloud.google.com/vertex-ai/generative-ai/pricing
+# describes that the average number of characters per token is about 4.
+AVGERAGE_CHARS_PER_TOEKN = 4
+
+
+# Price in US dollars,
+# from https://cloud.google.com/vertex-ai/generative-ai/pricing
+# as of 2024-10-10.
 SUPPORTED_MODELS_AND_SETTINGS = {
-    'gemini-1.5-pro-001': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-pro-002': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-flash-002': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-flash-001': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-pro': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-flash': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-pro-latest': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-flash-latest': pg.Dict(api='gemini', rpm=500),
-    'gemini-1.5-pro-preview-0514': pg.Dict(api='gemini', rpm=50),
-    'gemini-1.5-pro-preview-0409': pg.Dict(api='gemini', rpm=50),
-    'gemini-1.5-flash-preview-0514': pg.Dict(api='gemini', rpm=200),
-    'gemini-1.0-pro': pg.Dict(api='gemini', rpm=300),
-    'gemini-1.0-pro-vision': pg.Dict(api='gemini', rpm=100),
+    'gemini-1.5-pro-001': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.0003125,
+        cost_per_1k_output_chars=0.00125,
+    ),
+    'gemini-1.5-pro-002': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.0003125,
+        cost_per_1k_output_chars=0.00125,
+    ),
+    'gemini-1.5-flash-002': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.00001875,
+        cost_per_1k_output_chars=0.000075,
+    ),
+    'gemini-1.5-flash-001': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.00001875,
+        cost_per_1k_output_chars=0.000075,
+    ),
+    'gemini-1.5-pro': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.0003125,
+        cost_per_1k_output_chars=0.00125,
+    ),
+    'gemini-1.5-flash': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.00001875,
+        cost_per_1k_output_chars=0.000075,
+    ),
+    'gemini-1.5-pro-latest': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.0003125,
+        cost_per_1k_output_chars=0.00125,
+    ),
+    'gemini-1.5-flash-latest': pg.Dict(
+        api='gemini',
+        rpm=500,
+        cost_per_1k_input_chars=0.00001875,
+        cost_per_1k_output_chars=0.000075,
+    ),
+    'gemini-1.5-pro-preview-0514': pg.Dict(
+        api='gemini',
+        rpm=50,
+        cost_per_1k_input_chars=0.0003125,
+        cost_per_1k_output_chars=0.00125,
+    ),
+    'gemini-1.5-pro-preview-0409': pg.Dict(
+        api='gemini',
+        rpm=50,
+        cost_per_1k_input_chars=0.0003125,
+        cost_per_1k_output_chars=0.00125,
+    ),
+    'gemini-1.5-flash-preview-0514': pg.Dict(
+        api='gemini',
+        rpm=200,
+        cost_per_1k_input_chars=0.00001875,
+        cost_per_1k_output_chars=0.000075,
+    ),
+    'gemini-1.0-pro': pg.Dict(
+        api='gemini',
+        rpm=300,
+        cost_per_1k_input_chars=0.000125,
+        cost_per_1k_output_chars=0.000375,
+    ),
+    'gemini-1.0-pro-vision': pg.Dict(
+        api='gemini',
+        rpm=100,
+        cost_per_1k_input_chars=0.000125,
+        cost_per_1k_output_chars=0.000375,
+    ),
     # PaLM APIs.
-    'text-bison': pg.Dict(api='palm', rpm=1600),
-    'text-bison-32k': pg.Dict(api='palm', rpm=300),
-    'text-unicorn': pg.Dict(api='palm', rpm=100),
+    'text-bison': pg.Dict(
+        api='palm',
+        rpm=1600
+    ),
+    'text-bison-32k': pg.Dict(
+        api='palm',
+        rpm=300
+    ),
+    'text-unicorn': pg.Dict(
+        api='palm',
+        rpm=100
+    ),
     # Endpoint
     # TODO(chengrun): Set a more appropriate rpm for endpoint.
     'custom': pg.Dict(api='endpoint', rpm=20),
@@ -160,6 +242,25 @@ class VertexAI(lf.LanguageModel):
         requests_per_min=SUPPORTED_MODELS_AND_SETTINGS[self.model].rpm,
         tokens_per_min=0,
     )
+
+  def estimate_cost(
+      self,
+      num_input_tokens: int,
+      num_output_tokens: int
+  ) -> float | None:
+    """Estimate the cost based on usage."""
+    cost_per_1k_input_chars = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_input_chars', None
+    )
+    cost_per_1k_output_chars = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
+        'cost_per_1k_output_chars', None
+    )
+    if cost_per_1k_output_chars is None or cost_per_1k_input_chars is None:
+      return None
+    return (
+        cost_per_1k_input_chars * num_input_tokens
+        + cost_per_1k_output_chars * num_output_tokens
+    ) * AVGERAGE_CHARS_PER_TOEKN / 1000
 
   def _generation_config(
       self, prompt: lf.Message, options: lf.LMSamplingOptions
@@ -285,6 +386,10 @@ class VertexAI(lf.LanguageModel):
         prompt_tokens=usage_metadata.prompt_token_count,
         completion_tokens=usage_metadata.candidates_token_count,
         total_tokens=usage_metadata.total_token_count,
+        estimated_cost=self.estimate_cost(
+            num_input_tokens=usage_metadata.prompt_token_count,
+            num_output_tokens=usage_metadata.candidates_token_count,
+        ),
     )
     return lf.LMSamplingResult(
         [
