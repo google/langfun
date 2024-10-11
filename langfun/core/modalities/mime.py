@@ -178,14 +178,50 @@ class Mime(lf.Modality):
       assert content is not None
       return content
 
-  def _repr_html_(self) -> str:
+  def _html_tree_view_content(
+      self,
+      **kwargs) -> str:
+    return self._raw_html()
+
+  def _html_tree_view_render(
+      self,
+      view: pg.views.HtmlTreeView,
+      raw_mime_content: bool = pg.View.PresetArgValue(False),                 # pytype: disable=annotation-type-mismatch
+      display_modality_when_hover: bool = pg.View.PresetArgValue(False),   # pytype: disable=annotation-type-mismatch
+      **kwargs
+  ):
+    if raw_mime_content:
+      return pg.Html(self._raw_html())
+    else:
+      if display_modality_when_hover:
+        kwargs.update(
+            display_modality_when_hover=True,
+            enable_summary_tooltip=True,
+        )
+      return super()._html_tree_view_render(view=view, **kwargs)
+
+  def _html_tree_view_tooltip(
+      self,
+      *,
+      view: pg.views.HtmlTreeView,
+      content: pg.Html | str | None = None,
+      display_modality_when_hover: bool = pg.View.PresetArgValue(False),    # pytype: disable=annotation-type-mismatch
+      **kwargs
+  ):
+    if content is None and display_modality_when_hover:
+      content = self._raw_html()
+    return super()._html_tree_view_tooltip(
+        view=view, content=content, **kwargs
+    )
+
+  def _raw_html(self) -> str:
     if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
       uri = self.uri
     else:
       uri = self.content_uri
-    return self._html(uri)
+    return self._mime_control_for(uri)
 
-  def _html(self, uri) -> str:
+  def _mime_control_for(self, uri) -> str:
     return f'<embed type="{self.mime_type}" src="{uri}"/>'
 
 

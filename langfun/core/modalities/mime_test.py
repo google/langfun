@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """MIME tests."""
+import inspect
 import unittest
 from unittest import mock
 
@@ -76,6 +77,44 @@ class CustomMimeTest(unittest.TestCase):
       mock_readfile_stub.side_effect = mock_readfile
       self.assertEqual(content.to_bytes(), 'bar')
       self.assertEqual(content.mime_type, 'text/plain')
+
+  def assert_html_content(self, html, expected):
+    expected = inspect.cleandoc(expected).strip()
+    actual = html.content.strip()
+    if actual != expected:
+      print(actual)
+    self.assertEqual(actual, expected)
+
+  def test_html(self):
+    self.assert_html_content(
+        mime.Custom('text/plain', b'foo').to_html(
+            enable_summary_tooltip=False,
+            enable_key_tooltip=False,
+        ),
+        """
+        <details open class="pyglove custom"><summary><div class="summary_title">Custom(...)</div></summary><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></details>
+        """
+    )
+    self.assert_html_content(
+        mime.Custom('text/plain', b'foo').to_html(
+            enable_summary_tooltip=False,
+            enable_key_tooltip=False,
+            raw_mime_content=True,
+        ),
+        """
+        <embed type="text/plain" src="data:text/plain;base64,Zm9v"/>
+        """
+    )
+    self.assert_html_content(
+        mime.Custom('text/plain', b'foo').to_html(
+            enable_summary_tooltip=False,
+            enable_key_tooltip=False,
+            display_modality_when_hover=True,
+        ),
+        """
+        <details open class="pyglove custom"><summary><div class="summary_title">Custom(...)</div><span class="tooltip custom"><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></span></summary><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></details>
+        """
+    )
 
 
 if __name__ == '__main__':

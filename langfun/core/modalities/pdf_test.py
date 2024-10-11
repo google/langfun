@@ -49,7 +49,7 @@ class PdfTest(unittest.TestCase):
     pdf = pdf_lib.PDF.from_bytes(pdf_bytes)
     self.assertIn(
         '<embed type="application/pdf" src="data:application/pdf;base64,',
-        pdf._repr_html_()
+        pdf._raw_html()
     )
 
 

@@ -29,7 +29,7 @@ class Xlsx(mime.Mime):
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   )
 
-  def to_html(self) -> str:
+  def _raw_html(self) -> str:
     try:
       import pandas as pd  # pylint: disable=g-import-not-at-top
       import openpyxl      # pylint: disable=g-import-not-at-top, unused-import
@@ -40,9 +40,6 @@ class Xlsx(mime.Mime):
           'Please install "langfun[mime-xlsx]" to enable XLSX support.'
       ) from e
 
-  def _repr_html_(self) -> str:
-    return self.to_html()
-
   def _is_compatible(self, mime_types: Iterable[str]) -> bool:
     return bool(set(mime_types).intersection([
         'text/html',
@@ -52,7 +49,7 @@ class Xlsx(mime.Mime):
   def _make_compatible(self, mime_types: Iterable[str]) -> mime.Mime:
     """Returns the MimeType of the converted file."""
     del mime_types
-    return mime.Mime(uri=self.uri, content=self.to_html())
+    return mime.Mime(uri=self.uri, content=self._raw_html())
 
 
 class Docx(mime.Mime):

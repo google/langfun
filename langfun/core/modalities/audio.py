@@ -26,5 +26,5 @@ class Audio(mime.Mime):
   def audio_format(self) -> str:
     return self.mime_type.removeprefix(self.MIME_PREFIX + '/')
 
-  def _html(self, uri: str) -> str:
+  def _mime_control_for(self, uri: str) -> str:
     return f'<audio controls> <source src="{uri}"> </audio>'

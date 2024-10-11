@@ -45,7 +45,7 @@ class ImageTest(unittest.TestCase):
   def test_from_bytes(self):
     image = image_lib.Image.from_bytes(image_content)
     self.assertEqual(image.image_format, 'png')
-    self.assertIn('data:image/png;base64,', image._repr_html_())
+    self.assertIn('data:image/png;base64,', image._raw_html())
     self.assertEqual(image.to_bytes(), image_content)
     with self.assertRaisesRegex(
         lf.ModalityError, '.* cannot be converted to text'
@@ -67,7 +67,10 @@ class ImageTest(unittest.TestCase):
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = mock_request
       self.assertEqual(image.image_format, 'png')
-      self.assertEqual(image._repr_html_(), '<img src="http://mock/web/a.png">')
+      self.assertEqual(
+          image._raw_html(),
+          '<img src="http://mock/web/a.png">'
+      )
       self.assertEqual(image.to_bytes(), image_content)
 
   def test_from_uri_base_cls(self):
@@ -76,7 +79,10 @@ class ImageTest(unittest.TestCase):
       image = mime_lib.Mime.from_uri('http://mock/web/a.png')
       self.assertIsInstance(image, image_lib.Image)
       self.assertEqual(image.image_format, 'png')
-      self.assertEqual(image._repr_html_(), '<img src="http://mock/web/a.png">')
+      self.assertEqual(
+          image._raw_html(),
+          '<img src="http://mock/web/a.png">'
+      )
       self.assertEqual(image.to_bytes(), image_content)
 
   def test_image_size(self):

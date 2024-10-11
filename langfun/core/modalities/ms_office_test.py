@@ -347,7 +347,7 @@ class XlsxTest(unittest.TestCase):
           ),
       )
       self.assertEqual(content.to_bytes(), xlsx_bytes)
-      self.assertEqual(content.to_html(), expected_xlsx_html)
+      self.assertEqual(content._raw_html(), expected_xlsx_html)
 
 
 class PptxTest(unittest.TestCase):

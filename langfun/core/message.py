@@ -14,13 +14,11 @@
 """Messages that are exchanged between users and agents."""
 
 import contextlib
-import html
 import io
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, Optional, Sequence, Union
 
 from langfun.core import modality
 from langfun.core import natural_language
-from langfun.core import repr_utils
 import pyglove as pg
 
 
@@ -406,6 +404,11 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
       with pg.notify_on_change(False):
         self.tags.append(tag)
 
+  def has_tag(self, tag: str | tuple[str, ...]) -> bool:
+    if isinstance(tag, str):
+      return tag in self.tags
+    return any(t in self.tags for t in tag)
+
   #
   # Message source chain.
   #
@@ -503,79 +506,244 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     v = self.metadata[key]
     return v.value if isinstance(v, pg.Ref) else v
 
-  def _repr_html_(self):
-    return self.to_html().content
-
-  def to_html(
+  # pytype: disable=annotation-type-mismatch
+  def _html_tree_view_content(
       self,
-      include_message_type: bool = True
-  ) -> repr_utils.Html:
-    """Returns the HTML representation of the message."""
-    s = io.StringIO()
-    s.write('<div style="padding:0px 10px 0px 10px;">')
-    # Title bar.
-    if include_message_type:
-      s.write(
-          repr_utils.html_round_text(
-              self.__class__.__name__,
-              text_color='white',
-              background_color=self._text_color(),
-          )
-      )
-      s.write('<hr>')
+      *,
+      view: pg.views.HtmlTreeView,
+      root_path: pg.KeyPath,
+      source_tag: str | Sequence[str] | None = pg.View.PresetArgValue(
+          ('lm-input', 'lm-output')
+      ),
+      include_message_metadata: bool = pg.View.PresetArgValue(True),
+      collapse_modalities_in_text: bool = pg.View.PresetArgValue(True),
+      collapse_llm_usage: bool = pg.View.PresetArgValue(False),
+      collapse_message_result_level: int = pg.View.PresetArgValue(1),
+      collapse_message_metadata_level: int = pg.View.PresetArgValue(0),
+      collapse_source_message_level: int = pg.View.PresetArgValue(1),
+      **kwargs,
+  ) -> pg.Html:
+  # pytype: enable=annotation-type-mismatch
+    """Returns the HTML representation of the message.
 
-    # Body.
-    s.write(
-        f'<span style="color: {self._text_color()}; white-space: pre-wrap;">'
+    Args:
+      view: The HTML tree view.
+      root_path: The root path of the message.
+      source_tag: tags to filter source messages. If None, the entire
+        source chain will be included.
+      include_message_metadata: Whether to include the metadata of the message.
+      collapse_modalities_in_text: Whether to collapse the modalities in the
+        message text.
+      collapse_llm_usage: Whether to collapse the usage in the message.
+      collapse_message_result_level: The level to collapse the result in the
+        message.
+      collapse_message_metadata_level: The level to collapse the metadata in the
+        message.
+      collapse_source_message_level: The level to collapse the source in the
+        message.
+      **kwargs: Other keyword arguments.
+
+    Returns:
+      The HTML representation of the message content.
+    """
+    def render_tags():
+      return pg.Html.element(
+          'div',
+          [pg.Html.element('span', [tag]) for tag in self.tags],
+          css_class=['message-tags'],
+      )
+
+    def render_message_text():
+      maybe_reformatted = self.get('formatted_text')
+      referred_chunks = {}
+      s = pg.Html('<div class="message-text">')
+      for chunk in self.chunk(maybe_reformatted):
+        if isinstance(chunk, str):
+          s.write(s.escape(chunk))
+        else:
+          assert isinstance(chunk, modality.Modality), chunk
+          child_path = root_path + 'metadata' + chunk.referred_name
+          s.write(
+              pg.Html.element(
+                  'div',
+                  [
+                      view.render(
+                          chunk,
+                          name=chunk.referred_name,
+                          root_path=child_path,
+                          collapse_level=child_path.depth + (
+                              0 if collapse_modalities_in_text else 1
+                          )
+                      )
+                  ],
+                  css_class=['modality-in-text'],
+              )
+          )
+          referred_chunks[chunk.referred_name] = chunk
+      s.write('</div>')
+      return s
+
+    def render_result():
+      if 'result' not in self.metadata:
+        return None
+      child_path = root_path + 'metadata' + 'result'
+      return pg.Html.element(
+          'div',
+          [
+              view.render(
+                  self.result,
+                  name='result',
+                  root_path=child_path,
+                  collapse_level=(
+                      child_path.depth + collapse_message_result_level
+                  )
+              )
+          ],
+          css_class=['message-result'],
+      )
+
+    def render_usage():
+      if 'usage' not in self.metadata:
+        return None
+      child_path = root_path + 'metadata' + 'usage'
+      return pg.Html.element(
+          'div',
+          [
+              view.render(
+                  self.usage,
+                  name='llm usage',
+                  root_path=child_path,
+                  collapse_level=child_path.depth + (
+                      0 if collapse_llm_usage else 1
+                  )
+              )
+          ],
+          css_class=['message-usage'],
+      )
+
+    def render_source_message():
+      source = self.source
+      while (source is not None
+             and source_tag is not None
+             and not source.has_tag(source_tag)):
+        source = source.source
+      if source is not None:
+        return view.render(
+            self.source,
+            name='source',
+            root_path=root_path + 'source',
+            include_metadata=include_message_metadata,
+            collapse_level=(
+                root_path.depth + 1 + collapse_source_message_level
+            ),
+            collapse_source_level=max(0, collapse_source_message_level - 1),
+            collapse_modalities=collapse_modalities_in_text,
+            collapse_usage=collapse_llm_usage,
+            collapse_metadata_level=collapse_message_metadata_level,
+            collapse_result_level=collapse_message_result_level,
+        )
+      return None
+
+    def render_metadata():
+      if not include_message_metadata:
+        return None
+      child_path = root_path + 'metadata'
+      return pg.Html.element(
+          'div',
+          [
+              view.render(
+                  self.metadata,
+                  css_class=['message-metadata'],
+                  name='metadata',
+                  root_path=child_path,
+                  collapse_level=(
+                      child_path.depth + collapse_message_metadata_level
+                  )
+              )
+          ],
+          css_class=['message-metadata'],
+      )
+
+    return pg.Html.element(
+        'div',
+        [
+            render_tags(),
+            render_message_text(),
+            render_result(),
+            render_usage(),
+            render_metadata(),
+            render_source_message(),
+        ],
+        css_class=['complex_value'],
     )
 
-    # NOTE(daiyip): LLM may reformat the text from the input, therefore
-    # we proritize the formatted text if it's available.
-    maybe_reformatted = self.get('formatted_text')
-    referred_chunks = {}
-    for chunk in self.chunk(maybe_reformatted):
-      if isinstance(chunk, str):
-        s.write(html.escape(chunk))
-      else:
-        assert isinstance(chunk, modality.Modality), chunk
-        s.write('&nbsp;')
-        s.write(repr_utils.html_round_text(
-            chunk.referred_name,
-            text_color='black',
-            background_color='#f7dc6f'
-        ))
-        s.write('&nbsp;')
-        referred_chunks[chunk.referred_name] = chunk
-    s.write('</span>')
+  def _html_style(self) -> list[str]:
+    return super()._html_style() + [
+        """
+        /* Langfun Message styles.*/
+        [class^="message-"] > details {
+            margin: 0px 0px 5px 0px;
+            border: 1px solid #EEE;
+        }
+        details.lf-message > summary > .summary_title::after {
+            content: ' 💬';
+        }
+        details.pyglove.ai-message {
+            border: 1px solid blue;
+            color: blue;
+        }
+        details.pyglove.user-message {
+            border: 1px solid green;
+            color: green;
+        }
+        .message-tags {
+            margin: 5px 0px 5px 0px;
+            font-size: .8em;
+        }
+        .message-tags > span {
+            border-radius: 5px;
+            background-color: #CCC;
+            padding: 3px;
+            margin: 0px 2px 0px 2px;
+            color: white;
+        }
+        .message-text {
+            padding: 20px;
+            margin: 10px 5px 10px 5px;
+            font-style: italic;
+            font-size: 1.1em;
+            white-space: pre-wrap;
+            border: 1px solid #EEE;
+            border-radius: 5px;
+            background-color: #EEE;
+        }
+        .modality-in-text {
+            display: inline-block;
+        }
+        .modality-in-text > details {
+            display: inline-block;
+            font-size: 0.8em;
+            border: 0;
+            background-color: #A6F1A6;
+            margin: 0px 5px 0px 5px;
+        }
+        .message-result {
+            color: purple;
+        }
+        .message-usage {
+            color: orange;
+        }
+        .message-usage .object_key.str {
+            border: 1px solid orange;
+            background-color: orange;
+            color: white;
+        }
+        """
+    ]
 
-    def item_color(k, v):
-      if isinstance(v, modality.Modality):
-        return ('black', '#f7dc6f', None, None)   # Light yellow
-      elif k == 'result':
-        return ('white', 'purple', 'purple', None)      # Blue.
-      elif k in ('usage',):
-        return ('white', '#e74c3c', None, None)   # Red.
-      else:
-        return ('white', '#17202a', None, None)   # Dark gray
+  def _html_element_class(self) -> list[str]:
+    return super()._html_element_class() + ['lf-message']
 
-    # TODO(daiyip): Revisit the logic in deciding what metadata keys to
-    # expose to the user.
-    if referred_chunks:
-      s.write(repr_utils.html_repr(referred_chunks, item_color))
-
-    if 'lm-response' in self.tags:
-      s.write(repr_utils.html_repr(self.metadata, item_color))
-    s.write('</div>')
-    return repr_utils.Html(s.getvalue())
-
-  def _text_color(self) -> str:
-    match self.__class__.__name__:
-      case 'UserMessage':
-        return 'green'
-      case 'AIMessage':
-        return 'blue'
-      case _:
-        return 'black'
 
 #
 # Messages of different roles.

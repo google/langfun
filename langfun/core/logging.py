@@ -13,16 +13,13 @@
 # limitations under the License.
 """Langfun event logging."""
 
-from collections.abc import Iterator
 import contextlib
 import datetime
-import io
 import typing
-from typing import Any, Literal
+from typing import Any, Iterator, Literal, Sequence
 
 from langfun.core import component
 from langfun.core import console
-from langfun.core import repr_utils
 import pyglove as pg
 
 
@@ -56,48 +53,152 @@ class LogEntry(pg.Object):
   def should_output(self, min_log_level: LogLevel) -> bool:
     return _LOG_LEVELS.index(self.level) >= _LOG_LEVELS.index(min_log_level)
 
-  def _repr_html_(self) -> str:
-    s = io.StringIO()
-    padding_left = 50 * self.indent
-    s.write(f'<div style="padding-left: {padding_left}px;">')
-    s.write(self._message_display)
-    if self.metadata:
-      s.write(repr_utils.html_repr(self.metadata))
-    s.write('</div>')
-    return s.getvalue()
+  def _html_tree_view_summary(
+      self,
+      view: pg.views.HtmlTreeView,
+      title: str | pg.Html | None = None,
+      max_str_len_for_summary: int = pg.View.PresetArgValue(80),  # pytype: disable=annotation-type-mismatch
+      **kwargs
+      ) -> str:
+    if len(self.message) > max_str_len_for_summary:
+      message = self.message[:max_str_len_for_summary] + '...'
+    else:
+      message = self.message
 
-  @property
-  def _message_text_bgcolor(self) -> str:
-    match self.level:
-      case 'debug':
-        return '#EEEEEE'
-      case 'info':
-        return '#A3E4D7'
-      case 'warning':
-        return '#F8C471'
-      case 'error':
-        return '#F5C6CB'
-      case 'fatal':
-        return '#F19CBB'
-      case _:
-        raise ValueError(f'Unknown log level: {self.level}')
-
-  @property
-  def _time_display(self) -> str:
-    display_text = self.time.strftime('%H:%M:%S')
-    alt_text = self.time.strftime('%Y-%m-%d %H:%M:%S.%f')
-    return (
-        '<span style="background-color: #BBBBBB; color: white; '
-        'border-radius:5px; padding:0px 5px 0px 5px;" '
-        f'title="{alt_text}">{display_text}</span>'
+    s = pg.Html(
+        pg.Html.element(
+            'span',
+            [self.time.strftime('%H:%M:%S')],
+            css_class=['log-time']
+        ),
+        pg.Html.element(
+            'span',
+            [pg.Html.escape(message)],
+            css_class=['log-summary'],
+        ),
+    )
+    return view.summary(
+        self,
+        title=title or s,
+        max_str_len_for_summary=max_str_len_for_summary,
+        **kwargs,
     )
 
-  @property
-  def _message_display(self) -> str:
-    return repr_utils.html_round_text(
-        self._time_display + '&nbsp;' + self.message,
-        background_color=self._message_text_bgcolor,
+  # pytype: disable=annotation-type-mismatch
+  def _html_tree_view_content(
+      self,
+      view: pg.views.HtmlTreeView,
+      root_path: pg.KeyPath,
+      collapse_log_metadata_level: int = pg.View.PresetArgValue(0),
+      max_str_len_for_summary: int = pg.View.PresetArgValue(80),
+      **kwargs
+  ) -> pg.Html:
+    # pytype: enable=annotation-type-mismatch
+    def render_message_text():
+      if len(self.message) < max_str_len_for_summary:
+        return None
+      return pg.Html.element(
+          'span',
+          [pg.Html.escape(self.message)],
+          css_class=['log-text'],
+      )
+
+    def render_metadata():
+      if not self.metadata:
+        return None
+      return pg.Html.element(
+          'div',
+          [
+              view.render(
+                  self.metadata,
+                  name='metadata',
+                  root_path=root_path + 'metadata',
+                  parent=self,
+                  collapse_level=(
+                      root_path.depth + collapse_log_metadata_level + 1
+                  )
+              )
+          ],
+          css_class=['log-metadata'],
+      )
+
+    return pg.Html.element(
+        'div',
+        [
+            render_message_text(),
+            render_metadata(),
+        ],
+        css_class=['complex_value'],
     )
+
+  def _html_style(self) -> list[str]:
+    return super()._html_style() + [
+        """
+        .log-time {
+          color: #222;
+          font-size: 12px;
+          padding-right: 10px;
+        }
+        .log-summary {
+          font-weight: normal;
+          font-style: italic;
+          padding: 4px;
+        }
+        .log-debug > summary > .summary_title::before {
+          content: '🛠️ '
+        }
+        .log-info > summary > .summary_title::before {
+          content: '💡 '
+        }
+        .log-warning > summary > .summary_title::before {
+          content: '❗ '
+        }
+        .log-error > summary > .summary_title::before {
+          content: '❌ '
+        }
+        .log-fatal > summary > .summary_title::before {
+          content: '💀 '
+        }
+        .log-text {
+          display: block;
+          color: black;
+          font-style: italic;
+          padding: 20px;
+          border-radius: 5px;
+          background: rgba(255, 255, 255, 0.5);
+          white-space: pre-wrap;
+        }
+        details.log-entry {
+          margin: 0px 0px 10px;
+          border: 0px;
+        }
+        div.log-metadata {
+          margin: 10px 0px 0px 0px; 
+        }
+        .log-metadata > details {
+          background-color: rgba(255, 255, 255, 0.5);
+          border: 1px solid transparent;
+        }
+        .log-debug {
+          background-color: #EEEEEE
+        }
+        .log-warning {
+          background-color: #F8C471
+        }
+        .log-info {
+          background-color: #A3E4D7
+        }
+        .log-error {
+          background-color: #F5C6CB
+        }
+        .log-fatal {
+          background-color: #F19CBB
+        }
+        """
+    ]
+
+  def _html_element_class(self) -> Sequence[str] | None:
+    return super()._html_element_class() + [f'log-{self.level}']
 
 
 def log(level: LogLevel,

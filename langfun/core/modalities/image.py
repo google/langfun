@@ -41,7 +41,7 @@ class Image(mime.Mime):
   def image_format(self) -> str:
     return self.mime_type.removeprefix(self.MIME_PREFIX + '/')
 
-  def _html(self, uri: str) -> str:
+  def _mime_control_for(self, uri: str) -> str:
     return f'<img src="{uri}">'
 
   @functools.cached_property

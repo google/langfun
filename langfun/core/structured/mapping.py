@@ -183,6 +183,44 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       result.write(lf.colored(str(self.metadata), color='cyan'))
     return result.getvalue().strip()
 
+  def _html_tree_view_content(
+      self,
+      *,
+      parent: Any,
+      view: pg.views.HtmlTreeView,
+      root_path: pg.KeyPath,
+      **kwargs,
+  ):
+    def render_value(value, **kwargs):
+      if isinstance(value, lf.Template):
+        # Make a shallow copy to make sure modalities are rooted by
+        # the input.
+        value = value.clone().render()
+      return view.render(value, **kwargs)
+
+    exclude_keys = []
+    if not self.context:
+      exclude_keys.append('context')
+    if not self.schema:
+      exclude_keys.append('schema')
+    if not self.metadata:
+      exclude_keys.append('metadata')
+
+    kwargs.pop('special_keys', None)
+    kwargs.pop('exclude_keys', None)
+    return view.complex_value(
+        self.sym_init_args,
+        parent=self,
+        root_path=root_path,
+        render_value_fn=render_value,
+        special_keys=['input', 'output', 'context', 'schema', 'metadata'],
+        exclude_keys=exclude_keys,
+        **kwargs
+    )
+
+  def _html_tree_view_collapse_level(self) -> int:
+    return 2
+
 
 class Mapping(lf.LangFunc):
   """Base class for mapping.

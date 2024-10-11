@@ -13,6 +13,7 @@
 # limitations under the License.
 """Template test."""
 import inspect
+from typing import Any
 import unittest
 
 from langfun.core import component
@@ -550,6 +551,42 @@ class TemplateRenderEventTest(unittest.TestCase):
     l.render(name='ballon')
     self.assertEqual(render_events, ['The science of ballon'])
     self.assertEqual(render_stacks, [[l]])
+
+
+class HtmlTest(unittest.TestCase):
+
+  def assert_html_content(self, html, expected):
+    expected = inspect.cleandoc(expected).strip()
+    actual = html.content.strip()
+    if actual != expected:
+      print(actual)
+    self.assertEqual(actual, expected)
+
+  def test_html(self):
+
+    class Foo(Template):
+      """Template Foo.
+
+      {{x}} + {{y}} = ?
+      """
+      x: Any
+      y: Any
+
+    class Bar(Template):
+      """Template Bar.
+
+      {{y}} + {{z}}
+      """
+      y: Any
+
+    self.assert_html_content(
+        Foo(x=Bar('{{y}} + {{z}}'), y=1).to_html(
+            enable_summary_tooltip=False,
+        ),
+        """
+        <details open class="pyglove foo lf-template"><summary><div class="summary_title">Foo(...)</div></summary><div class="complex_value"><div class="template-str"><span>{{x}} + {{y}} = ?</span></div><fieldset class="template-fields"><legend>Template Variables</legend><div class="complex_value foo lf-template"><table><tr><td><span class="object_key str">x</span><span class="tooltip key-path">x</span></td><td><div><details class="pyglove bar lf-template"><summary><div class="summary_title">Bar(...)</div></summary><div class="complex_value"><div class="template-str"><span>{{y}} + {{z}}</span></div><fieldset class="template-fields"><legend>Template Variables</legend><div class="complex_value bar lf-template"><table><tr><td><span class="object_key str">y</span><span class="tooltip key-path">x.y</span></td><td><div><div class="inferred-value"><span class="simple_value int">1</span></div></div></td></tr><tr><td><span class="object_key str">z</span><span class="tooltip key-path">x.z</span></td><td><div><span class="contextual-variable">(external)</span></div></td></tr></table></div></fieldset></div></details></div></td></tr><tr><td><span class="object_key str">y</span><span class="tooltip key-path">y</span></td><td><div><span class="simple_value int">1</span></div></td></tr></table></div></fieldset></div></details>
+        """
+    )
 
 
 if __name__ == '__main__':

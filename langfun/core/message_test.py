@@ -15,6 +15,7 @@
 
 import inspect
 import unittest
+from langfun.core import language_model
 from langfun.core import message
 from langfun.core import modality
 import pyglove as pg
@@ -26,9 +27,6 @@ class CustomModality(modality.Modality):
   def to_bytes(self):
     return self.content.encode()
 
-  def _repr_html_(self):
-    return f'<div>CustomModality: {self.content}</div>'
-
 
 class MessageTest(unittest.TestCase):
 
@@ -39,11 +37,19 @@ class MessageTest(unittest.TestCase):
 
     d = pg.Dict(x=A())
 
-    m = message.UserMessage('hi', metadata=dict(x=1), x=pg.Ref(d.x), y=2)
+    m = message.UserMessage(
+        'hi',
+        metadata=dict(x=1), x=pg.Ref(d.x),
+        y=2,
+        tags=['lm-input']
+    )
     self.assertEqual(m.metadata, {'x': pg.Ref(d.x), 'y': 2})
     self.assertEqual(m.sender, 'User')
     self.assertIs(m.x, d.x)
     self.assertEqual(m.y, 2)
+    self.assertTrue(m.has_tag('lm-input'))
+    self.assertTrue(m.has_tag(('lm-input', '')))
+    self.assertFalse(m.has_tag('lm-response'))
 
     with self.assertRaises(AttributeError):
       _ = m.z
@@ -332,50 +338,69 @@ class MessageTest(unittest.TestCase):
         )
     )
 
-  def test_html(self):
-    m = message.UserMessage(
-        'hi, this is a <<[[img1]]>> and <<[[x.img2]]>>',
-        img1=CustomModality('foo'),
-        x=dict(img2=CustomModality('bar')),
+  def assert_html_content(self, html, expected):
+    expected = inspect.cleandoc(expected).strip()
+    actual = html.content.strip()
+    if actual != expected:
+      print(actual)
+    self.assertEqual(actual, expected)
+
+  def test_html_user_message(self):
+    self.assert_html_content(
+        message.UserMessage(
+            'what is a <div>'
+        ).to_html(enable_summary_tooltip=False),
+        """
+        <details open class="pyglove user-message lf-message"><summary><div class="summary_title">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"></div><div class="message-text">what is a &lt;div&gt;</div><div class="message-metadata"><details class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><span class="empty_container"></span></div></details></div></div></details>
+        """
     )
-    self.assertEqual(
-        m._repr_html_(),
-        (
-            '<div style="padding:0px 10px 0px 10px;"><span style="color: white;'
-            'background-color: green;display:inline-block; border-radius:10px; '
-            'padding:5px; margin-top: 5px; margin-bottom: 5px; white-space: '
-            'pre-wrap">UserMessage</span><hr><span style="color: green; '
-            'white-space: pre-wrap;">hi, this is a&nbsp;<span style="color: '
-            'black;background-color: #f7dc6f;display:inline-block; '
-            'border-radius:10px; padding:5px; margin-top: 5px; margin-bottom: '
-            '5px; white-space: pre-wrap">img1</span>&nbsp;and&nbsp;<span style'
-            '="color: black;background-color: #f7dc6f;display:inline-block; '
-            'border-radius:10px; padding:5px; margin-top: 5px; margin-bottom: '
-            '5px; white-space: pre-wrap">x.img2</span>&nbsp;</span><div style='
-            '"padding-left: 20px; margin-top: 10px"><table style="border-top: '
-            '1px solid #EEEEEE;"><tr><td style="padding: 5px; vertical-align: '
-            'top; border-bottom: 1px solid #EEEEEE"><span style="color: black;'
-            'background-color: #f7dc6f;display:inline-block; border-radius:'
-            '10px; padding:5px; margin-top: 5px; margin-bottom: 0px; '
-            'white-space: pre-wrap">img1</span></td><td style="padding: 15px '
-            '5px 5px 5px; vertical-align: top; border-bottom: 1px solid '
-            '#EEEEEE;"><div>CustomModality: foo</div></td></tr><tr><td style='
-            '"padding: 5px; vertical-align: top; border-bottom: 1px solid '
-            '#EEEEEE"><span style="color: black;background-color: #f7dc6f;'
-            'display:inline-block; border-radius:10px; padding:5px; margin-top:'
-            ' 5px; margin-bottom: 0px; white-space: pre-wrap">x.img2</span>'
-            '</td><td style="padding: 15px 5px 5px 5px; vertical-align: top; '
-            'border-bottom: 1px solid #EEEEEE;"><div>CustomModality: bar</div>'
-            '</td></tr></table></div></div>'
-        )
+    self.assert_html_content(
+        message.UserMessage(
+            'what is this <<[[image]]>>',
+            tags=['lm-input'],
+            image=CustomModality('bird')
+        ).to_html(enable_summary_tooltip=False, include_message_metadata=False),
+        """
+        <details open class="pyglove user-message lf-message"><summary><div class="summary_title">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">what is this<div class="modality-in-text"><details class="pyglove custom-modality"><summary><div class="summary_name">image</div><div class="summary_title">CustomModality(...)</div></summary><div class="complex_value custom-modality"><table><tr><td><span class="object_key str">content</span><span class="tooltip key-path">metadata.image.content</span></td><td><div><span class="simple_value str">&#x27;bird&#x27;</span></div></td></tr></table></div></details></div></div></div></details>
+        """
     )
-    self.assertIn(
-        'background-color: blue',
-        message.AIMessage('hi').to_html().content,
+
+  def test_html_ai_message(self):
+    image = CustomModality('foo')
+    user_message = message.UserMessage(
+        'What is in this image? <<[[image]]>> this is a test',
+        metadata=dict(image=image),
+        source=message.UserMessage('User input'),
+        tags=['lm-input']
     )
-    self.assertIn(
-        'background-color: black',
-        message.SystemMessage('hi').to_html().content,
+    ai_message = message.AIMessage(
+        'My name is Gemini',
+        metadata=dict(
+            result=pg.Dict(x=1, y=2, z=pg.Dict(a=[12, 323])),
+            usage=language_model.LMSamplingUsage(10, 2, 12)
+        ),
+        tags=['lm-response', 'lm-output'],
+        source=user_message,
+    )
+    self.assert_html_content(
+        ai_message.to_html(enable_summary_tooltip=False),
+        """
+        <details open class="pyglove ai-message lf-message"><summary><div class="summary_title">AIMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-response</span><span>lm-output</span></div><div class="message-text">My name is Gemini</div><div class="message-result"><details open class="pyglove dict"><summary><div class="summary_name">result</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict"><table><tr><td><span class="object_key str">x</span><span class="tooltip key-path">metadata.result.x</span></td><td><div><span class="simple_value int">1</span></div></td></tr><tr><td><span class="object_key str">y</span><span class="tooltip key-path">metadata.result.y</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">z</span><span class="tooltip key-path">metadata.result.z</span></td><td><div><details class="pyglove dict"><summary><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict"><table><tr><td><span class="object_key str">a</span><span class="tooltip key-path">metadata.result.z.a</span></td><td><div><details class="pyglove list"><summary><div class="summary_title">List(...)</div></summary><div class="complex_value list"><table><tr><td><span class="object_key int">0</span><span class="tooltip key-path">metadata.result.z.a[0]</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key int">1</span><span class="tooltip key-path">metadata.result.z.a[1]</span></td><td><div><span class="simple_value int">323</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div></td></tr></table></div></details></div><div class="message-usage"><details open class="pyglove lm-sampling-usage"><summary><div class="summary_name">llm usage</div><div class="summary_title">LMSamplingUsage(...)</div></summary><div class="complex_value lm-sampling-usage"><table><tr><td><span class="object_key str">prompt_tokens</span><span class="tooltip key-path">metadata.usage.prompt_tokens</span></td><td><div><span class="simple_value int">10</span></div></td></tr><tr><td><span class="object_key str">completion_tokens</span><span class="tooltip key-path">metadata.usage.completion_tokens</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">total_tokens</span><span class="tooltip key-path">metadata.usage.total_tokens</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key str">num_requests</span><span class="tooltip key-path">metadata.usage.num_requests</span></td><td><div><span class="simple_value int">1</span></div></td></tr></table></div></details></div><div class="message-metadata"><details class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">result</span><span class="tooltip key-path">metadata.result</span></td><td><div><details class="pyglove dict"><summary><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">x</span><span class="tooltip key-path">metadata.result.x</span></td><td><div><span class="simple_value int">1</span></div></td></tr><tr><td><span class="object_key str">y</span><span class="tooltip key-path">metadata.result.y</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">z</span><span class="tooltip key-path">metadata.result.z</span></td><td><div><details class="pyglove dict"><summary><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">a</span><span class="tooltip key-path">metadata.result.z.a</span></td><td><div><details class="pyglove list"><summary><div class="summary_title">List(...)</div></summary><div class="complex_value list message-metadata"><table><tr><td><span class="object_key int">0</span><span class="tooltip key-path">metadata.result.z.a[0]</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key int">1</span><span class="tooltip key-path">metadata.result.z.a[1]</span></td><td><div><span class="simple_value int">323</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div></td></tr></table></div></details></div></td></tr><tr><td><span class="object_key str">usage</span><span class="tooltip key-path">metadata.usage</span></td><td><div><details class="pyglove lm-sampling-usage"><summary><div class="summary_title">LMSamplingUsage(...)</div></summary><div class="complex_value lm-sampling-usage message-metadata"><table><tr><td><span class="object_key str">prompt_tokens</span><span class="tooltip key-path">metadata.usage.prompt_tokens</span></td><td><div><span class="simple_value int">10</span></div></td></tr><tr><td><span class="object_key str">completion_tokens</span><span class="tooltip key-path">metadata.usage.completion_tokens</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">total_tokens</span><span class="tooltip key-path">metadata.usage.total_tokens</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key str">num_requests</span><span class="tooltip key-path">metadata.usage.num_requests</span></td><td><div><span class="simple_value int">1</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div><details open class="pyglove user-message lf-message"><summary><div class="summary_name">source</div><div class="summary_title">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">What is in this image?<div class="modality-in-text"><details class="pyglove custom-modality"><summary><div class="summary_name">image</div><div class="summary_title">CustomModality(...)</div></summary><div class="complex_value custom-modality"><table><tr><td><span class="object_key str">content</span><span class="tooltip key-path">source.metadata.image.content</span></td><td><div><span class="simple_value str">&#x27;foo&#x27;</span></div></td></tr></table></div></details></div>this is a test</div><div class="message-metadata"><details class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">image</span><span class="tooltip key-path">source.metadata.image</span></td><td><div><details class="pyglove custom-modality"><summary><div class="summary_title">CustomModality(...)</div></summary><div class="complex_value custom-modality message-metadata"><table><tr><td><span class="object_key str">content</span><span class="tooltip key-path">source.metadata.image.content</span></td><td><div><span class="simple_value str">&#x27;foo&#x27;</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div></div></details></div></details>
+        """
+    )
+    self.assert_html_content(
+        ai_message.to_html(
+            enable_summary_tooltip=False,
+            collapse_modalities_in_text=False,
+            collapse_llm_usage=True,
+            collapse_message_result_level=0,
+            collapse_message_metadata_level=0,
+            collapse_source_message_level=0,
+            source_tag=None,
+        ),
+        """
+        <details open class="pyglove ai-message lf-message"><summary><div class="summary_title">AIMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-response</span><span>lm-output</span></div><div class="message-text">My name is Gemini</div><div class="message-result"><details class="pyglove dict"><summary><div class="summary_name">result</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict"><table><tr><td><span class="object_key str">x</span><span class="tooltip key-path">metadata.result.x</span></td><td><div><span class="simple_value int">1</span></div></td></tr><tr><td><span class="object_key str">y</span><span class="tooltip key-path">metadata.result.y</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">z</span><span class="tooltip key-path">metadata.result.z</span></td><td><div><details class="pyglove dict"><summary><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict"><table><tr><td><span class="object_key str">a</span><span class="tooltip key-path">metadata.result.z.a</span></td><td><div><details class="pyglove list"><summary><div class="summary_title">List(...)</div></summary><div class="complex_value list"><table><tr><td><span class="object_key int">0</span><span class="tooltip key-path">metadata.result.z.a[0]</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key int">1</span><span class="tooltip key-path">metadata.result.z.a[1]</span></td><td><div><span class="simple_value int">323</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div></td></tr></table></div></details></div><div class="message-usage"><details class="pyglove lm-sampling-usage"><summary><div class="summary_name">llm usage</div><div class="summary_title">LMSamplingUsage(...)</div></summary><div class="complex_value lm-sampling-usage"><table><tr><td><span class="object_key str">prompt_tokens</span><span class="tooltip key-path">metadata.usage.prompt_tokens</span></td><td><div><span class="simple_value int">10</span></div></td></tr><tr><td><span class="object_key str">completion_tokens</span><span class="tooltip key-path">metadata.usage.completion_tokens</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">total_tokens</span><span class="tooltip key-path">metadata.usage.total_tokens</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key str">num_requests</span><span class="tooltip key-path">metadata.usage.num_requests</span></td><td><div><span class="simple_value int">1</span></div></td></tr></table></div></details></div><div class="message-metadata"><details class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">result</span><span class="tooltip key-path">metadata.result</span></td><td><div><details class="pyglove dict"><summary><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">x</span><span class="tooltip key-path">metadata.result.x</span></td><td><div><span class="simple_value int">1</span></div></td></tr><tr><td><span class="object_key str">y</span><span class="tooltip key-path">metadata.result.y</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">z</span><span class="tooltip key-path">metadata.result.z</span></td><td><div><details class="pyglove dict"><summary><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">a</span><span class="tooltip key-path">metadata.result.z.a</span></td><td><div><details class="pyglove list"><summary><div class="summary_title">List(...)</div></summary><div class="complex_value list message-metadata"><table><tr><td><span class="object_key int">0</span><span class="tooltip key-path">metadata.result.z.a[0]</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key int">1</span><span class="tooltip key-path">metadata.result.z.a[1]</span></td><td><div><span class="simple_value int">323</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div></td></tr></table></div></details></div></td></tr><tr><td><span class="object_key str">usage</span><span class="tooltip key-path">metadata.usage</span></td><td><div><details class="pyglove lm-sampling-usage"><summary><div class="summary_title">LMSamplingUsage(...)</div></summary><div class="complex_value lm-sampling-usage message-metadata"><table><tr><td><span class="object_key str">prompt_tokens</span><span class="tooltip key-path">metadata.usage.prompt_tokens</span></td><td><div><span class="simple_value int">10</span></div></td></tr><tr><td><span class="object_key str">completion_tokens</span><span class="tooltip key-path">metadata.usage.completion_tokens</span></td><td><div><span class="simple_value int">2</span></div></td></tr><tr><td><span class="object_key str">total_tokens</span><span class="tooltip key-path">metadata.usage.total_tokens</span></td><td><div><span class="simple_value int">12</span></div></td></tr><tr><td><span class="object_key str">num_requests</span><span class="tooltip key-path">metadata.usage.num_requests</span></td><td><div><span class="simple_value int">1</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div><details class="pyglove user-message lf-message"><summary><div class="summary_name">source</div><div class="summary_title">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">What is in this image?<div class="modality-in-text"><details open class="pyglove custom-modality"><summary><div class="summary_name">image</div><div class="summary_title">CustomModality(...)</div></summary><div class="complex_value custom-modality"><table><tr><td><span class="object_key str">content</span><span class="tooltip key-path">source.metadata.image.content</span></td><td><div><span class="simple_value str">&#x27;foo&#x27;</span></div></td></tr></table></div></details></div>this is a test</div><div class="message-metadata"><details class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><table><tr><td><span class="object_key str">image</span><span class="tooltip key-path">source.metadata.image</span></td><td><div><details class="pyglove custom-modality"><summary><div class="summary_title">CustomModality(...)</div></summary><div class="complex_value custom-modality message-metadata"><table><tr><td><span class="object_key str">content</span><span class="tooltip key-path">source.metadata.image.content</span></td><td><div><span class="simple_value str">&#x27;foo&#x27;</span></div></td></tr></table></div></details></div></td></tr></table></div></details></div><details class="pyglove user-message lf-message"><summary><div class="summary_name">source</div><div class="summary_title">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"></div><div class="message-text">User input</div><div class="message-metadata"><details class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict message-metadata"><span class="empty_container"></span></div></details></div></div></details></div></details></div></details>
+        """
     )
 
 

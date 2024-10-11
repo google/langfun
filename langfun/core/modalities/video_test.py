@@ -38,7 +38,7 @@ class VideoContentTest(unittest.TestCase):
     video = video_lib.Video.from_bytes(mp4_bytes)
     self.assertEqual(video.mime_type, 'video/mp4')
     self.assertEqual(video.video_format, 'mp4')
-    self.assertIn('data:video/mp4;base64,', video._repr_html_())
+    self.assertIn('data:video/mp4;base64,', video._raw_html())
     self.assertEqual(video.to_bytes(), mp4_bytes)
 
   def test_bad_video(self):
@@ -56,7 +56,7 @@ class VideoFileTest(unittest.TestCase):
       self.assertEqual(video.video_format, 'mp4')
       self.assertEqual(video.mime_type, 'video/mp4')
       self.assertEqual(
-          video._repr_html_(),
+          video._raw_html(),
           '<video controls> <source src="http://mock/web/a.mp4"> </video>',
       )
       self.assertEqual(video.to_bytes(), mp4_bytes)

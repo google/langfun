@@ -53,7 +53,7 @@ class AudioFileTest(unittest.TestCase):
       self.assertEqual(audio.audio_format, 'x-wav')
       self.assertEqual(audio.mime_type, 'audio/x-wav')
       self.assertEqual(
-          audio._repr_html_(),
+          audio._raw_html(),
           '<audio controls> <source src="http://mock/web/a.wav"> </audio>',
       )
       self.assertEqual(audio.to_bytes(), content_bytes)

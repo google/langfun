@@ -189,6 +189,40 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
       return value
     return cls(parse_value_spec(value))
 
+  def _html_tree_view_content(
+      self,
+      *,
+      view: pg.views.HtmlTreeView,
+      root_path: pg.KeyPath,
+      **kwargs,
+  ):
+    return pg.Html.element(
+        'div',
+        [self.schema_str(protocol='python')],
+        css_class=['lf-schema-definition']
+    ).add_style(
+        """
+        .lf-schema-definition {
+            color: blue;
+            margin: 5px;
+            white-space: pre-wrap;
+        }
+        """
+    )
+
+  def _html_tree_view_tooltip(
+      self,
+      *,
+      view: pg.views.HtmlTreeView,
+      content: pg.Html | str | None = None,
+      **kwargs,
+  ):
+    return view.tooltip(
+        self,
+        content=content or pg.Html.escape(self.schema_str(protocol='python')),
+        **kwargs
+    )
+
 
 def _top_level_object_specs_from_value(value: pg.Symbolic) -> list[Type[Any]]:
   """Returns a list of top level value specs from a symbolic value."""
