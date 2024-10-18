@@ -41,8 +41,8 @@ class Matching(base.Evaluation):
     """Returns the answer from the structure output."""
 
   @property
-  def matches(self) -> list[tuple[Any, Any, lf.Message]]:
-    """Returns the matches examples, outputs and the output messages."""
+  def matches(self) -> list[tuple[int, Any, Any, lf.Message]]:
+    """Returns the matches IDs, examples, outputs and the output messages."""
     return self._matches
 
   @property
@@ -57,7 +57,7 @@ class Matching(base.Evaluation):
     return self.num_matches / self.num_completed
 
   @property
-  def mismatches(self) -> list[tuple[Any, Any, lf.Message]]:
+  def mismatches(self) -> list[tuple[int, Any, Any, lf.Message]]:
     """Returns the mismatches examples, outputs and output messages."""
     return self._mismatches
 
@@ -87,7 +87,8 @@ class Matching(base.Evaluation):
     self._mismatches = []
 
   def audit_processed(
-      self, example: Any, output: Any, message: lf.Message, dryrun: bool = False
+      self, example_idx: int, example: Any, output: Any, message: lf.Message,
+      dryrun: bool = False
   ) -> None:
     groundtruth = self.groundtruth(example)
     answer = self.answer(output, example)
@@ -107,9 +108,9 @@ class Matching(base.Evaluation):
       )
 
     if self.match(answer, groundtruth):
-      self._matches.append((example, output, message))
+      self._matches.append((example_idx, example, output, message))
     else:
-      self._mismatches.append((example, output, message))
+      self._mismatches.append((example_idx, example, output, message))
 
   def match(self, answer: Any, groundtruth: Any) -> bool:
     """Matches answer against the groundtruth. Subclasses can override."""
@@ -247,7 +248,7 @@ class Matching(base.Evaluation):
       # Fall back to the default format.
       return None
 
-    for i, (example, output, message) in enumerate(self.matches):
+    for i, (_, example, output, message) in enumerate(self.matches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
       input_str = lf.repr_utils.escape_quoted(
@@ -282,7 +283,7 @@ class Matching(base.Evaluation):
         '</tr>'
     )
 
-    for i, (example, output, message) in enumerate(self.mismatches):
+    for i, (_, example, output, message) in enumerate(self.mismatches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
       input_str = pg.format(example, verbose=False, max_bytes_len=32)

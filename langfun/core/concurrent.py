@@ -921,5 +921,11 @@ def _progress_control(
     raise ValueError(f'Unsupported progress bar type: {progress_bar}')
 
 
+def get_executor(
+    resource_id: str,
+    max_workers: int | None = None) -> concurrent.futures.ThreadPoolExecutor:
+  """Gets a thread pool executor associated with a resource id."""
+  return _executor_pool.get(resource_id, max_workers)
+
 # The global executor pool based on resource IDs.
 _executor_pool = ExecutorPool()

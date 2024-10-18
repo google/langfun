@@ -62,8 +62,10 @@ class Scoring(base.Evaluation):
     self._scored = []
 
   def audit_processed(
-      self, example: Any, output: Any, message: lf.Message, dryrun: bool = False
+      self, example_idx: int, example: Any, output: Any, message: lf.Message,
+      dryrun: bool = False
   ) -> None:
+    del example_idx
     score = self.score(example, output)
 
     if dryrun:

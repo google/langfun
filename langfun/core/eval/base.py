@@ -1087,7 +1087,7 @@ class Evaluation(Evaluable):
       )
       error = e
 
-    copy.audit(example, output_message, error, dryrun=True)
+    copy.audit(1, example, output_message, error, dryrun=True)
     result = copy.finalize()
 
     if verbose:
@@ -1124,19 +1124,20 @@ class Evaluation(Evaluable):
     with lf.use_settings(debug=debug, cache=self.cache):
       self._reset()
 
-      def _process(example: Any):
+      def _process(idx_and_example: Any):
         # NOTE(daiyip): set the `input` symbol of the globals to None, so LLM
         # generated code with calls to `input` will raise an error, thus not
         # blocking the evaluation.
+        _, example = idx_and_example
         with lf_coding.context(input=None):
           output_message = self.process(example, **(self.additional_args or {}))
           self.process_output(example, output_message)
           return output_message
 
       try:
-        for example, message, error in lf.concurrent_map(
+        for (idx, example), message, error in lf.concurrent_map(
             _process,
-            examples,
+            enumerate(examples),
             max_workers=self.max_workers,
             show_progress=progress_bar or False,
             status_fn=self._status,
@@ -1148,7 +1149,7 @@ class Evaluation(Evaluable):
                 if isinstance(error, lf_structured.MappingError)
                 else None
             )
-          self.audit(example, message, error)
+          self.audit(idx + 1, example, message, error)
       finally:
         # Save cache upon completion or interruption.
         if self.dir and self.cache:
@@ -1437,6 +1438,7 @@ class Evaluation(Evaluable):
 
   def audit(
       self,
+      example_idx: int,
       example: Any,
       message: lf.Message | None,
       error: Exception | None = None,
@@ -1445,6 +1447,7 @@ class Evaluation(Evaluable):
     """Audits the example against the output. Subclasses should override.
 
     Args:
+      example_idx: 1-based index of the example in its dataset.
       example: The input object.
       message: The entire message returned by the LM, which could be used to
         trace the LM input, response and parsed structure. If error is raised
@@ -1465,7 +1468,7 @@ class Evaluation(Evaluable):
     else:
       assert message is not None
       output = message.text if self.schema is None else message.result
-      self.audit_processed(example, output, message, dryrun=dryrun)
+      self.audit_processed(example_idx, example, output, message, dryrun=dryrun)
 
     # Audit usage.
     if message is not None:
@@ -1482,7 +1485,8 @@ class Evaluation(Evaluable):
         self._num_usages += 1
 
   def audit_processed(
-      self, example: Any, output: Any, message: lf.Message, dryrun: bool = False
+      self, example_idx: int, example: Any, output: Any, message: lf.Message,
+      dryrun: bool = False
   ) -> None:
     """Audits a successfully processed example. Subclass should override."""
 
