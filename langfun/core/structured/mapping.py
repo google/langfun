@@ -13,6 +13,7 @@
 # limitations under the License.
 """The base of symbolic mapping methods."""
 
+import functools
 import io
 from typing import Annotated, Any, Callable
 import langfun.core as lf
@@ -183,43 +184,59 @@ class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
       result.write(lf.colored(str(self.metadata), color='cyan'))
     return result.getvalue().strip()
 
-  def _html_tree_view_content(
-      self,
-      *,
-      parent: Any,
-      view: pg.views.HtmlTreeView,
-      root_path: pg.KeyPath,
-      **kwargs,
-  ):
-    def render_value(value, **kwargs):
+  @classmethod
+  @functools.cache
+  def _html_tree_view_config(cls) -> dict[str, Any]:
+
+    def render_value(view, *, value, **kwargs):
       if isinstance(value, lf.Template):
         # Make a shallow copy to make sure modalities are rooted by
         # the input.
         value = value.clone().render()
+      if value is None:
+        return None
       return view.render(value, **kwargs)
 
-    exclude_keys = []
-    if not self.context:
-      exclude_keys.append('context')
-    if not self.schema:
-      exclude_keys.append('schema')
-    if not self.metadata:
-      exclude_keys.append('metadata')
-
-    kwargs.pop('special_keys', None)
-    kwargs.pop('exclude_keys', None)
-    return view.complex_value(
-        self.sym_init_args,
-        parent=self,
-        root_path=root_path,
-        render_value_fn=render_value,
-        special_keys=['input', 'output', 'context', 'schema', 'metadata'],
-        exclude_keys=exclude_keys,
-        **kwargs
+    return pg.views.HtmlTreeView.get_kwargs(
+        super()._html_tree_view_config(),
+        dict(
+            include_keys=['input', 'output', 'context', 'schema', 'metadata'],
+            extra_flags=dict(
+                render_value_fn=render_value,
+            ),
+            child_config=dict(
+                input=dict(
+                    collapse_level=1,
+                ),
+                output=dict(
+                    css_classes=['lf-example-output'],
+                    collapse_level=1,
+                ),
+                schema=dict(
+                    css_classes=['lf-example-schema'],
+                    collapse_level=1,
+                ),
+                metadata=dict(
+                    css_classes=['lf-example-metadata'],
+                    collapse_level=1,
+                ),
+            ),
+        )
     )
 
-  def _html_tree_view_uncollapse_level(self) -> int:
-    return 2
+  @classmethod
+  @functools.cache
+  def _html_tree_view_css_styles(cls) -> list[str]:
+    return super()._html_tree_view_css_styles() + [
+        """
+        .lf-example-output {
+            color: dodgerblue;
+        }
+        .lf-example-schema {
+            color: blue;
+        }
+        """
+    ]
 
 
 class Mapping(lf.LangFunc):

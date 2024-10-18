@@ -14,8 +14,9 @@
 """Messages that are exchanged between users and agents."""
 
 import contextlib
+import functools
 import io
-from typing import Annotated, Any, Optional, Sequence, Union
+from typing import Annotated, Any, Optional, Union
 
 from langfun.core import modality
 from langfun.core import natural_language
@@ -506,53 +507,70 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     v = self.metadata[key]
     return v.value if isinstance(v, pg.Ref) else v
 
-  # pytype: disable=annotation-type-mismatch
   def _html_tree_view_content(
       self,
       *,
       view: pg.views.HtmlTreeView,
       root_path: pg.KeyPath,
-      source_tag: str | Sequence[str] | None = pg.View.PresetArgValue(
-          ('lm-input', 'lm-output')
-      ),
-      include_message_metadata: bool = pg.View.PresetArgValue(True),
-      collapse_modalities_in_text: bool = pg.View.PresetArgValue(True),
-      collapse_llm_usage: bool = pg.View.PresetArgValue(False),
-      collapse_message_result_level: int | None = pg.View.PresetArgValue(1),
-      collapse_message_metadata_level: int | None = pg.View.PresetArgValue(0),
-      collapse_source_message_level: int | None = pg.View.PresetArgValue(1),
-      collapse_level: int | None = pg.View.PresetArgValue(1),
+      collapse_level: int | None = None,
+      extra_flags: dict[str, Any] | None = None,
       **kwargs,
   ) -> pg.Html:
-  # pytype: enable=annotation-type-mismatch
     """Returns the HTML representation of the message.
 
     Args:
       view: The HTML tree view.
       root_path: The root path of the message.
-      source_tag: tags to filter source messages. If None, the entire
-        source chain will be included.
-      include_message_metadata: Whether to include the metadata of the message.
-      collapse_modalities_in_text: Whether to collapse the modalities in the
-        message text.
-      collapse_llm_usage: Whether to collapse the usage in the message.
-      collapse_message_result_level: The level to collapse the result in the
-        message.
-      collapse_message_metadata_level: The level to collapse the metadata in the
-        message.
-      collapse_source_message_level: The level to collapse the source in the
-        message.
       collapse_level: The global collapse level.
-      **kwargs: Other keyword arguments.
+      extra_flags: Extra flags to control the rendering.
+        - source_tag: tags to filter source messages. If None, the entire
+          source chain will be included.
+        - include_message_metadata: Whether to include the metadata of the
+          message.
+        - collapse_modalities_in_text: Whether to collapse the modalities in the
+          message text.
+        - collapse_llm_usage: Whether to collapse the usage in the message.
+        - collapse_message_result_level: The level to collapse the result in the
+          message.
+        - collapse_message_metadata_level: The level to collapse the metadata in
+          the message.
+        - collapse_source_message_level: The level to collapse the source in the
+          message.
+        - collapse_level: The global collapse level.
+      **kwargs: Omitted keyword arguments.
 
     Returns:
       The HTML representation of the message content.
     """
+    extra_flags = extra_flags if extra_flags is not None else {}
+
+    include_message_metadata: bool = extra_flags.get(
+        'include_message_metadata', True
+    )
+    source_tag: str | tuple[str, ...] | None = extra_flags.get(
+        'source_tag', ('lm-input', 'lm-output')
+    )
+    collapse_modalities_in_text: bool = extra_flags.get(
+        'collapse_modalities_in_text', True
+    )
+    collapse_llm_usage: bool = extra_flags.get(
+        'collapse_llm_usage', False
+    )
+    collapse_message_result_level: int | None = extra_flags.get(
+        'collapse_message_result_level', 1
+    )
+    collapse_message_metadata_level: int | None = extra_flags.get(
+        'collapse_message_metadata_level', 1
+    )
+    collapse_source_message_level: int | None = extra_flags.get(
+        'collapse_source_message_level', 1
+    )
+    passthrough_kwargs = view.get_passthrough_kwargs(**kwargs)
     def render_tags():
       return pg.Html.element(
           'div',
           [pg.Html.element('span', [tag]) for tag in self.tags],
-          css_class=['message-tags'],
+          css_classes=['message-tags'],
       )
 
     def render_message_text():
@@ -573,12 +591,16 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
                           chunk,
                           name=chunk.referred_name,
                           root_path=child_path,
-                          collapse_level=child_path.depth + (
+                          collapse_level=(
                               0 if collapse_modalities_in_text else 1
-                          )
+                          ),
+                          extra_flags=dict(
+                              display_modality_when_hover=True,
+                          ),
+                          **passthrough_kwargs,
                       )
                   ],
-                  css_class=['modality-in-text'],
+                  css_classes=['modality-in-text'],
               )
           )
           referred_chunks[chunk.referred_name] = chunk
@@ -596,14 +618,15 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
                   self.result,
                   name='result',
                   root_path=child_path,
-                  collapse_level=view.max_collapse_level(
-                      collapse_level,
+                  collapse_level=view.get_collapse_level(
+                      (collapse_level, -1),
                       collapse_message_result_level,
-                      child_path,
-                  )
+                  ),
+                  extra_flags=extra_flags,
+                  **passthrough_kwargs,
               )
           ],
-          css_class=['message-result'],
+          css_classes=['message-result'],
       )
 
     def render_usage():
@@ -616,15 +639,19 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
               view.render(
                   self.usage,
                   name='llm usage',
+                  key_style='label',
                   root_path=child_path,
-                  collapse_level=view.max_collapse_level(
-                      collapse_level,
+                  collapse_level=view.get_collapse_level(
+                      (collapse_level, -1),
                       0 if collapse_llm_usage else 1,
-                      child_path,
-                  )
+                  ),
+                  extra_flags=extra_flags,
+                  **view.get_passthrough_kwargs(
+                      remove=['key_style'], **kwargs
+                  ),
               )
           ],
-          css_class=['message-usage'],
+          css_classes=['message-usage'],
       )
 
     def render_source_message():
@@ -635,21 +662,22 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
         source = source.source
       if source is not None:
         child_path = root_path + 'source'
+        child_extra_flags = extra_flags.copy()
+        child_extra_flags['collapse_source_message_level'] = (
+            view.get_collapse_level(
+                (collapse_source_message_level, -1), 0,
+            )
+        )
         return view.render(
             self.source,
             name='source',
             root_path=child_path,
-            include_metadata=include_message_metadata,
-            collapse_level=view.max_collapse_level(
-                collapse_level,
+            collapse_level=view.get_collapse_level(
+                (collapse_level, -1),
                 collapse_source_message_level,
-                child_path
             ),
-            collapse_source_level=max(0, collapse_source_message_level - 1),
-            collapse_modalities=collapse_modalities_in_text,
-            collapse_usage=collapse_llm_usage,
-            collapse_metadata_level=collapse_message_metadata_level,
-            collapse_result_level=collapse_message_result_level,
+            extra_flags=child_extra_flags,
+            **passthrough_kwargs,
         )
       return None
 
@@ -662,17 +690,20 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
           [
               view.render(
                   self.metadata,
-                  css_class=['message-metadata'],
+                  css_classes=['message-metadata'],
+                  exclude_keys=['usage', 'result'],
                   name='metadata',
                   root_path=child_path,
-                  collapse_level=view.max_collapse_level(
-                      collapse_level,
+                  collapse_level=view.get_collapse_level(
+                      (collapse_level, -1),
                       collapse_message_metadata_level,
-                      child_path,
-                  )
+                  ),
+                  **view.get_passthrough_kwargs(
+                      remove=['exclude_keys'], **kwargs
+                  ),
               )
           ],
-          css_class=['message-metadata'],
+          css_classes=['message-metadata'],
       )
 
     return pg.Html.element(
@@ -685,18 +716,30 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
             render_metadata(),
             render_source_message(),
         ],
-        css_class=['complex_value'],
+        css_classes=['complex_value'],
     )
 
-  def _html_style(self) -> list[str]:
-    return super()._html_style() + [
+  @classmethod
+  @functools.cache
+  def _html_tree_view_config(cls) -> dict[str, Any]:
+    return pg.views.HtmlTreeView.get_kwargs(
+        super()._html_tree_view_config(),
+        dict(
+            css_classes=['lf-message'],
+        )
+    )
+
+  @classmethod
+  @functools.cache
+  def _html_tree_view_css_styles(cls) -> list[str]:
+    return super()._html_tree_view_css_styles() + [
         """
         /* Langfun Message styles.*/
         [class^="message-"] > details {
             margin: 0px 0px 5px 0px;
             border: 1px solid #EEE;
         }
-        details.lf-message > summary > .summary_title::after {
+        .lf-message.summary-title::after {
             content: ' 💬';
         }
         details.pyglove.ai-message {
@@ -739,21 +782,18 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
             margin: 0px 5px 0px 5px;
         }
         .message-result {
-            color: purple;
+            color: dodgerblue;
         }
         .message-usage {
             color: orange;
         }
-        .message-usage .object_key.str {
+        .message-usage .object-key.str {
             border: 1px solid orange;
             background-color: orange;
             color: white;
         }
         """
     ]
-
-  def _html_element_class(self) -> list[str]:
-    return super()._html_element_class() + ['lf-message']
 
 
 #

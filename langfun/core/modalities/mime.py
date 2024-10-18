@@ -15,7 +15,7 @@
 
 import base64
 import functools
-from typing import Annotated, Iterable, Type, Union
+from typing import Annotated, Any, Iterable, Type, Union
 import langfun.core as lf
 import pyglove as pg
 import requests
@@ -183,35 +183,47 @@ class Mime(lf.Modality):
       **kwargs) -> str:
     return self._raw_html()
 
-  def _html_tree_view_render(
+  def _html_tree_view(
       self,
       view: pg.views.HtmlTreeView,
-      raw_mime_content: bool = pg.View.PresetArgValue(False),                 # pytype: disable=annotation-type-mismatch
-      display_modality_when_hover: bool = pg.View.PresetArgValue(False),   # pytype: disable=annotation-type-mismatch
+      extra_flags: dict[str, Any] | None = None,
       **kwargs
   ):
+    extra_flags = extra_flags if extra_flags is not None else {}
+    raw_mime_content = extra_flags.get('raw_mime_content', False)
+    display_modality_when_hover = extra_flags.get(
+        'display_modality_when_hover', False
+    )
     if raw_mime_content:
-      return pg.Html(self._raw_html())
-    else:
-      if display_modality_when_hover:
-        kwargs.update(
-            display_modality_when_hover=True,
-            enable_summary_tooltip=True,
-        )
-      return super()._html_tree_view_render(view=view, **kwargs)
+      kwargs['enable_summary'] = False
+    elif display_modality_when_hover:
+      kwargs.update(
+          enable_summary=True,
+          enable_summary_tooltip=True,
+      )
+    return super()._html_tree_view(
+        view=view, extra_flags=extra_flags, **kwargs
+    )
 
-  def _html_tree_view_tooltip(
+  def _html_tree_view_summary(
       self,
       *,
       view: pg.views.HtmlTreeView,
-      content: pg.Html | str | None = None,
-      display_modality_when_hover: bool = pg.View.PresetArgValue(False),    # pytype: disable=annotation-type-mismatch
+      extra_flags: dict[str, Any] | None = None,
       **kwargs
   ):
-    if content is None and display_modality_when_hover:
-      content = self._raw_html()
-    return super()._html_tree_view_tooltip(
-        view=view, content=content, **kwargs
+    extra_flags = extra_flags or {}
+    if extra_flags.get('display_modality_when_hover', False):
+      def summary_tooltip(*args, content: str | None = None, **kwargs):
+        del content
+        return view.tooltip(*args, content=self._raw_html(), **kwargs)
+    else:
+      summary_tooltip = None
+    return super()._html_tree_view_summary(
+        view=view,
+        summary_tooltip_fn=summary_tooltip,
+        extra_flags=extra_flags,
+        **kwargs
     )
 
   def _raw_html(self) -> str:

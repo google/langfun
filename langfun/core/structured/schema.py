@@ -199,7 +199,7 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
     return pg.Html.element(
         'div',
         [self.schema_str(protocol='python')],
-        css_class=['lf-schema-definition']
+        css_classes=['lf-schema-definition']
     ).add_style(
         """
         .lf-schema-definition {

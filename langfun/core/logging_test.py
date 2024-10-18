@@ -69,20 +69,36 @@ class LoggingTest(unittest.TestCase):
             time=time, metadata={}
         ).to_html(enable_summary_tooltip=False),
         """
-        <details open class="pyglove log-entry log-info"><summary><div class="summary_title"><span class="log-time">12:30:45</span><span class="log-summary">5 + 2 &gt; 3</span></div></summary><div class="complex_value"></div></details>
+        <details open class="pyglove log-entry log-info"><summary><div class="summary-title log-info"><span class="log-time">12:30:45</span><span class="log-summary">5 + 2 &gt; 3</span></div></summary><div class="complex_value"></div></details>
         """
     )
     self.assert_html_content(
         logging.LogEntry(
             level='error', message='This is a longer message: 5 + 2 > 3',
-            time=time, metadata=dict(x=1, y=2)
+            time=time, metadata=dict(x=dict(z=1), y=2)
         ).to_html(
-            max_str_len_for_summary=10,
+            extra_flags=dict(
+                collapse_log_metadata_level=1,
+            ),
+            max_summary_len_for_str=10,
             enable_summary_tooltip=False,
-            collapse_log_metadata_level=1
         ),
         """
-        <details open class="pyglove log-entry log-error"><summary><div class="summary_title"><span class="log-time">12:30:45</span><span class="log-summary">This is a ...</span></div></summary><div class="complex_value"><span class="log-text">This is a longer message: 5 + 2 &gt; 3</span><div class="log-metadata"><details open class="pyglove dict"><summary><div class="summary_name">metadata</div><div class="summary_title">Dict(...)</div></summary><div class="complex_value dict"><table><tr><td><span class="object_key str">x</span><span class="tooltip key-path">metadata.x</span></td><td><div><span class="simple_value int">1</span></div></td></tr><tr><td><span class="object_key str">y</span><span class="tooltip key-path">metadata.y</span></td><td><div><span class="simple_value int">2</span></div></td></tr></table></div></details></div></div></details>
+        <details open class="pyglove log-entry log-error"><summary><div class="summary-title log-error"><span class="log-time">12:30:45</span><span class="log-summary">This is a ...</span></div></summary><div class="complex_value"><span class="log-text">This is a longer message: 5 + 2 &gt; 3</span><div class="log-metadata"><details open class="pyglove dict"><summary><div class="summary-name">metadata<span class="tooltip">metadata</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><details class="pyglove dict"><summary><div class="summary-name">x<span class="tooltip">metadata.x</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><details open class="pyglove int"><summary><div class="summary-name">z<span class="tooltip">metadata.x.z</span></div><div class="summary-title">int</div></summary><span class="simple-value int">1</span></details></div></details><details open class="pyglove int"><summary><div class="summary-name">y<span class="tooltip">metadata.y</span></div><div class="summary-title">int</div></summary><span class="simple-value int">2</span></details></div></details></div></div></details>
+        """
+    )
+    self.assert_html_content(
+        logging.LogEntry(
+            level='error', message='This is a longer message: 5 + 2 > 3',
+            time=time, metadata=dict(x=dict(z=1), y=2)
+        ).to_html(
+            extra_flags=dict(
+                max_summary_len_for_str=10,
+            ),
+            enable_summary_tooltip=False,
+        ),
+        """
+        <details open class="pyglove log-entry log-error"><summary><div class="summary-title log-error"><span class="log-time">12:30:45</span><span class="log-summary">This is a longer message: 5 + 2 &gt; 3</span></div></summary><div class="complex_value"><div class="log-metadata"><details open class="pyglove dict"><summary><div class="summary-name">metadata<span class="tooltip">metadata</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><details open class="pyglove dict"><summary><div class="summary-name">x<span class="tooltip">metadata.x</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><details open class="pyglove int"><summary><div class="summary-name">z<span class="tooltip">metadata.x.z</span></div><div class="summary-title">int</div></summary><span class="simple-value int">1</span></details></div></details><details open class="pyglove int"><summary><div class="summary-name">y<span class="tooltip">metadata.y</span></div><div class="summary-title">int</div></summary><span class="simple-value int">2</span></details></div></details></div></div></details>
         """
     )
 
