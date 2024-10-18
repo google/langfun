@@ -17,7 +17,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
-from typing import Annotated, Any, Callable, Iterator, Sequence, Set, Tuple, Type, Union
+from typing import Annotated, Any, Callable, Iterator, Set, Tuple, Type, Union
 
 import jinja2
 from jinja2 import meta as jinja2_meta
@@ -531,59 +531,48 @@ class Template(
       *,
       view: pg.views.HtmlTreeView,
       root_path: pg.KeyPath,
-      collapse_template_vars_level: int | None = pg.View.PresetArgValue(1),
-      collapse_level: int | None = pg.View.PresetArgValue(1),  # pytype: disable=annotation-type-mismatch
+      collapse_level: int | None = None,
+      extra_flags: dict[str, Any] | None = None,
+      debug: bool = False,
       **kwargs,
   ):
+    extra_flags = extra_flags if extra_flags is not None else {}
+    collapse_template_vars_level: int | None = extra_flags.get(
+        'collapse_template_vars_level', 1
+    )
+
     def render_template_str():
       return pg.Html.element(
           'div',
           [
               pg.Html.element('span', [self.template_str])
           ],
-          css_class=['template-str'],
+          css_classes=['template-str'],
       )
 
     def render_fields():
-      def render_value_fn(value, *, root_path, **kwargs):
-        if isinstance(value, component.ContextualAttribute):
-          inferred = self.sym_inferred(root_path.key, pg.MISSING_VALUE)
-          if inferred != pg.MISSING_VALUE:
-            return pg.Html.element(
-                'div',
-                [
-                    view.render(inferred, root_path=root_path, **kwargs)
-                ],
-                css_class=['inferred-value'],
-            )
-          else:
-            return pg.Html.element(
-                'span',
-                ['(external)'],
-                css_class=['contextual-variable'],
-            )
-        return view.render(
-            value, root_path=root_path, **kwargs
-        )
       return pg.Html.element(
           'fieldset',
           [
               pg.Html.element('legend', ['Template Variables']),
               view.complex_value(
-                  self.sym_init_args,
+                  {k: v for k, v in self.sym_items()},
                   name='fields',
                   root_path=root_path,
-                  render_value_fn=render_value_fn,
-                  exclude_keys=['template_str', 'clean'],
                   parent=self,
-                  collapse_level=view.max_collapse_level(
-                      collapse_level,
-                      collapse_template_vars_level,
-                      root_path
-                  ),
+                  exclude_keys=['template_str', 'clean'],
+                  collapse_level=max(
+                      collapse_template_vars_level, collapse_level
+                  ) if collapse_level is not None else None,
+                  extra_flags=extra_flags,
+                  debug=debug,
+                  **view.get_passthrough_kwargs(
+                      remove=['exclude_keys'],
+                      **kwargs,
+                  )
               ),
           ],
-          css_class=['template-fields'],
+          css_classes=['template-fields'],
       )
 
     return pg.Html.element(
@@ -592,11 +581,12 @@ class Template(
             render_template_str(),
             render_fields(),
         ],
-        css_class=['complex_value'],
+        css_classes=['complex_value'],
     )
 
-  def _html_style(self) -> list[str]:
-    return super()._html_style() + [
+  @classmethod
+  def _html_tree_view_css_styles(cls) -> list[str]:
+    return super()._html_tree_view_css_styles() + [
         """
         /* Langfun Template styles. */
         .template-str {
@@ -619,22 +609,19 @@ class Template(
             font-size: 0.8em;
             margin: 5px 0px 5px 0px;
         }
-        .inferred-value::after {
-            content: ' (inferred)';
-            color: gray;
-            font-style: italic;
-        }
-        .contextual-variable {
-            margin: 0px 0px 0px 5px;
-            font-style: italic;
-            color: gray;
-        }
         """
     ]
 
-  # Additional CSS class to add to the root <details> element.
-  def _html_element_class(self) -> Sequence[str] | None:
-    return super()._html_element_class() + ['lf-template']
+  @classmethod
+  @functools.cache
+  def _html_tree_view_config(cls) -> dict[str, Any]:
+    return pg.views.HtmlTreeView.get_kwargs(
+        super()._html_tree_view_config(),
+        dict(
+            css_classes=['lf-template'],
+        )
+    )
+
 
 # Register converter from str to LangFunc, therefore we can always
 # pass strs to attributes that accept LangFunc.

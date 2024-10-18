@@ -286,6 +286,54 @@ class ContextualAttribute(pg.symbolic.ValueFromParentChain):
     else:
       return pg.MISSING_VALUE
 
+  def _html_tree_view_content(
+      self,
+      *,
+      view: pg.views.HtmlTreeView,
+      parent: Any,
+      root_path: pg.KeyPath,
+      **kwargs,
+  ) -> pg.Html:
+    inferred_value = pg.MISSING_VALUE
+    if isinstance(parent, pg.Symbolic) and root_path:
+      inferred_value = parent.sym_inferred(root_path.key, pg.MISSING_VALUE)
+
+    if inferred_value is not pg.MISSING_VALUE:
+      kwargs.pop('name', None)
+      return view.render(
+          inferred_value, parent=self, root_path=root_path + '<inferred>',
+          **view.get_passthrough_kwargs(**kwargs)
+      )
+    return pg.Html.element(
+        'div',
+        [
+            '(not available)',
+        ],
+        css_classes=['unavailable-contextual'],
+    )
+
+  def _html_tree_view_config(self) -> dict[str, Any]:
+    return pg.views.HtmlTreeView.get_kwargs(
+        super()._html_tree_view_config(),
+        dict(
+            collapse_level=1,
+        )
+    )
+
+  @classmethod
+  def _html_tree_view_css_styles(cls) -> list[str]:
+    return super()._html_tree_view_css_styles() + [
+        """
+        .contextual-attribute {
+          color: purple;
+        }
+        .unavailable-contextual {
+          color: gray;
+          font-style: italic;
+        }
+        """
+    ]
+
 
 # NOTE(daiyip): Returning Any instead of `lf.ContextualAttribute` to avoid
 # pytype check error as `contextual()` can be assigned to any type.

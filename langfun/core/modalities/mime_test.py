@@ -92,14 +92,16 @@ class CustomMimeTest(unittest.TestCase):
             enable_key_tooltip=False,
         ),
         """
-        <details open class="pyglove custom"><summary><div class="summary_title">Custom(...)</div></summary><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></details>
+        <details open class="pyglove custom"><summary><div class="summary-title">Custom(...)</div></summary><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></details>
         """
     )
     self.assert_html_content(
         mime.Custom('text/plain', b'foo').to_html(
             enable_summary_tooltip=False,
             enable_key_tooltip=False,
-            raw_mime_content=True,
+            extra_flags=dict(
+                raw_mime_content=True,
+            )
         ),
         """
         <embed type="text/plain" src="data:text/plain;base64,Zm9v"/>
@@ -109,10 +111,12 @@ class CustomMimeTest(unittest.TestCase):
         mime.Custom('text/plain', b'foo').to_html(
             enable_summary_tooltip=False,
             enable_key_tooltip=False,
-            display_modality_when_hover=True,
+            extra_flags=dict(
+                display_modality_when_hover=True,
+            )
         ),
         """
-        <details open class="pyglove custom"><summary><div class="summary_title">Custom(...)</div><span class="tooltip custom"><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></span></summary><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></details>
+        <details open class="pyglove custom"><summary><div class="summary-title">Custom(...)</div><span class="tooltip"><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></span></summary><embed type="text/plain" src="data:text/plain;base64,Zm9v"/></details>
         """
     )
 

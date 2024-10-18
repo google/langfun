@@ -13,6 +13,8 @@
 # limitations under the License.
 """Contextual component and app test."""
 
+import inspect
+from typing import Any
 import unittest
 import weakref
 
@@ -296,6 +298,52 @@ class ContextualAttributeTest(unittest.TestCase):
     c.z = 3
     self.assertEqual(c.z, 3)
     self.assertEqual(b.z, 3)
+
+  def test_to_html(self):
+    class A(lf.Component):
+      x: int = 1
+      y: int = lf.contextual()
+
+    def assert_content(html, expected):
+      expected = inspect.cleandoc(expected).strip()
+      actual = html.content.strip()
+      if actual != expected:
+        print(actual)
+      self.assertEqual(actual.strip(), expected)
+
+    self.assertIn(
+        inspect.cleandoc(
+            """
+            .contextual-attribute {
+              color: purple;
+            }
+            .unavailable-contextual {
+              color: gray;
+              font-style: italic;
+            }
+            """
+        ),
+        A().to_html().style_section,
+    )
+
+    assert_content(
+        A().to_html(enable_summary_tooltip=False),
+        """
+        <details open class="pyglove a"><summary><div class="summary-title">A(...)</div></summary><div class="complex-value a"><details open class="pyglove int"><summary><div class="summary-name">x<span class="tooltip">x</span></div><div class="summary-title">int</div></summary><span class="simple-value int">1</span></details><details open class="pyglove contextual-attribute"><summary><div class="summary-name">y<span class="tooltip">y</span></div><div class="summary-title">ContextualAttribute(...)</div></summary><div class="unavailable-contextual">(not available)</div></details></div></details>
+        """
+    )
+
+    class B(lf.Component):
+      z: Any
+      y: int = 2
+
+    b = B(A())
+    assert_content(
+        b.z.to_html(enable_summary_tooltip=False),
+        """
+        <details open class="pyglove a"><summary><div class="summary-title">A(...)</div></summary><div class="complex-value a"><details open class="pyglove int"><summary><div class="summary-name">x<span class="tooltip">x</span></div><div class="summary-title">int</div></summary><span class="simple-value int">1</span></details><details open class="pyglove contextual-attribute"><summary><div class="summary-name">y<span class="tooltip">y</span></div><div class="summary-title">ContextualAttribute(...)</div></summary><span class="simple-value int">2</span></details></div></details>
+        """
+    )
 
 
 if __name__ == '__main__':

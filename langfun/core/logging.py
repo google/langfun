@@ -15,8 +15,9 @@
 
 import contextlib
 import datetime
+import functools
 import typing
-from typing import Any, Iterator, Literal, Sequence
+from typing import Any, Iterator, Literal
 
 from langfun.core import component
 from langfun.core import console
@@ -57,11 +58,11 @@ class LogEntry(pg.Object):
       self,
       view: pg.views.HtmlTreeView,
       title: str | pg.Html | None = None,
-      max_str_len_for_summary: int = pg.View.PresetArgValue(80),  # pytype: disable=annotation-type-mismatch
+      max_summary_len_for_str: int = 80,
       **kwargs
       ) -> str:
-    if len(self.message) > max_str_len_for_summary:
-      message = self.message[:max_str_len_for_summary] + '...'
+    if len(self.message) > max_summary_len_for_str:
+      message = self.message[:max_summary_len_for_str] + '...'
     else:
       message = self.message
 
@@ -69,18 +70,18 @@ class LogEntry(pg.Object):
         pg.Html.element(
             'span',
             [self.time.strftime('%H:%M:%S')],
-            css_class=['log-time']
+            css_classes=['log-time']
         ),
         pg.Html.element(
             'span',
             [pg.Html.escape(message)],
-            css_class=['log-summary'],
+            css_classes=['log-summary'],
         ),
     )
     return view.summary(
         self,
         title=title or s,
-        max_str_len_for_summary=max_str_len_for_summary,
+        max_summary_len_for_str=max_summary_len_for_str,
         **kwargs,
     )
 
@@ -89,43 +90,45 @@ class LogEntry(pg.Object):
       self,
       view: pg.views.HtmlTreeView,
       root_path: pg.KeyPath,
-      collapse_log_metadata_level: int | None = pg.View.PresetArgValue(0),
-      max_str_len_for_summary: int = pg.View.PresetArgValue(80),
-      collapse_level: int | None = pg.View.PresetArgValue(1),
+      max_summary_len_for_str: int = 80,
+      collapse_level: int | None = 1,
+      extra_flags: dict[str, Any] | None = None,
       **kwargs
   ) -> pg.Html:
     # pytype: enable=annotation-type-mismatch
+    extra_flags = extra_flags if extra_flags is not None else {}
+    collapse_log_metadata_level: int | None = extra_flags.get(
+        'collapse_log_metadata_level', None
+    )
     def render_message_text():
-      if len(self.message) < max_str_len_for_summary:
+      if len(self.message) < max_summary_len_for_str:
         return None
       return pg.Html.element(
           'span',
           [pg.Html.escape(self.message)],
-          css_class=['log-text'],
+          css_classes=['log-text'],
       )
 
     def render_metadata():
       if not self.metadata:
         return None
-      child_path = root_path + 'metadata'
       return pg.Html.element(
           'div',
           [
               view.render(
                   self.metadata,
                   name='metadata',
-                  root_path=child_path,
+                  root_path=root_path + 'metadata',
                   parent=self,
-                  collapse_level=(
-                      view.max_collapse_level(
-                          collapse_level,
-                          collapse_log_metadata_level,
-                          child_path
-                      )
-                  )
+                  collapse_level=view.get_collapse_level(
+                      (collapse_level, -1), collapse_log_metadata_level,
+                  ),
+                  max_summary_len_for_str=max_summary_len_for_str,
+                  extra_flags=extra_flags,
+                  **view.get_passthrough_kwargs(**kwargs),
               )
           ],
-          css_class=['log-metadata'],
+          css_classes=['log-metadata'],
       )
 
     return pg.Html.element(
@@ -134,12 +137,23 @@ class LogEntry(pg.Object):
             render_message_text(),
             render_metadata(),
         ],
-        css_class=['complex_value'],
+        css_classes=['complex_value'],
     )
 
-  def _html_style(self) -> list[str]:
-    return super()._html_style() + [
+  def _html_tree_view_config(self) -> dict[str, Any]:
+    return pg.views.HtmlTreeView.get_kwargs(
+        super()._html_tree_view_config(),
+        dict(
+            css_classes=[f'log-{self.level}'],
+        )
+    )
+
+  @classmethod
+  @functools.cache
+  def _html_tree_view_css_styles(cls) -> list[str]:
+    return super()._html_tree_view_css_styles() + [
         """
+        /* Langfun LogEntry styles. */
         .log-time {
           color: #222;
           font-size: 12px;
@@ -202,9 +216,6 @@ class LogEntry(pg.Object):
         }
         """
     ]
-
-  def _html_element_class(self) -> Sequence[str] | None:
-    return super()._html_element_class() + [f'log-{self.level}']
 
 
 def log(level: LogLevel,
