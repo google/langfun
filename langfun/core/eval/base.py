@@ -1684,10 +1684,23 @@ class Evaluation(Evaluable):
 
 
 @pg.functor()
-def inputs_from(path: str | list[str]) -> list[Any]:
+def inputs_from(path: str | list[str], **kwargs) -> list[Any]:
   """A functor that returns a list of user-defined objects as eval inputs."""
   if isinstance(path, str):
-    return pg.load(path)
+    if path.endswith('.json'):
+      return pg.load(path)
+    elif path.endswith('.csv'):
+      import pandas as pd  # pylint: disable=g-import-not-at-top
+      dataset_df = pd.read_csv(path, **kwargs)
+      dataset = []
+      for i in range(dataset_df.shape[0]):
+        row = {}
+        for col in dataset_df.columns:
+          row[col] = dataset_df.iloc[i][col]
+        dataset.append(row)
+      return dataset
+    else:
+      raise ValueError(f'Unsupported file format: {path}')
   examples = []
   for p in path:
     examples.extend(pg.load(p))
