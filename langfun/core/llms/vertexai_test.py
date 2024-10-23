@@ -209,6 +209,7 @@ class VertexAITest(unittest.TestCase):
                 'properties': {
                     'name': {'type_': 'STRING'}
                 },
+                'property_ordering': ['name'],
                 'required': ['name'],
                 'title': 'Person',
             }
