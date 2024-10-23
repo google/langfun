@@ -195,8 +195,12 @@ class VertexAITest(unittest.TestCase):
             stop=['\n'],
         ),
     )
+    actual = config.to_dict()
+    # There is a discrepancy between the `property_ordering` in the
+    # Google-internal version and the open-source version.
+    actual['response_schema'].pop('property_ordering', None)
     self.assertEqual(
-        config.to_dict(),
+        actual,
         dict(
             temperature=2.0,
             top_p=1.0,
@@ -209,7 +213,6 @@ class VertexAITest(unittest.TestCase):
                 'properties': {
                     'name': {'type_': 'STRING'}
                 },
-                'property_ordering': ['name'],
                 'required': ['name'],
                 'title': 'Person',
             }
