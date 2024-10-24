@@ -30,6 +30,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     #     as RPM/TPM of the largest-available model (Claude-3-Opus).
     # Price in US dollars at https://www.anthropic.com/pricing
     # as of 2024-10-10.
+    'claude-3-5-sonnet-20241022': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.015,
+    ),
     'claude-3-5-sonnet-20240620': pg.Dict(
         max_tokens=4096,
         rpm=4000,
@@ -263,6 +270,17 @@ class Claude3(Anthropic):
 
 
 class Claude35Sonnet(Claude3):
+  """A balance between between Opus and Haiku."""
+  model = 'claude-3-5-sonnet-20241022'
+
+
+class Claude35Sonnet20241022(Claude3):
+  """A balance between between Opus and Haiku."""
+
+  model = 'claude-3-5-sonnet-20241022'
+
+
+class Claude35Sonnet20240620(Claude3):
   """A balance between between Opus and Haiku."""
 
   model = 'claude-3-5-sonnet-20240620'
