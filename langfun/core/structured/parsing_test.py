@@ -670,6 +670,24 @@ class CallTest(unittest.TestCase):
         3,
     )
 
+  def test_call_with_parsing_message_chaining(self):
+    output = parsing.call(
+        'Compute 1 + 2',
+        int,
+        lm=fake.StaticSequence(['three']),
+        parsing_lm=fake.StaticSequence(['3']),
+        parsing_examples=[
+            mapping.MappingExample(
+                context='Multiple four and five',
+                input='twenty',
+                schema=int,
+                output=20,
+            )
+        ],
+        returns_message=True,
+    )
+    self.assertEqual(output.root.text, 'Compute 1 + 2')
+
   def test_call_with_autofix(self):
     lm = fake.StaticSequence(
         [

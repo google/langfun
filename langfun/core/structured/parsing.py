@@ -271,8 +271,8 @@ def call(
     return lm_output if returns_message else lm_output.text
 
   # Call `parsing_lm` for structured parsing.
-  return prompting.query(
-      lm_output,
+  parsing_message = prompting.query(
+      lm_output.text,
       schema,
       examples=parsing_examples,
       lm=parsing_lm or lm,
@@ -281,9 +281,12 @@ def call(
       autofix=autofix,
       autofix_lm=autofix_lm or lm,
       protocol=protocol,
-      returns_message=returns_message,
+      returns_message=True,
       **kwargs,
   )
+  # Chain the source of the parsed output to the LM output.
+  parsing_message.root.source = lm_output
+  return parsing_message if returns_message else parsing_message.result
 
 
 def _parse_structure_cls(
