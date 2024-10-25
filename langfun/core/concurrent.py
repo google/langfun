@@ -118,6 +118,7 @@ def with_retry(
     max_attempts: int,
     retry_interval: int | tuple[int, int] = (5, 60),
     exponential_backoff: bool = True,
+    max_retry_interval: int = 300,
     seed: int | None = None,
 ) -> Callable[..., Any]:
   """Derives a user function with retry on error.
@@ -133,6 +134,9 @@ def with_retry(
       of the tuple.
     exponential_backoff: If True, exponential wait time will be applied on top
       of the base retry interval.
+    max_retry_interval: The max retry interval in seconds. This is useful when
+      the retry interval is exponential, to avoid the wait time to grow
+      exponentially.
     seed: Random seed to generate retry interval. If None, the seed will be
       determined based on current time.
 
@@ -153,7 +157,7 @@ def with_retry(
     def next_wait_interval(attempt: int) -> float:
       if not exponential_backoff:
         attempt = 1
-      return base_interval() * (2 ** (attempt - 1))
+      return min(max_retry_interval, base_interval() * (2 ** (attempt - 1)))
 
     wait_intervals = []
     errors = []
@@ -193,6 +197,7 @@ def concurrent_execute(
     max_attempts: int = 5,
     retry_interval: int | tuple[int, int] = (5, 60),
     exponential_backoff: bool = True,
+    max_retry_interval: int = 300,
 ) -> list[Any]:
   """Executes a function concurrently under current component context.
 
@@ -213,6 +218,9 @@ def concurrent_execute(
       of the tuple.
     exponential_backoff: If True, exponential wait time will be applied on top
       of the base retry interval.
+    max_retry_interval: The max retry interval in seconds. This is useful when
+      the retry interval is exponential, to avoid the wait time to grow
+      exponentially.
 
   Returns:
     A list of ouputs. Each is the return value of `func` based on the input
@@ -225,6 +233,7 @@ def concurrent_execute(
         max_attempts=max_attempts,
         retry_interval=retry_interval,
         exponential_backoff=exponential_backoff,
+        max_retry_interval=max_retry_interval,
     )
 
   # NOTE(daiyip): when executor is not specified and max_worker is 1,

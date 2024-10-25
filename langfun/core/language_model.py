@@ -409,6 +409,15 @@ class LanguageModel(component.Component):
       )
   ] = True
 
+  max_retry_interval: Annotated[
+      int,
+      (
+          'The max retry interval in seconds. This is useful when the retry '
+          'interval is exponential, to avoid the wait time to grow '
+          'exponentially.'
+      )
+  ] = 300
+
   debug: Annotated[
       bool | LMDebugMode,
       (
@@ -587,6 +596,7 @@ class LanguageModel(component.Component):
         max_attempts=self.max_attempts,
         retry_interval=self.retry_interval,
         exponential_backoff=self.exponential_backoff,
+        max_retry_interval=self.max_retry_interval,
     )
 
   def __call__(

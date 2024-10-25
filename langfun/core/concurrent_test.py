@@ -138,9 +138,18 @@ class WithRetryTest(unittest.TestCase):
       raise ValueError('Intentional error.')
 
     foo_with_retry = concurrent.with_retry(
-        foo, ValueError, max_attempts=4, retry_interval=1
+        foo, ValueError, max_attempts=4, retry_interval=1,
     )
     self.assert_retry(foo_with_retry, 4, [1, 2, 4])
+
+  def test_retry_with_max_retry_interval(self):
+    def foo():
+      raise ValueError('Intentional error.')
+
+    foo_with_retry = concurrent.with_retry(
+        foo, ValueError, max_attempts=4, retry_interval=1, max_retry_interval=3,
+    )
+    self.assert_retry(foo_with_retry, 4, [1, 2, 3])
 
   def test_retry_with_uncaught_exception(self):
     def foo():
