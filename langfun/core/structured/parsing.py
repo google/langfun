@@ -286,6 +286,8 @@ def call(
   )
   # Chain the source of the parsed output to the LM output.
   parsing_message.root.source = lm_output
+  parsing_message.tag('parsing-lm-output')
+  parsing_message.lm_input.tag('parsing-lm-input')
   return parsing_message if returns_message else parsing_message.result
 
 
