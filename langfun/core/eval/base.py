@@ -531,19 +531,14 @@ class Evaluable(lf.Component):
     self._render_message(self.dryrun_output, s)
 
   def _render_message(self, message: lf.Message, s: io.StringIO) -> None:
-    for m in message.trace():
-      if 'lm-input' in m.tags:
-        color = 'green'
-      elif 'lm-response' in m.tags:
-        color = 'blue'
-      else:
-        continue
-
-      s.write(
-          f'<div style="color: {color}; border: 1px solid; margin-top: 10px">'
-      )
-      s.write(m._repr_html_())    # pylint: disable=protected-access
-      s.write('</div>')
+    s.write(
+        message.to_html_str(
+            extra_flags=dict(
+                include_message_metadata=False,
+                source_tag=['lm-input', 'lm-response'],
+            )
+        )
+    )
 
   @classmethod
   def from_dir(
