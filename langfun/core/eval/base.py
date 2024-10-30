@@ -1684,6 +1684,8 @@ def inputs_from(path: str | list[str], **kwargs) -> list[Any]:
   if isinstance(path, str):
     if path.endswith('.json'):
       return pg.load(path)
+    elif path.endswith('.jsonl'):
+      return list(iter(pg.open_jsonl(path)))
     elif path.endswith('.csv'):
       import pandas as pd  # pylint: disable=g-import-not-at-top
       dataset_df = pd.read_csv(path, **kwargs)

@@ -599,6 +599,14 @@ class InputsFrom(unittest.TestCase):
     pg.save([1, 2, 3], path)
     self.assertEqual(base.inputs_from(path)(), [1, 2, 3])
 
+    path = os.path.join(tmp_dir, 'input_file.jsonl')
+    with pg.open_jsonl(path, 'w') as f:
+      f.add(pg.Dict(x=1))
+      f.add(dict(y=2))
+    self.assertEqual(
+        base.inputs_from(path)(), [pg.Dict(x=1), dict(y=2)]
+    )
+
   def test_inputs_from_multiple_files(self):
     tmp_dir = tempfile.gettempdir()
     path1 = os.path.join(tmp_dir, 'input_file1.json')
