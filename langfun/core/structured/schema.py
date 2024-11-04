@@ -110,7 +110,11 @@ class SchemaError(Exception):   # pylint: disable=g-bad-exception-name
     return r.getvalue()
 
 
-class Schema(lf.NaturalLanguageFormattable, pg.Object):
+class Schema(
+    lf.NaturalLanguageFormattable,
+    pg.Object,
+    pg.views.HtmlTreeView.Extension
+):
   """Base class for structured data schema."""
 
   spec: pg.typing.Annotated[
@@ -193,7 +197,6 @@ class Schema(lf.NaturalLanguageFormattable, pg.Object):
       self,
       *,
       view: pg.views.HtmlTreeView,
-      root_path: pg.KeyPath,
       **kwargs,
   ):
     return pg.Html.element(

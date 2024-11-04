@@ -43,7 +43,7 @@ def get_log_level() -> LogLevel:
   return component.context_value('__event_log_level__', 'info')
 
 
-class LogEntry(pg.Object):
+class LogEntry(pg.Object, pg.views.HtmlTreeView.Extension):
   """Event log entry."""
   time: datetime.datetime
   level: LogLevel
@@ -60,7 +60,7 @@ class LogEntry(pg.Object):
       title: str | pg.Html | None = None,
       max_summary_len_for_str: int = 80,
       **kwargs
-      ) -> str:
+  ) -> pg.Html | None:
     if len(self.message) > max_summary_len_for_str:
       message = self.message[:max_summary_len_for_str] + '...'
     else:
@@ -89,7 +89,7 @@ class LogEntry(pg.Object):
   def _html_tree_view_content(
       self,
       view: pg.views.HtmlTreeView,
-      root_path: pg.KeyPath,
+      root_path: pg.KeyPath | None = None,
       max_summary_len_for_str: int = 80,
       collapse_level: int | None = 1,
       extra_flags: dict[str, Any] | None = None,
@@ -118,7 +118,7 @@ class LogEntry(pg.Object):
               view.render(
                   self.metadata,
                   name='metadata',
-                  root_path=root_path + 'metadata',
+                  root_path=pg.KeyPath('metadata', root_path),
                   parent=self,
                   collapse_level=view.get_collapse_level(
                       (collapse_level, -1), collapse_log_metadata_level,

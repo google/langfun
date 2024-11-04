@@ -253,7 +253,9 @@ def _get_scoped_value(
   return scoped_values.get(var_name, default)
 
 
-class ContextualAttribute(pg.symbolic.ValueFromParentChain):
+class ContextualAttribute(
+    pg.symbolic.ValueFromParentChain, pg.views.HtmlTreeView.Extension
+):
   """Attributes whose values are inferred from the context of the component.
 
   Please see go/langfun-component#attribute-value-retrieval for details.
@@ -290,8 +292,8 @@ class ContextualAttribute(pg.symbolic.ValueFromParentChain):
       self,
       *,
       view: pg.views.HtmlTreeView,
-      parent: Any,
-      root_path: pg.KeyPath,
+      parent: Any = None,
+      root_path: pg.KeyPath | None = None,
       **kwargs,
   ) -> pg.Html:
     inferred_value = pg.MISSING_VALUE
@@ -301,7 +303,8 @@ class ContextualAttribute(pg.symbolic.ValueFromParentChain):
     if inferred_value is not pg.MISSING_VALUE:
       kwargs.pop('name', None)
       return view.render(
-          inferred_value, parent=self, root_path=root_path + '<inferred>',
+          inferred_value, parent=self,
+          root_path=pg.KeyPath('<inferred>', root_path),
           **view.get_passthrough_kwargs(**kwargs)
       )
     return pg.Html.element(

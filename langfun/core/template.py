@@ -47,6 +47,7 @@ class Template(
     natural_language.NaturalLanguageFormattable,
     component.Component,
     pg.typing.CustomTyping,
+    pg.views.HtmlTreeView.Extension
 ):
   """Langfun string template.
 
@@ -530,7 +531,7 @@ class Template(
       self,
       *,
       view: pg.views.HtmlTreeView,
-      root_path: pg.KeyPath,
+      root_path: pg.KeyPath | None = None,
       collapse_level: int | None = None,
       extra_flags: dict[str, Any] | None = None,
       debug: bool = False,

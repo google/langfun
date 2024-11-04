@@ -59,7 +59,9 @@ class MappingError(Exception):  # pylint: disable=g-bad-exception-name
 
 
 @pg.use_init_args(['input', 'output', 'schema', 'context'])
-class MappingExample(lf.NaturalLanguageFormattable, lf.Component):
+class MappingExample(lf.NaturalLanguageFormattable,
+                     lf.Component,
+                     pg.views.HtmlTreeView.Extension):
   """Mapping example between text, schema and structured value."""
 
   input: pg.typing.Annotated[

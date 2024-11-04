@@ -23,7 +23,11 @@ from langfun.core import natural_language
 import pyglove as pg
 
 
-class Message(natural_language.NaturalLanguageFormattable, pg.Object):
+class Message(
+    natural_language.NaturalLanguageFormattable,
+    pg.Object,
+    pg.views.HtmlTreeView.Extension
+):
   """Message.
 
   ``Message`` is the protocol for users and the system to interact with
@@ -511,7 +515,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
       self,
       *,
       view: pg.views.HtmlTreeView,
-      root_path: pg.KeyPath,
+      root_path: pg.KeyPath | None = None,
       collapse_level: int | None = None,
       extra_flags: dict[str, Any] | None = None,
       **kwargs,
@@ -582,7 +586,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
           s.write(s.escape(chunk))
         else:
           assert isinstance(chunk, modality.Modality), chunk
-          child_path = root_path + 'metadata' + chunk.referred_name
+          child_path = pg.KeyPath(['metadata', chunk.referred_name], root_path)
           s.write(
               pg.Html.element(
                   'div',
@@ -610,7 +614,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     def render_result():
       if 'result' not in self.metadata:
         return None
-      child_path = root_path + 'metadata' + 'result'
+      child_path = pg.KeyPath(['metadata', 'result'], root_path)
       return pg.Html.element(
           'div',
           [
@@ -632,7 +636,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     def render_usage():
       if 'usage' not in self.metadata:
         return None
-      child_path = root_path + 'metadata' + 'usage'
+      child_path = pg.KeyPath(['metadata', 'usage'], root_path)
       return pg.Html.element(
           'div',
           [
@@ -661,7 +665,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
              and not source.has_tag(source_tag)):
         source = source.source
       if source is not None:
-        child_path = root_path + 'source'
+        child_path = pg.KeyPath('source', root_path)
         child_extra_flags = extra_flags.copy()
         child_extra_flags['collapse_source_message_level'] = (
             view.get_collapse_level(
@@ -684,7 +688,7 @@ class Message(natural_language.NaturalLanguageFormattable, pg.Object):
     def render_metadata():
       if not include_message_metadata:
         return None
-      child_path = root_path + 'metadata'
+      child_path = pg.KeyPath('metadata', root_path)
       return pg.Html.element(
           'div',
           [

@@ -31,7 +31,7 @@ def format_modality_as_ref(enabled: bool = True) -> ContextManager[None]:
   )
 
 
-class Modality(component.Component):
+class Modality(component.Component, pg.views.HtmlTreeView.Extension):
   """Base class for multimodal object."""
 
   REF_START = '<<[['
