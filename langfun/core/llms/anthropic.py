@@ -141,6 +141,8 @@ class Anthropic(rest.REST):
         'x-api-key': self._api_key,
         'anthropic-version': self.api_version,
         'content-type': 'application/json',
+        # TODO(yifenglu): Remove beta flag once the feature is fully supported.
+        'anthropic-beta': 'pdfs-2024-09-25',
     }
 
   @property
@@ -223,9 +225,17 @@ class Anthropic(rest.REST):
         if isinstance(chunk, str):
           item = dict(type='text', text=chunk)
         elif isinstance(chunk, lf_modalities.Image):
-          # NOTE(daiyip): Anthropic only support image content instead of URL.
           item = dict(
               type='image',
+              source=dict(
+                  type='base64',
+                  media_type=chunk.mime_type,
+                  data=base64.b64encode(chunk.to_bytes()).decode(),
+              ),
+          )
+        elif isinstance(chunk, lf_modalities.PDF):
+          item = dict(
+              type='document',
               source=dict(
                   type='base64',
                   media_type=chunk.mime_type,
