@@ -38,6 +38,11 @@ class Conversation(Completion):
       '(Optional) Preamble before beginning the conversation.',
   ] = None
 
+  role: Annotated[
+      str | None,
+      '(Optional) User defined role for the AI response in the conversation.',
+  ] = None
+
   conversation_context: Annotated[
       lf.LangFunc | None,
       (
@@ -71,6 +76,10 @@ class Conversation(Completion):
     with lf.context(**kwargs):
       # Call LM based on the prompt generated from `input_message`.
       lm_response = super().__call__()
+      if self.role is not None:
+        lm_response.rebind(
+            sender=self.role, skip_notification=True, raise_on_no_change=False
+        )
 
       # Add current turn to memory.
       self.add(self.input_message, lm_response)

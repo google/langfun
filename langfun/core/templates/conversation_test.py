@@ -83,6 +83,7 @@ class ConversationTest(unittest.TestCase):
   def test_call(self):
     c = Conversation(
         lm=QuestionCounter(),
+        role='Agent',
         preamble="You are a helpful and joyful AI bot. Now let's chat.",
     )
     # First round.
@@ -102,7 +103,7 @@ class ConversationTest(unittest.TestCase):
         inspect.cleandoc("""
         You are a helpful and joyful AI bot. Now let's chat.
         User: Hello
-        AI: Response 1.
+        Agent: Response 1.
         User: How are you?
         """),
     )
@@ -114,9 +115,9 @@ class ConversationTest(unittest.TestCase):
         inspect.cleandoc("""
         You are a helpful and joyful AI bot. Now let's chat.
         User: Hello
-        AI: Response 1.
+        Agent: Response 1.
         User: How are you?
-        AI: Response 2.
+        Agent: Response 2.
         User: Okay, bye.
         """),
     )
