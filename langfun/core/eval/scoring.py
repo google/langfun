@@ -85,12 +85,12 @@ class Scoring(base.Evaluation):
     del progress
     return {
         'Average Score': {self.avg_score},
-        'Scored': '%.2f%% (%d/%d)' % (
+        'Scored': '%.3f%% (%d/%d)' % (
             self.score_rate * 100,
             self.num_scored,
             self.num_completed,
         ),
-        'Failed': '%.2f%% (%d/%d)' % (
+        'Failed': '%.3f%% (%d/%d)' % (
             self.failure_rate * 100,
             self.num_failures,
             self.num_completed,
@@ -101,8 +101,8 @@ class Scoring(base.Evaluation):
     assert self.result is not None
     m = self.result.metrics
     return (
-        'COMPLETED(%s): AvgScore=%f Scored=%.2f%% (%d/%d) '
-        'Failures=%.2f%% (%d/%d)'
+        'COMPLETED(%s): AvgScore=%f Scored=%.3f%% (%d/%d) '
+        'Failures=%.3f%% (%d/%d)'
     ) % (
         run_status,
         m.avg_score,
@@ -155,12 +155,12 @@ class Scoring(base.Evaluation):
   def _render_result_row(self, s: io.StringIO):
     super()._render_result_row(s)
     s.write(
-        '<td><span style="color:blue">%.2f</span></td>' % self.avg_score
+        '<td><span style="color:blue">%.3f</span></td>' % self.avg_score
     )
     s.write(
         '<td><span style="color:red">%s</span>%s</td>'
         % (
-            '%.2f%% ' % (self.score_rate * 100),
+            '%.3f%% ' % (self.score_rate * 100),
             '<a href="%s">(%d/%d)</a>'
             % (self.scored_link, self.num_scored, self.num_completed),
         )
@@ -173,7 +173,7 @@ class Scoring(base.Evaluation):
     self._render_link(
         s,
         'Average score (%d/%d)' % (m.num_scored, m.total),
-        '%.2f (%.2f%%)' % (m.avg_score, m.score_rate * 100),
+        '%.3f (%.3f%%)' % (m.avg_score, m.score_rate * 100),
         'color:green',
         lambda: self.scored_link,
     )
