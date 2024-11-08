@@ -98,6 +98,7 @@ class REST(lf.LanguageModel):
         500,  # Server side issue (might be bug).
         502,  # Bad gateway (upstream issue, might retry).
         503,  # Servers currently under load, retry after a brief wait.
+        529,  # Overloaded, retry after a brief wait.
     ):
       error_cls = lf.TemporaryLMError
     else:
