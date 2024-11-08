@@ -14,6 +14,7 @@
 """Language models from Anthropic."""
 
 import base64
+import functools
 import os
 from typing import Annotated, Any, Literal
 
@@ -21,6 +22,20 @@ import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 from langfun.core.llms import rest
 import pyglove as pg
+
+
+try:
+  # pylint: disable=g-import-not-at-top
+  from google import auth as google_auth
+  from google.auth import credentials as credentials_lib
+  from google.auth.transport import requests as auth_requests
+  Credentials = credentials_lib.Credentials
+  # pylint: enable=g-import-not-at-top
+except ImportError:
+  google_auth = None
+  auth_requests = None
+  credentials_lib = None
+  Credentials = None  # pylint: disable=invalid-name
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
@@ -360,15 +375,6 @@ class ClaudeInstant(Anthropic):
 class VertexAIAnthropic(Anthropic):
   """Anthropic models on VertexAI."""
 
-  access_token: Annotated[
-      str | None,
-      (
-          'Google Cloud access token. If None, it will be read from '
-          'environment variable \'GCP_ACCESS_TOKEN\'. '
-          'Get it by running `gcloud auth print-access-token`.'
-      )
-  ] = None
-
   project: Annotated[
       str | None,
       'Google Cloud project ID.',
@@ -379,12 +385,24 @@ class VertexAIAnthropic(Anthropic):
       'GCP location with Anthropic models hosted.'
   ] = 'us-east5'
 
+  credentials: Annotated[
+      Credentials | None,    # pytype: disable=invalid-annotation
+      (
+          'Credentials to use. If None, the default credentials '
+          'to the environment will be used.'
+      ),
+  ] = None
+
   api_version = 'vertex-2023-10-16'
 
   def _on_bound(self):
     super()._on_bound()
+    if google_auth is None:
+      raise ValueError(
+          'Please install "langfun[llm-google-vertex]" to use Vertex AI models.'
+      )
     self._project = None
-    self._access_token = None
+    self._credentials = None
 
   def _initialize(self):
     project = self.project or os.environ.get('VERTEXAI_PROJECT', None)
@@ -394,22 +412,26 @@ class VertexAIAnthropic(Anthropic):
           'variable `VERTEXAI_PROJECT` with your Vertex AI project ID.'
       )
     self._project = project
-
-    access_token = self.access_token or os.environ.get(
-        'GCP_ACCESS_TOKEN', None
-    )
-    if not access_token:
-      raise ValueError(
-          'Please specify `access_token` during `__init__` or set environment '
-          'variable `GCP_ACCESS_TOKEN` with the output of '
-          '`gcloud auth print-access-token`.'
+    credentials = self.credentials
+    if credentials is None:
+      # Use default credentials.
+      credentials = google_auth.default(
+          scopes=['https://www.googleapis.com/auth/cloud-platform']
       )
-    self._access_token = access_token
+    self._credentials = credentials
+
+  @functools.cached_property
+  def _session(self):
+    assert self._api_initialized
+    assert self._credentials is not None
+    assert auth_requests is not None
+    s = auth_requests.AuthorizedSession(self._credentials)
+    s.headers.update(self.headers or {})
+    return s
 
   @property
   def headers(self):
     return {
-        'Authorization': f'Bearer {self._access_token}',
         'Content-Type': 'application/json; charset=utf-8',
     }
 

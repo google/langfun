@@ -18,6 +18,8 @@ import os
 from typing import Any
 import unittest
 from unittest import mock
+
+from google.auth import exceptions
 from langfun.core import language_model
 from langfun.core import message as lf_message
 from langfun.core import modalities as lf_modalities
@@ -192,14 +194,16 @@ class VertexAIAnthropicTest(unittest.TestCase):
       lm = anthropic.VertexAIClaude3_5_Sonnet_20241022()
       lm('hi')
 
-    with self.assertRaisesRegex(ValueError, 'Please specify `access_token`'):
-      lm = anthropic.VertexAIClaude3_5_Sonnet_20241022(project='langfun')
-      lm('hi')
+    model = anthropic.VertexAIClaude3_5_Sonnet_20241022(project='langfun')
 
-    model = anthropic.VertexAIClaude3_5_Sonnet_20241022(
-        project='langfun', access_token='my_token'
-    )
-    model._initialize()
+    # NOTE(daiyip): For OSS users, default credentials are not available unless
+    # users have already set up their GCP project. Therefore we ignore the
+    # exception here.
+    try:
+      model._initialize()
+    except exceptions.DefaultCredentialsError:
+      pass
+
     self.assertEqual(
         model.api_endpoint,
         (
@@ -207,13 +211,6 @@ class VertexAIAnthropicTest(unittest.TestCase):
             'langfun/locations/us-east5/publishers/anthropic/'
             'models/claude-3-5-sonnet-v2@20241022:streamRawPredict'
         )
-    )
-    self.assertEqual(
-        model.headers,
-        {
-            'Authorization': 'Bearer my_token',
-            'Content-Type': 'application/json; charset=utf-8',
-        }
     )
     request = model.request(
         lf_message.UserMessage('hi'),
