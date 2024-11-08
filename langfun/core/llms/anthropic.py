@@ -15,7 +15,7 @@
 
 import base64
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
@@ -30,19 +30,42 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     #     as RPM/TPM of the largest-available model (Claude-3-Opus).
     # Price in US dollars at https://www.anthropic.com/pricing
     # as of 2024-10-10.
+    # Anthropic models hosted on VertexAI.
+    'claude-3-5-sonnet-v2@20241022': pg.Dict(
+        max_tokens=8192,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.015,
+    ),
+    'claude-3-5-haiku@20241022': pg.Dict(
+        max_tokens=8192,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.001,
+        cost_per_1k_output_tokens=0.005,
+    ),
+    # Anthropic hosted models.
     'claude-3-5-sonnet-20241022': pg.Dict(
-        max_tokens=4096,
+        max_tokens=8192,
         rpm=4000,
         tpm=400000,
         cost_per_1k_input_tokens=0.003,
         cost_per_1k_output_tokens=0.015,
     ),
     'claude-3-5-sonnet-20240620': pg.Dict(
-        max_tokens=4096,
+        max_tokens=8192,
         rpm=4000,
         tpm=400000,
         cost_per_1k_input_tokens=0.003,
         cost_per_1k_output_tokens=0.015,
+    ),
+    'claude-3-5-haiku-20241022': pg.Dict(
+        max_tokens=8192,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.001,
+        cost_per_1k_output_tokens=0.005,
     ),
     'claude-3-opus-20240229': pg.Dict(
         max_tokens=4096,
@@ -327,3 +350,93 @@ class Claude21(Anthropic):
 class ClaudeInstant(Anthropic):
   """Cheapest small and fast model, 100K context window."""
   model = 'claude-instant-1.2'
+
+
+#
+# Authropic models on VertexAI.
+#
+
+
+class VertexAIAnthropic(Anthropic):
+  """Anthropic models on VertexAI."""
+
+  access_token: Annotated[
+      str | None,
+      (
+          'Google Cloud access token. If None, it will be read from '
+          'environment variable \'GCP_ACCESS_TOKEN\'. '
+          'Get it by running `gcloud auth print-access-token`.'
+      )
+  ] = None
+
+  project: Annotated[
+      str | None,
+      'Google Cloud project ID.',
+  ] = None
+
+  location: Annotated[
+      Literal['us-east5', 'europe-west1'],
+      'GCP location with Anthropic models hosted.'
+  ] = 'us-east5'
+
+  api_version = 'vertex-2023-10-16'
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._project = None
+    self._access_token = None
+
+  def _initialize(self):
+    project = self.project or os.environ.get('VERTEXAI_PROJECT', None)
+    if not project:
+      raise ValueError(
+          'Please specify `project` during `__init__` or set environment '
+          'variable `VERTEXAI_PROJECT` with your Vertex AI project ID.'
+      )
+    self._project = project
+
+    access_token = self.access_token or os.environ.get(
+        'GCP_ACCESS_TOKEN', None
+    )
+    if not access_token:
+      raise ValueError(
+          'Please specify `access_token` during `__init__` or set environment '
+          'variable `GCP_ACCESS_TOKEN` with the output of '
+          '`gcloud auth print-access-token`.'
+      )
+    self._access_token = access_token
+
+  @property
+  def headers(self):
+    return {
+        'Authorization': f'Bearer {self._access_token}',
+        'Content-Type': 'application/json; charset=utf-8',
+    }
+
+  @property
+  def api_endpoint(self) -> str:
+    return (
+        f'https://{self.location}-aiplatform.googleapis.com/v1/projects/'
+        f'{self._project}/locations/{self.location}/publishers/anthropic/'
+        f'models/{self.model}:streamRawPredict'
+    )
+
+  def request(
+      self,
+      prompt: lf.Message,
+      sampling_options: lf.LMSamplingOptions
+  ):
+    request = super().request(prompt, sampling_options)
+    request['anthropic_version'] = self.api_version
+    del request['model']
+    return request
+
+
+class VertexAIClaude3_5_Sonnet_20241022(VertexAIAnthropic):  # pylint: disable=invalid-name
+  """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
+  model = 'claude-3-5-sonnet-v2@20241022'
+
+
+class VertexAIClaude3_5_Haiku_20241022(VertexAIAnthropic):  # pylint: disable=invalid-name
+  """Anthropic's Claude 3.5 Haiku model on VertexAI."""
+  model = 'claude-3-5-haiku@20241022'
