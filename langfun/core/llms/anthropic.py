@@ -48,15 +48,15 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # Anthropic models hosted on VertexAI.
     'claude-3-5-sonnet-v2@20241022': pg.Dict(
         max_tokens=8192,
-        rpm=4000,
-        tpm=400000,
+        rpm=1000,
+        tpm=100000,
         cost_per_1k_input_tokens=0.003,
         cost_per_1k_output_tokens=0.015,
     ),
     'claude-3-5-haiku@20241022': pg.Dict(
         max_tokens=8192,
-        rpm=4000,
-        tpm=400000,
+        rpm=1000,
+        tpm=100000,
         cost_per_1k_input_tokens=0.001,
         cost_per_1k_output_tokens=0.005,
     ),
