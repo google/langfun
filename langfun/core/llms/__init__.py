@@ -24,6 +24,9 @@ from langfun.core.llms.fake import StaticMapping
 from langfun.core.llms.fake import StaticResponse
 from langfun.core.llms.fake import StaticSequence
 
+# Compositional models.
+from langfun.core.llms.compositional import RandomChoice
+
 # REST-based models.
 from langfun.core.llms.rest import REST
 
