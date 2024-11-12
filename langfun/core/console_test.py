@@ -18,6 +18,7 @@ import io
 import unittest
 
 from langfun.core import console
+import pyglove as pg
 
 
 class ConsoleTest(unittest.TestCase):
@@ -32,6 +33,22 @@ class ConsoleTest(unittest.TestCase):
 
   def test_under_notebook(self):
     self.assertFalse(console.under_notebook())
+    console._notebook = True
+    self.assertTrue(console.under_notebook())
+    console._notebook = None
+
+  def test_notebook_interaction(self):
+    console._notebook = pg.Dict(
+        display=lambda x: x, Javascript=lambda x: x, clear_output=lambda: None)
+    self.assertEqual(console.display('hi', clear=True), 'hi')
+    self.assertEqual(
+        console.run_script('console.log("hi")'),
+        'console.log("hi")'
+    )
+    console.clear()
+    console._notebook = None
+    self.assertIsNone(console.display('hi'))
+    self.assertIsNone(console.run_script('console.log("hi")'))
 
 
 if __name__ == '__main__':

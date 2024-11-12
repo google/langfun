@@ -685,7 +685,6 @@ class LanguageModelTest(unittest.TestCase):
             lm2('hi')
             list(concurrent.concurrent_map(call_lm, ['hi', 'hello']))
 
-    print(usages2)
     self.assertEqual(usages2.uncached.breakdown, {
         'model2': lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
     })
@@ -777,7 +776,7 @@ class UsageSummaryTest(unittest.TestCase):
     self.assertFalse(usage_summary.uncached)
 
     # Add uncached.
-    usage_summary.update(
+    usage_summary.add(
         'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
     )
     self.assertEqual(
@@ -788,7 +787,7 @@ class UsageSummaryTest(unittest.TestCase):
     )
     # Add cached.
     self.assertFalse(usage_summary.cached)
-    usage_summary.update(
+    usage_summary.add(
         'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), True
     )
     self.assertEqual(
@@ -798,7 +797,7 @@ class UsageSummaryTest(unittest.TestCase):
         usage_summary.cached.total, lm_lib.LMSamplingUsage(1, 2, 3, 1, 0.0)
     )
     # Add UsageNotAvailable.
-    usage_summary.update(
+    usage_summary.add(
         'model1', lm_lib.UsageNotAvailable(num_requests=1), False
     )
     self.assertEqual(
@@ -807,6 +806,100 @@ class UsageSummaryTest(unittest.TestCase):
     self.assertEqual(
         usage_summary.uncached.total, lm_lib.UsageNotAvailable(num_requests=2)
     )
+
+  def test_merge(self):
+    usage_summary = lm_lib.UsageSummary()
+    usage_summary.add(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    usage_summary.add(
+        'model2', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    usage_summary.add(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    usage_summary2 = lm_lib.UsageSummary()
+    usage_summary2.add(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    usage_summary2.add(
+        'model3', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    usage_summary2.merge(usage_summary)
+    self.assertEqual(
+        usage_summary2,
+        lm_lib.UsageSummary(
+            cached=lm_lib.UsageSummary.AggregatedUsage(
+                total=lm_lib.LMSamplingUsage(
+                    prompt_tokens=0,
+                    completion_tokens=0,
+                    total_tokens=0,
+                    num_requests=0,
+                    estimated_cost=0.0,
+                ),
+                breakdown={}
+            ),
+            uncached=lm_lib.UsageSummary.AggregatedUsage(
+                total=lm_lib.LMSamplingUsage(
+                    prompt_tokens=5,
+                    completion_tokens=10,
+                    total_tokens=15,
+                    num_requests=5,
+                    estimated_cost=25.0
+                ),
+                breakdown=dict(
+                    model1=lm_lib.LMSamplingUsage(
+                        prompt_tokens=3,
+                        completion_tokens=6,
+                        total_tokens=9,
+                        num_requests=3,
+                        estimated_cost=15.0
+                    ),
+                    model3=lm_lib.LMSamplingUsage(
+                        prompt_tokens=1,
+                        completion_tokens=2,
+                        total_tokens=3,
+                        num_requests=1,
+                        estimated_cost=5.0
+                    ),
+                    model2=lm_lib.LMSamplingUsage(
+                        prompt_tokens=1,
+                        completion_tokens=2,
+                        total_tokens=3,
+                        num_requests=1,
+                        estimated_cost=5.0
+                    )
+                )
+            )
+        )
+    )
+
+  def test_html_view(self):
+    usage_summary = lm_lib.UsageSummary()
+    usage_summary.add(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    self.assertIn(
+        '5.000',
+        usage_summary.to_html(extra_flags=dict(as_badge=True)).content
+    )
+    usage_summary.add(
+        'model1', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+    )
+    self.assertIn(
+        '10.000',
+        usage_summary.to_html(
+            extra_flags=dict(as_badge=True, interactive=True)
+        ).content
+    )
+    self.assertTrue(
+        usage_summary.to_html().content.startswith('<details open')
+    )
+    with pg.views.html.controls.HtmlControl.track_scripts() as scripts:
+      usage_summary.add(
+          'model2', lm_lib.LMSamplingUsage(1, 2, 3, 1, 5.0), False
+      )
+      self.assertEqual(len(scripts), 4)
 
 
 if __name__ == '__main__':

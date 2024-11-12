@@ -17,6 +17,8 @@ import abc
 import contextlib
 import dataclasses
 import enum
+import functools
+import math
 import threading
 import time
 from typing import Annotated, Any, Callable, Iterator, Optional, Sequence, Tuple, Type, Union
@@ -875,7 +877,7 @@ class LanguageModel(component.Component):
       return DEFAULT_MAX_CONCURRENCY  # Default of 1
 
 
-class UsageSummary(pg.Object):
+class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
   """Usage sumary."""
 
   class AggregatedUsage(pg.Object):
@@ -897,20 +899,131 @@ class UsageSummary(pg.Object):
       aggregated = self.breakdown.get(model_id, None)
       with pg.notify_on_change(False):
         self.breakdown[model_id] = usage + aggregated
-        self.rebind(total=self.total + usage, skip_notification=True)
+        self.rebind(
+            total=self.total + usage,
+            raise_on_no_change=False
+        )
+
+    def merge(self, other: 'UsageSummary.AggregatedUsage') -> None:
+      """Merges the usage summary."""
+      with pg.notify_on_change(False):
+        for model_id, usage in other.breakdown.items():
+          self.add(model_id, usage)
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._usage_badge = None
+    self._lock = threading.Lock()
 
   @property
   def total(self) -> LMSamplingUsage:
     return self.cached.total + self.uncached.total
 
-  def update(self, model_id: str, usage: LMSamplingUsage, is_cached: bool):
+  def add(self, model_id: str, usage: LMSamplingUsage, is_cached: bool):
     """Updates the usage summary."""
-    if is_cached:
-      usage.rebind(estimated_cost=0.0, skip_notification=True)
-      self.cached.add(model_id, usage)
-    else:
-      self.uncached.add(model_id, usage)
+    with self._lock:
+      if is_cached:
+        usage.rebind(estimated_cost=0.0, skip_notification=True)
+        self.cached.add(model_id, usage)
+      else:
+        self.uncached.add(model_id, usage)
+      self._update_view()
 
+  def merge(self, other: 'UsageSummary', as_cached: bool = False) -> None:
+    """Aggregates the usage summary.
+
+    Args:
+      other: The usage summary to merge.
+      as_cached: Whether to merge the usage summary as cached.
+    """
+    with self._lock:
+      self.cached.merge(other.cached)
+      if as_cached:
+        self.cached.merge(other.uncached)
+      else:
+        self.uncached.merge(other.uncached)
+      self._update_view()
+
+  def _sym_nondefault(self) -> dict[str, Any]:
+    """Overrides nondefault values so volatile values are not included."""
+    return dict()
+
+  #
+  # Html views for the usage summary.
+  #
+
+  def _update_view(self):
+    if self._usage_badge is not None:
+      self._usage_badge.update(
+          self._badge_text(),
+          tooltip=pg.format(self.total, verbose=False),
+          styles=dict(color=self._badge_color()),
+      )
+
+  def _badge_text(self) -> str:
+    if self.total.estimated_cost is not None:
+      return f'{self.total.estimated_cost:.3f}'
+    return '0.000'
+
+  def _badge_color(self) -> str | None:
+    if self.total.estimated_cost is None or self.total.estimated_cost < 1.0:
+      return None
+
+    # Step 1: The normal cost range is around 1e-3 to 1e5.
+    # Therefore we normalize the log10 value from [-3, 5] to [0, 1].
+    normalized_value = (math.log10(self.total.estimated_cost) + 3) / (5 + 3)
+
+    # Step 2: Interpolate between green and red
+    red = int(255 * normalized_value)
+    green = int(255 * (1 - normalized_value))
+    return f'rgb({red}, {green}, 0)'
+
+  def _html_tree_view(
+      self,
+      *,
+      view: pg.views.HtmlTreeView,
+      extra_flags: dict[str, Any] | None = None,
+      **kwargs
+  ) -> pg.Html:
+    extra_flags = extra_flags or {}
+    as_badge = extra_flags.pop('as_badge', False)
+    interactive = extra_flags.get('interactive', True)
+    if as_badge:
+      usage_badge = self._usage_badge
+      if usage_badge is None:
+        usage_badge = pg.views.html.controls.Badge(
+            self._badge_text(),
+            tooltip=pg.format(self.total, verbose=False),
+            css_classes=['usage-summary'],
+            styles=dict(color=self._badge_color()),
+            interactive=True,
+        )
+        if interactive:
+          self._usage_badge = usage_badge
+      return usage_badge.to_html()
+    return super()._html_tree_view(
+        view=view,
+        extra_flags=extra_flags,
+        **kwargs
+    )
+
+  @classmethod
+  @functools.cache
+  def _html_tree_view_css_styles(cls) -> list[str]:
+    return super()._html_tree_view_css_styles() + [
+        """
+        .usage-summary.label {
+            display: inline-flex;
+            border-radius: 5px;
+            padding: 5px;
+            background-color: #f1f1f1;
+            color: #CCC;
+        }
+        .usage-summary.label::before {
+            content: '$';
+        }
+        """
+    ]
 
 pg.members(
     dict(
@@ -938,12 +1051,10 @@ class _UsageTracker:
   def __init__(self, model_ids: set[str] | None):
     self.model_ids = model_ids
     self.usage_summary = UsageSummary()
-    self._lock = threading.Lock()
 
   def track(self, model_id: str, usage: LMSamplingUsage, is_cached: bool):
     if self.model_ids is None or model_id in self.model_ids:
-      with self._lock:
-        self.usage_summary.update(model_id, usage, is_cached)
+      self.usage_summary.add(model_id, usage, is_cached)
 
 
 @contextlib.contextmanager

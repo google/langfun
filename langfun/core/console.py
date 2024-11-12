@@ -59,12 +59,20 @@ def under_notebook() -> bool:
   return bool(_notebook)
 
 
-def display(value: Any, clear: bool = False) -> None:  # pylint: disable=redefined-outer-name
+def display(value: Any, clear: bool = False) -> Any:  # pylint: disable=redefined-outer-name
   """Displays object in current notebook cell."""
   if _notebook is not None:
     if clear:
       _notebook.clear_output()
-    _notebook.display(value)
+    return _notebook.display(value)
+  return None
+
+
+def run_script(javascript: str) -> Any:
+  """Runs JavaScript in current notebook cell."""
+  if _notebook is not None:
+    return _notebook.display(_notebook.Javascript(javascript))
+  return
 
 
 def clear() -> None:

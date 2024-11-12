@@ -16,6 +16,8 @@
 # pylint: disable=g-importing-member
 # pylint: disable=g-bad-import-order
 
+from langfun.core.eval import v2
+
 from langfun.core.eval.base import register
 from langfun.core.eval.base import registered_names
 from langfun.core.eval.base import get_evaluations
