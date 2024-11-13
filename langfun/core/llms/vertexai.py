@@ -51,13 +51,13 @@ AVGERAGE_CHARS_PER_TOEKN = 4
 SUPPORTED_MODELS_AND_SETTINGS = {
     'gemini-1.5-pro-001': pg.Dict(
         api='gemini',
-        rpm=500,
+        rpm=100,
         cost_per_1k_input_chars=0.0003125,
         cost_per_1k_output_chars=0.00125,
     ),
     'gemini-1.5-pro-002': pg.Dict(
         api='gemini',
-        rpm=500,
+        rpm=100,
         cost_per_1k_input_chars=0.0003125,
         cost_per_1k_output_chars=0.00125,
     ),
@@ -75,7 +75,7 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     ),
     'gemini-1.5-pro': pg.Dict(
         api='gemini',
-        rpm=500,
+        rpm=100,
         cost_per_1k_input_chars=0.0003125,
         cost_per_1k_output_chars=0.00125,
     ),
@@ -87,7 +87,7 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     ),
     'gemini-1.5-pro-latest': pg.Dict(
         api='gemini',
-        rpm=500,
+        rpm=100,
         cost_per_1k_input_chars=0.0003125,
         cost_per_1k_output_chars=0.00125,
     ),
