@@ -53,6 +53,10 @@ PythonFunction = coding.PythonFunction
 from langfun.core import llms
 lm_cache = llms.cache.lm_cache
 
+from langfun.core import agentic
+Action = agentic.Action
+Session = agentic.Session
+
 from langfun.core import memories
 
 from langfun.core import modalities
