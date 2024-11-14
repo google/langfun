@@ -199,6 +199,12 @@ class VertexAITest(unittest.TestCase):
     # There is a discrepancy between the `property_ordering` in the
     # Google-internal version and the open-source version.
     actual['response_schema'].pop('property_ordering', None)
+    if pg.KeyPath.parse('response_schema.type_').get(actual):
+      actual['response_schema']['type'] = actual['response_schema'].pop('type_')
+    if pg.KeyPath.parse('response_schema.properties.name.type_').get(actual):
+      actual['response_schema']['properties']['name']['type'] = actual[
+          'response_schema']['properties']['name'].pop('type_')
+
     self.assertEqual(
         actual,
         dict(
@@ -209,9 +215,9 @@ class VertexAITest(unittest.TestCase):
             stop_sequences=['\n'],
             response_mime_type='application/json',
             response_schema={
-                'type_': 'OBJECT',
+                'type': 'OBJECT',
                 'properties': {
-                    'name': {'type_': 'STRING'}
+                    'name': {'type': 'STRING'}
                 },
                 'required': ['name'],
                 'title': 'Person',
