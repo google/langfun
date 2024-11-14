@@ -108,8 +108,15 @@ class Evaluation(experiment_lib.Experiment):
   def num_examples(self) -> int:
     """Returns the number of examples from the inputs."""
     # NOTE(daiyip): setting `num_examples` of the input functor allows fast
-    # retrieval of number of examples without interating the whole dataset.
-    return getattr(self.inputs, 'num_examples', len(self.example_inputs))
+    # retrieval of number of examples without iterating the whole dataset.
+    num_examples = getattr(self.inputs, 'num_examples', None)
+    if not isinstance(num_examples, int):
+      it = self.example_inputs
+      if hasattr(it, '__len__'):
+        num_examples = len(it)
+      else:
+        num_examples = len(list(it))
+    return num_examples
 
   #
   # Evaluation logics.

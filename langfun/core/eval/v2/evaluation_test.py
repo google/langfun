@@ -56,6 +56,18 @@ class EvaluationTest(unittest.TestCase):
         [set(['test_llm:0']), set(['test_llm:1']), set(['test_llm:2'])]
     )
 
+  def test_input(self):
+    exp = test_helper.TestEvaluation()
+    self.assertEqual(exp.num_examples, 10)
+    exp = test_helper.TestEvaluation(inputs=test_helper.test_inputs(None))
+    self.assertEqual(exp.num_examples, 20)
+    @pg.functor
+    def my_inputs():
+      yield pg.Dict(x=1, y=2)
+      yield pg.Dict(x=3, y=4)
+    exp = test_helper.TestEvaluation(inputs=my_inputs())
+    self.assertEqual(exp.num_examples, 2)
+
   def test_evaluate(self):
     exp = test_helper.TestEvaluation()
     example = exp.evaluate(Example(id=3))

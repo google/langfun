@@ -33,7 +33,9 @@ Run = experiment_lib.Run
 
 
 @pg.functor()
-def test_inputs(num_examples: int = 10):
+def test_inputs(num_examples: int | None = 10):
+  if num_examples is None:
+    num_examples = 20
   return [
       pg.Dict(x=i, y=i ** 2, groundtruth=i + i ** 2)
       for i in range(num_examples)
