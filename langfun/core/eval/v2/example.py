@@ -73,14 +73,15 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       return self.execution_status['evaluate'].elapse
     return None
 
-  def to_json(self, **kwargs) -> dict[str, Any]:
+  def to_json(self, *, exclude_input: bool = False, **kwargs):
     """Returns the JSON representation of the item."""
     return self.to_json_dict(
         fields=dict(
             id=(self.id, None),
-            # NOTE(daiyip): We do not write `input` to JSON as it will be
-            # loaded from the input functor. This allows us to support
-            # non-serializable examples.
+            input=(
+                self.input if not exclude_input else pg.MISSING_VALUE,
+                pg.MISSING_VALUE
+            ),
             output=(self.output, pg.MISSING_VALUE),
             error=(self.error, None),
             metadata=(self.metadata, {}),
@@ -99,12 +100,17 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       cls,
       json_value: dict[str, Any],
       *,
-      example_input_by_id: Callable[[int], Any],
+      example_input_by_id: Callable[[int], Any] | None = None,
       **kwargs
   ) -> 'Example':
     """Creates an example from the JSON representation."""
     example_id = json_value.get('id')
-    example_input = example_input_by_id(example_id)
+    if example_input_by_id:
+      example_input = example_input_by_id(example_id)
+    else:
+      example_input = json_value.pop('input', pg.MISSING_VALUE)
+      if example_input is not pg.MISSING_VALUE:
+        example_input = pg.from_json(example_input, **kwargs)
     json_value['input'] = example_input
 
     # NOTE(daiyip): We need to load the types of the examples into the
@@ -205,26 +211,29 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       )
 
     def _render_content():
-      def _tab(label, key):
+      def _tab(label, key, default):
         field = getattr(self, key)
-        if pg.MISSING_VALUE == field or not field:
+        if default == field:
           return None
         return pg.views.html.controls.Tab(
             label=label,
             content=view.render(
                 field,
                 root_path=root_path + key,
+                collapse_level=None,
                 **view.get_passthrough_kwargs(**kwargs),
             ),
         )
       tabs = [
-          _tab('Input', 'input'),
-          _tab('Output', 'output'),
-          _tab('Output Metadata', 'metadata'),
-          _tab('Error', 'error'),
+          _tab('Input', 'input', pg.MISSING_VALUE),
+          _tab('Output', 'output', pg.MISSING_VALUE),
+          _tab('Output Metadata', 'metadata', {}),
+          _tab('Error', 'error', None),
       ]
+      tabs = [tab for tab in tabs if tab is not None]
       return pg.views.html.controls.TabControl(
-          [tab for tab in tabs if tab is not None]
+          tabs,
+          len(tabs) - 1,
       )
 
     return pg.Html.element(

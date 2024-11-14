@@ -65,7 +65,8 @@ class ExampleTest(unittest.TestCase):
         output=inputs[0].a(1),
         metadata=dict(b=inputs[0].b())
     )
-    json_str = pg.to_json_str(ex)
+    # Serialize without input.
+    json_str = pg.to_json_str(ex, exclude_input=True)
     self.assertEqual(
         pg.from_json_str(
             json_str,
@@ -73,6 +74,27 @@ class ExampleTest(unittest.TestCase):
         ),
         ex
     )
+    pg.JSONConvertible._TYPE_REGISTRY._type_to_cls_map.pop(
+        inputs[0].a.__type_name__
+    )
+    pg.JSONConvertible._TYPE_REGISTRY._type_to_cls_map.pop(
+        inputs[0].b.__type_name__
+    )
+    v = pg.from_json_str(json_str, auto_dict=True)
+    v.output.pop('type_name')
+    v.metadata.b.pop('type_name')
+    self.assertEqual(
+        v,
+        Example(
+            id=1,
+            output=pg.Dict(x=1),
+            metadata=dict(b=pg.Dict(x=1, y=2)),
+        )
+    )
+    # Serialize with input.
+    ex = Example(id=2, input=pg.Dict(x=1), output=pg.Dict(x=2))
+    json_str = pg.to_json_str(ex, exclude_input=False)
+    self.assertEqual(pg.from_json_str(json_str), ex)
 
   def test_html_view(self):
     ex = Example(

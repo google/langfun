@@ -59,6 +59,7 @@ class EvaluationTest(unittest.TestCase):
   def test_evaluate(self):
     exp = test_helper.TestEvaluation()
     example = exp.evaluate(Example(id=3))
+    self.assertIs(exp.state.get(3), example)
     self.assertTrue(example.newly_processed)
     self.assertEqual(example.input, pg.Dict(x=2, y=4, groundtruth=6))
     self.assertEqual(example.output, 6)

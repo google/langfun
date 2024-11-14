@@ -247,6 +247,11 @@ class Evaluation(experiment_lib.Experiment):
   # Handling evaluation state.
   #
 
+  @property
+  def state(self) -> 'EvaluationState':
+    """Returns the state of the evaluation."""
+    return self._state
+
   def load_state(
       self, state_file: str, raise_if_not_exist: bool = False
   ) -> None:

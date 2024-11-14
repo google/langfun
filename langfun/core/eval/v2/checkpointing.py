@@ -116,7 +116,12 @@ class StateWriter:
     self._sequence_writer = pg.io.open_sequence(path, 'w')
 
   def add(self, example: Example):
-    example_blob = pg.to_json_str(example, hide_default_values=True)
+    example_blob = pg.to_json_str(
+        example,
+        hide_default_values=True,
+        save_ref_value=True,
+        exclude_input=True
+    )
     with self._lock:
       if self._sequence_writer is None:
         return
