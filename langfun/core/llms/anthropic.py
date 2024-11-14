@@ -53,6 +53,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         cost_per_1k_input_tokens=0.003,
         cost_per_1k_output_tokens=0.015,
     ),
+    'claude-3-5-sonnet@20240620': pg.Dict(
+        max_tokens=8192,
+        rpm=1000,
+        tpm=100000,
+        cost_per_1k_input_tokens=0.003,
+        cost_per_1k_output_tokens=0.015,
+    ),
     'claude-3-5-haiku@20241022': pg.Dict(
         max_tokens=8192,
         rpm=1000,
@@ -457,6 +464,11 @@ class VertexAIAnthropic(Anthropic):
 class VertexAIClaude3_5_Sonnet_20241022(VertexAIAnthropic):  # pylint: disable=invalid-name
   """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
   model = 'claude-3-5-sonnet-v2@20241022'
+
+
+class VertexAIClaude3_5_Sonnet_20240620(VertexAIAnthropic):  # pylint: disable=invalid-name
+  """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
+  model = 'claude-3-5-sonnet@20240620'
 
 
 class VertexAIClaude3_5_Haiku_20241022(VertexAIAnthropic):  # pylint: disable=invalid-name
