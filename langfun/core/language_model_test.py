@@ -744,6 +744,13 @@ class LMSamplingUsageTest(unittest.TestCase):
     self.assertEqual(usage1 + usage2, usage1 + usage2)
     self.assertIs(usage1 + None, usage1)
     self.assertIs(None + usage1, usage1)
+    usage3 = lm_lib.LMSamplingUsage(100, 200, 300, 4, None)
+    self.assertEqual(
+        usage1 + usage3, lm_lib.LMSamplingUsage(200, 400, 600, 8, 5.0)
+    )
+    self.assertEqual(
+        usage3 + usage1, lm_lib.LMSamplingUsage(200, 400, 600, 8, 5.0)
+    )
 
   def test_usage_not_available(self):
     usage_not_available = lm_lib.UsageNotAvailable()

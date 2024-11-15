@@ -124,17 +124,18 @@ class LMSamplingUsage(pg.Object):
   def __add__(self, other: Optional['LMSamplingUsage']) -> 'LMSamplingUsage':
     if other is None:
       return self
+    if self.estimated_cost is None:
+      estimated_cost = other.estimated_cost
+    elif other.estimated_cost is None:
+      estimated_cost = self.estimated_cost
+    else:
+      estimated_cost = self.estimated_cost + other.estimated_cost
     return LMSamplingUsage(
         prompt_tokens=self.prompt_tokens + other.prompt_tokens,
         completion_tokens=self.completion_tokens + other.completion_tokens,
         total_tokens=self.total_tokens + other.total_tokens,
         num_requests=self.num_requests + other.num_requests,
-        estimated_cost=(
-            self.estimated_cost + other.estimated_cost    # pylint: disable=g-long-ternary
-            if (self.estimated_cost is not None
-                and other.estimated_cost is not None)
-            else None
-        )
+        estimated_cost=estimated_cost,
     )
 
   def __radd__(self, other: Optional['LMSamplingUsage']) -> 'LMSamplingUsage':
@@ -956,7 +957,9 @@ class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
     if self._usage_badge is not None:
       self._usage_badge.update(
           self._badge_text(),
-          tooltip=pg.format(self.total, verbose=False),
+          tooltip=pg.format(
+              self, verbose=False, custom_format=self._tooltip_format
+          ),
           styles=dict(color=self._badge_color()),
       )
 
@@ -978,6 +981,14 @@ class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
     green = int(255 * (1 - normalized_value))
     return f'rgb({red}, {green}, 0)'
 
+  def _tooltip_format(self, v, root_indent):
+    del root_indent
+    if isinstance(v, int):
+      return f'{v:,}'
+    if isinstance(v, float):
+      return f'{v:,.3f}'
+    return None
+
   def _html_tree_view(
       self,
       *,
@@ -993,7 +1004,9 @@ class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
       if usage_badge is None:
         usage_badge = pg.views.html.controls.Badge(
             self._badge_text(),
-            tooltip=pg.format(self.total, verbose=False),
+            tooltip=pg.format(
+                self, custom_format=self._tooltip_format, verbose=False
+            ),
             css_classes=['usage-summary'],
             styles=dict(color=self._badge_color()),
             interactive=True,
