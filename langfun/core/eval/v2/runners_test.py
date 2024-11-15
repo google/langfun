@@ -198,7 +198,9 @@ class RunnerTest(unittest.TestCase):
     )
     # Global cache.
     root_dir = os.path.join(tempfile.gettempdir(), 'global_cache')
-    run = exp.run(root_dir, runner='sequential', use_cache='global', plugins=[])
+    run = exp.run(
+        root_dir, 'new', runner='sequential', use_cache='global', plugins=[]
+    )
     self.assertTrue(pg.io.path_exists(run.output_path_for(exp, 'cache.json')))
     self.assertEqual(exp.usage_summary.cached.total.num_requests, 4)
     self.assertEqual(exp.usage_summary.uncached.total.num_requests, 2)
@@ -206,7 +208,8 @@ class RunnerTest(unittest.TestCase):
     # Per-dataset cache.
     root_dir = os.path.join(tempfile.gettempdir(), 'per_dataset')
     run = exp.run(
-        root_dir, runner='sequential', use_cache='per_dataset', plugins=[]
+        root_dir, 'new', runner='sequential',
+        use_cache='per_dataset', plugins=[]
     )
     for leaf in exp.leaf_nodes:
       self.assertTrue(
@@ -225,6 +228,9 @@ class RunnerTest(unittest.TestCase):
       )
     self.assertEqual(exp.usage_summary.cached.total.num_requests, 0)
     self.assertEqual(exp.usage_summary.uncached.total.num_requests, 6)
+
+
+class ParallelRunnerTest(RunnerTest):
 
   def test_parallel_runner(self):
     plugin = TestPlugin()
@@ -265,6 +271,22 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(node.progress.num_skipped, 0)
         self.assertEqual(node.progress.num_failed, 0)
         self.assertEqual(node.progress.num_processed, node.progress.num_total)
+
+  def test_concurrent_startup_delay(self):
+    plugin = TestPlugin()
+    exp = test_helper.test_experiment()
+    root_dir = os.path.join(
+        tempfile.gettempdir(), 'test_concurrent_startup_delay'
+    )
+    _ = exp.run(
+        root_dir,
+        runner='parallel',
+        plugins=[plugin],
+        concurrent_startup_delay=(0, 5),
+    )
+
+
+class DebugRunnerTest(RunnerTest):
 
   def test_debug_runner(self):
     plugin = TestPlugin()

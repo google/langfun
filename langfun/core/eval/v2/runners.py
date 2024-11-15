@@ -15,6 +15,9 @@
 import abc
 import collections
 import concurrent.futures
+import random
+import threading
+import time
 from typing import Any, Annotated, Callable, Iterator
 
 from langfun import core as lf
@@ -373,6 +376,15 @@ class ParallelRunner(RunnerBase):
       'Timeout for each evaluation example.'
   ] = None
 
+  concurrent_startup_delay: Annotated[
+      tuple[int, int] | None,
+      (
+          'A range of seconds to delay the initial evaluation of each thread '
+          'in the thread pool, helping to prevent a burst in LLM QPS at '
+          'startup. If set to None, no delay will be applied.'
+      )
+  ] = None
+
   def _run(self, evaluations: list[Evaluation]) -> None:
     """Runs the evaluations in parallel."""
     def _run_group(evaluation_group: list[Evaluation]):
@@ -405,8 +417,20 @@ class ParallelRunner(RunnerBase):
       self, evaluation: Evaluation, items: Iterator[Example]
   ) -> None:
     """Override run items to run in parallel."""
+    if self.concurrent_startup_delay is not None:
+      thread_delayed = {}
+      def _evaluate_item(item: Example):
+        thread_id = threading.current_thread().ident
+        if thread_id not in thread_delayed:
+          thread_delayed[thread_id] = True
+          time.sleep(random.randint(*self.concurrent_startup_delay))
+        return self.evaluate_item(evaluation, item)
+    else:
+      def _evaluate_item(item: Example):
+        return self.evaluate_item(evaluation, item)
+
     for _, _, _ in lf.concurrent_map(
-        lambda item: self.evaluate_item(evaluation, item),
+        _evaluate_item,
         items,
         max_workers=evaluation.max_workers,
         timeout=self.timeout,
