@@ -52,7 +52,8 @@ class GenAI(lf.LanguageModel):
           'text-bison-001',
           'chat-bison-001',
           'gemini-1.5-pro-latest',
-          'gemini-1.5-flash-latest'
+          'gemini-1.5-flash-latest',
+          'gemini-exp-1114',
       ],
       'Model name.',
   ]
@@ -342,6 +343,13 @@ _VIDEO_TYPES = [
 _PDF = [
     'application/pdf',
 ]
+
+
+class GeminiExp_20241114(GenAI):  # pylint: disable=invalid-name
+  """Gemini Experimental model launched on 11/14/2024."""
+
+  model = 'gemini-exp-1114'
+  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
 
 
 class GeminiPro1_5(GenAI):  # pylint: disable=invalid-name
