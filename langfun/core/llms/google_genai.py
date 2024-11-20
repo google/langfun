@@ -52,7 +52,8 @@ class GenAI(lf.LanguageModel):
           'text-bison-001',
           'chat-bison-001',
           'gemini-1.5-pro-latest',
-          'gemini-1.5-flash-latest'
+          'gemini-1.5-flash-latest',
+          'gemini-exp-1114'
       ],
       'Model name.',
   ]
@@ -381,3 +382,9 @@ class Palm2_IT(GenAI):  # pylint: disable=invalid-name
   """PaLM2 instruction-tuned model."""
 
   model = 'chat-bison-001'
+
+
+class GeminiExp_1114(GenAI):  # pylint: disable=invalid-name
+  """Gemini Experimental model launched on 11/14/2024."""
+
+  model = 'gemini-exp-1114'
