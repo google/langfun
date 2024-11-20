@@ -530,7 +530,7 @@ _DOCUMENT_TYPES = [
 class VertexAIGemini1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 model."""
 
-  supported_modalities = (
+  supported_modalities: pg.typing.List(str).freeze(   # pytype: disable=invalid-annotation
       _DOCUMENT_TYPES + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
   )
 
@@ -611,7 +611,9 @@ class VertexAIGeminiPro1Vision(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.0 Pro model."""
 
   model = 'gemini-1.0-pro-vision'
-  supported_modalities = _IMAGE_TYPES + _VIDEO_TYPES
+  supported_modalities: pg.typing.List(str).freeze(   # pytype: disable=invalid-annotation
+      _IMAGE_TYPES + _VIDEO_TYPES
+  )
 
 
 class VertexAIPalm2(VertexAI):  # pylint: disable=invalid-name
