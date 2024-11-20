@@ -38,6 +38,7 @@ from langfun.core.llms.google_genai import GeminiPro1_5
 from langfun.core.llms.google_genai import GeminiProVision
 from langfun.core.llms.google_genai import Palm2
 from langfun.core.llms.google_genai import Palm2_IT
+from langfun.core.llms.google_genai import GeminiExp_20241114
 
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
