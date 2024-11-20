@@ -384,7 +384,7 @@ class Palm2_IT(GenAI):  # pylint: disable=invalid-name
   model = 'chat-bison-001'
 
 
-class GeminiExp_1114(GenAI):  # pylint: disable=invalid-name
+class GeminiExp_20241114(GenAI):  # pylint: disable=invalid-name
   """Gemini Experimental model launched on 11/14/2024."""
 
   model = 'gemini-exp-1114'
