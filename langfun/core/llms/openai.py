@@ -102,6 +102,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         cost_per_1k_input_tokens=0.0025,
         cost_per_1k_output_tokens=0.01,
     ),
+    'gpt-4o-2024-11-20': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.0025,
+        cost_per_1k_output_tokens=0.01,
+    ),
     'gpt-4o-2024-08-06': pg.Dict(
         in_service=True,
         rpm=10000,
@@ -715,6 +722,12 @@ class Gpt4oMini_20240718(OpenAI):  # pylint:disable=invalid-name
 class Gpt4o(OpenAI):
   """GPT-4o."""
   model = 'gpt-4o'
+  multimodal = True
+
+
+class Gpt4o_20241120(OpenAI):     # pylint:disable=invalid-name
+  """GPT-4o version 2024-11-20."""
+  model = 'gpt-4o-2024-11-20'
   multimodal = True
 
 

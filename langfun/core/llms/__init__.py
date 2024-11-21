@@ -51,6 +51,7 @@ from langfun.core.llms.openai import GptO1Mini_20240912
 from langfun.core.llms.openai import Gpt4oMini
 from langfun.core.llms.openai import Gpt4oMini_20240718
 from langfun.core.llms.openai import Gpt4o
+from langfun.core.llms.openai import Gpt4o_20241120
 from langfun.core.llms.openai import Gpt4o_20240806
 from langfun.core.llms.openai import Gpt4o_20240513
 
