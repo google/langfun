@@ -51,6 +51,16 @@ class TqdmProgressTrackerTest(unittest.TestCase):
       _ = experiment.run(root_dir, 'new', plugins=[])
     self.assertIn('All: 100%', string_io.getvalue())
 
+  def test_with_example_ids(self):
+    root_dir = os.path.join(
+        tempfile.gettempdir(), 'test_tqdm_progress_tracker_with_example_ids'
+    )
+    experiment = test_helper.test_experiment()
+    string_io = io.StringIO()
+    with contextlib.redirect_stderr(string_io):
+      _ = experiment.run(root_dir, 'new', example_ids=[1], plugins=[])
+    self.assertIn('All: 100%', string_io.getvalue())
+
 
 if __name__ == '__main__':
   unittest.main()
