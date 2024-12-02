@@ -142,7 +142,6 @@ If you want to customize your installation, you can select specific features usi
 | llm-google          | All supported Google-powered LLMs.       |
 | llm-google-vertexai | LLMs powered by Google Cloud VertexAI    |
 | llm-google-genai    | LLMs powered by Google Generative AI API |
-| llm-openai          | LLMs powered by OpenAI                   |
 | mime                | All MIME supports.                       |
 | mime-auto           | Automatic MIME type detection.           |
 | mime-docx           | DocX format support.                     |

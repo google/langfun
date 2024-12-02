@@ -10,8 +10,6 @@ tqdm>=4.64.1
 google-cloud-aiplatform>=1.5.0
 # extras:llm-google-genai
 google-generativeai>=0.3.2
-# extras:llm-openai
-openai>=0.27.2
 
 # extras:mime-auto
 python-magic>=0.4.27

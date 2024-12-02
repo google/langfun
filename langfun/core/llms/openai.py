@@ -13,33 +13,13 @@
 # limitations under the License.
 """Language models from OpenAI."""
 
-import collections
-import functools
 import os
 from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+from langfun.core.llms import rest
 import pyglove as pg
-
-try:
-  import openai  # pylint: disable=g-import-not-at-top
-
-  if hasattr(openai, 'error'):
-    # For lower versions.
-    ServiceUnavailableError = openai.error.ServiceUnavailableError
-    RateLimitError = openai.error.RateLimitError
-    APITimeoutError = (
-        openai.error.APIError,
-        '.*The server had an error processing your request'
-    )
-  else:
-    # For higher versions.
-    ServiceUnavailableError = getattr(openai, 'InternalServerError')
-    RateLimitError = getattr(openai, 'RateLimitError')
-    APITimeoutError = getattr(openai, 'APITimeoutError')
-except ImportError:
-  openai = None
 
 
 # From https://platform.openai.com/settings/organization/limits
@@ -289,7 +269,7 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         rpm=_DEFAULT_RPM,
         tpm=_DEFAULT_TPM
     ),
-    # GPT-3 instruction-tuned models
+    # GPT-3 instruction-tuned models (Deprecated)
     'text-curie-001': pg.Dict(
         in_service=False,
         rpm=_DEFAULT_RPM,
@@ -325,9 +305,9 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         rpm=_DEFAULT_RPM,
         tpm=_DEFAULT_TPM
     ),
-    # GPT-3 base models
+    # GPT-3 base models that are still in service.
     'babbage-002': pg.Dict(
-        in_service=False,
+        in_service=True,
         rpm=_DEFAULT_RPM,
         tpm=_DEFAULT_TPM
     ),
@@ -340,7 +320,7 @@ SUPPORTED_MODELS_AND_SETTINGS = {
 
 
 @lf.use_init_args(['model'])
-class OpenAI(lf.LanguageModel):
+class OpenAI(rest.REST):
   """OpenAI model."""
 
   model: pg.typing.Annotated[
@@ -348,7 +328,9 @@ class OpenAI(lf.LanguageModel):
           pg.MISSING_VALUE, list(SUPPORTED_MODELS_AND_SETTINGS.keys())
       ),
       'The name of the model to use.',
-  ] = 'gpt-3.5-turbo'
+  ]
+
+  api_endpoint: str = 'https://api.openai.com/v1/chat/completions'
 
   multimodal: Annotated[
       bool,
@@ -372,27 +354,45 @@ class OpenAI(lf.LanguageModel):
       ),
   ] = None
 
+  project: Annotated[
+      str | None,
+      (
+          'Project. If None, the key will be read from environment '
+          "variable 'OPENAI_PROJECT'. Based on the value, usages from "
+          "these API requests will count against the project's quota. "
+      ),
+  ] = None
+
   def _on_bound(self):
     super()._on_bound()
-    self.__dict__.pop('_api_initialized', None)
-    if openai is None:
-      raise RuntimeError(
-          'Please install "langfun[llm-openai]" to use OpenAI models.'
-      )
+    self._api_key = None
+    self._organization = None
+    self._project = None
 
-  @functools.cached_property
-  def _api_initialized(self):
+  def _initialize(self):
     api_key = self.api_key or os.environ.get('OPENAI_API_KEY', None)
     if not api_key:
       raise ValueError(
           'Please specify `api_key` during `__init__` or set environment '
           'variable `OPENAI_API_KEY` with your OpenAI API key.'
       )
-    openai.api_key = api_key
-    org = self.organization or os.environ.get('OPENAI_ORGANIZATION', None)
-    if org:
-      openai.organization = org
-    return True
+    self._api_key = api_key
+    self._organization = self.organization or os.environ.get(
+        'OPENAI_ORGANIZATION', None
+    )
+    self._project = self.project or os.environ.get('OPENAI_PROJECT', None)
+
+  @property
+  def headers(self) -> dict[str, Any]:
+    headers = {
+        'Content-Type': 'application/json',
+        'Authorization': f'Bearer {self._api_key}',
+    }
+    if self._organization:
+      headers['OpenAI-Organization'] = self._organization
+    if self._project:
+      headers['OpenAI-Project'] = self._project
+    return headers
 
   @property
   def model_id(self) -> str:
@@ -428,23 +428,16 @@ class OpenAI(lf.LanguageModel):
 
   @classmethod
   def dir(cls):
-    assert openai is not None
-    return openai.Model.list()
+    return [k for k, v in SUPPORTED_MODELS_AND_SETTINGS.items() if v.in_service]
 
-  @property
-  def is_chat_model(self):
-    """Returns True if the model is a chat model."""
-    return self.model.startswith(('o1', 'gpt-4', 'gpt-3.5-turbo'))
-
-  def _get_request_args(
+  def _request_args(
       self, options: lf.LMSamplingOptions) -> dict[str, Any]:
     # Reference:
     # https://platform.openai.com/docs/api-reference/completions/create
     # NOTE(daiyip): options.top_k is not applicable.
     args = dict(
+        model=self.model,
         n=options.n,
-        stream=False,
-        timeout=self.timeout,
         top_logprobs=options.top_logprobs,
     )
     if options.logprobs:
@@ -453,13 +446,10 @@ class OpenAI(lf.LanguageModel):
         raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
       args['logprobs'] = options.logprobs
 
-    # Completion and ChatCompletion uses different parameter name for model.
-    args['model' if self.is_chat_model else 'engine'] = self.model
-
     if options.temperature is not None:
       args['temperature'] = options.temperature
     if options.max_tokens is not None:
-      args['max_tokens'] = options.max_tokens
+      args['max_completion_tokens'] = options.max_tokens
     if options.top_p is not None:
       args['top_p'] = options.top_p
     if options.stop:
@@ -468,168 +458,113 @@ class OpenAI(lf.LanguageModel):
       args['seed'] = options.random_seed
     return args
 
-  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
-    assert self._api_initialized
-    if self.is_chat_model:
-      return self._chat_complete_batch(prompts)
-    else:
-      return self._complete_batch(prompts)
+  def _content_from_message(self, message: lf.Message):
+    """Returns a OpenAI content object from a Langfun message."""
+    def _uri_from(chunk: lf.Modality) -> str:
+      if chunk.uri and chunk.uri.lower().startswith(
+          ('http:', 'https:', 'ftp:')
+      ):
+        return chunk.uri
+      return chunk.content_uri
 
-  def _complete_batch(
-      self, prompts: list[lf.Message]
-  ) -> list[lf.LMSamplingResult]:
-
-    def _open_ai_completion(prompts):
-      assert openai is not None
-      response = openai.Completion.create(
-          prompt=[p.text for p in prompts],
-          **self._get_request_args(self.sampling_options),
-      )
-      # Parse response.
-      samples_by_index = collections.defaultdict(list)
-      for choice in response.choices:
-        samples_by_index[choice.index].append(
-            lf.LMSample(choice.text.strip(), score=choice.logprobs or 0.0)
-        )
-
-      n = len(samples_by_index)
-      estimated_cost = self.estimate_cost(
-          num_input_tokens=response.usage.prompt_tokens,
-          num_output_tokens=response.usage.completion_tokens,
-      )
-      usage = lf.LMSamplingUsage(
-          prompt_tokens=response.usage.prompt_tokens // n,
-          completion_tokens=response.usage.completion_tokens // n,
-          total_tokens=response.usage.total_tokens // n,
-          estimated_cost=(
-              None if estimated_cost is None else (estimated_cost // n)
-          )
-      )
-      return [
-          lf.LMSamplingResult(samples_by_index[index], usage=usage)
-          for index in sorted(samples_by_index.keys())
-      ]
-
-    return self._parallel_execute_with_currency_control(
-        _open_ai_completion,
-        [prompts],
-        retry_on_errors=(
-            ServiceUnavailableError,
-            RateLimitError,
-            APITimeoutError,
-        ),
-    )[0]
-
-  def _chat_complete_batch(
-      self, prompts: list[lf.Message]
-  ) -> list[lf.LMSamplingResult]:
-    def _content_from_message(message: lf.Message):
-      if self.multimodal:
-        content = []
-        for chunk in message.chunk():
-          if isinstance(chunk, str):
-            item = dict(type='text', text=chunk)
-          elif isinstance(chunk, lf_modalities.Image):
-            if chunk.uri and chunk.uri.lower().startswith(
-                ('http:', 'https:', 'ftp:')
-            ):
-              uri = chunk.uri
-            else:
-              uri = chunk.content_uri
-            item = dict(type='image_url', image_url=dict(url=uri))
-          else:
-            raise ValueError(f'Unsupported modality object: {chunk!r}.')
-          content.append(item)
+    content = []
+    for chunk in message.chunk():
+      if isinstance(chunk, str):
+        item = dict(type='text', text=chunk)
+      elif isinstance(chunk, lf_modalities.Image) and self.multimodal:
+        item = dict(type='image_url', image_url=dict(url=_uri_from(chunk)))
       else:
-        content = message.text
-      return content
+        raise ValueError(f'Unsupported modality: {chunk!r}.')
+      content.append(item)
+    return content
 
-    def _open_ai_chat_completion(prompt: lf.Message):
-      request_args = self._get_request_args(self.sampling_options)
-      # Users could use `metadata_json_schema` to pass additional
-      # request arguments.
-      json_schema = prompt.metadata.get('json_schema')
-      if json_schema is not None:
-        if not isinstance(json_schema, dict):
-          raise ValueError(
-              f'`json_schema` must be a dict, got {json_schema!r}.'
-          )
-        if 'title' not in json_schema:
-          raise ValueError(
-              f'The root of `json_schema` must have a `title` field, '
-              f'got {json_schema!r}.'
-          )
-        request_args.update(
-            response_format=dict(
-                type='json_schema',
-                json_schema=dict(
-                    schema=json_schema,
-                    name=json_schema['title'],
-                    strict=True,
-                )
-            )
+  def request(
+      self,
+      prompt: lf.Message,
+      sampling_options: lf.LMSamplingOptions
+  ) -> dict[str, Any]:
+    """Returns the JSON input for a message."""
+    request_args = self._request_args(sampling_options)
+
+    # Users could use `metadata_json_schema` to pass additional
+    # request arguments.
+    json_schema = prompt.metadata.get('json_schema')
+    if json_schema is not None:
+      if not isinstance(json_schema, dict):
+        raise ValueError(
+            f'`json_schema` must be a dict, got {json_schema!r}.'
         )
-        prompt.metadata.formatted_text = (
-            prompt.text
-            + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
-            + pg.to_json_str(request_args['response_format'], json_indent=2)
+      if 'title' not in json_schema:
+        raise ValueError(
+            f'The root of `json_schema` must have a `title` field, '
+            f'got {json_schema!r}.'
         )
-
-      # Prepare messages.
-      messages = []
-      # Users could use `metadata_system_message` to pass system message.
-      system_message = prompt.metadata.get('system_message')
-      if system_message:
-        system_message = lf.SystemMessage.from_value(system_message)
-        messages.append(
-            dict(role='system', content=_content_from_message(system_message))
-        )
-      messages.append(dict(role='user', content=_content_from_message(prompt)))
-
-      assert openai is not None
-      response = openai.ChatCompletion.create(messages=messages, **request_args)
-
-      samples = []
-      for choice in response.choices:
-        logprobs = None
-        choice_logprobs = getattr(choice, 'logprobs', None)
-        if choice_logprobs:
-          logprobs = [
-              (
-                  t.token,
-                  t.logprob,
-                  [(tt.token, tt.logprob) for tt in t.top_logprobs],
+      request_args.update(
+          response_format=dict(
+              type='json_schema',
+              json_schema=dict(
+                  schema=json_schema,
+                  name=json_schema['title'],
+                  strict=True,
               )
-              for t in choice_logprobs.content
-          ]
-        samples.append(
-            lf.LMSample(
-                choice.message.content,
-                score=0.0,
-                logprobs=logprobs,
-            )
-        )
-
-      return lf.LMSamplingResult(
-          samples=samples,
-          usage=lf.LMSamplingUsage(
-              prompt_tokens=response.usage.prompt_tokens,
-              completion_tokens=response.usage.completion_tokens,
-              total_tokens=response.usage.total_tokens,
-              estimated_cost=self.estimate_cost(
-                  num_input_tokens=response.usage.prompt_tokens,
-                  num_output_tokens=response.usage.completion_tokens,
-              )
-          ),
+          )
+      )
+      prompt.metadata.formatted_text = (
+          prompt.text
+          + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
+          + pg.to_json_str(request_args['response_format'], json_indent=2)
       )
 
-    return self._parallel_execute_with_currency_control(
-        _open_ai_chat_completion,
-        prompts,
-        retry_on_errors=(
-            ServiceUnavailableError,
-            RateLimitError,
-            APITimeoutError
+    # Prepare messages.
+    messages = []
+    # Users could use `metadata_system_message` to pass system message.
+    system_message = prompt.metadata.get('system_message')
+    if system_message:
+      system_message = lf.SystemMessage.from_value(system_message)
+      messages.append(
+          dict(role='system',
+               content=self._content_from_message(system_message))
+      )
+    messages.append(
+        dict(role='user', content=self._content_from_message(prompt))
+    )
+    request = dict()
+    request.update(request_args)
+    request['messages'] = messages
+    return request
+
+  def _parse_choice(self, choice: dict[str, Any]) -> lf.LMSample:
+    # Reference:
+    # https://platform.openai.com/docs/api-reference/chat/object
+    logprobs = None
+    choice_logprobs = choice.get('logprobs')
+    if choice_logprobs:
+      logprobs = [
+          (
+              t['token'],
+              t['logprob'],
+              [(tt['token'], tt['logprob']) for tt in t['top_logprobs']],
+          )
+          for t in choice_logprobs['content']
+      ]
+    return lf.LMSample(
+        choice['message']['content'],
+        score=0.0,
+        logprobs=logprobs,
+    )
+
+  def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    usage = json['usage']
+    return lf.LMSamplingResult(
+        samples=[self._parse_choice(choice) for choice in json['choices']],
+        usage=lf.LMSamplingUsage(
+            prompt_tokens=usage['prompt_tokens'],
+            completion_tokens=usage['completion_tokens'],
+            total_tokens=usage['total_tokens'],
+            estimated_cost=self.estimate_cost(
+                num_input_tokens=usage['prompt_tokens'],
+                num_output_tokens=usage['completion_tokens'],
+            )
         ),
     )
 
