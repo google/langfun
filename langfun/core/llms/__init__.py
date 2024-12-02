@@ -120,6 +120,8 @@ from langfun.core.llms.groq import GroqWhisper_Large_v3
 from langfun.core.llms.groq import GroqWhisper_Large_v3Turbo
 
 from langfun.core.llms.vertexai import VertexAI
+from langfun.core.llms.vertexai import VertexAIRest
+from langfun.core.llms.vertexai import VertexAIRestGemini1_5
 from langfun.core.llms.vertexai import VertexAIGemini1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_Latest
