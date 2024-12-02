@@ -426,6 +426,7 @@ class VertexRestfulAITest(unittest.TestCase):
           model,
       )
 
+  @mock.patch.object(vertexai.VertexAIRest, 'credentials', new=True)
   def test_project_and_location_check(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `project`'):
       _ = vertexai.VertexAIGeminiPro1()._api_initialized
@@ -496,6 +497,7 @@ class VertexRestfulAITest(unittest.TestCase):
           lf.LMSamplingOptions(),
       )
 
+  @mock.patch.object(vertexai.VertexAIRest, 'credentials', new=True)
   def test_call_model(self):
     with mock.patch('requests.Session.post') as mock_generate:
       mock_generate.side_effect = mock_requests_post
