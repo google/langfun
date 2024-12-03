@@ -89,7 +89,7 @@ class QueryTest(unittest.TestCase):
     )
     self.assertEqual(
         prompting.query(
-            lf.Template('what is {{x}} + {{y}}'), int, x=1, y=0, lm=lm.clone()
+            lf.Template('what is {{x}} + {{y}}', x=1, y=0), int, lm=lm.clone()
         ),
         1,
     )
@@ -363,6 +363,23 @@ class QueryTest(unittest.TestCase):
 
             OUTPUT_OBJECT:
             """),
+    )
+
+  def test_query_prompt_with_metadata(self):
+    self.assertIn(
+        'x',
+        prompting.query_prompt(
+            'what is this?',
+            metadata_x=1
+        ).metadata
+    )
+    self.assertIn(
+        'x',
+        prompting.query_prompt(
+            'what is this?',
+            int,
+            metadata_x=1
+        ).metadata
     )
 
   def test_query_prompt_with_unrooted_template(self):
@@ -943,6 +960,72 @@ class QueryStructureJsonTest(unittest.TestCase):
     self.assertEqual(
         prompting.query('what is 1 + 0', int, lm=lm, protocol='json'), 1
     )
+
+
+class TrackQueriesTest(unittest.TestCase):
+
+  def test_include_child_scopes(self):
+    lm = fake.StaticSequence([
+        'bar',
+        'Activity(description="hi")',
+    ])
+    with prompting.track_queries() as queries:
+      prompting.query('foo', lm=lm)
+      with prompting.track_queries() as child_queries:
+        prompting.query('give me an activity', Activity, lm=lm)
+
+    self.assertEqual(len(queries), 2)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIsNone(queries[0].schema)
+    self.assertEqual(queries[0].output, 'bar')
+    self.assertIs(queries[0].lm, lm)
+
+    self.assertTrue(pg.eq(queries[1].input, lf.Template('give me an activity')))
+    self.assertEqual(queries[1].schema.spec.cls, Activity)
+    self.assertTrue(pg.eq(queries[1].output, Activity(description='hi')))
+    self.assertIs(queries[1].lm, lm)
+    self.assertGreater(queries[0].usage_summary.total.total_tokens, 0)
+    self.assertGreater(queries[1].usage_summary.total.total_tokens, 0)
+
+    self.assertEqual(len(child_queries), 1)
+    self.assertIs(child_queries[0], queries[1])
+
+  def test_exclude_child_scopes(self):
+    lm = fake.StaticSequence([
+        'bar',
+        'Activity(description="hi")',
+    ])
+    with prompting.track_queries(include_child_scopes=False) as queries:
+      prompting.query('foo', lm=lm)
+      with prompting.track_queries(include_child_scopes=False) as child_queries:
+        prompting.query('give me an activity', Activity, lm=lm)
+
+    self.assertEqual(len(queries), 1)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIsNone(queries[0].schema)
+    self.assertEqual(queries[0].output, 'bar')
+    self.assertIs(queries[0].lm, lm)
+
+    self.assertEqual(len(child_queries), 1)
+    self.assertTrue(
+        pg.eq(child_queries[0].input, lf.Template('give me an activity'))
+    )
+    self.assertEqual(child_queries[0].schema.spec.cls, Activity)
+    self.assertTrue(pg.eq(child_queries[0].output, Activity(description='hi')))
+    self.assertIs(child_queries[0].lm, lm)
+
+  def test_concurrent_map(self):
+
+    def make_query(prompt):
+      _ = prompting.query(prompt, lm=lm)
+
+    lm = fake.StaticSequence([
+        'foo',
+        'bar',
+    ])
+    with prompting.track_queries() as queries:
+      list(lf.concurrent_map(make_query, ['a', 'b']))
+    self.assertEqual(len(queries), 2)
 
 
 if __name__ == '__main__':
