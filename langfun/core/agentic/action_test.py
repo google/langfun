@@ -18,6 +18,7 @@ import unittest
 import langfun.core as lf
 from langfun.core.agentic import action as action_lib
 from langfun.core.llms import fake
+import langfun.core.structured as lf_structured
 
 
 class SessionTest(unittest.TestCase):
@@ -40,7 +41,12 @@ class SessionTest(unittest.TestCase):
         test.assertIs(session.current_invocation.action, self)
         session.info('Begin Foo', x=1)
         session.query('foo', lm=lm)
+        with session.track_queries():
+          self.make_additional_query(lm)
         return self.x + Bar()(session, lm=lm)
+
+      def make_additional_query(self, lm):
+        lf_structured.query('additional query', lm=lm)
 
     lm = fake.StaticResponse('lm response')
     session = action_lib.Session()
@@ -51,10 +57,10 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(len(session.root_invocation.child_invocations), 1)
     self.assertEqual(len(list(session.root_invocation.queries())), 0)
     self.assertEqual(
-        len(list(session.root_invocation.queries(include_children=True))), 2
+        len(list(session.root_invocation.queries(include_children=True))), 3
     )
     self.assertEqual(
-        len(list(session.root_invocation.child_invocations[0].queries())), 1
+        len(list(session.root_invocation.child_invocations[0].queries())), 2
     )
     self.assertEqual(len(session.root_invocation.child_invocations[0].logs), 1)
     self.assertEqual(
