@@ -17,6 +17,7 @@ import unittest
 
 import langfun.core as lf
 from langfun.core.agentic import action as action_lib
+from langfun.core.llms import fake
 
 
 class SessionTest(unittest.TestCase):
@@ -26,25 +27,35 @@ class SessionTest(unittest.TestCase):
 
     class Bar(action_lib.Action):
 
-      def call(self, session, **kwargs):
+      def call(self, session, *, lm, **kwargs):
         test.assertIs(session.current_invocation.action, self)
         session.info('Begin Bar')
+        session.query('bar', lm=lm)
         return 2
 
     class Foo(action_lib.Action):
       x: int
 
-      def call(self, session, **kwargs):
+      def call(self, session, *, lm, **kwargs):
         test.assertIs(session.current_invocation.action, self)
         session.info('Begin Foo', x=1)
-        return self.x + Bar()(session)
+        session.query('foo', lm=lm)
+        return self.x + Bar()(session, lm=lm)
 
+    lm = fake.StaticResponse('lm response')
     session = action_lib.Session()
     root = session.root_invocation
     self.assertIsInstance(root.action, action_lib.RootAction)
     self.assertIs(session.current_invocation, session.root_invocation)
-    self.assertEqual(Foo(1)(session), 3)
+    self.assertEqual(Foo(1)(session, lm=lm), 3)
     self.assertEqual(len(session.root_invocation.child_invocations), 1)
+    self.assertEqual(len(list(session.root_invocation.queries())), 0)
+    self.assertEqual(
+        len(list(session.root_invocation.queries(include_children=True))), 2
+    )
+    self.assertEqual(
+        len(list(session.root_invocation.child_invocations[0].queries())), 1
+    )
     self.assertEqual(len(session.root_invocation.child_invocations[0].logs), 1)
     self.assertEqual(
         len(session.root_invocation.child_invocations[0].child_invocations),
@@ -53,6 +64,11 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(
         len(session.root_invocation
             .child_invocations[0].child_invocations[0].logs),
+        1
+    )
+    self.assertEqual(
+        len(list(session.root_invocation
+                 .child_invocations[0].child_invocations[0].queries())),
         1
     )
     self.assertEqual(
