@@ -140,7 +140,6 @@ If you want to customize your installation, you can select specific features usi
 | all                 | All Langfun features.                    |
 | llm                 | All supported LLMs.                      |
 | llm-google          | All supported Google-powered LLMs.       |
-| llm-google-vertexai | LLMs powered by Google Cloud VertexAI    |
 | llm-google-genai    | LLMs powered by Google Generative AI API |
 | mime                | All MIME supports.                       |
 | mime-auto           | Automatic MIME type detection.           |

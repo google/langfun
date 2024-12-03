@@ -6,8 +6,6 @@ requests>=2.31.0
 termcolor==1.1.0
 tqdm>=4.64.1
 
-# extras:llm-google-vertex
-google-cloud-aiplatform>=1.5.0
 # extras:llm-google-genai
 google-generativeai>=0.3.2
 

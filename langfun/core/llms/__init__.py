@@ -120,25 +120,19 @@ from langfun.core.llms.groq import GroqWhisper_Large_v3
 from langfun.core.llms.groq import GroqWhisper_Large_v3Turbo
 
 from langfun.core.llms.vertexai import VertexAI
-from langfun.core.llms.vertexai import VertexAIRest
-from langfun.core.llms.vertexai import VertexAIRestGemini1_5
 from langfun.core.llms.vertexai import VertexAIGemini1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5
-from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_Latest
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_001
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_002
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_0514
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_0409
-from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_Latest
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_001
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_002
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_0514
 from langfun.core.llms.vertexai import VertexAIGeminiPro1
 from langfun.core.llms.vertexai import VertexAIGeminiPro1Vision
-from langfun.core.llms.vertexai import VertexAIPalm2
-from langfun.core.llms.vertexai import VertexAIPalm2_32K
-from langfun.core.llms.vertexai import VertexAICustom
+from langfun.core.llms.vertexai import VertexAIEndpoint
 
 
 # LLaMA C++ models.
