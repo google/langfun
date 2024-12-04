@@ -261,6 +261,9 @@ class RunnerBase(Runner):
       if cache is not None:
         self.background_run(cache.save)
 
+      # Wait for the background tasks to finish.
+      self._io_pool.shutdown(wait=True)
+
   @abc.abstractmethod
   def _run(self, evaluations: list[Evaluation]) -> None:
     """Runs multiple evaluations."""
