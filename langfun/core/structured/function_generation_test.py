@@ -63,6 +63,42 @@ class FunctionGenerationTest(unittest.TestCase):
 
     lm = fake.StaticSequence([unittest_lm_response, function_gen_lm_response])
 
+    @function_generation.function_gen(lm=lm, unittest='auto')
+    def linear_search(items, target):  # pylint: disable=unused-argument
+      """Performs a linear search on a list to find a target value.
+
+      Args:
+          items (list): The list to search within.
+          target: The value to search for.
+
+      Returns:
+          int: The index of the target value if found, otherwise -1.
+      """
+
+    self.assertEqual(linear_search(['a', 'b', 'c'], 'c'), 2)
+    self.assertEqual(linear_search.source(), function_gen_lm_response)
+
+  def test_generate_function_without_unittest(self):
+    function_gen_lm_response = inspect.cleandoc("""
+        def linear_search(items, target):
+            \"\"\"
+            Performs a linear search on a list to find a target value.
+
+            Args:
+                items (list): The list to search within.
+                target: The value to search for.
+
+            Returns:
+                int: The index of the target value if found, otherwise -1.
+            \"\"\"
+            for i, item in enumerate(items):
+                if item == target:
+                    return i
+            return -1
+        """)
+
+    lm = fake.StaticSequence([function_gen_lm_response])
+
     @function_generation.function_gen(lm=lm)
     def linear_search(items, target):  # pylint: disable=unused-argument
       """Performs a linear search on a list to find a target value.
@@ -258,7 +294,9 @@ class FunctionGenerationTest(unittest.TestCase):
     cache_file = os.path.join(cache_file_dir, 'cache_file.json')
 
     @function_generation.function_gen(
-        lm=lm, unittest=_unittest_fn, cache_filename=cache_file
+        lm=lm,
+        unittest=_unittest_fn,
+        cache_filename=cache_file,
     )
     def linear_search(items, target):  # pylint: disable=unused-argument
       """Performs a linear search on a list to find a target value.
@@ -310,7 +348,9 @@ class FunctionGenerationTest(unittest.TestCase):
 
     custom_unittest = _unittest_fn
 
-    @function_generation.function_gen(lm=lm, unittest=custom_unittest)
+    @function_generation.function_gen(
+        lm=lm, unittest=custom_unittest, num_retries=2
+    )
     def linear_search(items, target):  # pylint: disable=unused-argument
       """Performs a linear search on a list to find a target value.
 

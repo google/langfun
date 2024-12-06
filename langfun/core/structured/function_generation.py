@@ -16,7 +16,7 @@
 import functools
 import inspect
 import re
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Literal, Optional, Tuple
 
 from langfun.core import language_model
 from langfun.core import template
@@ -25,7 +25,7 @@ from langfun.core.structured import prompting
 import pyglove as pg
 
 
-def unittest_gen(signature, lm, num_retries=10):
+def unittest_gen(signature, lm, num_retries=1):
   """Generates unit tests for a python function signature."""
 
   class UnitTest(pg.Object):
@@ -78,10 +78,13 @@ def _function_gen(
     func: Callable[..., Any],
     signature: str,
     lm: language_model.LanguageModel,
-    num_retries: int = 10,
+    num_retries: int = 1,
     unittest: Optional[
-        Callable[[Callable[..., Any]], None] | list[Tuple[Any, Any]]
+        Callable[[Callable[..., Any]], None]
+        | list[Tuple[Any, Any]]
+        | Literal["auto"]
     ] = None,
+    unittest_num_retries: int = 1,
 ):
   """Generates a python function with LLM and verify its quality with unit testing."""
 
@@ -131,9 +134,11 @@ def _function_gen(
     """
 
   unittest_examples = None
-  if unittest is None:
-    unittest_examples = unittest_gen(signature, lm=lm)
-  elif not callable(unittest):
+  if unittest == "auto":
+    unittest_examples = unittest_gen(
+        signature, lm=lm, num_retries=unittest_num_retries
+    )
+  elif isinstance(unittest, list):
     unittest_examples = unittest
 
   for _ in range(num_retries):
@@ -145,11 +150,16 @@ def _function_gen(
 
       # Check whether the sigantures are the same.
       if inspect.signature(f) != inspect.signature(func):
+        pg.logging.warning(
+            "Signature mismatch. Expected: %s, Actual: %s",
+            inspect.signature(func),
+            inspect.signature(f),
+        )
         continue
 
       if callable(unittest):
         unittest(f)
-      else:
+      elif unittest_examples:
         unittest_with_test_cases(f, unittest_examples)
 
       return f, source_code
@@ -172,10 +182,13 @@ def _process_signature(signature):
 def function_gen(
     lm: language_model.LanguageModel,
     cache_filename: str | None = None,
-    num_retries: int = 10,
+    num_retries: int = 1,
     unittest: Optional[
-        Callable[[Callable[..., Any]], None] | list[Tuple[Any, Any]]
+        Callable[[Callable[..., Any]], None]
+        | list[Tuple[Any, Any]]
+        | Literal["auto"]
     ] = None,
+    unittest_num_retries: int = 1,
 ):
   """A decorator for automating function generation using a language model.
 
@@ -192,9 +205,12 @@ def function_gen(
         make to generate a suitable function implementation.
       unittest: This optional parameter enables the definition of custom unit
         tests. You can either provide a list of test cases as tuples of inputs
-        and outputs, or a function that throws an error if a test fails. If left
-        as None (the default setting), the LLM will automatically create the
-        unit test cases.
+        and outputs, or a function that throws an error if a test fails, or let
+        LLM automatically create the unit test cases. If a generated function is
+        and returned, it should pass all the unittests.
+      unittest_num_retries: If unittest is set to "auto", this parameter
+        specifies the number of times the LLM's attempts to generate unit test
+        cases.
 
   Returns:
       The implemented function object.
@@ -226,7 +242,12 @@ def function_gen(
           return func.__function__(*args, **kwargs)
 
       func.__function__, func.__source_code__ = _function_gen(
-          func, signature, lm, num_retries=num_retries, unittest=unittest
+          func,
+          signature,
+          lm,
+          num_retries=num_retries,
+          unittest=unittest,
+          unittest_num_retries=unittest_num_retries,
       )
       if func.__function__ is None:
         raise ValueError(f"Function generation failed. Signature:\n{signature}")
