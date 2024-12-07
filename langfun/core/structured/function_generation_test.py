@@ -311,6 +311,36 @@ class FunctionGenerationTest(unittest.TestCase):
 
     self.assertEqual(linear_search(['a', 'b', 'c'], 'c'), 2)
 
+  def test_context_passthrough(self):
+
+    class Number(pg.Object):
+      value: int
+
+    function_gen_lm_response = inspect.cleandoc("""
+        ```python
+        def add(a: Number, b: Number) -> Number:
+            \"\"\"Adds two numbers together.\"\"\"
+            return Number(a.value + b.value)
+        ```
+        """)
+
+    lm = fake.StaticSequence(
+        [function_gen_lm_response]
+    )
+
+    def _unittest_fn(func):
+      assert func(Number(1), Number(2)) == Number(3)
+
+    custom_unittest = _unittest_fn
+
+    @function_generation.function_gen(
+        lm=lm, unittest=custom_unittest, num_retries=1
+    )
+    def add(a: Number, b: Number) -> Number:  # pylint: disable=unused-argument
+      """Adds two numbers together."""
+
+    self.assertEqual(add(Number(2), Number(3)), Number(5))
+
   def test_siganture_check(self):
     incorrect_signature_lm_response = inspect.cleandoc("""
         ```python

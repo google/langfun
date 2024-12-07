@@ -76,6 +76,7 @@ def unittest_with_test_cases(f, unittests):
 
 def _function_gen(
     func: Callable[..., Any],
+    context: dict[str, Any],
     signature: str,
     lm: language_model.LanguageModel,
     num_retries: int = 1,
@@ -141,21 +142,23 @@ def _function_gen(
   elif isinstance(unittest, list):
     unittest_examples = unittest
 
+  last_error = None
   for _ in range(num_retries):
     try:
       source_code = prompting.query(
           PythonFunctionPrompt(signature=signature), lm=lm
       )
-      f = python.evaluate(source_code)
+      f = python.evaluate(source_code, global_vars=context)
 
       # Check whether the sigantures are the same.
       if inspect.signature(f) != inspect.signature(func):
-        pg.logging.warning(
-            "Signature mismatch. Expected: %s, Actual: %s",
-            inspect.signature(func),
-            inspect.signature(f),
+        raise python.CodeError(
+            code=source_code,
+            cause=TypeError(
+                f"Signature mismatch: Expected: {inspect.signature(func)}, "
+                f"Actual: {inspect.signature(f)}.",
+            ),
         )
-        continue
 
       if callable(unittest):
         unittest(f)
@@ -163,10 +166,12 @@ def _function_gen(
         unittest_with_test_cases(f, unittest_examples)
 
       return f, source_code
-    except Exception:  # pylint: disable=broad-exception-caught
-      pass
-
-  return None, None
+    except python.CodeError as e:
+      last_error = e
+      pg.logging.warning(
+          f"Bad code generated: {e}",
+      )
+  raise last_error
 
 
 def _process_signature(signature):
@@ -220,6 +225,13 @@ def function_gen(
     setattr(func, "__function__", None)
     setattr(func, "__source_code__", None)
 
+    # Prepare the globals/locals for the generated code to be evaluated against.
+    callstack = inspect.stack()
+    assert len(callstack) > 1
+    context = dict(callstack[1][0].f_globals)
+    context.update(callstack[1][0].f_locals)
+    context.pop(func.__name__, None)
+
     @functools.wraps(func)
     def lm_generated_func(*args, **kwargs):
       if func.__function__ is not None:
@@ -238,20 +250,20 @@ def function_gen(
 
         if signature in cache:
           func.__source_code__ = cache[signature]
-          func.__function__ = python.evaluate(func.__source_code__)
+          func.__function__ = python.evaluate(
+              func.__source_code__, global_vars=context
+          )
           return func.__function__(*args, **kwargs)
 
       func.__function__, func.__source_code__ = _function_gen(
           func,
+          context,
           signature,
           lm,
           num_retries=num_retries,
           unittest=unittest,
           unittest_num_retries=unittest_num_retries,
       )
-      if func.__function__ is None:
-        raise ValueError(f"Function generation failed. Signature:\n{signature}")
-
       if cache_filename is not None:
         cache[signature] = func.__source_code__
         cache.save(cache_filename)
