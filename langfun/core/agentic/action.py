@@ -37,7 +37,7 @@ class Action(pg.Object):
       self, session: Optional['Session'] = None, **kwargs) -> Any:
     """Executes the action."""
     session = session or Session()
-    with session.track(self):
+    with session.track_action(self):
       self._result = self.call(session=session, **kwargs)
       return self._result
 
@@ -213,7 +213,7 @@ class Session(pg.Object):
     return self._invocation_stack[-1]
 
   @contextlib.contextmanager
-  def track(self, action: Action) -> Iterator[ActionInvocation]:
+  def track_action(self, action: Action) -> Iterator[ActionInvocation]:
     """Track the execution of an action."""
     new_invocation = ActionInvocation(pg.maybe_ref(action))
     with pg.notify_on_change(False):
@@ -238,6 +238,21 @@ class Session(pg.Object):
             raise_on_no_change=False
         )
 
+  @contextlib.contextmanager
+  def track_queries(self) -> Iterator[list[lf_structured.QueryInvocation]]:
+    """Tracks `lf.query` made within the context.
+
+    Yields:
+      A list of `lf.QueryInvocation` objects, each for a single `lf.query`
+      call.
+    """
+    with lf_structured.track_queries(include_child_scopes=False) as queries:
+      try:
+        yield queries
+      finally:
+        with pg.notify_on_change(False):
+          self.current_invocation.execution.extend(queries)
+
   def query(
       self,
       prompt: Union[str, lf.Template, Any],
@@ -250,7 +265,35 @@ class Session(pg.Object):
       examples: list[lf_structured.MappingExample] | None = None,
       **kwargs
       ) -> Any:
-    """Calls `lf.query` and associates it with the current invocation."""
+    """Calls `lf.query` and associates it with the current invocation.
+
+    The following code are equivalent:
+
+      Code 1:
+      ```
+      session.query(...)
+      ```
+
+      Code 2:
+      ```
+      with session.track_queries() as queries:
+        output = lf.query(...)
+      ```
+    The former is preferred when `lf.query` is directly called by the action.
+    If `lf.query` is called by a function that does not have access to the
+    session, the latter should be used.
+
+    Args:
+      prompt: The prompt to query.
+      schema: The schema to use for the query.
+      default: The default value to return if the query fails.
+      lm: The language model to use for the query.
+      examples: The examples to use for the query.
+      **kwargs: Additional keyword arguments to pass to `lf.query`.
+    
+    Returns:
+      The result of the query.
+    """
     with lf_structured.track_queries() as queries:
       output = lf_structured.query(
           prompt,
