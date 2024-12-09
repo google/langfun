@@ -778,7 +778,7 @@ class Message(
         .modality-in-text {
             display: inline-block;
         }
-        .modality-in-text > details {
+        .modality-in-text > details.pyglove {
             display: inline-block;
             font-size: 0.8em;
             border: 0;

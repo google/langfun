@@ -962,6 +962,18 @@ class QueryStructureJsonTest(unittest.TestCase):
     )
 
 
+class QueryInvocationTest(unittest.TestCase):
+
+  def test_to_html(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi")',
+    ])
+    with prompting.track_queries() as queries:
+      prompting.query('foo', Activity, lm=lm)
+
+    self.assertIn('schema', queries[0].to_html_str())
+
+
 class TrackQueriesTest(unittest.TestCase):
 
   def test_include_child_scopes(self):
