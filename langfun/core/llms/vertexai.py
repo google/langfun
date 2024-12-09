@@ -343,7 +343,7 @@ class VertexAI(rest.REST):
     return lf.AIMessage.from_chunks(chunks)
 
 
-_IMAGE_TYPES = [
+IMAGE_TYPES = [
     'image/png',
     'image/jpeg',
     'image/webp',
@@ -351,7 +351,7 @@ _IMAGE_TYPES = [
     'image/heif',
 ]
 
-_AUDIO_TYPES = [
+AUDIO_TYPES = [
     'audio/aac',
     'audio/flac',
     'audio/mp3',
@@ -362,10 +362,10 @@ _AUDIO_TYPES = [
     'audio/opus',
     'audio/pcm',
     'audio/wav',
-    'audio/webm'
+    'audio/webm',
 ]
 
-_VIDEO_TYPES = [
+VIDEO_TYPES = [
     'video/mov',
     'video/mpeg',
     'video/mpegps',
@@ -375,9 +375,10 @@ _VIDEO_TYPES = [
     'video/wmv',
     'video/x-flv',
     'video/3gpp',
+    'video/quicktime',
 ]
 
-_DOCUMENT_TYPES = [
+DOCUMENT_TYPES = [
     'application/pdf',
     'text/plain',
     'text/csv',
@@ -391,8 +392,8 @@ _DOCUMENT_TYPES = [
 class VertexAIGemini1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 model."""
 
-  supported_modalities: pg.typing.List(str).freeze(   # pytype: disable=invalid-annotation
-      _DOCUMENT_TYPES + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+  supported_modalities: pg.typing.List(str).freeze(  # pytype: disable=invalid-annotation
+      DOCUMENT_TYPES + IMAGE_TYPES + AUDIO_TYPES + VIDEO_TYPES
   )
 
 
@@ -460,8 +461,8 @@ class VertexAIGeminiPro1Vision(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.0 Pro Vision model."""
 
   model = 'gemini-1.0-pro-vision'
-  supported_modalities: pg.typing.List(str).freeze(   # pytype: disable=invalid-annotation
-      _IMAGE_TYPES + _VIDEO_TYPES
+  supported_modalities: pg.typing.List(str).freeze(  # pytype: disable=invalid-annotation
+      IMAGE_TYPES + VIDEO_TYPES
   )
 
 

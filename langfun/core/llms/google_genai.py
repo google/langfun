@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+from langfun.core.llms import vertexai
 import pyglove as pg
 
 
@@ -307,71 +308,52 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 #
 
 
-_IMAGE_TYPES = [
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-    'image/heic',
-    'image/heif',
-]
-
-_AUDIO_TYPES = [
-    'audio/aac',
-    'audio/flac',
-    'audio/mp3',
-    'audio/m4a',
-    'audio/mpeg',
-    'audio/mpga',
-    'audio/mp4',
-    'audio/opus',
-    'audio/pcm',
-    'audio/wav',
-    'audio/webm'
-]
-
-_VIDEO_TYPES = [
-    'video/mov',
-    'video/mpeg',
-    'video/mpegps',
-    'video/mpg',
-    'video/mp4',
-    'video/webm',
-    'video/wmv',
-    'video/x-flv',
-    'video/3gpp',
-]
-
-_PDF = [
-    'application/pdf',
-]
-
-
 class GeminiExp_20241206(GenAI):  # pylint: disable=invalid-name
   """Gemini Experimental model launched on 12/06/2024."""
 
   model = 'gemini-exp-1206'
-  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
 
 
 class GeminiExp_20241114(GenAI):  # pylint: disable=invalid-name
   """Gemini Experimental model launched on 11/14/2024."""
 
   model = 'gemini-exp-1114'
-  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
 
 
 class GeminiPro1_5(GenAI):  # pylint: disable=invalid-name
   """Gemini Pro latest model."""
 
   model = 'gemini-1.5-pro-latest'
-  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
 
 
 class GeminiFlash1_5(GenAI):  # pylint: disable=invalid-name
   """Gemini Flash latest model."""
 
   model = 'gemini-1.5-flash-latest'
-  supported_modalities = _PDF + _IMAGE_TYPES + _AUDIO_TYPES + _VIDEO_TYPES
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
 
 
 class GeminiPro(GenAI):
@@ -384,7 +366,7 @@ class GeminiProVision(GenAI):
   """Gemini Pro vision model."""
 
   model = 'gemini-pro-vision'
-  supported_modalities = _IMAGE_TYPES + _VIDEO_TYPES
+  supported_modalities = vertexai.IMAGE_TYPES + vertexai.VIDEO_TYPES
 
 
 class Palm2(GenAI):
