@@ -35,7 +35,7 @@ except ImportError:
   google_auth = None
   auth_requests = None
   credentials_lib = None
-  Credentials = None  # pylint: disable=invalid-name
+  Credentials = Any  # pylint: disable=invalid-name
 
 
 SUPPORTED_MODELS_AND_SETTINGS = {
