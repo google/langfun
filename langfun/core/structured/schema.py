@@ -201,7 +201,7 @@ class Schema(
   ):
     return pg.Html.element(
         'div',
-        [self.schema_str(protocol='python')],
+        [pg.Html.escape(self.schema_str(protocol='python'))],
         css_classes=['lf-schema-definition']
     ).add_style(
         """

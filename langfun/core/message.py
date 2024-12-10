@@ -769,7 +769,6 @@ class Message(
             padding: 20px;
             margin: 10px 5px 10px 5px;
             font-style: italic;
-            font-size: 1.1em;
             white-space: pre-wrap;
             border: 1px solid #EEE;
             border-radius: 5px;
