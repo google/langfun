@@ -556,6 +556,9 @@ class Evaluation(experiment_lib.Experiment):
           border: 0px;
           margin: 0px;
         }
+        .eval-details .tab-control {
+          width: 100%;
+        }
         .eval-details .tab-button {
           font-size: large;
         }
