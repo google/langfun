@@ -33,7 +33,8 @@ class SessionTest(unittest.TestCase):
         test.assertIs(session.current_action.action, self)
         session.info('Begin Bar')
         session.query('bar', lm=lm)
-        return 2, dict(note='bar')
+        session.add_metadata(note='bar')
+        return 2
 
     class Foo(action_lib.Action):
       x: int
@@ -45,7 +46,8 @@ class SessionTest(unittest.TestCase):
           session.query('foo', lm=lm)
         with session.track_queries():
           self.make_additional_query(lm)
-        return self.x + Bar()(session, lm=lm), dict(note='foo')
+        session.add_metadata(note='foo')
+        return self.x + Bar()(session, lm=lm)
 
       def make_additional_query(self, lm):
         lf_structured.query('additional query', lm=lm)

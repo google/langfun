@@ -64,23 +64,16 @@ class Action(pg.Object):
 
     with session.track_action(self):
       result = self.call(session=session, **kwargs)
-      metadata = dict()
-      if (isinstance(result, tuple)
-          and len(result) == 2 and isinstance(result[1], dict)):
-        result, metadata = result
 
       # For the top-level action, we store the session in the metadata.
       if new_session:
         self._session = session
-      self._result, self._result_metadata = result, metadata
+      self._result = result
+      self._result_metadata = session.current_action.result_metadata
       return self._result
 
   @abc.abstractmethod
-  def call(
-      self,
-      session: 'Session',
-      **kwargs
-  ) -> Union[Any, tuple[Any, dict[str, Any]]]:
+  def call(self, session: 'Session', **kwargs) -> Any:
     """Calls the action.
 
     Args:
@@ -88,7 +81,7 @@ class Action(pg.Object):
       **kwargs: Additional keyword arguments to pass to the action.
 
     Returns:
-      The result of the action or a tuple of (result, result_metadata).
+      The result of the action.
     """
 
 
@@ -725,6 +718,11 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def current_action(self) -> ActionInvocation:
     """Returns the current invocation."""
     return self._current_action
+
+  def add_metadata(self, **kwargs: Any) -> None:
+    """Adds metadata to the current invocation."""
+    with pg.notify_on_change(False):
+      self._current_action.result_metadata.update(kwargs)
 
   def phase(self, name: str) -> ContextManager[ExecutionTrace]:
     """Context manager for starting a new execution phase."""
