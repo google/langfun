@@ -40,7 +40,7 @@ except ImportError:
 
 # https://cloud.google.com/vertex-ai/generative-ai/pricing
 # describes that the average number of characters per token is about 4.
-AVGERAGE_CHARS_PER_TOEKN = 4
+AVGERAGE_CHARS_PER_TOKEN = 4
 
 
 # Price in US dollars,
@@ -101,6 +101,18 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         rpm=100,
         cost_per_1k_input_chars=0.000125,
         cost_per_1k_output_chars=0.000375,
+    ),
+    # TODO(sharatsharat): Update costs when published
+    'gemini-exp-1206': pg.Dict(
+        rpm=20,
+        cost_per_1k_input_chars=0.000,
+        cost_per_1k_output_chars=0.000,
+    ),
+    # TODO(sharatsharat): Update costs when published
+    'gemini-2.0-flash-exp': pg.Dict(
+        rpm=20,
+        cost_per_1k_input_chars=0.000,
+        cost_per_1k_output_chars=0.000,
     ),
     # TODO(chengrun): Set a more appropriate rpm for endpoint.
     'vertexai-endpoint': pg.Dict(
@@ -215,7 +227,7 @@ class VertexAI(rest.REST):
     return (
         cost_per_1k_input_chars * num_input_tokens
         + cost_per_1k_output_chars * num_output_tokens
-    ) * AVGERAGE_CHARS_PER_TOEKN / 1000
+    ) * AVGERAGE_CHARS_PER_TOKEN / 1000
 
   @functools.cached_property
   def _session(self):
