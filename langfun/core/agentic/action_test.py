@@ -73,7 +73,7 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(root.execution.has_stopped)
     self.assertGreater(root.execution.elapse, 0)
     self.assertEqual(root.result, 3)
-    self.assertEqual(root.result_metadata, dict(note='foo'))
+    self.assertEqual(root.metadata, dict(note='foo'))
 
     # The root space should have one action (foo), no queries, and no logs.
     self.assertEqual(len(list(root.actions)), 1)
@@ -109,11 +109,11 @@ class SessionTest(unittest.TestCase):
     self.assertIsInstance(bar_invocation, action_lib.ActionInvocation)
     self.assertIsInstance(bar_invocation.action, Bar)
     self.assertEqual(bar_invocation.result, 2)
-    self.assertEqual(bar_invocation.result_metadata, dict(note='bar'))
+    self.assertEqual(bar_invocation.metadata, dict(note='bar'))
     self.assertEqual(len(bar_invocation.execution.items), 2)
 
     # Save to HTML
-    self.assertIn('invocation-result', session.to_html().content)
+    self.assertIn('result', session.to_html().content)
 
     # Save session to JSON
     json_str = session.to_json_str(save_ref_value=True)

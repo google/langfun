@@ -32,7 +32,7 @@ class Action(pg.Object):
     super()._on_bound()
     self._session = None
     self._result = None
-    self._result_metadata = {}
+    self._metadata = {}
 
   @property
   def session(self) -> Optional['Session']:
@@ -45,9 +45,9 @@ class Action(pg.Object):
     return self._result
 
   @property
-  def result_metadata(self) -> dict[str, Any] | None:
+  def metadata(self) -> dict[str, Any] | None:
     """Returns the metadata associated with the result from previous call."""
-    return self._result_metadata
+    return self._metadata
 
   def __call__(
       self,
@@ -69,7 +69,7 @@ class Action(pg.Object):
       if new_session:
         self._session = session
       self._result = result
-      self._result_metadata = session.current_action.result_metadata
+      self._metadata = session.current_action.metadata
       return self._result
 
   @abc.abstractmethod
@@ -139,7 +139,7 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     if self._time_badge is not None:
       self._time_badge.update(
           'Starting',
-          add_class=['running'],
+          add_class=['starting'],
           remove_class=['not-started'],
       )
 
@@ -149,9 +149,13 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     if self._time_badge is not None:
       self._time_badge.update(
           f'{int(self.elapse)} seconds',
+          tooltip=pg.format(self.execution_summary(), verbose=False),
           add_class=['finished'],
           remove_class=['running'],
       )
+
+  def __len__(self) -> int:
+    return len(self.items)
 
   @property
   def has_started(self) -> bool:
@@ -238,17 +242,8 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
         and not isinstance(item, lf.logging.LogEntry)):
       sub_task_label = self._execution_item_label(item)
       self._time_badge.update(
-          pg.Html.element(
-              'span',
-              [
-                  'Running',
-                  pg.views.html.controls.Badge(
-                      sub_task_label.text,
-                      tooltip=sub_task_label.tooltip,
-                      css_classes=['task-in-progress']
-                  )
-              ]
-          ),
+          text=sub_task_label.text,
+          tooltip=sub_task_label.tooltip.content,
           add_class=['running'],
           remove_class=['not-started'],
       )
@@ -263,6 +258,20 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     """Returns the usage summary of the action."""
     return self._usage_summary
 
+  def execution_summary(self) -> dict[str, Any]:
+    """Execution summary string."""
+    return pg.Dict(
+        num_queries=len(self.queries),
+        execution_breakdown=[
+            dict(
+                action=action.action.__class__.__name__,
+                usage=action.usage_summary.total,
+                execution_time=action.execution.elapse,
+            )
+            for action in self.actions
+        ]
+    )
+
   #
   # HTML views.
   #
@@ -274,57 +283,47 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
       extra_flags: dict[str, Any] | None = None,
       view: pg.views.html.HtmlTreeView, **kwargs
   ):
-    extra_flags = extra_flags or {}
-    interactive = extra_flags.get('interactive', True)
-    def time_badge():
-      if not self.has_started:
-        label = '(Not started)'
-        css_class = 'not-started'
-      elif not self.has_stopped:
-        label = 'Starting'
-        css_class = 'running'
-      else:
-        label = f'{int(self.elapse)} seconds'
-        css_class = 'finished'
-      return pg.views.html.controls.Badge(
-          label,
-          css_classes=['execution-time', css_class],
-          interactive=interactive,
-      )
-    time_badge = time_badge()
+    return None
+
+  def _execution_badge(self, interactive: bool = True):
+    if not self.has_started:
+      label = '(Not started)'
+      tooltip = 'Execution not started.'
+      css_class = 'not-started'
+    elif not self.has_stopped:
+      label = 'Starting'
+      tooltip = 'Execution starting.'
+      css_class = 'running'
+    else:
+      label = f'{int(self.elapse)} seconds'
+      tooltip = pg.format(self.execution_summary(), verbose=False)
+      css_class = 'finished'
+    time_badge = pg.views.html.controls.Badge(
+        label,
+        tooltip=tooltip,
+        css_classes=['execution-time', css_class],
+        interactive=interactive,
+    )
     if interactive:
       self._time_badge = time_badge
-    title = pg.Html.element(
-        'div',
-        [
-            'ExecutionTrace',
-            time_badge,
-        ],
-        css_classes=['execution-trace-title'],
-    )
-    kwargs.pop('title', None)
-    kwargs['enable_summary_tooltip'] = False
-    kwargs['enable_key_tooltip'] = False
-    return view.summary(
-        self,
-        name=name,
-        title=title,
-        extra_flags=extra_flags,
-        **kwargs
-    )
+    return time_badge
 
-  def _html_tree_view_content(self, **kwargs):
+  def _html_tree_view_content(
+      self,
+      *,
+      extra_flags: dict[str, Any] | None = None,
+      **kwargs
+  ):
     del kwargs
-    self._tab_control = pg.views.html.controls.TabControl(
-        [self._execution_item_tab(item) for item in self.items],
-        tab_position='left'
-    )
-    return pg.Html.element(
-        'div',
-        [
-            self._tab_control
-        ]
-    )
+    extra_flags = extra_flags or {}
+    interactive = extra_flags.get('interactive', True)
+    if interactive or self.items:
+      self._tab_control = pg.views.html.controls.TabControl(
+          [self._execution_item_tab(item) for item in self.items],
+          tab_position='left'
+      )
+      return self._tab_control.to_html()
+    return '(no tracked items)'
 
   def _execution_item_tab(self, item: TracedItem) -> pg.views.html.controls.Tab:
     if isinstance(item, ActionInvocation):
@@ -381,7 +380,8 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
     elif isinstance(item, ExecutionTrace):
       return pg.views.html.controls.Label(
-          item.name or 'Phase'
+          item.name or 'Phase',
+          tooltip=f'Execution phase {item.name!r}.'
       )
     else:
       raise ValueError(f'Unsupported item type: {type(item)}')
@@ -420,19 +420,19 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           display: inline-block;
         }
         .badge.execution-time {
-          margin-left: 5px;
+          margin-left: 4px;
+          border-radius: 0px;
+        }
+        .execution-time.starting {
+          background-color: ghostwhite;
+          font-weight: normal;
         }
         .execution-time.running {
-          background-color: lavender;
+          background-color: ghostwhite;
           font-weight: normal;
         }
         .execution-time.finished {
           background-color: aliceblue;
-          font-weight: bold;
-        }
-        .badge.task-in-progress {
-          margin-left: 5px;
-          background-color: azure;
           font-weight: bold;
         }
        """
@@ -448,7 +448,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
       'The result of the action.'
   ] = None
 
-  result_metadata: Annotated[
+  metadata: Annotated[
       dict[str, Any],
       'The metadata returned by the action.'
   ] = {}
@@ -464,8 +464,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def _on_bound(self):
     super()._on_bound()
     self._current_phase = self.execution
-    self._result_badge = None
-    self._result_metadata_badge = None
+    self._tab_control = None
 
   @property
   def current_phase(self) -> ExecutionTrace:
@@ -520,31 +519,42 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
     """Starts the execution of the action."""
     self.execution.start()
 
-  def end(self, result: Any, result_metadata: dict[str, Any]) -> None:
+  def end(self, result: Any, metadata: dict[str, Any]) -> None:
     """Ends the execution of the action with result and metadata."""
     self.execution.stop()
     self.rebind(
         result=result,
-        result_metadata=result_metadata,
+        metadata=metadata,
         skip_notification=True,
         raise_on_no_change=False
     )
-    if self._result_badge is not None:
-      self._result_badge.update(
-          self._result_badge_label(result),
-          tooltip=self._result_badge_tooltip(result),
-          add_class=['ready'],
-          remove_class=['not-ready'],
+    if self._tab_control is not None:
+      if self.metadata:
+        self._tab_control.insert(
+            1,
+            pg.views.html.controls.Tab(
+                'metadata',
+                pg.view(
+                    self.metadata,
+                    collapse_level=None,
+                    enable_summary_tooltip=False
+                ),
+                name='metadata',
+            )
+        )
+      self._tab_control.insert(
+          1,
+          pg.views.html.controls.Tab(
+              'result',
+              pg.view(
+                  self.result,
+                  collapse_level=None,
+                  enable_summary_tooltip=False
+              ),
+              name='result',
+          ),
       )
-    if self._result_metadata_badge is not None:
-      result_metadata = dict(result_metadata)
-      result_metadata.pop('session', None)
-      self._result_metadata_badge.update(
-          '{...}',
-          tooltip=self._result_metadata_badge_tooltip(result_metadata),
-          add_class=['ready'],
-          remove_class=['not-ready'],
-      )
+      self._tab_control.select(['metadata', 'result'])
 
   #
   # HTML views.
@@ -566,128 +576,88 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
     interactive = extra_flags.get('interactive', True)
     if (isinstance(self.action, RootAction)
         and self.execution.has_stopped
-        and len(self.execution.items) == 1):
+        and len(self.execution) == 1):
       return view.content(self.execution.items[0], extra_flags=extra_flags)
 
-    def _result_badge():
-      if not self.execution.has_stopped:
-        label = '(n/a)'
-        tooltip = 'Result is not available yet.'
-        css_class = 'not-ready'
-      else:
-        label = self._result_badge_label(self.result)
-        tooltip = self._result_badge_tooltip(self.result)
-        css_class = 'ready'
-      return pg.views.html.controls.Badge(
-          label,
-          tooltip=tooltip,
-          css_classes=['invocation-result', css_class],
-          interactive=interactive,
+    tabs = []
+    if not isinstance(self.action, RootAction):
+      tabs.append(
+          pg.views.html.controls.Tab(
+              'action',
+              view.render(  # pylint: disable=g-long-ternary
+                  self.action,
+                  collapse_level=None,
+                  root_path=self.action.sym_path,
+                  enable_summary_tooltip=False,
+              ),
+              name='action',
+          )
       )
-
-    def _result_metadata_badge():
-      if not self.execution.has_stopped:
-        label = '(n/a)'
-        tooltip = 'Result metadata is not available yet.'
-        css_class = 'not-ready'
-      else:
-        label = '{...}' if self.result_metadata else '(empty)'
-        tooltip = self._result_metadata_badge_tooltip(self.result_metadata)
-        css_class = 'ready'
-      return pg.views.html.controls.Badge(
-          label,
-          tooltip=tooltip,
-          css_classes=['invocation-result-metadata', css_class],
-          interactive=interactive,
+    if self.execution.has_stopped:
+      tabs.append(
+          pg.views.html.controls.Tab(
+              'result',
+              view.render(
+                  self.result,
+                  collapse_level=None,
+                  enable_summary_tooltip=False
+              ),
+              name='result'
+          )
       )
+      if self.metadata:
+        tabs.append(
+            pg.views.html.controls.Tab(
+                'metadata',
+                view.render(
+                    self.metadata,
+                    collapse_level=None,
+                    enable_summary_tooltip=False
+                ),
+                name='metadata'
+            )
+        )
 
-    result_badge = _result_badge()
-    result_metadata_badge = _result_metadata_badge()
-    if interactive:
-      self._result_badge = result_badge
-      self._result_metadata_badge = result_metadata_badge
-
-    return pg.Html.element(
-        'div',
-        [
+    tabs.append(
+        pg.views.html.controls.Tab(
             pg.Html.element(
-                'div',
+                'span',
                 [
-                    view.render(
-                        self.usage_summary, extra_flags=dict(as_badge=True)
+                    'execution',
+                    self.execution._execution_badge(interactive),  # pylint: disable=protected-access
+                    (
+                        self.usage_summary.to_html(  # pylint: disable=g-long-ternary
+                            extra_flags=dict(as_badge=True)
+                        )
+                        if (interactive
+                            or self.usage_summary.total.num_requests > 0)
+                        else None
                     ),
-                    result_badge,
-                    result_metadata_badge,
                 ],
-                css_classes=['invocation-badge-container'],
+                css_classes=['execution-tab-title']
             ),
-            view.render(  # pylint: disable=g-long-ternary
-                self.action,
-                name='action',
-                collapse_level=None,
-                root_path=self.action.sym_path,
-                css_classes='invocation-title',
-                enable_summary_tooltip=False,
-            ) if not isinstance(self.action, RootAction) else None,
-            view.render(self.execution, name='execution'),
-        ]
-    )
-
-  def _result_badge_label(self, result: Any) -> str:
-    label = pg.format(
-        result, python_format=True, verbose=False
-    )
-    if len(label) > 40:
-      if isinstance(result, str):
-        label = label[:40] + '...'
-      else:
-        label = f'{result.__class__.__name__}(...)'
-    return label
-
-  def _result_badge_tooltip(self, result: Any) -> pg.Html:
-    return typing.cast(
-        pg.Html,
-        pg.view(
-            result, name='result',
-            collapse_level=None,
-            enable_summary_tooltip=False,
-            enable_key_tooltip=False,
+            view.render(self.execution, extra_flags=extra_flags),
+            name='execution',
         )
     )
-
-  def _result_metadata_badge_tooltip(
-      self, result_metadata: dict[str, Any]
-  ) -> pg.Html:
-    return typing.cast(
-        pg.Html,
-        pg.view(
-            result_metadata,
-            name='result_metadata',
-            collapse_level=None,
-            enable_summary_tooltip=False,
-        )
-    )
+    tab_control = pg.views.html.controls.TabControl(tabs)
+    # Select the tab following a priority: metadata, result, action, execution.
+    tab_control.select(['metadata', 'result', 'action', 'execution'])
+    if interactive:
+      self._tab_control = tab_control
+    return tab_control
 
   @classmethod
   def _html_tree_view_css_styles(cls) -> list[str]:
     return super()._html_tree_view_css_styles() + [
         """
-        .invocation-badge-container {
-          display: flex;
-          padding-bottom: 5px;
+        .execution-tab-title {
+          text-align: left;
         }
-        .invocation-badge-container > .label-container {
-          margin-right: 3px;
-        }
-        .invocation-result.ready {
-          background-color: lightcyan;
-        }
-        .invocation-result-metadata.ready {
-          background-color: lightyellow;
-        }
-        details.pyglove.invocation-title {
-          background-color: aliceblue;
-          border: 0px solid white;
+        .execution-tab-title .usage-summary.label {
+          border-radius: 0px;
+          font-weight: normal;
+          color: #AAA;
         }
         """
     ]
@@ -722,7 +692,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def add_metadata(self, **kwargs: Any) -> None:
     """Adds metadata to the current invocation."""
     with pg.notify_on_change(False):
-      self._current_action.result_metadata.update(kwargs)
+      self._current_action.metadata.update(kwargs)
 
   def phase(self, name: str) -> ContextManager[ExecutionTrace]:
     """Context manager for starting a new execution phase."""
@@ -745,11 +715,11 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       yield invocation
     finally:
       # Stop the execution of the current action.
-      self._current_action.end(action.result, action.result_metadata)
+      self._current_action.end(action.result, action.metadata)
       self._current_action = parent_action
       if parent_action is self.root:
         parent_action.end(
-            result=action.result, result_metadata=action.result_metadata,
+            result=action.result, metadata=action.metadata,
         )
 
   @contextlib.contextmanager
