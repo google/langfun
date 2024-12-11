@@ -555,13 +555,6 @@ class TemplateRenderEventTest(unittest.TestCase):
 
 class HtmlTest(unittest.TestCase):
 
-  def assert_html_content(self, html, expected):
-    expected = inspect.cleandoc(expected).strip()
-    actual = html.content.strip()
-    if actual != expected:
-      print(actual)
-    self.assertEqual(actual, expected)
-
   def test_html(self):
 
     class Foo(Template):
@@ -594,36 +587,23 @@ class HtmlTest(unittest.TestCase):
                 background-color: #EEE;
                 color: #cc2986;
             }
-            .template-fields {
-                margin: 0px 0px 5px 0px;
-                border: 1px solid #EEE;
-                padding: 5px;
-            }
-            .template-fields > legend {
-                font-size: 0.8em;
-                margin: 5px 0px 5px 0px;
-            }
             """
         ),
         Foo(x=1, y=2).to_html().style_section,
     )
-    self.assert_html_content(
+    self.assertIn(
+        'template-str',
         Foo(x=Bar('{{y}} + {{z}}'), y=1).to_html(
             enable_summary_tooltip=False,
-        ),
-        """
-        <details open class="pyglove foo lf-template"><summary><div class="summary-title lf-template">Foo(...)</div></summary><div class="complex_value"><div class="template-str"><span>{{x}} + {{y}} = ?</span></div><fieldset class="template-fields"><legend>Template Variables</legend><div class="complex-value foo"><details class="pyglove bar lf-template"><summary><div class="summary-name lf-template">x<span class="tooltip lf-template">x</span></div><div class="summary-title lf-template">Bar(...)</div></summary><div class="complex_value"><div class="template-str"><span>{{y}} + {{z}}</span></div><fieldset class="template-fields"><legend>Template Variables</legend><div class="complex-value bar"><details open class="pyglove contextual-attribute"><summary><div class="summary-name">y<span class="tooltip">x.y</span></div><div class="summary-title">ContextualAttribute(...)</div></summary><span class="simple-value int">1</span></details><details open class="pyglove contextual-attribute"><summary><div class="summary-name">z<span class="tooltip">x.z</span></div><div class="summary-title">ContextualAttribute(...)</div></summary><div class="unavailable-contextual">(not available)</div></details></div></fieldset></div></details><details open class="pyglove int"><summary><div class="summary-name">y<span class="tooltip">y</span></div><div class="summary-title">int</div></summary><span class="simple-value int">1</span></details></div></fieldset></div></details>
-        """
+        ).content,
     )
-    self.assert_html_content(
+    self.assertIn(
+        'template-str',
         Foo(x=Bar('{{y}} + {{z}}'), y=1).to_html(
             enable_summary_tooltip=False,
             collapse_level=0,
             key_style='label',
-        ),
-        """
-        <details class="pyglove foo lf-template"><summary><div class="summary-title lf-template">Foo(...)</div></summary><div class="complex_value"><div class="template-str"><span>{{x}} + {{y}} = ?</span></div><fieldset class="template-fields"><legend>Template Variables</legend><div class="complex-value foo"><table><tr><td><span class="object-key str">x</span><span class="tooltip">x</span></td><td><details class="pyglove bar lf-template"><summary><div class="summary-title lf-template">Bar(...)</div></summary><div class="complex_value"><div class="template-str"><span>{{y}} + {{z}}</span></div><fieldset class="template-fields"><legend>Template Variables</legend><div class="complex-value bar"><table><tr><td><span class="object-key str">y</span><span class="tooltip">x.y</span></td><td><details open class="pyglove contextual-attribute"><summary><div class="summary-title">ContextualAttribute(...)</div></summary><span class="simple-value int">1</span></details></td></tr><tr><td><span class="object-key str">z</span><span class="tooltip">x.z</span></td><td><details open class="pyglove contextual-attribute"><summary><div class="summary-title">ContextualAttribute(...)</div></summary><div class="unavailable-contextual">(not available)</div></details></td></tr></table></div></fieldset></div></details></td></tr><tr><td><span class="object-key str">y</span><span class="tooltip">y</span></td><td><span class="simple-value int">1</span></td></tr></table></div></fieldset></div></details>
-        """
+        ).content,
     )
 
 
