@@ -307,6 +307,17 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 # Public Gemini models.
 #
 
+class Gemini2_0_Flash_Exp(GenAI):  # pylint: disable=invalid-name
+  """Gemini2.0 Flash Experimental model launched on 12/11/2024."""
+
+  model = 'gemini-2.0-flash-exp'
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
+
 
 class GeminiExp_20241206(GenAI):  # pylint: disable=invalid-name
   """Gemini Experimental model launched on 12/06/2024."""
