@@ -56,6 +56,7 @@ class GenAI(lf.LanguageModel):
           'gemini-1.5-flash-latest',
           'gemini-exp-1114',
           'gemini-exp-1206',
+          'gemini-2.0-flash-exp'
       ],
       'Model name.',
   ]
