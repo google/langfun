@@ -15,6 +15,7 @@
 
 import contextlib
 import functools
+import time
 from typing import Annotated, Any, Callable, Iterator, Type, Union
 
 import langfun.core as lf
@@ -221,6 +222,7 @@ def query(
     query_input = schema_lib.mark_missing(prompt)
 
   with lf.track_usages() as usage_summary:
+    start_time = time.time()
     if schema in (None, str):
       # Query with natural language output.
       output_message = lf.LangFunc.from_value(query_input, **kwargs)(
@@ -250,6 +252,7 @@ def query(
           cache_seed=cache_seed,
           skip_lm=skip_lm,
       )
+    end_time = time.time()
 
   def _result(message: lf.Message):
     return message.text if schema in (None, str) else message.result
@@ -268,6 +271,8 @@ def query(
           examples=pg.Ref(examples) if examples else [],
           lm_response=lf.AIMessage(output_message.text),
           usage_summary=usage_summary,
+          start_time=start_time,
+          end_time=end_time,
       )
       for i, (tracker, include_child_scopes) in enumerate(trackers):
         if i == 0 or include_child_scopes:
@@ -384,6 +389,14 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       lf.UsageSummary,
       'Usage summary for `lf.query`.'
   ]
+  start_time: Annotated[
+      float,
+      'Start time of query.'
+  ]
+  end_time: Annotated[
+      float,
+      'End time of query.'
+  ]
 
   @functools.cached_property
   def lm_request(self) -> lf.Message:
@@ -392,6 +405,11 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   @functools.cached_property
   def output(self) -> Any:
     return query_output(self.lm_response, self.schema)
+
+  @property
+  def elapse(self) -> float:
+    """Returns query elapse in seconds."""
+    return self.end_time - self.start_time
 
   def _on_bound(self):
     super()._on_bound()
@@ -404,6 +422,8 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       view: pg.views.HtmlTreeView,
       **kwargs: Any
   ) -> pg.Html | None:
+    kwargs.pop('title', None)
+    kwargs.pop('enable_summary_tooltip', None)
     return view.summary(
         value=self,
         title=pg.Html.element(
@@ -423,11 +443,16 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
                     ),
                     css_classes=['query-invocation-lm']
                 ),
+                pg.views.html.controls.Badge(
+                    f'{int(self.elapse)} seconds',
+                    css_classes=['query-invocation-time']
+                ),
                 self.usage_summary.to_html(extra_flags=dict(as_badge=True))
             ],
             css_classes=['query-invocation-title']
         ),
-        enable_summary_tooltip=False
+        enable_summary_tooltip=False,
+        **kwargs
     )
 
   def _html_tree_view_content(
@@ -442,12 +467,12 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
             pg.view(self.input, collapse_level=None),
         ),
         pg.views.html.controls.Tab(
-            'schema',
-            pg.view(self.schema),
-        ),
-        pg.views.html.controls.Tab(
             'output',
             pg.view(self.output, collapse_level=None),
+        ),
+        pg.views.html.controls.Tab(
+            'schema',
+            pg.view(self.schema),
         ),
         pg.views.html.controls.Tab(
             'lm_request',
@@ -463,24 +488,34 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
                 extra_flags=dict(include_message_metadata=False)
             ),
         ),
-    ], tab_position='top').to_html()
+    ], tab_position='top', selected=1).to_html()
 
   @classmethod
   def _html_tree_view_css_styles(cls) -> list[str]:
     return super()._html_tree_view_css_styles() + [
         """
         .query-invocation-title {
-            display: inline-block;
-            font-weight: normal;
+          display: inline-block;
+          font-weight: normal;
         }
         .query-invocation-type-name {
-            font-style: italic;
-            color: #888;
+          color: #888;
         }
         .query-invocation-lm.badge {
-            margin-left: 5px;
-            margin-right: 5px;
-            background-color: #fff0d6;
+          margin-left: 5px;
+          margin-right: 5px;
+          color: white;
+          background-color: mediumslateblue;
+        }
+        .query-invocation-time.badge {
+          margin-left: 5px;
+          border-radius: 0px;
+          font-weight: bold;
+          background-color: aliceblue;
+        }
+        .query-invocation-title .usage-summary.label {
+          border-radius: 0px;
+          color: #AAA;
         }
         """
     ]

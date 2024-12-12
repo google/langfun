@@ -996,6 +996,7 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(queries[1].schema.spec.cls, Activity)
     self.assertTrue(pg.eq(queries[1].output, Activity(description='hi')))
     self.assertIs(queries[1].lm, lm)
+    self.assertGreater(queries[0].elapse, 0)
     self.assertGreater(queries[0].usage_summary.total.total_tokens, 0)
     self.assertGreater(queries[1].usage_summary.total.total_tokens, 0)
 

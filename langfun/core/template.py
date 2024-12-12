@@ -552,38 +552,33 @@ class Template(
       )
 
     def render_fields():
-      return pg.Html.element(
-          'fieldset',
-          [
-              pg.Html.element('legend', ['Template Variables']),
-              view.complex_value(
-                  {k: v for k, v in self.sym_items()},
-                  name='fields',
-                  root_path=root_path,
-                  parent=self,
-                  exclude_keys=['template_str', 'clean'],
-                  collapse_level=max(
-                      collapse_template_vars_level, collapse_level
-                  ) if collapse_level is not None else None,
-                  extra_flags=extra_flags,
-                  debug=debug,
-                  **view.get_passthrough_kwargs(
-                      remove=['exclude_keys'],
-                      **kwargs,
-                  )
-              ),
-          ],
-          css_classes=['template-fields'],
+      return view.complex_value(
+          {k: v for k, v in self.sym_items()},
+          name='fields',
+          root_path=root_path,
+          parent=self,
+          exclude_keys=['template_str', 'clean'],
+          collapse_level=max(
+              collapse_template_vars_level, collapse_level
+          ) if collapse_level is not None else None,
+          extra_flags=extra_flags,
+          debug=debug,
+          **view.get_passthrough_kwargs(
+              remove=['exclude_keys'],
+              **kwargs,
+          )
       )
 
-    return pg.Html.element(
-        'div',
-        [
+    return pg.views.html.controls.TabControl([
+        pg.views.html.controls.Tab(
+            'template_str',
             render_template_str(),
+        ),
+        pg.views.html.controls.Tab(
+            'variables',
             render_fields(),
-        ],
-        css_classes=['complex_value'],
-    )
+        ),
+    ], selected=1)
 
   @classmethod
   def _html_tree_view_css_styles(cls) -> list[str]:
@@ -600,15 +595,6 @@ class Template(
             border-radius: 5px;
             background-color: #EEE;
             color: #cc2986;
-        }
-        .template-fields {
-            margin: 0px 0px 5px 0px;
-            border: 1px solid #EEE;
-            padding: 5px;
-        }
-        .template-fields > legend {
-            font-size: 0.8em;
-            margin: 5px 0px 5px 0px;
         }
         """
     ]
