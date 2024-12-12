@@ -32,7 +32,7 @@ from langfun.core.llms.rest import REST
 
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
-from langfun.core.llms.google_genai import Gemini2_0_Flash_Exp
+from langfun.core.llms.google_genai import GeminiFlash2_0_Exp
 from langfun.core.llms.google_genai import GeminiExp_20241114
 from langfun.core.llms.google_genai import GeminiExp_20241206
 from langfun.core.llms.google_genai import GeminiFlash1_5

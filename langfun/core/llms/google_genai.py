@@ -307,7 +307,7 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 # Public Gemini models.
 #
 
-class Gemini2_0_Flash_Exp(GenAI):  # pylint: disable=invalid-name
+class GeminiFlash2_0_Exp(GenAI):  # pylint: disable=invalid-name
   """Gemini2.0 Flash Experimental model launched on 12/11/2024."""
 
   model = 'gemini-2.0-flash-exp'
