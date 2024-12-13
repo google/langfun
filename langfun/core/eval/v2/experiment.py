@@ -465,6 +465,33 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     runner.run()
     return runner.current_run
 
+  def run_preconfigured(
+      self,
+      root_dir: str | None = None,
+      id: str | None = None,   # pylint: disable=redefined-builtin
+      **kwargs
+  ) -> 'Run':
+    """Runs the experiment with pre-configured kwargs from `cls.RUN_ARGS`.
+
+    This helper method allows users to config running arguments as a part of
+    the class.
+
+    Args:
+      root_dir: root directory of the experiment.
+      id: ID of the current run.
+      **kwargs: Keyword arguments to override the RUN_CONFIG.
+
+    Returns:
+      The current run.
+    """
+    run_config = getattr(self, 'RUN_ARGS', {})
+    run_config.update(kwargs)
+    if root_dir is not None:
+      run_config['root_dir'] = root_dir
+    if id is not None:
+      run_config['id'] = id
+    return self.run(**run_config)
+
   #
   # HTML views.
   #

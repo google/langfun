@@ -39,6 +39,10 @@ def sample_inputs():
 
 class MyEvaluation(Evaluation):
   NAME = 'my_eval'
+  RUN_ARGS = dict(
+      runner='test'
+  )
+
   replica_id: int = 0
   inputs = sample_inputs()
   metrics = [metrics_lib.Match()]
@@ -288,8 +292,15 @@ class RunnerTest(unittest.TestCase):
         TestRunner
     )
     root_dir = os.path.join(tempfile.gettempdir(), 'my_eval')
+
+    # Test standard run.
     MyEvaluation(replica_id=0).run(
         root_dir, id='20241101_0', runner='test'
+    )
+
+    # Test run preconfigured.
+    MyEvaluation(replica_id=0).run_preconfigured(
+        root_dir=root_dir, id='20241101_1'
     )
 
     with self.assertRaisesRegex(
