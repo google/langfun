@@ -521,13 +521,13 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
   def end(self, result: Any, metadata: dict[str, Any]) -> None:
     """Ends the execution of the action with result and metadata."""
-    self.execution.stop()
     self.rebind(
         result=result,
         metadata=metadata,
         skip_notification=True,
         raise_on_no_change=False
     )
+    self.execution.stop()
     if self._tab_control is not None:
       if self.metadata:
         self._tab_control.insert(
