@@ -48,14 +48,15 @@ class GenAI(lf.LanguageModel):
 
   model: Annotated[
       Literal[
+          'gemini-2.0-flash-exp',
+          'gemini-exp-1206',
+          'gemini-exp-1114',
+          'gemini-1.5-pro-latest',
+          'gemini-1.5-flash-latest',
           'gemini-pro',
           'gemini-pro-vision',
           'text-bison-001',
           'chat-bison-001',
-          'gemini-1.5-pro-latest',
-          'gemini-1.5-flash-latest',
-          'gemini-exp-1114',
-          'gemini-exp-1206',
       ],
       'Model name.',
   ]
@@ -306,6 +307,18 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 #
 # Public Gemini models.
 #
+
+
+class GeminiFlash2_0Exp(GenAI):  # pylint: disable=invalid-name
+  """Gemini Experimental model launched on 12/06/2024."""
+
+  model = 'gemini-2.0-flash-exp'
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
 
 
 class GeminiExp_20241206(GenAI):  # pylint: disable=invalid-name

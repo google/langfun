@@ -401,6 +401,20 @@ DOCUMENT_TYPES = [
 ]
 
 
+class VertexAIGemini2_0(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 2.0 model."""
+
+  supported_modalities: pg.typing.List(str).freeze(  # pytype: disable=invalid-annotation
+      DOCUMENT_TYPES + IMAGE_TYPES + AUDIO_TYPES + VIDEO_TYPES
+  )
+
+
+class VertexAIGeminiFlash2_0Exp(VertexAI):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 2.0 Flash model."""
+
+  model = 'gemini-2.0-flash-exp'
+
+
 class VertexAIGemini1_5(VertexAI):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 model."""
 
