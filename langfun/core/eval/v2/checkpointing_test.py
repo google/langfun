@@ -24,11 +24,11 @@ import pyglove as pg
 Example = example_lib.Example
 
 
-class StateWriterTest(unittest.TestCase):
+class SequenceWriterTest(unittest.TestCase):
 
   def test_basic(self):
     file = os.path.join(tempfile.gettempdir(), 'test.jsonl')
-    writer = checkpointing.StateWriter(file)
+    writer = checkpointing.SequenceWriter(file)
     example = Example(id=1, input=pg.Dict(x=1), output=2)
     writer.add(example)
     del writer
@@ -36,7 +36,7 @@ class StateWriterTest(unittest.TestCase):
 
   def test_error_handling(self):
     file = os.path.join(tempfile.gettempdir(), 'test_error_handling.jsonl')
-    writer = checkpointing.StateWriter(file)
+    writer = checkpointing.SequenceWriter(file)
     writer.add(Example(id=1, input=pg.Dict(x=1), output=2))
 
     def f():
@@ -52,17 +52,50 @@ class StateWriterTest(unittest.TestCase):
       self.assertEqual(len(list(iter(f))), 1)
 
 
-class CheckpointingTest(unittest.TestCase):
+class PerExampleCheckpointerTest(unittest.TestCase):
 
   def test_checkpointing(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_checkpointing')
+    root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer')
     experiment = test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
-    checkpointer = checkpointing.Checkpointer(checkpoint_filename)
+    checkpointer = checkpointing.PerExampleCheckpointer(checkpoint_filename)
     run = experiment.run(
         root_dir, 'new', runner='sequential', plugins=[checkpointer]
     )
-    self.assertEqual(len(checkpointer._state_writer), 0)
+    num_processed = {}
+    for leaf in experiment.leaf_nodes:
+      for i in range(leaf.num_examples):
+        example = leaf.state.get(i + 1)
+        ckpt = run.output_path_for(leaf, f'checkpoint_{example.id}.jsonl')
+        if example.has_error:
+          self.assertFalse(pg.io.path_exists(ckpt))
+        else:
+          self.assertTrue(pg.io.path_exists(ckpt))
+          with pg.io.open_sequence(ckpt) as f:
+            self.assertEqual(len(list(iter(f))), 1)
+      if leaf.id not in num_processed:
+        self.assertEqual(leaf.progress.num_skipped, 0)
+        num_processed[leaf.id] = leaf.progress.num_processed
+
+    # Run again, should skip existing.
+    _ = experiment.run(
+        root_dir, 'latest', runner='sequential', plugins=[checkpointer]
+    )
+    for leaf in experiment.leaf_nodes:
+      self.assertEqual(leaf.progress.num_skipped, num_processed[leaf.id])
+
+
+class BulkCheckpointerTest(unittest.TestCase):
+
+  def test_checkpointing(self):
+    root_dir = os.path.join(tempfile.gettempdir(), 'test_bulk_checkpointer')
+    experiment = test_helper.test_experiment()
+    checkpoint_filename = 'checkpoint.jsonl'
+    checkpointer = checkpointing.BulkCheckpointer(checkpoint_filename)
+    run = experiment.run(
+        root_dir, 'new', runner='sequential', plugins=[checkpointer]
+    )
+    self.assertEqual(len(checkpointer._sequence_writer), 0)
     num_processed = {}
     for leaf in experiment.leaf_nodes:
       ckpt = run.output_path_for(leaf, checkpoint_filename)
@@ -80,7 +113,7 @@ class CheckpointingTest(unittest.TestCase):
     _ = experiment.run(
         root_dir, 'latest', runner='sequential', plugins=[checkpointer]
     )
-    self.assertEqual(len(checkpointer._state_writer), 0)
+    self.assertEqual(len(checkpointer._sequence_writer), 0)
     for leaf in experiment.leaf_nodes:
       self.assertEqual(leaf.progress.num_skipped, num_processed[leaf.id])
 

@@ -29,9 +29,13 @@ from langfun.core.eval.v2.metrics import Metric
 from langfun.core.eval.v2 import metrics
 
 from langfun.core.eval.v2.experiment import Plugin
-
 from langfun.core.eval.v2.experiment import Runner
 from langfun.core.eval.v2 import runners
+
+# Plugins
+from langfun.core.eval.v2.checkpointing import BulkCheckpointer
+from langfun.core.eval.v2.checkpointing import PerExampleCheckpointer
+from langfun.core.eval.v2.reporting import HtmlReporter
 
 
 # pylint: enable=g-bad-import-order

@@ -53,7 +53,7 @@ class RunnerBase(Runner):
   ] = False
 
   plugins = [
-      checkpointing.Checkpointer(),
+      checkpointing.BulkCheckpointer(),
       reporting.HtmlReporter(),
   ]
 
