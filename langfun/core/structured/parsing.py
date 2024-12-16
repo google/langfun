@@ -16,13 +16,13 @@ from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
-from langfun.core.structured import prompting
+from langfun.core.structured import querying
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
 @lf.use_init_args(['schema', 'default', 'examples'])
-class ParseStructure(mapping.Mapping):
+class _ParseStructure(mapping.Mapping):
   """Parse an object out from a natural language text."""
 
   context_title = 'USER_REQUEST'
@@ -37,7 +37,7 @@ class ParseStructure(mapping.Mapping):
   ]
 
 
-class ParseStructureJson(ParseStructure):
+class _ParseStructureJson(_ParseStructure):
   """Parse an object out from a NL text using JSON as the protocol."""
 
   preamble = """
@@ -53,7 +53,7 @@ class ParseStructureJson(ParseStructure):
   output_title = 'JSON'
 
 
-class ParseStructurePython(ParseStructure):
+class _ParseStructurePython(_ParseStructure):
   """Parse an object out from a NL text using Python as the protocol."""
 
   preamble = """
@@ -87,7 +87,7 @@ def parse(
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
-  """Parse a natural langugage message based on schema.
+  """Parse a natural language message based on schema.
 
   Examples:
 
@@ -271,7 +271,7 @@ def call(
     return lm_output if returns_message else lm_output.text
 
   # Call `parsing_lm` for structured parsing.
-  parsing_message = prompting.query(
+  parsing_message = querying.query(
       lm_output.text,
       schema,
       examples=parsing_examples,
@@ -293,11 +293,11 @@ def call(
 
 def _parse_structure_cls(
     protocol: schema_lib.SchemaProtocol,
-) -> Type[ParseStructure]:
+) -> Type[_ParseStructure]:
   if protocol == 'json':
-    return ParseStructureJson
+    return _ParseStructureJson
   elif protocol == 'python':
-    return ParseStructurePython
+    return _ParseStructurePython
   else:
     raise ValueError(f'Unknown protocol: {protocol!r}.')
 

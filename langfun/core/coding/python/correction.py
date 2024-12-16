@@ -76,7 +76,7 @@ def run_with_correction(
   # Delay import at runtime to avoid circular depenency.
   # pylint: disable=g-import-not-at-top
   # pytype: disable=import-error
-  from langfun.core.structured import prompting
+  from langfun.core.structured import querying
   # pytype: enable=import-error
   # pylint: enable=g-import-not-at-top
 
@@ -119,7 +119,7 @@ def run_with_correction(
     # structure.
     try:
       # Disable autofix for code correction to avoid recursion.
-      correction = prompting.query(
+      correction = querying.query(
           CodeWithError(code=code, error=error), CorrectedCode, lm=lm, autofix=0
       )
     except errors.CodeError:

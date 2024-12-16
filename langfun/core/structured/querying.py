@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Symbolic query."""
+"""Query LLM for structured output."""
 
 import contextlib
 import functools
@@ -26,7 +26,7 @@ import pyglove as pg
 
 
 @lf.use_init_args(['schema', 'default', 'examples'])
-class QueryStructure(mapping.Mapping):
+class _QueryStructure(mapping.Mapping):
   """Query an object out from a natural language text."""
 
   context_title = 'CONTEXT'
@@ -38,7 +38,7 @@ class QueryStructure(mapping.Mapping):
   ]
 
 
-class QueryStructureJson(QueryStructure):
+class _QueryStructureJson(_QueryStructure):
   """Query a structured value using JSON as the protocol."""
 
   preamble = """
@@ -52,10 +52,10 @@ class QueryStructureJson(QueryStructure):
         1 + 1 =
 
       {{ schema_title }}:
-        {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
+        {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": int}}
 
       {{ output_title}}:
-        {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
+        {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": 2}}
       """
 
   protocol = 'json'
@@ -63,7 +63,7 @@ class QueryStructureJson(QueryStructure):
   output_title = 'JSON'
 
 
-class QueryStructurePython(QueryStructure):
+class _QueryStructurePython(_QueryStructure):
   """Query a structured value using Python as the protocol."""
 
   preamble = """
@@ -94,11 +94,11 @@ class QueryStructurePython(QueryStructure):
 
 def _query_structure_cls(
     protocol: schema_lib.SchemaProtocol,
-) -> Type[QueryStructure]:
+) -> Type[_QueryStructure]:
   if protocol == 'json':
-    return QueryStructureJson
+    return _QueryStructureJson
   elif protocol == 'python':
-    return QueryStructurePython
+    return _QueryStructurePython
   else:
     raise ValueError(f'Unknown protocol: {protocol!r}.')
 

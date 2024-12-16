@@ -36,7 +36,7 @@ class Itinerary(pg.Object):
 class DescribeStructureTest(unittest.TestCase):
 
   def test_render(self):
-    l = description_lib.DescribeStructure(
+    l = description_lib._DescribeStructure(
         input=Itinerary(
             day=1,
             type='daytime',
@@ -137,7 +137,7 @@ class DescribeStructureTest(unittest.TestCase):
         ],
         hotel=None,
     )
-    l = description_lib.DescribeStructure(
+    l = description_lib._DescribeStructure(
         input=value, context='1 day itinerary to SF'
     )
     self.assertEqual(
@@ -187,7 +187,7 @@ class DescribeStructureTest(unittest.TestCase):
         ],
         hotel=None,
     )
-    l = description_lib.DescribeStructure(input=value)
+    l = description_lib._DescribeStructure(input=value)
     self.assertEqual(
         l.render().text,
         inspect.cleandoc("""

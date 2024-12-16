@@ -21,7 +21,7 @@ from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
-class CompleteStructure(mapping.Mapping):
+class _CompleteStructure(mapping.Mapping):
   """Complete structure by filling the missing fields."""
 
   input: Annotated[
@@ -241,7 +241,7 @@ def complete(
   Returns:
     The result based on the schema.
   """
-  t = CompleteStructure(
+  t = _CompleteStructure(
       input=schema_lib.mark_missing(input_value),
       default=default,
       examples=examples,

@@ -21,7 +21,7 @@ from typing import Any, Callable, Literal, Optional, Tuple
 from langfun.core import language_model
 from langfun.core import template
 from langfun.core.coding import python
-from langfun.core.structured import prompting
+from langfun.core.structured import querying
 import pyglove as pg
 
 
@@ -39,7 +39,7 @@ def unittest_gen(signature, lm, num_retries=1):
 
   unittest_examples = None
   for _ in range(num_retries):
-    r = prompting.query(
+    r = querying.query(
         PythonFunctionSignature(signature=signature),
         list[UnitTest],
         lm=lm,
@@ -145,7 +145,7 @@ def _function_gen(
   last_error = None
   for _ in range(num_retries):
     try:
-      source_code = prompting.query(
+      source_code = querying.query(
           PythonFunctionPrompt(signature=signature), lm=lm
       )
       f = python.evaluate(source_code, global_vars=context)

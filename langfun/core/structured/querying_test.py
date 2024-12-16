@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for structured prompting."""
+"""Tests for structured query."""
 
 import inspect
 import math
@@ -23,7 +23,7 @@ from langfun.core import modalities
 from langfun.core.llms import fake
 from langfun.core.llms.cache import in_memory
 from langfun.core.structured import mapping
-from langfun.core.structured import prompting
+from langfun.core.structured import querying
 import pyglove as pg
 
 
@@ -51,7 +51,7 @@ class QueryTest(unittest.TestCase):
       expected_modalities: int = 0,
       **kwargs,
   ):
-    m = prompting.query(
+    m = querying.query(
         prompt, schema=schema, examples=examples,
         **kwargs, returns_message=True
     )
@@ -67,14 +67,14 @@ class QueryTest(unittest.TestCase):
 
   def test_call(self):
     lm = fake.StaticSequence(['1'])
-    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm), 1)
+    self.assertEqual(querying.query('what is 1 + 0', int, lm=lm), 1)
 
     # Testing calling the same `lm` without copy.
     with self.assertRaises(IndexError):
-      prompting.query('what is 1 + 2', int, lm=lm)
+      querying.query('what is 1 + 2', int, lm=lm)
 
     self.assertEqual(
-        prompting.query(
+        querying.query(
             'what is 1 + 0', int, lm=lm.clone(), returns_message=True
         ),
         lf.AIMessage(
@@ -88,17 +88,17 @@ class QueryTest(unittest.TestCase):
         ),
     )
     self.assertEqual(
-        prompting.query(
+        querying.query(
             lf.Template('what is {{x}} + {{y}}', x=1, y=0), int, lm=lm.clone()
         ),
         1,
     )
     self.assertEqual(
-        prompting.query('what is {{x}} + {{y}}', int, x=1, y=0, lm=lm.clone()),
+        querying.query('what is {{x}} + {{y}}', int, x=1, y=0, lm=lm.clone()),
         1,
     )
     self.assertEqual(
-        prompting.query(
+        querying.query(
             'what is {{x}} + {{y}}',
             x=1,
             y=0,
@@ -107,7 +107,7 @@ class QueryTest(unittest.TestCase):
         'The answer is one.',
     )
     self.assertEqual(
-        prompting.query(
+        querying.query(
             Activity.partial(),
             lm=fake.StaticResponse('Activity(description="hello")'),
         ),
@@ -329,11 +329,11 @@ class QueryTest(unittest.TestCase):
 
   def test_bad_protocol(self):
     with self.assertRaisesRegex(ValueError, 'Unknown protocol'):
-      prompting.query('what is 1 + 1', int, protocol='text')
+      querying.query('what is 1 + 1', int, protocol='text')
 
   def test_query_prompt(self):
     self.assertEqual(
-        prompting.query_prompt('what is this?', int),
+        querying.query_prompt('what is this?', int),
         inspect.cleandoc("""
             Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT according to OUTPUT_TYPE.
 
@@ -368,14 +368,14 @@ class QueryTest(unittest.TestCase):
   def test_query_prompt_with_metadata(self):
     self.assertIn(
         'x',
-        prompting.query_prompt(
+        querying.query_prompt(
             'what is this?',
             metadata_x=1
         ).metadata
     )
     self.assertIn(
         'x',
-        prompting.query_prompt(
+        querying.query_prompt(
             'what is this?',
             int,
             metadata_x=1
@@ -383,7 +383,7 @@ class QueryTest(unittest.TestCase):
     )
 
   def test_query_prompt_with_unrooted_template(self):
-    output = prompting.query_prompt(
+    output = querying.query_prompt(
         pg.Dict(
             input=lf.Template(
                 'what is {{image}}',
@@ -395,7 +395,7 @@ class QueryTest(unittest.TestCase):
 
   def test_query_output(self):
     self.assertEqual(
-        prompting.query_output(
+        querying.query_output(
             lf.AIMessage('1'),
             int,
         ),
@@ -414,7 +414,7 @@ class QueryTest(unittest.TestCase):
 
     # Case 1: Reward function based on input and output.
     self.assertEqual(
-        prompting.query_reward(
+        querying.query_reward(
             mapping.MappingExample(
                 input=lf.Template('{{x}} + {{y}}', x=1, y=1),
                 schema=Answer,
@@ -425,7 +425,7 @@ class QueryTest(unittest.TestCase):
         1.0
     )
     self.assertEqual(
-        prompting.query_reward(
+        querying.query_reward(
             mapping.MappingExample(
                 input=lf.Template('{{x}} + {{y}}', x=2, y=3),
                 output=Answer(final_answer=2),
@@ -445,7 +445,7 @@ class QueryTest(unittest.TestCase):
         )
 
     self.assertEqual(
-        prompting.query_reward(
+        querying.query_reward(
             mapping.MappingExample(
                 input=lf.Template('{{x}} + {{y}}', x=1, y=1),
                 output=Answer2(final_answer=2),
@@ -470,7 +470,7 @@ class QueryTest(unittest.TestCase):
         ) * metadata['weight']
 
     self.assertEqual(
-        prompting.query_reward(
+        querying.query_reward(
             mapping.MappingExample(
                 input=lf.Template('{{x}} + {{y}}', x=1, y=1),
                 output=Answer3(final_answer=2),
@@ -486,7 +486,7 @@ class QueryTest(unittest.TestCase):
       final_answer: int
 
     self.assertIsNone(
-        prompting.query_reward(
+        querying.query_reward(
             mapping.MappingExample(
                 input=lf.Template('{{x}} + {{y}}', x=1, y=1),
                 output=Answer4(final_answer=2),
@@ -497,7 +497,7 @@ class QueryTest(unittest.TestCase):
 
     # Case 5: Not a structured output.
     self.assertIsNone(
-        prompting.query_reward(
+        querying.query_reward(
             mapping.MappingExample(
                 input=lf.Template('{{x}} + {{y}}', x=1, y=1),
                 output='2',
@@ -516,7 +516,7 @@ class QueryTest(unittest.TestCase):
     with self.assertRaisesRegex(
         TypeError, '.*Answer5.__reward__` should have signature'
     ):
-      prompting.query_reward(
+      querying.query_reward(
           mapping.MappingExample(
               input=lf.Template('{{x}} + {{y}}', x=1, y=1),
               output=Answer5(final_answer=2),
@@ -528,7 +528,7 @@ class QueryTest(unittest.TestCase):
 class QueryStructurePythonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = prompting.QueryStructurePython(
+    l = querying._QueryStructurePython(
         input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
     )
     self.assertEqual(
@@ -565,7 +565,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = prompting.QueryStructurePython(
+    l = querying._QueryStructurePython(
         input=lf.AIMessage('Compute 12 / 6 + 2.'),
         schema=int,
         examples=[
@@ -675,7 +675,7 @@ class QueryStructurePythonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = prompting.QueryStructurePython(
+      l = querying._QueryStructurePython(
           input=lm_input,
           schema=[Itinerary],
           examples=[
@@ -712,7 +712,7 @@ class QueryStructurePythonTest(unittest.TestCase):
           mapping.MappingError,
           'name .* is not defined',
       ):
-        prompting.query('Compute 1 + 2', int)
+        querying.query('Compute 1 + 2', int)
 
   def test_autofix(self):
     lm = fake.StaticSequence([
@@ -723,7 +723,7 @@ class QueryStructurePythonTest(unittest.TestCase):
             )
             """),
     ])
-    self.assertEqual(prompting.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
+    self.assertEqual(querying.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
 
   def test_response_postprocess(self):
     with lf.context(
@@ -731,12 +731,12 @@ class QueryStructurePythonTest(unittest.TestCase):
         override_attrs=True,
     ):
       self.assertEqual(
-          prompting.query(
+          querying.query(
               'Compute 1 + 2', response_postprocess=lambda x: x.split('\n')[1]),
           '3'
       )
       self.assertEqual(
-          prompting.query(
+          querying.query(
               'Compute 1 + 2', int,
               response_postprocess=lambda x: x.split('\n')[1]),
           3
@@ -746,7 +746,7 @@ class QueryStructurePythonTest(unittest.TestCase):
 class QueryStructureJsonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = prompting.QueryStructureJson(
+    l = querying._QueryStructureJson(
         input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
     )
     self.assertEqual(
@@ -762,10 +762,10 @@ class QueryStructureJsonTest(unittest.TestCase):
               1 + 1 =
 
             SCHEMA:
-              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
+              {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": int}}
 
             JSON:
-              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
+              {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": 2}}
 
             INPUT_OBJECT:
               Compute 12 / 6 + 2.
@@ -778,7 +778,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = prompting.QueryStructureJson(
+    l = querying._QueryStructureJson(
         input=lf.AIMessage('Compute 12 / 6 + 2.'),
         schema=int,
         examples=[
@@ -799,10 +799,10 @@ class QueryStructureJsonTest(unittest.TestCase):
               1 + 1 =
 
             SCHEMA:
-              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": int}}
+              {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": int}}
 
             JSON:
-              {"result": {"_type": "langfun.core.structured.prompting.Answer", "final_answer": 2}}
+              {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": 2}}
 
             INPUT_OBJECT:
               What is the answer of 1 plus 1?
@@ -913,7 +913,7 @@ class QueryStructureJsonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = prompting.QueryStructureJson(
+      l = querying._QueryStructureJson(
           input=lm_input,
           schema=[Itinerary],
           examples=[
@@ -951,14 +951,14 @@ class QueryStructureJsonTest(unittest.TestCase):
             mapping.MappingError,
             'No JSON dict in the output',
         ):
-          prompting.query('Compute 1 + 2', int, protocol='json', cache_seed=1)
+          querying.query('Compute 1 + 2', int, protocol='json', cache_seed=1)
       # Make sure bad mapping does not impact cache.
       self.assertEqual(len(cache), 0)
 
   def test_query(self):
     lm = fake.StaticSequence(['{"result": 1}'])
     self.assertEqual(
-        prompting.query('what is 1 + 0', int, lm=lm, protocol='json'), 1
+        querying.query('what is 1 + 0', int, lm=lm, protocol='json'), 1
     )
 
 
@@ -968,8 +968,8 @@ class QueryInvocationTest(unittest.TestCase):
     lm = fake.StaticSequence([
         'Activity(description="hi")',
     ])
-    with prompting.track_queries() as queries:
-      prompting.query('foo', Activity, lm=lm)
+    with querying.track_queries() as queries:
+      querying.query('foo', Activity, lm=lm)
 
     self.assertIn('schema', queries[0].to_html_str())
 
@@ -981,10 +981,10 @@ class TrackQueriesTest(unittest.TestCase):
         'bar',
         'Activity(description="hi")',
     ])
-    with prompting.track_queries() as queries:
-      prompting.query('foo', lm=lm)
-      with prompting.track_queries() as child_queries:
-        prompting.query('give me an activity', Activity, lm=lm)
+    with querying.track_queries() as queries:
+      querying.query('foo', lm=lm)
+      with querying.track_queries() as child_queries:
+        querying.query('give me an activity', Activity, lm=lm)
 
     self.assertEqual(len(queries), 2)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
@@ -1008,10 +1008,10 @@ class TrackQueriesTest(unittest.TestCase):
         'bar',
         'Activity(description="hi")',
     ])
-    with prompting.track_queries(include_child_scopes=False) as queries:
-      prompting.query('foo', lm=lm)
-      with prompting.track_queries(include_child_scopes=False) as child_queries:
-        prompting.query('give me an activity', Activity, lm=lm)
+    with querying.track_queries(include_child_scopes=False) as queries:
+      querying.query('foo', lm=lm)
+      with querying.track_queries(include_child_scopes=False) as child_queries:
+        querying.query('give me an activity', Activity, lm=lm)
 
     self.assertEqual(len(queries), 1)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
@@ -1030,13 +1030,13 @@ class TrackQueriesTest(unittest.TestCase):
   def test_concurrent_map(self):
 
     def make_query(prompt):
-      _ = prompting.query(prompt, lm=lm)
+      _ = querying.query(prompt, lm=lm)
 
     lm = fake.StaticSequence([
         'foo',
         'bar',
     ])
-    with prompting.track_queries() as queries:
+    with querying.track_queries() as queries:
       list(lf.concurrent_map(make_query, ['a', 'b']))
     self.assertEqual(len(queries), 2)
 

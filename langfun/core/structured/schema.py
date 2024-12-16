@@ -388,9 +388,9 @@ class SchemaPythonRepr(SchemaRepr):
     return annotation(schema.spec)
 
 
-def source_form(value, markdown: bool = False) -> str:
+def source_form(value, compact: bool = True, markdown: bool = False) -> str:
   """Returns the source code form of an object."""
-  return ValuePythonRepr().repr(value, markdown=markdown)
+  return ValuePythonRepr().repr(value, compact=compact, markdown=markdown)
 
 
 def class_definitions(
@@ -789,7 +789,7 @@ class ValueJsonRepr(ValueRepr):
     """Parse a JSON string into a structured object."""
     del schema
     try:
-      text = self.cleanup_json(text)
+      text = cleanup_json(text)
       v = pg.from_json_str(text, **kwargs)
     except Exception as e:
       raise JsonError(text, e)  # pylint: disable=raise-missing-from
@@ -801,55 +801,56 @@ class ValueJsonRepr(ValueRepr):
       ))
     return v['result']
 
-  def cleanup_json(self, json_str: str) -> str:
-    """Clean up the LM responded JSON string."""
-    # Treatments:
-    # 1. Extract the JSON string with a top-level dict from the response.
-    #    This prevents the leading and trailing texts in the response to
-    #    be counted as part of the JSON.
-    # 2. Escape new lines in JSON values.
 
-    curly_brackets = 0
-    under_json = False
-    under_str = False
-    str_begin = -1
+def cleanup_json(json_str: str) -> str:
+  """Clean up the LM responded JSON string."""
+  # Treatments:
+  # 1. Extract the JSON string with a top-level dict from the response.
+  #    This prevents the leading and trailing texts in the response to
+  #    be counted as part of the JSON.
+  # 2. Escape new lines in JSON values.
 
-    cleaned = io.StringIO()
-    for i, c in enumerate(json_str):
-      if c == '{' and not under_str:
-        cleaned.write(c)
-        curly_brackets += 1
-        under_json = True
-        continue
-      elif not under_json:
-        continue
+  curly_brackets = 0
+  under_json = False
+  under_str = False
+  str_begin = -1
 
-      if c == '}' and not under_str:
-        cleaned.write(c)
-        curly_brackets -= 1
-        if curly_brackets == 0:
-          break
-      elif c == '"' and json_str[i - 1] != '\\':
-        under_str = not under_str
-        if under_str:
-          str_begin = i
-        else:
-          assert str_begin > 0
-          str_value = json_str[str_begin : i + 1].replace('\n', '\\n')
-          cleaned.write(str_value)
-          str_begin = -1
-      elif not under_str:
-        cleaned.write(c)
+  cleaned = io.StringIO()
+  for i, c in enumerate(json_str):
+    if c == '{' and not under_str:
+      cleaned.write(c)
+      curly_brackets += 1
+      under_json = True
+      continue
+    elif not under_json:
+      continue
 
-    if not under_json:
-      raise ValueError(f'No JSON dict in the output: {json_str}')
+    if c == '}' and not under_str:
+      cleaned.write(c)
+      curly_brackets -= 1
+      if curly_brackets == 0:
+        break
+    elif c == '"' and json_str[i - 1] != '\\':
+      under_str = not under_str
+      if under_str:
+        str_begin = i
+      else:
+        assert str_begin > 0
+        str_value = json_str[str_begin : i + 1].replace('\n', '\\n')
+        cleaned.write(str_value)
+        str_begin = -1
+    elif not under_str:
+      cleaned.write(c)
 
-    if curly_brackets > 0:
-      raise ValueError(
-          f'Malformated JSON: missing {curly_brackets} closing curly braces.'
-      )
+  if not under_json:
+    raise ValueError(f'No JSON dict in the output: {json_str}')
 
-    return cleaned.getvalue()
+  if curly_brackets > 0:
+    raise ValueError(
+        f'Malformated JSON: missing {curly_brackets} closing curly braces.'
+    )
+
+  return cleaned.getvalue()
 
 
 def schema_repr(protocol: SchemaProtocol) -> SchemaRepr:

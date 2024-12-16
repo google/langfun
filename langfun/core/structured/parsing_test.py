@@ -37,7 +37,7 @@ class Itinerary(pg.Object):
 class ParseStructurePythonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = parsing.ParseStructurePython(int)
+    l = parsing._ParseStructurePython(int)
     m = lf.AIMessage('12 / 6 + 2 = 4')
     self.assertEqual(
         l.render(input=m, context='Compute 12 / 6 + 2.').text,
@@ -62,7 +62,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     )
 
   def test_render_no_context(self):
-    l = parsing.ParseStructurePython(int)
+    l = parsing._ParseStructurePython(int)
     m = lf.AIMessage('12 / 6 + 2 = 4')
 
     self.assertEqual(
@@ -85,7 +85,7 @@ class ParseStructurePythonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = parsing.ParseStructurePython(
+    l = parsing._ParseStructurePython(
         int,
         examples=[
             mapping.MappingExample(
@@ -212,7 +212,7 @@ class ParseStructurePythonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = parsing.ParseStructurePython(
+      l = parsing._ParseStructurePython(
           [Itinerary],
           examples=[
               mapping.MappingExample(
@@ -295,7 +295,7 @@ class ParseStructurePythonTest(unittest.TestCase):
 class ParseStructureJsonTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = parsing.ParseStructureJson(int)
+    l = parsing._ParseStructureJson(int)
     m = lf.AIMessage('12 / 6 + 2 = 4')
     self.assertEqual(
         l.render(input=m, context='Compute 12 / 6 + 2.').text,
@@ -320,7 +320,7 @@ class ParseStructureJsonTest(unittest.TestCase):
     )
 
   def test_render_no_context(self):
-    l = parsing.ParseStructureJson(int)
+    l = parsing._ParseStructureJson(int)
     m = lf.AIMessage('12 / 6 + 2 = 4')
 
     self.assertEqual(
@@ -343,7 +343,7 @@ class ParseStructureJsonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = parsing.ParseStructureJson(
+    l = parsing._ParseStructureJson(
         int,
         examples=[
             mapping.MappingExample(
@@ -504,7 +504,7 @@ class ParseStructureJsonTest(unittest.TestCase):
         override_attrs=True,
     ):
       message = lf.LangFunc(lm_input)()
-      l = parsing.ParseStructureJson(
+      l = parsing._ParseStructureJson(
           [Itinerary],
           examples=[
               mapping.MappingExample(

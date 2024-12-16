@@ -17,7 +17,7 @@ from typing import Any, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
-from langfun.core.structured import prompting
+from langfun.core.structured import querying
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
@@ -101,7 +101,7 @@ def score(
     prompts = []
     for p in prompt:
       prompts.append(
-          prompting.query_prompt(
+          querying.query_prompt(
               p,
               schema,
               examples=examples,
@@ -111,7 +111,7 @@ def score(
       )
     input_message = prompts
   else:
-    input_message = prompting.query_prompt(
+    input_message = querying.query_prompt(
         prompt,
         schema,
         examples=examples,

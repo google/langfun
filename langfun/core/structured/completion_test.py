@@ -46,7 +46,7 @@ class TripPlan(pg.Object):
 class CompleteStructureTest(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = completion.CompleteStructure()
+    l = completion._CompleteStructure()
     input_value = schema_lib.mark_missing(
         TripPlan.partial(
             place='San Francisco',
@@ -120,7 +120,7 @@ class CompleteStructureTest(unittest.TestCase):
     )
 
   def test_render_no_class_definitions(self):
-    l = completion.CompleteStructure()
+    l = completion._CompleteStructure()
     input_value = schema_lib.mark_missing(
         TripPlan.partial(
             place='San Francisco',
@@ -200,7 +200,7 @@ class CompleteStructureTest(unittest.TestCase):
     )
 
   def test_render_with_examples(self):
-    l = completion.CompleteStructure()
+    l = completion._CompleteStructure()
     input_value = schema_lib.mark_missing(
         TripPlan.partial(
             place='San Francisco',
@@ -411,7 +411,7 @@ class CompleteStructureTest(unittest.TestCase):
             modalities.Image.from_bytes(b'image_of_elephant'),
         )
     )
-    l = completion.CompleteStructure(
+    l = completion._CompleteStructure(
         input=input_value,
         examples=[
             mapping.MappingExample(

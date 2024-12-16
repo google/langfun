@@ -17,7 +17,7 @@ from typing import Any, Type, Union
 
 import langfun.core as lf
 from langfun.core.structured import mapping
-from langfun.core.structured import prompting
+from langfun.core.structured import querying
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
@@ -48,7 +48,7 @@ def tokenize(
   Returns:
     A list of (text, token_id) tuples.
   """
-  input_message = prompting.query_prompt(
+  input_message = querying.query_prompt(
       prompt,
       schema,
       examples=examples,

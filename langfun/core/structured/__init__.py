@@ -36,12 +36,6 @@ from langfun.core.structured.schema import class_definitions
 from langfun.core.structured.schema import annotation
 from langfun.core.structured.schema import structure_from_python
 
-from langfun.core.structured.schema import SchemaRepr
-from langfun.core.structured.schema import SchemaJsonRepr
-from langfun.core.structured.schema import SchemaPythonRepr
-from langfun.core.structured.schema import ValueRepr
-from langfun.core.structured.schema import ValueJsonRepr
-from langfun.core.structured.schema import ValuePythonRepr
 from langfun.core.structured.schema import schema_repr
 from langfun.core.structured.schema import source_form
 from langfun.core.structured.schema import value_repr
@@ -56,26 +50,17 @@ from langfun.core.structured.mapping import Mapping
 from langfun.core.structured.mapping import MappingError
 from langfun.core.structured.mapping import MappingExample
 
-from langfun.core.structured.parsing import ParseStructure
-from langfun.core.structured.parsing import ParseStructureJson
-from langfun.core.structured.parsing import ParseStructurePython
 from langfun.core.structured.parsing import parse
 from langfun.core.structured.parsing import call
 
-from langfun.core.structured.prompting import QueryStructure
-from langfun.core.structured.prompting import QueryStructureJson
-from langfun.core.structured.prompting import QueryStructurePython
-from langfun.core.structured.prompting import query
-from langfun.core.structured.prompting import query_prompt
-from langfun.core.structured.prompting import query_output
-from langfun.core.structured.prompting import query_reward
-from langfun.core.structured.prompting import QueryInvocation
-from langfun.core.structured.prompting import track_queries
+from langfun.core.structured.querying import track_queries
+from langfun.core.structured.querying import QueryInvocation
+from langfun.core.structured.querying import query
+from langfun.core.structured.querying import query_prompt
+from langfun.core.structured.querying import query_output
+from langfun.core.structured.querying import query_reward
 
-from langfun.core.structured.description import DescribeStructure
 from langfun.core.structured.description import describe
-
-from langfun.core.structured.completion import CompleteStructure
 from langfun.core.structured.completion import complete
 
 from langfun.core.structured.scoring import score

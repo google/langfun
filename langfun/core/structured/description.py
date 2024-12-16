@@ -22,7 +22,7 @@ import pyglove as pg
 
 
 @pg.use_init_args(['examples'])
-class DescribeStructure(mapping.Mapping):
+class _DescribeStructure(mapping.Mapping):
   """Describe a structured value in natural language."""
 
   input_title = 'PYTHON_OBJECT'
@@ -106,7 +106,7 @@ def describe(
   Returns:
     The parsed result based on the schema.
   """
-  return DescribeStructure(
+  return _DescribeStructure(
       input=value,
       context=context,
       examples=examples or default_describe_examples(),
