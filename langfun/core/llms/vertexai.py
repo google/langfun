@@ -409,7 +409,7 @@ class VertexAIGemini2_0(VertexAI):  # pylint: disable=invalid-name
   )
 
 
-class VertexAIGeminiFlash2_0Exp(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiFlash2_0Exp(VertexAIGemini2_0):  # pylint: disable=invalid-name
   """Vertex AI Gemini 2.0 Flash model."""
 
   model = 'gemini-2.0-flash-exp'
