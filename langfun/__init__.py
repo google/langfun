@@ -37,6 +37,9 @@ generate_class = structured.generate_class
 
 track_queries = structured.track_queries
 
+# Helper function for map-reduce style querying.
+query_and_reduce = structured.query_and_reduce
+
 # Helper functions for input/output transformations based on
 # `lf.query` (e.g. jax-on-beam could use these for batch processing)
 query_prompt = structured.query_prompt

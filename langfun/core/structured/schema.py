@@ -213,18 +213,8 @@ class Schema(
         """
     )
 
-  def _html_tree_view_tooltip(
-      self,
-      *,
-      view: pg.views.HtmlTreeView,
-      content: pg.Html | str | None = None,
-      **kwargs,
-  ):
-    return view.tooltip(
-        self,
-        content=content or pg.Html.escape(self.schema_str(protocol='python')),
-        **kwargs
-    )
+
+SchemaType = Union[Schema, Type[Any], list[Type[Any]], dict[str, Any]]
 
 
 def _top_level_object_specs_from_value(value: pg.Symbolic) -> list[Type[Any]]:

@@ -327,6 +327,69 @@ class QueryTest(unittest.TestCase):
         expected_modalities=3,
     )
 
+  def test_multiple_queries(self):
+    self.assertEqual(
+        querying.query(
+            'Compute 1 + 2',
+            int,
+            lm=[
+                fake.StaticResponse('1'),
+                fake.StaticResponse('2'),
+            ],
+            num_samples=[1, 2],
+        ),
+        [1, 2, 2]
+    )
+    self.assertEqual(
+        querying.query(
+            'Compute 1 + 2',
+            int,
+            lm=[
+                fake.StaticResponse('1'),
+                fake.StaticResponse('2'),
+            ],
+            num_samples=2,
+        ),
+        [1, 1, 2, 2]
+    )
+    self.assertEqual(
+        querying.query(
+            'Compute 1 + 2',
+            int,
+            lm=[
+                fake.StaticResponse('1'),
+                fake.StaticResponse('abc'),
+            ],
+            num_samples=[1, 2],
+        ),
+        [1]
+    )
+    self.assertEqual(
+        querying.query(
+            'Compute 1 + 2',
+            int,
+            default=0,
+            lm=[
+                fake.StaticResponse('1'),
+                fake.StaticResponse('abc'),
+            ],
+            num_samples=[1, 2],
+        ),
+        [1, 0, 0]
+    )
+    results = querying.query(
+        'Compute 1 + 2',
+        int,
+        default=0,
+        lm=[
+            fake.StaticResponse('1'),
+            fake.StaticResponse('abc'),
+        ],
+        returns_message=True,
+    )
+    self.assertEqual([r.text for r in results], ['1', 'abc'])
+    self.assertEqual([r.result for r in results], [1, 0])
+
   def test_bad_protocol(self):
     with self.assertRaisesRegex(ValueError, 'Unknown protocol'):
       querying.query('what is 1 + 1', int, protocol='text')
@@ -392,6 +455,30 @@ class QueryTest(unittest.TestCase):
         ).input,
     )
     self.assertIsNotNone(output.get_modality('image'))
+
+  def test_query_and_reduce(self):
+    self.assertEqual(
+        querying.query_and_reduce(
+            'Compute 1 + 1',
+            int,
+            reduce=sum,
+            lm=[
+                fake.StaticResponse('1'),
+                fake.StaticResponse('2'),
+            ],
+            num_samples=[1, 2],
+        ),
+        5
+    )
+    self.assertEqual(
+        querying.query_and_reduce(
+            'Compute 1 + 1',
+            int,
+            reduce=sum,
+            lm=fake.StaticResponse('2'),
+        ),
+        2
+    )
 
   def test_query_output(self):
     self.assertEqual(

@@ -105,12 +105,11 @@ def _query_structure_cls(
 
 def query(
     prompt: Union[str, lf.Template, Any],
-    schema: Union[
-        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
-    ] = None,
+    schema: schema_lib.SchemaType |  None = None,
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
-    lm: lf.LanguageModel | None = None,
+    lm: lf.LanguageModel | list[lf.LanguageModel] | None = None,
+    num_samples: int | list[int] = 1,
     examples: list[mapping.MappingExample] | None = None,
     cache_seed: int | None = 0,
     response_postprocess: Callable[[str], str] | None = None,
@@ -121,75 +120,206 @@ def query(
     skip_lm: bool = False,
     **kwargs,
 ) -> Any:
-  """Queries an language model for a (maybe) structured output.
+  """Query one or more language models for structured or unstructured outputs.
+
+  This is the primary API in Langfun for interacting with language models,
+  supporting natural language prompts, structured inputs, and multiple advanced
+  features.
+
+  Key Features:
+
+    - **Input**: Accepts natural language strings, structured inputs (e.g.,
+      `pg.Object`), and templates (`lf.Template`) with modality objects.
+
+    - **Output**: Returns structured outputs when `schema` is specified;
+      otherwise, outputs raw natural language (as a string).
+
+    - **Few-shot examples**: Supports structured few-shot examples with the
+      `examples` argument.
+
+    - **Multi-LM fan-out**: Sends queries to multiple language models with in
+      multiple samples in parallel,  returning a list of outputs.
 
   Examples:
 
+    Case 1: Regular natural language-based LLM query:
+
     ```
-    class FlightDuration:
-      hours: int
-      minutes: int
+    lf.query('1 + 1 = ?', lm=lf.llms.Gpt4Turbo())
 
-    class Flight(pg.Object):
-      airline: str
-      flight_number: str
-      departure_airport_code: str
-      arrival_airport_code: str
-      departure_time: str
-      arrival_time: str
-      duration: FlightDuration
-      stops: int
-      price: float
+    # Outptut: '2'
+    ```
 
-    prompt = '''
-      Information about flight UA2631.
-      '''
+    Case 2: Query with structured output.
 
-    r = lf.query(prompt, Flight)
-    assert isinstance(r, Flight)
-    assert r.airline == 'United Airlines'
-    assert r.departure_airport_code == 'SFO'
-    assert r.duration.hour = 7
+    ```
+    lf.query('1 + 1 = ?', int, lm=lf.llms.Gpt4Turbo())
+    
+    # Output: 2
+    ```
+
+    Case 3: Query with structured input.
+
+    ```
+    class Sum(pg.Object):
+      a: int
+      b: int
+
+    lf.query(Sum(1, 1), int, lm=lf.llms.Gpt4Turbo())
+
+    # Output: 2
+    ```
+
+    Case 4: Query with input of mixed modalities.
+
+    ```
+    class Animal(pg.Object):
+      pass
+
+    class Dog(Animal):
+      pass
+    
+    class Entity(pg.Object):
+      name: str
+
+    lf.query(
+        'What is in this {{image}} and {{objects}}?'
+        list[Entity],
+        lm=lf.llms.Gpt4Turbo()
+        image=lf.Image(path='/path/to/a/airplane.png'),
+        objects=[Dog()],
+    )
+
+    # Output: [Entity(name='airplane'), Entity(name='dog')]
+    ```
+
+    Case 5: Query with structured few-shot examples.
+    ```
+    lf.query(
+        'What is in this {{image}} and {{objects}}?'
+        list[Entity],
+        lm=lf.llms.Gpt4Turbo()
+        image=lf.Image(path='/path/to/a/dinasaur.png'),
+        objects=[Dog()],
+        examples=[
+            lf.MappingExample(
+                input=lf.Template(
+                    'What is the object near the house in this {{image}}?',
+                    image=lf.Image(path='/path/to/image.png'),
+                ),
+                schema=Entity,
+                output=Entity('cat'),
+            ),
+        ],
+    )
+
+    # Output: [Entity(name='dinasaur'), Entity(name='dog')]
+    ```
+
+    Case 6: Multiple queries to multiple models.
+    ```
+    lf.query(
+        '1 + 1 = ?',
+        int,
+        lm=[
+            lf.llms.Gpt4Turbo(),
+            lf.llms.Gemini1_5Pro(),
+        ],
+        num_samples=[1, 2],
+    )
+    # Output: [2, 2, 2]
     ```
 
   Args:
-    prompt: A str (may contain {{}} as template) as natural language input, or a
-      `pg.Symbolic` object as structured input as prompt to LLM.
-    schema: A type annotation as the schema for output object. If str (default),
-      the response will be a str in natural language.
-    default: The default value if parsing failed. If not specified, error will
-      be raised.
-    lm: The language model to use. If not specified, the language model from
-      `lf.context` context manager will be used.
-    examples: An optional list of fewshot examples for helping parsing. If None,
-      the default one-shot example will be added.
-    cache_seed: Seed for computing cache key. The cache key is determined by a
-      tuple of (lm, prompt, cache seed). If None, cache will be disabled for the
-      query even cache is configured by the LM.
-    response_postprocess: An optional callable object to process the raw LM
-      response before parsing it into the final output object. If None, the raw
-      LM response will not be processed.
-    autofix: Number of attempts to auto fix the generated code. If 0, autofix is
-      disabled. Auto-fix is not supported for 'json' protocol.
-    autofix_lm: The language model to use for autofix. If not specified, the
-      `autofix_lm` from `lf.context` context manager will be used. Otherwise it
-      will use `lm`.
-    protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default `python` will be used.
-    returns_message: If True, returns `lf.Message` as the output, instead of
-      returning the structured `message.result`.
-    skip_lm: If True, returns the rendered prompt as a UserMessage object.
-      otherwise return the LLM response based on the rendered prompt.
-    **kwargs: Keyword arguments passed to render the prompt or configure the 
-      `lf.structured.Mapping` class. Notable kwargs are:
-      - template_str: Change the root template for query.
-      - preamble: Change the preamble for query.
-      - mapping_template: Change the template for each mapping examle.
+    prompt: The input query. Can be:
+      - A natural language string (supports templating with `{{}}`),
+      - A `pg.Object` object for structured input,
+      - An `lf.Template` for mixed or template-based inputs.
+    schema: Type annotation or `lf.Schema` object for the expected output. 
+      If `None` (default), the response will be a natural language string.
+    default: Default value to return if parsing fails. If not specified, an
+      error will be raised.
+    lm: The language model(s) to query. Can be:
+      - A single `LanguageModel`,
+      - A list of `LanguageModel`s for multi-model fan-out.
+      If `None`, the LM from `lf.context` will be used.
+    num_samples: Number of samples to generate. If a list is provided, its
+      length must match the number of models in `lm`.
+    examples: Few-shot examples to guide the model output. Defaults to `None`.
+    cache_seed: Seed for caching the query. Queries with the same
+      `(lm, prompt, cache_seed)` will use cached responses. If `None`,
+      caching is disabled.
+    response_postprocess: A post-processing function for the raw LM response.
+      If `None`, no post-processing occurs.
+    autofix: Number of attempts for auto-fixing code errors. Set to `0` to
+      disable auto-fixing. Not supported with the `'json'` protocol.
+    autofix_lm: The LM to use for auto-fixing. Defaults to the `autofix_lm`
+      from `lf.context` or the main `lm`.
+    protocol: Format for schema representation. Choices are `'json'` or
+      `'python'`. Default is `'python'`.
+    returns_message:  If `True`, returns an `lf.Message` object instead of
+      the final parsed result.
+    skip_lm: If `True`, skips the LLM call and returns the rendered 
+      prompt as a `UserMessage` object.
+    **kwargs: Additional keyword arguments for:
+      - Rendering templates (e.g., `template_str`, `preamble`),
+      - Configuring `lf.structured.Mapping`.
 
   Returns:
-    The result based on the schema.
+    The result of the query:
+    - A single output or a list of outputs if multiple models/samples are used.
+    - Each output is a parsed object matching `schema`, an `lf.Message` (if 
+      `returns_message=True`), or a natural language string (default).
   """
     # Internal usage logging.
+
+  # Multiple quries will be issued when `lm` is a list or `num_samples` is
+  # greater than 1.
+  if isinstance(lm, list) or num_samples != 1:
+    def _single_query(inputs):
+      lm, example_i = inputs
+      return query(
+          prompt,
+          schema,
+          default=default,
+          lm=lm,
+          examples=examples,
+          # Usually num_examples should not be large, so we multiple the user
+          # provided cache seed by 100 to avoid collision.
+          cache_seed=(
+              None if cache_seed is None else cache_seed * 100 + example_i
+          ),
+          response_postprocess=response_postprocess,
+          autofix=autofix,
+          autofix_lm=autofix_lm,
+          protocol=protocol,
+          returns_message=returns_message,
+          skip_lm=skip_lm,
+          **kwargs,
+      )
+    lm_list = lm if isinstance(lm, list) else [lm]
+    num_samples_list = (
+        num_samples if isinstance(num_samples, list)
+        else [num_samples] * len(lm_list)
+    )
+    assert len(lm_list) == len(num_samples_list), (
+        'Expect the length of `num_samples` to be the same as the '
+        f'the length of `lm`. Got {num_samples} and {lm_list}.'
+    )
+    query_inputs = []
+    total_queries = 0
+    for lm, num_samples in zip(lm_list, num_samples_list):
+      query_inputs.extend([(lm, i) for i in range(num_samples)])
+      total_queries += num_samples
+
+    samples = []
+    for _, output, error in lf.concurrent_map(
+        _single_query, query_inputs, max_workers=max(64, total_queries),
+        ordered=True,
+    ):
+      if error is None:
+        samples.append(output)
+    return samples
 
   # Normalize query schema.
   # When `lf.query` is used for symbolic completion, schema is automatically
@@ -280,11 +410,52 @@ def query(
   return output_message if returns_message else _result(output_message)
 
 
+#
+# Helper function for map-reduce style querying.
+#
+
+
+def query_and_reduce(
+    prompt: Union[str, lf.Template, Any],
+    schema: schema_lib.SchemaType | None = None,
+    *,
+    reduce: Callable[[list[Any]], Any],
+    lm: lf.LanguageModel | list[lf.LanguageModel] | None = None,
+    num_samples: int | list[int] = 1,
+    **kwargs,
+) -> Any:
+  """Issues multiple `lf.query` calls in parallel and reduce the outputs.
+  
+  Args:
+    prompt: A str (may contain {{}} as template) as natural language input, or a
+      `pg.Symbolic` object as structured input as prompt to LLM.
+    schema: A type annotation as the schema for output object. If str (default),
+      the response will be a str in natural language.
+    reduce: A function to reduce the outputs of multiple `lf.query` calls. It
+      takes a list of outputs and returns the final object.
+    lm: The language model to use. If not specified, the language model from
+      `lf.context` context manager will be used.
+    num_samples: The number of samples to obtain from each language model being
+      requested. If a list is provided, it should have the same length as `lm`.
+    **kwargs: Additional arguments to pass to `lf.query`.
+
+  Returns:
+    The reduced output from multiple `lf.query` calls.
+  """
+  results = query(prompt, schema, lm=lm, num_samples=num_samples, **kwargs)
+  if isinstance(results, list):
+    results = reduce(results)
+  return results
+
+
+#
+# Functions for decomposing `lf.query` into pre-llm and post-llm operations.
+#
+
+
 def query_prompt(
     prompt: Union[str, lf.Template, Any],
-    schema: Union[
-        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
-    ] = None,
+    schema: schema_lib.SchemaType | None = None,
     **kwargs,
 ) -> lf.Message:
   """Returns the final prompt sent to LLM for `lf.query`."""
@@ -295,9 +466,7 @@ def query_prompt(
 
 def query_output(
     response: Union[str, lf.Message],
-    schema: Union[
-        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
-    ],
+    schema: schema_lib.SchemaType | None = None,
     **kwargs,
 ) -> Any:
   """Returns the final output of `lf.query` from a provided LLM response."""
@@ -306,6 +475,11 @@ def query_output(
   return query(
       pg.MISSING_VALUE, schema, lm=fake.StaticResponse(response), **kwargs
   )
+
+
+#
+# Functions for computing reward of an LLM response based on a mapping example.
+#
 
 
 def query_reward(
@@ -360,6 +534,11 @@ def _reward_fn(cls) -> Callable[
     args = [self, input, expected_output, metadata]
     return cls.__reward__(*args[:num_args])
   return _reward
+
+
+#
+# Functions for tracking `lf.query` invocations.
+#
 
 
 class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
