@@ -270,24 +270,31 @@ def call(
   if schema in (str, None):
     return lm_output if returns_message else lm_output.text
 
+  def _chain_nl_output_message(parsing_message: lf.Message):
+    """Chain the source of the parsed output to the LM output."""
+    parsing_message.root.source = lm_output
+    parsing_message.tag('parsing-lm-output')
+    parsing_message.lm_input.tag('parsing-lm-input')
+
   # Call `parsing_lm` for structured parsing.
-  parsing_message = querying.query(
-      lm_output.text,
-      schema,
-      examples=parsing_examples,
-      lm=parsing_lm or lm,
-      include_context=parsing_include_context,
-      cache_seed=cache_seed,
-      autofix=autofix,
-      autofix_lm=autofix_lm or lm,
-      protocol=protocol,
-      returns_message=True,
-      **kwargs,
-  )
-  # Chain the source of the parsed output to the LM output.
-  parsing_message.root.source = lm_output
-  parsing_message.tag('parsing-lm-output')
-  parsing_message.lm_input.tag('parsing-lm-input')
+  try:
+    parsing_message = querying.query(
+        lm_output.text,
+        schema,
+        examples=parsing_examples,
+        lm=parsing_lm or lm,
+        include_context=parsing_include_context,
+        cache_seed=cache_seed,
+        autofix=autofix,
+        autofix_lm=autofix_lm or lm,
+        protocol=protocol,
+        returns_message=True,
+        **kwargs,
+    )
+    _chain_nl_output_message(parsing_message)
+  except mapping.MappingError as e:
+    _chain_nl_output_message(e.lm_response)
+    raise e
   return parsing_message if returns_message else parsing_message.result
 
 

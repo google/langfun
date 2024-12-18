@@ -686,6 +686,31 @@ class CallTest(unittest.TestCase):
         ],
         returns_message=True,
     )
+    self.assertIn('parsing-lm-output', output.tags)
+    self.assertIn('parsing-lm-input', output.source.tags)
+    self.assertEqual(output.root.text, 'Compute 1 + 2')
+
+  def test_call_with_parsing_message_chaining_on_parsing_error(self):
+    try:
+      output = parsing.call(
+          'Compute 1 + 2',
+          int,
+          lm=fake.StaticSequence(['three']),
+          parsing_lm=fake.StaticSequence(['abc']),
+          parsing_examples=[
+              mapping.MappingExample(
+                  context='Multiple four and five',
+                  input='twenty',
+                  schema=int,
+                  output=20,
+              )
+          ],
+          returns_message=True,
+      )
+    except mapping.MappingError as e:
+      output = e.lm_response
+    self.assertIn('parsing-lm-output', output.tags)
+    self.assertIn('parsing-lm-input', output.source.tags)
     self.assertEqual(output.root.text, 'Compute 1 + 2')
 
   def test_call_with_autofix(self):
