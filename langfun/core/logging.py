@@ -54,6 +54,25 @@ class LogEntry(pg.Object, pg.views.HtmlTreeView.Extension):
   def should_output(self, min_log_level: LogLevel) -> bool:
     return _LOG_LEVELS.index(self.level) >= _LOG_LEVELS.index(min_log_level)
 
+  def format(self,
+             compact: bool = False,
+             verbose: bool = True,
+             root_indent: int = 0,
+             *,
+             text_format: bool = True,
+             **kwargs):
+    if text_format:
+      s = f"""{self.time.strftime('%H:%M:%S')} {self.level.upper()} - {self.message}"""
+      if self.metadata:
+        s += f' (metadata: {self.metadata!r})'
+      return s
+    return super().format(
+        compact=compact,
+        verbose=verbose,
+        root_indent=root_indent,
+        **kwargs
+    )
+
   def _html_tree_view_summary(
       self,
       view: pg.views.HtmlTreeView,

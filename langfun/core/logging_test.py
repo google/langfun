@@ -61,6 +61,25 @@ class LoggingTest(unittest.TestCase):
       print(actual)
     self.assertEqual(actual, expected)
 
+  def test_format(self):
+    time = datetime.datetime(2024, 10, 10, 12, 30, 45)
+    self.assertEqual(
+        str(
+            logging.LogEntry(
+                level='info', message='hello\nworld',
+                time=time, metadata=dict(x=1),
+            )
+        ),
+        '12:30:45 INFO - hello\nworld (metadata: {x=1})',
+    )
+    self.assertIn(
+        'LogEntry(',
+        logging.LogEntry(
+            level='info', message='hello\nworld',
+            time=time, metadata=dict(x=1),
+        ).format(text_format=False),
+    )
+
   def test_html(self):
     time = datetime.datetime(2024, 10, 10, 12, 30, 45)
     self.assert_html_content(

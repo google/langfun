@@ -133,6 +133,12 @@ class EvaluationTest(unittest.TestCase):
 
   def test_html_view(self):
     exp = test_helper.TestEvaluation()
+    exp.debug('debug message')
+    exp.info('info message')
+    exp.warning('warning message', x=1)
+    exp.error('error message', x=1)
+    exp.fatal('fatal message')
+
     self.assertIn(
         exp.id,
         exp.to_html(extra_flags=dict(card_view=True, current_run=None)).content

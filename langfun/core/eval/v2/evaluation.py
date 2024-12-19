@@ -14,7 +14,9 @@
 """Base class for Langfun evaluation tasks."""
 
 import abc
+import datetime
 import functools
+import threading
 import time
 
 from typing import Annotated, Any, Callable, Iterable
@@ -63,6 +65,8 @@ class Evaluation(experiment_lib.Experiment):
     self.__dict__.pop('is_leaf', None)
     self.__dict__.pop('children', None)
     super()._on_bound()
+    self._log_entries = []
+    self._log_lock = threading.Lock()
 
   #
   # Handling evaluation hierarchy (materialized vs. hyper evaluations).
@@ -278,6 +282,41 @@ class Evaluation(experiment_lib.Experiment):
         metric.reset()
 
   #
+  # Evaluation-level logging.
+  #
+
+  def _log(self, level: lf.logging.LogLevel, message: str, **kwargs):
+    with self._log_lock:
+      self._log_entries.append(
+          lf.logging.LogEntry(
+              level=level,
+              time=datetime.datetime.now(),
+              message=message,
+              metadata=kwargs,
+          )
+      )
+
+  def debug(self, message: str, **kwargs):
+    """Logs a debug message to the session."""
+    self._log('debug', message, **kwargs)
+
+  def info(self, message: str, **kwargs):
+    """Logs an info message to the session."""
+    self._log('info', message, **kwargs)
+
+  def warning(self, message: str, **kwargs):
+    """Logs a warning message to the session."""
+    self._log('warning', message, **kwargs)
+
+  def error(self, message: str, **kwargs):
+    """Logs an error message to the session."""
+    self._log('error', message, **kwargs)
+
+  def fatal(self, message: str, **kwargs):
+    """Logs a fatal message to the session."""
+    self._log('fatal', message, **kwargs)
+
+  #
   # HTML views.
   #
 
@@ -465,6 +504,25 @@ class Evaluation(experiment_lib.Experiment):
           )
       )
 
+    def _logs_tab() -> pg.views.html.controls.Tab:
+      """Renders a tab for the logs of the evaluation."""
+      with self._log_lock:
+        log_history = '\n'.join(str(l) for l in self._log_entries)
+      return pg.views.html.controls.Tab(
+          label='Logs',
+          content=pg.Html.element(
+              'div',
+              [
+                  pg.Html.element(
+                      'textarea',
+                      [pg.Html.escape(log_history)],
+                      readonly=True,
+                      css_classes=['logs-textarea'],
+                  )
+              ]
+          )
+      )
+
     def _main_tabs() -> pg.Html:
       return pg.Html.element(
           'div',
@@ -474,6 +532,8 @@ class Evaluation(experiment_lib.Experiment):
                       _definition_tab(),
                   ] + [
                       _metric_tab(m) for m in self.metrics
+                  ] + [
+                      _logs_tab()
                   ],
                   selected=1,
               )
@@ -593,6 +653,14 @@ class Evaluation(experiment_lib.Experiment):
           width:100%;
           height:100%;
         }
+        .logs-textarea {
+          width: 100%;
+          height: 500px;
+          padding: 5px;
+          border: 1px solid #DDD;
+          background-color: #EEE;
+          resize: vertical;
+        }
         """
     ]
 
@@ -615,6 +683,11 @@ class EvaluationState:
         assert isinstance(example, example_lib.Example), example
         self._evaluated_examples[example.id] = example
 
+  @property
+  def evaluated_examples(self) -> dict[int, example_lib.Example]:
+    """Returns the examples in the state."""
+    return self._evaluated_examples
+
   def get(self, example_id: int) -> example_lib.Example | None:
     """Returns the example with the given ID."""
     return self._evaluated_examples.get(example_id)
@@ -622,9 +695,3 @@ class EvaluationState:
   def update(self, example: example_lib.Example) -> None:
     """Updates the state with the given example."""
     self._evaluated_examples[example.id] = example
-
-  @property
-  def evaluated_examples(self) -> dict[int, example_lib.Example]:
-    """Returns the examples in the state."""
-    return self._evaluated_examples
-
