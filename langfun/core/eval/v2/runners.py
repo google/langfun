@@ -18,6 +18,7 @@ import concurrent.futures
 import random
 import threading
 import time
+import traceback
 from typing import Any, Annotated, Callable, Iterator
 
 from langfun import core as lf
@@ -120,9 +121,14 @@ class RunnerBase(Runner):
     # Start the progress of the evaluation.
     if experiment.is_leaf:
       assert isinstance(experiment, Evaluation)
-      experiment.progress.start(
-          total=(len(self.current_run.example_ids)
-                 if self.current_run.example_ids else experiment.num_examples)
+      num_examples_to_evaluate = (
+          len(self.current_run.example_ids)
+          if self.current_run.example_ids else experiment.num_examples
+      )
+      experiment.progress.start(total=num_examples_to_evaluate)
+      experiment.info(
+          'Starting evaluation %s with %d examples to evaluate.'
+          % (experiment.id, num_examples_to_evaluate)
       )
     else:
       experiment.progress.start(total=len(experiment.leaf_nodes))
@@ -144,8 +150,7 @@ class RunnerBase(Runner):
 
     # Only leaf evaluations will trigger the complete notification of the
     # ancestors.
-    if experiment.is_leaf:
-      self._update_ancestor_progresses(experiment)
+    self._update_ancestor_progresses(experiment)
 
   def on_experiment_complete(self, experiment: Experiment) -> None:
     """Called when an evaluation is complete."""
@@ -160,6 +165,35 @@ class RunnerBase(Runner):
     # ancestors.
     if experiment.is_leaf:
       self._update_ancestor_progresses(experiment)
+      self._log_experiment_completion(experiment)
+
+  def _log_experiment_completion(self, experiment: Experiment):
+    example_ids = (
+        self.current_run.example_ids if self.current_run.example_ids else
+        list(range(1, experiment.num_examples + 1))
+    )
+    num_from_checkpoint, num_processed = 0, 0
+    for example_id in example_ids:
+      example = experiment.state.get(example_id)
+      if example.newly_processed:
+        num_processed += 1
+      else:
+        num_from_checkpoint += 1
+    experiment.info(
+        f'{experiment.id} completed with {num_from_checkpoint + num_processed} '
+        f'examples evaluated ({num_from_checkpoint} from checkpoint, '
+        f'{num_processed} newly processed).'
+    )
+
+  def on_experiment_abort(
+      self, experiment: Experiment, error: BaseException) -> None:
+    """Called when an evaluation is complete."""
+    assert experiment.is_leaf
+    experiment.fatal(f'{error}\n\n{traceback.format_exc()}')
+
+    # Notify the plugins of the experiment abort.
+    for plugin in self._all_plugins(experiment):
+      plugin.on_experiment_abort(self, experiment, error)
 
   def _update_ancestor_progresses(self, experiment: Experiment):
     """Updates the progresses of the parent nodes of the experiment."""
@@ -270,31 +304,36 @@ class RunnerBase(Runner):
 
   def run_evaluation(self, evaluation: Evaluation) -> None:
     """Runs the evaluation."""
-    self.on_experiment_start(evaluation)
+    try:
+      self.on_experiment_start(evaluation)
 
-    per_evaluation_settings = {}
-    cache = None
-    if self.current_run.use_cache == 'per_dataset':
-      cache = self._load_or_create_cache(evaluation)
-      per_evaluation_settings['cache'] = cache
+      per_evaluation_settings = {}
+      cache = None
+      if self.current_run.use_cache == 'per_dataset':
+        cache = self._load_or_create_cache(evaluation)
+        per_evaluation_settings['cache'] = cache
 
-    with lf.use_settings(**per_evaluation_settings):
-      if self.current_run.example_ids is None:
-        items = (
-            Example(id=i + 1, input=ex) for i, ex in enumerate(
-                evaluation.example_inputs)
-        )
-      else:
-        items = (
-            Example(
-                id=example_id, input=evaluation.example_input_by_id(example_id)
-            ) for example_id in self.current_run.example_ids
-        )
-      self._evaluate_items(evaluation, items)
+      with lf.use_settings(**per_evaluation_settings):
+        if self.current_run.example_ids is None:
+          items = (
+              Example(id=i + 1, input=ex) for i, ex in enumerate(
+                  evaluation.example_inputs)
+          )
+        else:
+          items = (
+              Example(
+                  id=example_id,
+                  input=evaluation.example_input_by_id(example_id)
+              ) for example_id in self.current_run.example_ids
+          )
+        self._evaluate_items(evaluation, items)
 
-    if cache:
-      self.background_run(cache.save)
-    self.on_experiment_complete(evaluation)
+      if cache:
+        self.background_run(cache.save)
+      self.on_experiment_complete(evaluation)
+    except BaseException as e:  # pylint: disable=broad-except
+      self.on_experiment_abort(evaluation, e)
+      raise e
 
   @abc.abstractmethod
   def _evaluate_items(
@@ -410,9 +449,7 @@ class ParallelRunner(RunnerBase):
         groups.values(),
         max_workers=max(64, len(groups)),
         timeout=self.timeout,
-        silence_on_errors=(
-            None if self.current_run.raise_if_has_error else BaseException
-        )
+        silence_on_errors=None,
     ):
       pass
 
@@ -437,8 +474,6 @@ class ParallelRunner(RunnerBase):
         items,
         max_workers=evaluation.max_workers,
         timeout=self.timeout,
-        silence_on_errors=(
-            None if self.current_run.raise_if_has_error else BaseException
-        )
+        silence_on_errors=None,
     ):
       pass
