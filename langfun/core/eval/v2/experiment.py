@@ -959,6 +959,14 @@ class Plugin(lf.Component):
   ) -> None:
     """Called when an experiment (both leaf and non-leaf) is complete."""
 
+  def on_experiment_abort(
+      self,
+      runner: Runner,
+      experiment: Experiment,
+      error: BaseException,
+  ) -> None:
+    """Called when an experiment (both leaf and non-leaf) is aborted."""
+
   def on_example_start(
       self,
       runner: Runner,

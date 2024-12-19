@@ -13,6 +13,7 @@
 # limitations under the License.
 """Checkpointing evaluation runs."""
 import threading
+import traceback
 
 import langfun.core as lf
 from langfun.core.eval.v2 import example as example_lib
@@ -26,6 +27,21 @@ Runner = experiment_lib.Runner
 
 class Checkpointer(experiment_lib.Plugin):
   """Base class for checkpointing evaluation examples."""
+
+  def on_experiment_start(self, experiment: Experiment):
+    if experiment.state.evaluated_examples:
+      experiment.info(
+          'Loaded %d examples from checkpoint files. Example IDs: %s' %
+          (
+              len(experiment.state.evaluated_examples),
+              list(sorted(experiment.state.evaluated_examples.keys()))
+          ),
+      )
+    else:
+      experiment.info(
+          'No previous evaluated examples are loaded. '
+          f'Experiment {experiment.id} starts from scratch.'
+      )
 
 
 class PerExampleCheckpointer(Checkpointer):
@@ -68,10 +84,11 @@ class PerExampleCheckpointer(Checkpointer):
           _load_state, ckpt_files, max_workers=64,
       ):
         if error is not None:
-          pg.logging.warning(
+          experiment.warning(
               'Failed to load checkpoint file %s: %s. Skipping the file.',
               ckpt_file, error
           )
+    super().on_experiment_start(experiment)
 
   def on_example_complete(
       self,
@@ -80,7 +97,11 @@ class PerExampleCheckpointer(Checkpointer):
       example: Example,
   ) -> None:
     """Saves the example to the checkpoint file."""
-    if not example.has_error:
+    if example.has_error:
+      experiment.warning(
+          f'Example {example.id} has error. Skipping checkpointing.'
+      )
+    else:
       def save_state(example: Example):
         writer = SequenceWriter(
             runner.current_run.output_path_for(
@@ -91,8 +112,18 @@ class PerExampleCheckpointer(Checkpointer):
                 )
             )
         )
-        writer.add(example)
-        writer.close()
+        try:
+          writer.add(example)
+          writer.close()
+          experiment.info(
+              f'Example {example.id} is saved to {writer.path}.',
+          )
+        except BaseException as e:  # pylint: disable=broad-except
+          experiment.error(
+              f'Failed to save example {example.id} to {writer.path}. '
+              f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
+          )
+          raise e
       runner.background_run(save_state, example)
 
   def _file_prefix_and_ext(self, filename: str) -> tuple[str, str]:
@@ -164,6 +195,7 @@ class BulkCheckpointer(Checkpointer):
     with self._lock:
       if self._sequence_writer is not None:
         self._sequence_writer[experiment.id] = sequence_writer
+    super().on_experiment_start(experiment)
 
   def on_experiment_complete(
       self,
@@ -178,8 +210,12 @@ class BulkCheckpointer(Checkpointer):
       if self._sequence_writer is not None:
         # Make sure the writer is closed without delay so the file will be
         # available immediately.
-        self._sequence_writer[experiment.id].close()
-        del self._sequence_writer[experiment.id]
+        writer = self._sequence_writer.pop(experiment.id)
+        writer.close()
+        experiment.info(
+            f'{len(experiment.state.evaluated_examples)} examples are '
+            f'checkpointed to {writer.path}.'
+        )
 
   def on_example_complete(
       self,
@@ -189,8 +225,22 @@ class BulkCheckpointer(Checkpointer):
   ) -> None:
     """Saves the example to the checkpoint file."""
     assert experiment.id in self._sequence_writer
-    if not example.has_error:
-      runner.background_run(self._sequence_writer[experiment.id].add, example)
+    if example.has_error:
+      experiment.warning(
+          f'Example {example.id} has error. Skipping checkpointing.'
+      )
+    else:
+      def _save_example(example: Example):
+        writer = self._sequence_writer[experiment.id]
+        try:
+          writer.add(example)
+        except BaseException as e:  # pylint: disable=broad-except
+          experiment.error(
+              f'Failed to save example {example.id} to {writer.path}. '
+              f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
+          )
+          raise e
+      runner.background_run(_save_example, example)
 
 
 class SequenceWriter:
@@ -198,7 +248,12 @@ class SequenceWriter:
 
   def __init__(self, path: str):
     self._lock = threading.Lock()
+    self._path = path
     self._sequence_writer = pg.io.open_sequence(path, 'w')
+
+  @property
+  def path(self) -> str:
+    return self._path
 
   def add(self, example: Example):
     example_blob = pg.to_json_str(
