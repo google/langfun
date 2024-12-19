@@ -583,7 +583,16 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
 
   @functools.cached_property
   def output(self) -> Any:
-    return query_output(self.lm_response, self.schema)
+    """The output of `lf.query`. If it failed, returns the `MappingError`."""
+    try:
+      return query_output(self.lm_response, self.schema)
+    except mapping.MappingError as e:
+      return e
+
+  @property
+  def has_error(self) -> bool:
+    """Returns True if the query failed to generate a valid output."""
+    return isinstance(self.output, BaseException)
 
   @property
   def elapse(self) -> float:
