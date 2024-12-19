@@ -1051,6 +1051,16 @@ class QueryStructureJsonTest(unittest.TestCase):
 
 class QueryInvocationTest(unittest.TestCase):
 
+  def test_basics(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi"',
+    ])
+    with querying.track_queries() as queries:
+      querying.query('foo', Activity, default=None, lm=lm)
+
+    self.assertTrue(queries[0].has_error)
+    self.assertIsInstance(queries[0].output, mapping.MappingError)
+
   def test_to_html(self):
     lm = fake.StaticSequence([
         'Activity(description="hi")',
