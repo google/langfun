@@ -14,6 +14,7 @@
 """Reporting evaluation results."""
 
 import time
+import traceback
 from typing import Annotated
 
 from langfun.core.eval.v2 import example as example_lib
@@ -61,6 +62,14 @@ class HtmlReporter(experiment_lib.Plugin):
   ) -> None:
     self._maybe_update_summary(runner, force=True)
 
+  def on_run_abort(
+      self,
+      runner: Runner,
+      root: Experiment,
+      error: BaseException
+  ) -> None:
+    self._maybe_update_summary(runner, force=True)
+
   def on_experiment_start(
       self,
       runner: Runner,
@@ -74,6 +83,16 @@ class HtmlReporter(experiment_lib.Plugin):
   ):
     if experiment.is_leaf:
       self._maybe_update_experiment_html(runner, experiment, force=True)
+
+  def on_experiment_abort(
+      self,
+      runner: Runner,
+      experiment: Experiment,
+      error: BaseException
+  ) -> None:
+    del error
+    assert experiment.is_leaf
+    self._maybe_update_experiment_html(runner, experiment, force=True)
 
   def on_example_complete(
       self, runner: Runner, experiment: Experiment, example: Example
@@ -103,19 +122,26 @@ class HtmlReporter(experiment_lib.Plugin):
       self, runner: Runner, experiment: Experiment, force: bool = False
   ) -> None:
     def _save():
-      html = experiment.to_html(
-          collapse_level=None,
-          extra_flags=dict(
-              current_run=runner.current_run,
-              interactive=False,
-              card_view=False,
-          ),
+      index_html_path = runner.current_run.output_path_for(
+          experiment, _EVALULATION_DETAIL_FILE
       )
-      html.save(
-          runner.current_run.output_path_for(
-              experiment, _EVALULATION_DETAIL_FILE
-          )
-      )
+      try:
+        html = experiment.to_html(
+            collapse_level=None,
+            extra_flags=dict(
+                current_run=runner.current_run,
+                interactive=False,
+                card_view=False,
+            ),
+        )
+        html.save(index_html_path)
+      except BaseException as e:  # pylint: disable=broad-except
+        experiment.error(
+            f'Failed to save HTML {index_html_path!r}. '
+            f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
+        )
+        raise e
+
     if force or (
         time.time() - self._last_experiment_report_time[experiment.id]
         > self.experiment_report_interval
@@ -128,17 +154,24 @@ class HtmlReporter(experiment_lib.Plugin):
   ) -> None:
     """Saves the example."""
     def _save():
-      html = example.to_html(
-          collapse_level=None,
-          enable_summary_tooltip=False,
-          extra_flags=dict(
-              # For properly rendering the next link.
-              num_examples=getattr(experiment, 'num_examples', None)
-          ),
-      )
-      html.save(
-          runner.current_run.output_path_for(
-              experiment, f'{example.id}.html'
-          )
-      )
+      try:
+        html = example.to_html(
+            collapse_level=None,
+            enable_summary_tooltip=False,
+            extra_flags=dict(
+                # For properly rendering the next link.
+                num_examples=getattr(experiment, 'num_examples', None)
+            ),
+        )
+        html.save(
+            runner.current_run.output_path_for(
+                experiment, f'{example.id}.html'
+            )
+        )
+      except BaseException as e:  # pylint: disable=broad-except
+        experiment.error(
+            f'Failed to save HTML {example.id}.html. '
+            f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
+        )
+        raise e
     runner.background_run(_save)

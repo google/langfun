@@ -285,36 +285,43 @@ class Evaluation(experiment_lib.Experiment):
   # Evaluation-level logging.
   #
 
-  def _log(self, level: lf.logging.LogLevel, message: str, **kwargs):
+  def _log(self, log_func, level: lf.logging.LogLevel, message: str, **kwargs):
+    # Write to external logging system.
+    log_message = f'{self.id}: {message}'
+    if kwargs:
+      log_message = f'{log_message} (metadata: {kwargs!r})'
+    log_func(log_message)
+
+    # Add to experiment log history.
+    log_entry = lf.logging.LogEntry(
+        level=level,
+        time=datetime.datetime.now(),
+        message=message,
+        metadata=kwargs,
+    )
     with self._log_lock:
-      self._log_entries.append(
-          lf.logging.LogEntry(
-              level=level,
-              time=datetime.datetime.now(),
-              message=message,
-              metadata=kwargs,
-          )
-      )
+      self._log_entries.append(log_entry)
 
   def debug(self, message: str, **kwargs):
     """Logs a debug message to the session."""
-    self._log('debug', message, **kwargs)
+    self._log(pg.logging.debug, 'debug', message, **kwargs)
 
   def info(self, message: str, **kwargs):
     """Logs an info message to the session."""
-    self._log('info', message, **kwargs)
+    self._log(pg.logging.info, 'info', message, **kwargs)
 
   def warning(self, message: str, **kwargs):
     """Logs a warning message to the session."""
-    self._log('warning', message, **kwargs)
+    self._log(pg.logging.warning, 'warning', message, **kwargs)
 
   def error(self, message: str, **kwargs):
     """Logs an error message to the session."""
-    self._log('error', message, **kwargs)
+    self._log(pg.logging.error, 'error', message, **kwargs)
 
   def fatal(self, message: str, **kwargs):
     """Logs a fatal message to the session."""
-    self._log('fatal', message, **kwargs)
+    # We use error level for fatal message, which does not trigger assertion.
+    self._log(pg.logging.error, 'fatal', message, **kwargs)
 
   #
   # HTML views.
