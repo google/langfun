@@ -65,6 +65,7 @@ class RunnerBase(Runner):
     with pg.notify_on_change(False):
       self.plugins.append(progress_tracking.progress_tracker(self.tqdm))
 
+    self._io_pool_lock = threading.Lock()
     self._io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=16)
     # TODO(daiyip): render background errors.
     self._background_last_error = None
@@ -76,7 +77,10 @@ class RunnerBase(Runner):
         func(*args, **kwargs)
       except Exception as e:  # pylint: disable=broad-except
         self._background_last_error = e
-    self._io_pool.submit(_background_run, *args, **kwargs)
+
+    with self._io_pool_lock:
+      if self._io_pool is not None:
+        self._io_pool.submit(_background_run, *args, **kwargs)
 
   def _all_plugins(self, experiment: Experiment) -> Iterator[Plugin]:
     """Returns all plugins for the experiment."""
@@ -296,7 +300,9 @@ class RunnerBase(Runner):
         self.background_run(cache.save)
 
       # Wait for the background tasks to finish.
-      self._io_pool.shutdown(wait=True)
+      with self._io_pool_lock:
+        self._io_pool, io_pool = None, self._io_pool
+      io_pool.shutdown(wait=True)
 
   @abc.abstractmethod
   def _run(self, evaluations: list[Evaluation]) -> None:

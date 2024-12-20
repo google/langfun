@@ -18,10 +18,11 @@ import time
 from typing import Any
 import unittest
 
+from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import experiment as experiment_lib
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
-from langfun.core.eval.v2 import test_helper
+
 import pyglove as pg
 
 
@@ -101,7 +102,7 @@ class RunnerTest(unittest.TestCase):
 
   def test_basic(self):
     plugin = TestPlugin()
-    exp = test_helper.test_experiment()
+    exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(tempfile.gettempdir(), 'test_sequential_runner')
     run = exp.run(root_dir, runner='sequential', plugins=[plugin])
 
@@ -143,7 +144,7 @@ class RunnerTest(unittest.TestCase):
 
   def test_raise_if_has_error(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'test_raise_if_has_error')
-    exp = test_helper.TestEvaluation()
+    exp = eval_test_helper.TestEvaluation()
     with self.assertRaisesRegex(ValueError, 'x should not be 5'):
       exp.run(
           root_dir, runner='sequential', plugins=[], raise_if_has_error=True
@@ -154,7 +155,7 @@ class RunnerTest(unittest.TestCase):
 
   def test_example_ids(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'test_example_ids')
-    exp = test_helper.test_experiment()
+    exp = eval_test_helper.test_experiment()
     plugin = TestPlugin()
     _ = exp.run(
         root_dir, runner='sequential', plugins=[plugin], example_ids=[5, 7, 9]
@@ -164,7 +165,7 @@ class RunnerTest(unittest.TestCase):
 
   def test_filter(self):
     plugin = TestPlugin()
-    exp = test_helper.test_experiment()
+    exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(tempfile.gettempdir(), 'test_filter')
 
     _ = exp.run(
@@ -193,7 +194,7 @@ class RunnerTest(unittest.TestCase):
           ) for i in range(num_examples)
       ]
 
-    exp = test_helper.TestEvaluation(
+    exp = eval_test_helper.TestEvaluation(
         inputs=test_inputs(num_examples=pg.oneof([2, 4]))
     )
     # Global cache.
@@ -234,7 +235,7 @@ class ParallelRunnerTest(RunnerTest):
 
   def test_parallel_runner(self):
     plugin = TestPlugin()
-    exp = test_helper.test_experiment()
+    exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(tempfile.gettempdir(), 'test_parallel_runner')
     run = exp.run(root_dir, runner='parallel', plugins=[plugin])
 
@@ -274,7 +275,7 @@ class ParallelRunnerTest(RunnerTest):
 
   def test_concurrent_startup_delay(self):
     plugin = TestPlugin()
-    exp = test_helper.test_experiment()
+    exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(
         tempfile.gettempdir(), 'test_concurrent_startup_delay'
     )
@@ -290,7 +291,7 @@ class DebugRunnerTest(RunnerTest):
 
   def test_debug_runner(self):
     plugin = TestPlugin()
-    exp = test_helper.test_experiment()
+    exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(tempfile.gettempdir(), 'test_debug_runner')
     run = exp.run(root_dir, runner='debug', plugins=[plugin])
 

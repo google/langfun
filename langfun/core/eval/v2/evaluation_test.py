@@ -15,11 +15,10 @@ import os
 import tempfile
 import unittest
 
+from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import evaluation as evaluation_lib
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import experiment as experiment_lib
-
-from langfun.core.eval.v2 import test_helper
 
 import pyglove as pg
 
@@ -32,17 +31,23 @@ Run = experiment_lib.Run
 class EvaluationTest(unittest.TestCase):
 
   def test_hyper_evaluation(self):
-    exp = test_helper.TestEvaluation(
-        lm=test_helper.TestLLM(offset=pg.oneof(range(3)))
+    exp = eval_test_helper.TestEvaluation(
+        lm=eval_test_helper.TestLLM(offset=pg.oneof(range(3)))
     )
     self.assertFalse(exp.is_leaf)
     self.assertTrue(
         pg.eq(
             exp.children,
             [
-                test_helper.TestEvaluation(lm=test_helper.TestLLM(offset=0)),
-                test_helper.TestEvaluation(lm=test_helper.TestLLM(offset=1)),
-                test_helper.TestEvaluation(lm=test_helper.TestLLM(offset=2)),
+                eval_test_helper.TestEvaluation(
+                    lm=eval_test_helper.TestLLM(offset=0)
+                ),
+                eval_test_helper.TestEvaluation(
+                    lm=eval_test_helper.TestLLM(offset=1)
+                ),
+                eval_test_helper.TestEvaluation(
+                    lm=eval_test_helper.TestLLM(offset=2)
+                ),
             ]
         )
     )
@@ -57,19 +62,21 @@ class EvaluationTest(unittest.TestCase):
     )
 
   def test_input(self):
-    exp = test_helper.TestEvaluation()
+    exp = eval_test_helper.TestEvaluation()
     self.assertEqual(exp.num_examples, 10)
-    exp = test_helper.TestEvaluation(inputs=test_helper.test_inputs(None))
+    exp = eval_test_helper.TestEvaluation(
+        inputs=eval_test_helper.test_inputs(None)
+    )
     self.assertEqual(exp.num_examples, 20)
     @pg.functor
     def my_inputs():
       yield pg.Dict(x=1, y=2)
       yield pg.Dict(x=3, y=4)
-    exp = test_helper.TestEvaluation(inputs=my_inputs())
+    exp = eval_test_helper.TestEvaluation(inputs=my_inputs())
     self.assertEqual(exp.num_examples, 2)
 
   def test_evaluate(self):
-    exp = test_helper.TestEvaluation()
+    exp = eval_test_helper.TestEvaluation()
     example = exp.evaluate(Example(id=3))
     self.assertIs(exp.state.get(3), example)
     self.assertTrue(example.newly_processed)
@@ -85,7 +92,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertIsNotNone(example.start_time)
     self.assertIsNotNone(example.end_time)
 
-    exp = test_helper.TestEvaluation(lm=test_helper.TestLLM(offset=1))
+    exp = eval_test_helper.TestEvaluation(lm=eval_test_helper.TestLLM(offset=1))
     example = exp.evaluate(3)
     self.assertTrue(example.newly_processed)
     self.assertEqual(example.input, pg.Dict(x=2, y=4, groundtruth=6))
@@ -109,7 +116,7 @@ class EvaluationTest(unittest.TestCase):
     pg.io.mkdirs(eval_dir, exist_ok=True)
     state_file = os.path.join(eval_dir, 'state.jsonl')
     with pg.io.open_sequence(state_file, 'w') as f:
-      exp = test_helper.TestEvaluation()
+      exp = eval_test_helper.TestEvaluation()
       example = exp.evaluate(3)
       self.assertTrue(example.newly_processed)
       self.assertEqual(example.input, pg.Dict(x=2, y=4, groundtruth=6))
@@ -132,7 +139,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.usage_summary.uncached.total.num_requests, 0)
 
   def test_html_view(self):
-    exp = test_helper.TestEvaluation()
+    exp = eval_test_helper.TestEvaluation()
     exp.debug('debug message')
     exp.info('info message')
     exp.warning('warning message', x=1)

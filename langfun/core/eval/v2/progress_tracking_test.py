@@ -18,9 +18,9 @@ import tempfile
 import unittest
 
 from langfun.core import console as lf_console
+from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import progress_tracking    # pylint: disable=unused-import
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
-from langfun.core.eval.v2 import test_helper
 import pyglove as pg
 
 
@@ -35,7 +35,7 @@ class HtmlProgressTrackerTest(unittest.TestCase):
         display=display
     )
     root_dir = os.path.join(tempfile.gettempdir(), 'test_html_progress_tracker')
-    experiment = test_helper.test_experiment()
+    experiment = eval_test_helper.test_experiment()
     _ = experiment.run(root_dir, 'new', plugins=[])
     self.assertIsInstance(result['view'], pg.Html)
     lf_console._notebook = None
@@ -45,7 +45,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
 
   def test_basic(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'test_tqdm_progress_tracker')
-    experiment = test_helper.test_experiment()
+    experiment = eval_test_helper.test_experiment()
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
       _ = experiment.run(root_dir, 'new', plugins=[])
@@ -55,7 +55,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
     root_dir = os.path.join(
         tempfile.gettempdir(), 'test_tqdm_progress_tracker_with_example_ids'
     )
-    experiment = test_helper.test_experiment()
+    experiment = eval_test_helper.test_experiment()
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
       _ = experiment.run(root_dir, 'new', example_ids=[1], plugins=[])

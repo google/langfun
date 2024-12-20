@@ -15,9 +15,9 @@ import os
 import tempfile
 import unittest
 
+from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import reporting
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
-from langfun.core.eval.v2 import test_helper
 import pyglove as pg
 
 
@@ -25,7 +25,7 @@ class ReportingTest(unittest.TestCase):
 
   def test_reporting(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'test_reporting')
-    experiment = test_helper.test_experiment()
+    experiment = eval_test_helper.test_experiment()
     reporter = reporting.HtmlReporter()
     run = experiment.run(root_dir, 'new', plugins=[reporter])
     pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))

@@ -16,9 +16,9 @@ import tempfile
 import unittest
 
 from langfun.core.eval.v2 import checkpointing
+from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
-from langfun.core.eval.v2 import test_helper
 import pyglove as pg
 
 Example = example_lib.Example
@@ -56,7 +56,7 @@ class PerExampleCheckpointerTest(unittest.TestCase):
 
   def test_checkpointing(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer')
-    experiment = test_helper.test_experiment()
+    experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
     checkpointer = checkpointing.PerExampleCheckpointer(checkpoint_filename)
     run = experiment.run(
@@ -89,7 +89,7 @@ class BulkCheckpointerTest(unittest.TestCase):
 
   def test_checkpointing(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'test_bulk_checkpointer')
-    experiment = test_helper.test_experiment()
+    experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
     checkpointer = checkpointing.BulkCheckpointer(checkpoint_filename)
     run = experiment.run(

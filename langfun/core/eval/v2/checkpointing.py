@@ -66,6 +66,10 @@ class PerExampleCheckpointer(Checkpointer):
 
     # For refresh runs, we don't want to load the previous state.
     if not runner.current_run.refresh:
+      if runner.current_run.input_root != runner.current_run.output_root:
+        experiment.info(
+            f'Warm starting from directory: {runner.current_run.input_root}.'
+        )
       def _load_state(ckpt_file):
         experiment.load_state(ckpt_file)
 
@@ -85,8 +89,8 @@ class PerExampleCheckpointer(Checkpointer):
       ):
         if error is not None:
           experiment.warning(
-              'Failed to load checkpoint file %s: %s. Skipping the file.',
-              ckpt_file, error
+              f'Failed to load checkpoint file {ckpt_file}: {error}. '
+              'Skipping the file.'
           )
     super().on_experiment_start(experiment)
 
@@ -181,6 +185,10 @@ class BulkCheckpointer(Checkpointer):
       return
     # For refresh runs, we don't want to load the previous state.
     if not runner.current_run.refresh:
+      if runner.current_run.input_root != runner.current_run.output_root:
+        experiment.info(
+            f'Warm starting from directory: {runner.current_run.input_root}.'
+        )
       experiment.load_state(
           runner.current_run.input_path_for(
               experiment, self.checkpoint_filename
