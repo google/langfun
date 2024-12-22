@@ -55,6 +55,7 @@ class SequenceWriterTest(unittest.TestCase):
 class PerExampleCheckpointerTest(unittest.TestCase):
 
   def test_checkpointing(self):
+    pg.defaults.loggers.use_stdout()
     root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer')
     experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'

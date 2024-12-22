@@ -13,12 +13,14 @@
 # limitations under the License.
 """Reporting evaluation results."""
 
+import threading
 import time
 import traceback
 from typing import Annotated
 
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import experiment as experiment_lib
+import pyglove as pg
 
 Runner = experiment_lib.Runner
 Experiment = experiment_lib.Experiment
@@ -40,12 +42,15 @@ class HtmlReporter(experiment_lib.Plugin):
   experiment_report_interval: Annotated[
       int,
       'The interval of writing report for inidividual experiments in seconds.'
-  ] = 60
+  ] = 120
 
   def _on_bound(self):
     super()._on_bound()
     self._last_summary_time = 0
     self._last_experiment_report_time = {}
+    self._update_thread = None
+    self._stop_update = False
+    self._stop_update_experiment_ids = set()
 
   def on_run_start(
       self,
@@ -54,12 +59,19 @@ class HtmlReporter(experiment_lib.Plugin):
   ) -> None:
     self._maybe_update_summary(runner)
     self._last_experiment_report_time = {leaf.id: 0 for leaf in root.leaf_nodes}
+    self._stop_update = False
+    self._stop_update_experiment_ids = set()
+    self._update_thread = threading.Thread(
+        target=self._update_thread_func, args=(runner,)
+    )
+    self._update_thread.start()
 
   def on_run_complete(
       self,
       runner: Runner,
       root: Experiment
   ) -> None:
+    self._stop_update = True
     self._maybe_update_summary(runner, force=True)
 
   def on_run_abort(
@@ -68,7 +80,19 @@ class HtmlReporter(experiment_lib.Plugin):
       root: Experiment,
       error: BaseException
   ) -> None:
+    self._stop_update = True
     self._maybe_update_summary(runner, force=True)
+
+  def _update_thread_func(self, runner: Runner):
+    while not self._stop_update:
+      self._maybe_update_summary(runner, background=False)
+      for leaf in runner.current_run.experiment.leaf_nodes:
+        if leaf.id in self._stop_update_experiment_ids:
+          continue
+        self._maybe_update_experiment_html(runner, leaf, background=False)
+        if leaf.progress.is_stopped:
+          self._stop_update_experiment_ids.add(leaf.id)
+      time.sleep(5)
 
   def on_experiment_start(
       self,
@@ -101,7 +125,11 @@ class HtmlReporter(experiment_lib.Plugin):
     self._maybe_update_experiment_html(runner, experiment)
     self._maybe_update_summary(runner)
 
-  def _maybe_update_summary(self, runner: Runner, force: bool = False) -> None:
+  def _maybe_update_summary(
+      self,
+      runner: Runner,
+      background: bool = True,
+      force: bool = False) -> None:
     """Maybe update the summary of current run."""
     run = runner.current_run
     def _summary():
@@ -115,26 +143,37 @@ class HtmlReporter(experiment_lib.Plugin):
       )
 
     if force or (time.time() - self._last_summary_time > self.summary_interval):
-      runner.background_run(_summary)
+      if background:
+        runner.background_run(_summary)
+      else:
+        _summary()
       self._last_summary_time = time.time()
 
   def _maybe_update_experiment_html(
-      self, runner: Runner, experiment: Experiment, force: bool = False
+      self,
+      runner: Runner,
+      experiment: Experiment,
+      force: bool = False,
+      background: bool = True,
   ) -> None:
     def _save():
       index_html_path = runner.current_run.output_path_for(
           experiment, _EVALULATION_DETAIL_FILE
       )
       try:
-        html = experiment.to_html(
-            collapse_level=None,
-            extra_flags=dict(
-                current_run=runner.current_run,
-                interactive=False,
-                card_view=False,
-            ),
-        )
-        html.save(index_html_path)
+        with pg.timeit() as t:
+          html = experiment.to_html(
+              collapse_level=None,
+              extra_flags=dict(
+                  current_run=runner.current_run,
+                  interactive=False,
+                  card_view=False,
+              ),
+          )
+          html.save(index_html_path)
+          experiment.info(
+              f'Generated HTML {index_html_path!r} in {t.elapse:.2f} seconds.',
+          )
       except BaseException as e:  # pylint: disable=broad-except
         experiment.error(
             f'Failed to save HTML {index_html_path!r}. '
@@ -146,7 +185,10 @@ class HtmlReporter(experiment_lib.Plugin):
         time.time() - self._last_experiment_report_time[experiment.id]
         > self.experiment_report_interval
     ):
-      runner.background_run(_save)
+      if background:
+        runner.background_run(_save)
+      else:
+        _save()
       self._last_experiment_report_time[experiment.id] = time.time()
 
   def _save_example_html(

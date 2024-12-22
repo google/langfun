@@ -81,7 +81,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
   directory (using the ID 'latest'). Users can specify 'new' to start a fresh
   run or provide a specific run ID (typically in the format %Y%m%d_%<number>).
   Additionally, when initiating a new run, users may specify a `warm_start_from`
-  ID to restore the experiment’s state from a previous run.
+  directory to restore the experiment’s state from a previous run.
 
   Examples:
 
@@ -97,9 +97,9 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     # Start a new, clean run.
     experiment.run(root_dir, 'new')
 
-    # Start a new run with a warm start from the previous run located in
-    # 'run_20241031_1' of the root directory.
-    experiment.run(root_dir, 'new', warm_start_from='20241031_1')
+    # Start a new run with a warm start from the another run located at
+    # '/path/to/another/run' (e.g. /my_expreriment/run_20241031_1).
+    experiment.run(root_dir, 'new', warm_start_from='/path/to/another/run')
 
     # Resume run '20241031_1', re-running failed examples and recomputing
     # metrics as needed.
