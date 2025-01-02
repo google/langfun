@@ -32,6 +32,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # o1 (preview) models.
     # Pricing in US dollars, from https://openai.com/api/pricing/
     # as of 2024-10-10.
+    'o1': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.015,
+        cost_per_1k_output_tokens=0.06,
+    ),
     'o1-preview': pg.Dict(
         in_service=True,
         rpm=10000,
@@ -255,25 +262,17 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     ),
     # GPT-3.5 models
     'text-davinci-003': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
+        in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM
     ),
     'text-davinci-002': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
+        in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM
     ),
     'code-davinci-002': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
+        in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM
     ),
     # GPT-3 instruction-tuned models (Deprecated)
     'text-curie-001': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
+        in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM
     ),
     'text-babbage-001': pg.Dict(
         in_service=False,
@@ -290,32 +289,12 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         rpm=_DEFAULT_RPM,
         tpm=_DEFAULT_TPM,
     ),
-    'curie': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
-    ),
-    'babbage': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
-    ),
-    'ada': pg.Dict(
-        in_service=False,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
-    ),
+    'curie': pg.Dict(in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'babbage': pg.Dict(in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'ada': pg.Dict(in_service=False, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
     # GPT-3 base models that are still in service.
-    'babbage-002': pg.Dict(
-        in_service=True,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
-    ),
-    'davinci-002': pg.Dict(
-        in_service=True,
-        rpm=_DEFAULT_RPM,
-        tpm=_DEFAULT_TPM
-    ),
+    'babbage-002': pg.Dict(in_service=True, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
+    'davinci-002': pg.Dict(in_service=True, rpm=_DEFAULT_RPM, tpm=_DEFAULT_TPM),
 }
 
 
@@ -567,6 +546,13 @@ class OpenAI(rest.REST):
             )
         ),
     )
+
+
+class GptO1(OpenAI):
+  """GPT-O1."""
+
+  model = 'o1'
+  multimodal = True
 
 
 class GptO1Preview(OpenAI):
