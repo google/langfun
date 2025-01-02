@@ -194,9 +194,13 @@ class Scoring(base.Evaluation):
     for i, (example, output, score, message) in enumerate(self.scored):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
-      input_str = pg.format(example, verbose=False, max_bytes_len=32)
+      input_str = pg.Html.escape(
+          pg.format(example, verbose=False, max_bytes_len=32)
+      )
       s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
-      output_str = pg.format(output, verbose=False, max_bytes_len=32)
+      output_str = pg.Html.escape(
+          pg.format(output, verbose=False, max_bytes_len=32)
+      )
       s.write(f'<td style="color:blue;white-space:pre-wrap">{output_str}</td>')
       s.write(f'<td style="color:magenta;white-space:pre-wrap">{score}</td>')
       s.write('<td>')

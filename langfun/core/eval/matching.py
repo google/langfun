@@ -251,14 +251,14 @@ class Matching(base.Evaluation):
     for i, (_, example, output, message) in enumerate(self.matches):
       bgcolor = 'white' if i % 2 == 0 else '#DDDDDD'
       s.write(f'<tr style="background-color: {bgcolor}"><td>{i + 1}</td>')
-      input_str = lf.repr_utils.escape_quoted(
+      input_str = pg.Html.escape(
           pg.format(
               example, verbose=False, max_bytes_len=32,
               custom_format=_maybe_html
           )
       )
       s.write(f'<td style="color:green;white-space:pre-wrap">{input_str}</td>')
-      output_str = lf.repr_utils.escape_quoted(
+      output_str = pg.Html.escape(
           pg.format(
               output, verbose=False, max_bytes_len=32,
               custom_format=_maybe_html
