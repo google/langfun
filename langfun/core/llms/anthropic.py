@@ -67,6 +67,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
         cost_per_1k_input_tokens=0.001,
         cost_per_1k_output_tokens=0.005,
     ),
+    'claude-3-opus@20240229': pg.Dict(
+        max_tokens=4096,
+        rpm=4000,
+        tpm=400000,
+        cost_per_1k_input_tokens=0.015,
+        cost_per_1k_output_tokens=0.075,
+    ),
     # Anthropic hosted models.
     'claude-3-5-sonnet-20241022': pg.Dict(
         max_tokens=8192,
@@ -459,6 +466,11 @@ class VertexAIAnthropic(Anthropic):
     request['anthropic_version'] = self.api_version
     del request['model']
     return request
+
+
+class VertexAIClaude3_Opus_20240229(VertexAIAnthropic):  # pylint: disable=invalid-name
+  """Anthropic's Claude 3 Opus model on VertexAI."""
+  model = 'claude-3-opus@20240229'
 
 
 class VertexAIClaude3_5_Sonnet_20241022(VertexAIAnthropic):  # pylint: disable=invalid-name

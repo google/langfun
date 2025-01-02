@@ -106,6 +106,7 @@ from langfun.core.llms.anthropic import VertexAIAnthropic
 from langfun.core.llms.anthropic import VertexAIClaude3_5_Sonnet_20241022
 from langfun.core.llms.anthropic import VertexAIClaude3_5_Sonnet_20240620
 from langfun.core.llms.anthropic import VertexAIClaude3_5_Haiku_20241022
+from langfun.core.llms.anthropic import VertexAIClaude3_Opus_20240229
 
 from langfun.core.llms.groq import Groq
 from langfun.core.llms.groq import GroqLlama3_2_3B
