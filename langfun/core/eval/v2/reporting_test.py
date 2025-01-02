@@ -15,6 +15,7 @@ import os
 import tempfile
 import unittest
 
+from langfun.core.eval.v2 import checkpointing
 from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import reporting
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
@@ -26,15 +27,131 @@ class ReportingTest(unittest.TestCase):
   def test_reporting(self):
     root_dir = os.path.join(tempfile.gettempdir(), 'test_reporting')
     experiment = eval_test_helper.test_experiment()
+    checkpointer = checkpointing.BulkCheckpointer('checkpoint.jsonl')
     reporter = reporting.HtmlReporter()
-    run = experiment.run(root_dir, 'new', plugins=[reporter])
-    pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+    run = experiment.run(root_dir, 'new', plugins=[checkpointer, reporter])
+    self.assertTrue(
+        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+    )
     for leaf in experiment.leaf_nodes:
       self.assertTrue(
           pg.io.path_exists(run.output_path_for(leaf, 'index.html'))
       )
       for i in range(leaf.num_examples):
-        pg.io.path_exists(run.output_path_for(leaf, f'{i + 1}.html'))
+        self.assertTrue(
+            pg.io.path_exists(run.output_path_for(leaf, f'{i + 1}.html'))
+        )
+      found_generation_log = False
+      for log_entry in leaf._log_entries:
+        if 'generated in' in log_entry.message:
+          found_generation_log = True
+          break
+      self.assertTrue(found_generation_log)
+
+    # Test warm start.
+    root_dir = os.path.join(tempfile.gettempdir(), 'test_reporting2')
+    experiment = eval_test_helper.test_experiment()
+    run = experiment.run(
+        root_dir, 'new', plugins=[checkpointer, reporter],
+        warm_start_from=run.output_root
+    )
+    self.assertTrue(
+        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+    )
+    for leaf in experiment.leaf_nodes:
+      self.assertTrue(
+          pg.io.path_exists(run.output_path_for(leaf, 'index.html'))
+      )
+      for i in range(leaf.num_examples):
+        self.assertTrue(
+            pg.io.path_exists(run.output_path_for(leaf, f'{i + 1}.html'))
+        )
+      found_copy_log = False
+      for log_entry in leaf._log_entries:
+        if 'copied in' in log_entry.message:
+          found_copy_log = True
+          break
+      self.assertTrue(found_copy_log)
+
+  def test_index_html_generation_error(self):
+    root_dir = os.path.join(
+        tempfile.gettempdir(),
+        'test_reporting_with_index_html_generation_error'
+    )
+    experiment = (eval_test_helper
+                  .test_experiment_with_index_html_generation_error())
+    reporter = reporting.HtmlReporter()
+    run = experiment.run(root_dir, 'new', plugins=[reporter])
+    self.assertFalse(
+        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+    )
+    for leaf in experiment.leaf_nodes:
+      self.assertFalse(
+          pg.io.path_exists(run.output_path_for(leaf, 'index.html'))
+      )
+    found_error_log = False
+    for log_entry in experiment._log_entries:
+      if log_entry.message.startswith('Failed to generate'):
+        found_error_log = True
+        break
+    self.assertTrue(found_error_log)
+
+  def test_example_html_generation_error(self):
+    root_dir = os.path.join(
+        tempfile.gettempdir(),
+        'test_reporting_with_example_html_generation_error'
+    )
+    experiment = (eval_test_helper
+                  .test_experiment_with_example_html_generation_error())
+    checkpointer = checkpointing.BulkCheckpointer('checkpoint.jsonl')
+    reporter = reporting.HtmlReporter()
+    run = experiment.run(root_dir, 'new', plugins=[checkpointer, reporter])
+    self.assertTrue(
+        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+    )
+    for leaf in experiment.leaf_nodes:
+      self.assertTrue(
+          pg.io.path_exists(run.output_path_for(leaf, 'index.html'))
+      )
+      for i in range(leaf.num_examples):
+        self.assertFalse(
+            pg.io.path_exists(run.output_path_for(leaf, f'{i + 1}.html'))
+        )
+    found_error_log = False
+    for log_entry in experiment._log_entries:
+      if log_entry.message.startswith('Failed to generate'):
+        found_error_log = True
+        break
+    self.assertTrue(found_error_log)
+
+    # Test warm start.
+    root_dir = os.path.join(
+        tempfile.gettempdir(),
+        'test_reporting_with_example_html_generation_error2'
+    )
+    experiment = (eval_test_helper
+                  .test_experiment_with_example_html_generation_error())
+    run = experiment.run(
+        root_dir, 'new', plugins=[checkpointer, reporter],
+        warm_start_from=run.output_root
+    )
+    self.assertTrue(
+        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+    )
+    for leaf in experiment.leaf_nodes:
+      self.assertTrue(
+          pg.io.path_exists(run.output_path_for(leaf, 'index.html'))
+      )
+      for i in range(leaf.num_examples):
+        self.assertFalse(
+            pg.io.path_exists(run.output_path_for(leaf, f'{i + 1}.html'))
+        )
+    found_error_log = False
+    for log_entry in experiment._log_entries:
+      if log_entry.message.startswith('Failed to copy'):
+        found_error_log = True
+        break
+    self.assertTrue(found_error_log)
 
 
 if __name__ == '__main__':

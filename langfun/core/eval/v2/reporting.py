@@ -172,11 +172,11 @@ class HtmlReporter(experiment_lib.Plugin):
           )
           html.save(index_html_path)
           experiment.info(
-              f'Generated HTML {index_html_path!r} in {t.elapse:.2f} seconds.',
+              f'Updated {index_html_path!r} in {t.elapse:.2f} seconds.',
           )
       except BaseException as e:  # pylint: disable=broad-except
         experiment.error(
-            f'Failed to save HTML {index_html_path!r}. '
+            f'Failed to generate {index_html_path!r}. '
             f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
         )
         raise e
@@ -194,26 +194,58 @@ class HtmlReporter(experiment_lib.Plugin):
   def _save_example_html(
       self, runner: Runner, experiment: Experiment, example: Example
   ) -> None:
-    """Saves the example."""
-    def _save():
+    """Saves the example in HTML format."""
+    def _generate():
       try:
-        html = example.to_html(
-            collapse_level=None,
-            enable_summary_tooltip=False,
-            extra_flags=dict(
-                # For properly rendering the next link.
-                num_examples=getattr(experiment, 'num_examples', None)
-            ),
-        )
-        html.save(
-            runner.current_run.output_path_for(
-                experiment, f'{example.id}.html'
-            )
+        with pg.timeit() as t:
+          html = example.to_html(
+              collapse_level=None,
+              enable_summary_tooltip=False,
+              extra_flags=dict(
+                  # For properly rendering the next link.
+                  num_examples=getattr(experiment, 'num_examples', None)
+              ),
+          )
+          html.save(
+              runner.current_run.output_path_for(
+                  experiment, f'{example.id}.html'
+              )
+          )
+        experiment.info(
+            f'\'{example.id}.html\' generated in {t.elapse:.2f} seconds. '
         )
       except BaseException as e:  # pylint: disable=broad-except
         experiment.error(
-            f'Failed to save HTML {example.id}.html. '
+            f'Failed to generate \'{example.id}.html\'. '
             f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
         )
         raise e
-    runner.background_run(_save)
+
+    def _copy():
+      src_file = runner.current_run.input_path_for(
+          experiment, f'{example.id}.html'
+      )
+      dest_file = runner.current_run.output_path_for(
+          experiment, f'{example.id}.html'
+      )
+      if src_file == dest_file:
+        return
+      try:
+        with pg.timeit() as t, pg.io.open(src_file, 'r') as src:
+          content = src.read()
+          with pg.io.open(dest_file, 'w') as dest:
+            dest.write(content)
+        experiment.info(
+            f'\'{example.id}.html\' copied in {t.elapse:.2f} seconds.'
+        )
+      except BaseException as e:  # pylint: disable=broad-except
+        experiment.error(
+            f'Failed to copy {src_file!r} to {dest_file!r}. Error: {e}.'
+        )
+        raise e
+
+    if example.newly_processed or runner.current_run.regenerate_example_html:
+      op = _generate
+    else:
+      op = _copy
+    runner.background_run(op)

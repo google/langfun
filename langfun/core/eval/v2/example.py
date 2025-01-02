@@ -101,6 +101,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       json_value: dict[str, Any],
       *,
       example_input_by_id: Callable[[int], Any] | None = None,
+      load_example_metadata: bool | Callable[['Example'], bool] = False,
       **kwargs
   ) -> 'Example':
     """Creates an example from the JSON representation."""
@@ -128,12 +129,21 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       pg.traverse(example, _visit)
       return list(referred_types)
 
+    # We delay loading the metadata until the other parts of the example are
+    # loaded. So we could apply the filter to decide whether to load the
+    # metadata.
+    metadata_dict = json_value.pop('metadata', None)
     with pg.JSONConvertible.load_types_for_deserialization(
         *example_class_defs(example_input)
     ):
-      return cls(
+      example = cls(
           **{k: pg.from_json(v, **kwargs) for k, v in json_value.items()}
       )
+      if callable(load_example_metadata):
+        load_example_metadata = load_example_metadata(example)
+      if load_example_metadata:
+        example.metadata = pg.from_json(metadata_dict, **kwargs)
+      return example
 
   #
   # HTML rendering.

@@ -138,6 +138,17 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.usage_summary.uncached.total.total_tokens, 0)
     self.assertEqual(example.usage_summary.uncached.total.num_requests, 0)
 
+    # Test load_state with filter.
+    exp.reset()
+    self.assertEqual(len(exp._state.evaluated_examples), 0)
+    exp.load_state(state_file, filter=lambda x: x.id == 3)
+    self.assertEqual(len(exp._state.evaluated_examples), 1)
+
+    exp.reset()
+    self.assertEqual(len(exp._state.evaluated_examples), 0)
+    exp.load_state(state_file, filter=lambda x: x.id == 1)
+    self.assertEqual(len(exp._state.evaluated_examples), 0)
+
   def test_html_view(self):
     exp = eval_test_helper.TestEvaluation()
     exp.debug('debug message')

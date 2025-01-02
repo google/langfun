@@ -105,8 +105,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     # metrics as needed.
     experiment.run(root_dir, '20241031_1')
 
-    # Refresh the previous run located in 'run_20241031_1'.
-    experiment.run(root_dir, '20241031_1', refresh=True)
+    # Reprocess the previous run located in 'run_20241031_1'.
+    experiment.run(root_dir, '20241031_1', reprocess=True)
     ```
 
   # Experiment Registration and Lookup
@@ -380,7 +380,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       filter: Callable[['Experiment'], bool] | None = None,   # pylint: disable=redefined-builtin
       example_ids: list[int] | None = None,
       raise_if_has_error: bool = False,
-      refresh: bool = False,
+      reprocess: bool | list[int] = False,
+      regenerate_example_html: bool | list[int] = False,
       process_timeout: int | None = None,
       use_cache: Literal['global', 'per_dataset', 'no'] = 'per_dataset',
       note: str | None = None,
@@ -391,22 +392,25 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     """Runs the experiment.
 
     Examples:
-      # Start a new run.
-      experiment.run('new')
+      # Start a new run under root_dir.
+      experiment.run(root_dir, 'new')
 
       # Continue the latest experiment run.
-      experiment.run('latest')
+      experiment.run(root_dir, 'latest')
 
       # Continue the latest experiment run or start a new run if it does not
       # exist.
-      experiment.run()
+      experiment.run(root_dir)
 
-      # Start a new run and warm start from a previous run under sub-dir
-      # 'run_20241031_1'.
-      experiment.run('new', warm_start_from='20241031_1')
+      # Start a new run and warm start from another run's directory
+      # '/path/to/another/run_20241031_1/'.
+      experiment.run(
+          root_dir, 'new',
+          warm_start_from='/path/to/another/run_20241031_1/'
+      )
 
-      # Refresh previous run under sub-dir 'run_20241031_1'.
-      experiment.run('20241031_1', refresh=True)
+      # Reprocess previous run under sub-dir 'run_20241031_1'.
+      experiment.run(root_dir, '20241031_1', reprocess=True)
 
     Args:
       root_dir: The root of the output directory of the experiment.
@@ -426,8 +430,16 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       example_ids: The example IDs to run. If None, it will run all examples.
       raise_if_has_error: If True, it will raise an error if any example fails.
         Otherwise, it will continue and report the error in the output.
-      refresh: Whether to refresh the experiment. If True, it will delete the
-        data under the current experiment run directory and start a new run.
+      reprocess: A boolean or a list of example IDs. If boolean, it indicates
+        that whether all the examples to be evaluated will be reprocessed,
+        meaning that existing checkpoints will be ignored. If a list of
+        example IDs, it indicates that only the specified examples will be
+        reprocessed.
+      regenerate_example_html: A boolean or a list of example IDs. If boolean,
+        it indicates that whether all the examples to be evaluated will have
+        their HTML files regenerated. If a list of example IDs, it indicates
+        that only the specified examples will have their HTML files
+        regenerated.
       process_timeout: The timeout in seconds for each process. If None, it
         will use the default timeout for the runner.
       use_cache: Whether to use LLM cache for the experiment.
@@ -454,7 +466,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
             filter=filter,
             example_ids=example_ids,
             raise_if_has_error=raise_if_has_error,
-            refresh=refresh,
+            reprocess=reprocess,
+            regenerate_example_html=regenerate_example_html,
             use_cache=use_cache,
             process_timeout=process_timeout,
             note=note,
@@ -815,11 +828,21 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
       'The user tags for the current run.'
   ] = []
 
-  refresh: Annotated[
-      bool,
+  reprocess: Annotated[
+      bool | list[int],
       (
-          'If True, it will delete the data under the current '
-          'run directory and start a new run.'
+          'If True, it will reprocess all examples under the current '
+          'run directory. If a list of integers, examples of the given IDS '
+          'will be reprocessed.'
+      )
+  ] = False
+
+  regenerate_example_html: Annotated[
+      bool | list[int],
+      (
+          'If True, it will regenerate the HTML files for previously processed '
+          'examples. If a list of integers, the HTML files for the examples of '
+          'the given IDs will be regenerated'
       )
   ] = False
 
@@ -872,6 +895,42 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def output_path_for(self, experiment: Experiment, relative_path: str) -> str:
     """Returns the output path for the experiment."""
     return os.path.join(self.output_dir(experiment), relative_path)
+
+  def examples_to_evaluate(self, experiment: Experiment) -> set[int]:
+    """Returns the example IDs to evaluate."""
+    if not experiment.is_leaf:
+      return set()
+    return set(
+        self.example_ids if self.example_ids else
+        range(1, experiment.num_examples + 1)
+    )
+
+  def examples_to_reprocess(self, experiment: Experiment) -> set[int]:
+    """Returns the example IDs to reprocess per request."""
+    if not self.reprocess:
+      return set()
+    reprocess_ids = self.examples_to_evaluate(experiment)
+    if isinstance(self.reprocess, list):
+      reprocess_ids &= set(self.reprocess)
+    return reprocess_ids
+
+  def examples_to_load(self, experiment: Experiment) -> set[int]:
+    """Returns the example IDs to load from checkpoint files.."""
+    load_ids = self.examples_to_evaluate(experiment)
+    if isinstance(self.regenerate_example_html, list):
+      load_ids |= set(self.regenerate_example_html)
+    load_ids -= self.examples_to_reprocess(experiment)
+    return load_ids
+
+  def examples_to_load_metadata(self, experiment: Experiment) -> set[int]:
+    """Returns the example IDs to load the metadata."""
+    load_metadata_ids = set()
+    if isinstance(self.regenerate_example_html, list):
+      load_metadata_ids = set(self.regenerate_example_html)
+    elif self.regenerate_example_html:
+      load_metadata_ids = self.examples_to_evaluate(experiment)
+    load_metadata_ids -= self.examples_to_reprocess(experiment)
+    return load_metadata_ids
 
 
 class Runner(pg.Object):

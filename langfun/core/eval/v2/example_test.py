@@ -70,9 +70,23 @@ class ExampleTest(unittest.TestCase):
     self.assertEqual(
         pg.from_json_str(
             json_str,
-            example_input_by_id=lambda i: inputs[i - 1]
+            example_input_by_id=lambda i: inputs[i - 1],
+            load_example_metadata=True,
         ),
         ex
+    )
+    self.assertEqual(
+        pg.from_json_str(
+            json_str,
+            example_input_by_id=lambda i: inputs[i - 1],
+            load_example_metadata=False,
+        ),
+        Example(
+            id=1,
+            input=inputs[0],
+            output=inputs[0].a(1),
+            metadata={}
+        )
     )
     pg.JSONConvertible._TYPE_REGISTRY._type_to_cls_map.pop(
         inputs[0].a.__type_name__
@@ -80,7 +94,7 @@ class ExampleTest(unittest.TestCase):
     pg.JSONConvertible._TYPE_REGISTRY._type_to_cls_map.pop(
         inputs[0].b.__type_name__
     )
-    v = pg.from_json_str(json_str, auto_dict=True)
+    v = pg.from_json_str(json_str, auto_dict=True, load_example_metadata=True)
     v.output.pop('type_name')
     v.metadata.b.pop('type_name')
     self.assertEqual(

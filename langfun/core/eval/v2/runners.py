@@ -123,6 +123,7 @@ class RunnerBase(Runner):
   def on_experiment_start(self, experiment: Experiment) -> None:
     """Called when an evaluation is started."""
     # Start the progress of the evaluation.
+    num_examples_to_evaluate = 0
     if experiment.is_leaf:
       assert isinstance(experiment, Evaluation)
       num_examples_to_evaluate = (
@@ -130,16 +131,18 @@ class RunnerBase(Runner):
           if self.current_run.example_ids else experiment.num_examples
       )
       experiment.progress.start(total=num_examples_to_evaluate)
-      experiment.info(
-          'Starting evaluation %s with %d examples to evaluate.'
-          % (experiment.id, num_examples_to_evaluate)
-      )
     else:
       experiment.progress.start(total=len(experiment.leaf_nodes))
 
     # Notify the plugins of the experiment start.
     for plugin in self._all_plugins(experiment):
       plugin.on_experiment_start(self, experiment)
+
+    if experiment.is_leaf:
+      experiment.info(
+          f'Starting evaluation {experiment.id!r} with '
+          f'{num_examples_to_evaluate} examples to evaluate.'
+      )
 
   def on_experiment_skipped(self, experiment: Experiment) -> None:
     """Called when an evaluation is skipped."""

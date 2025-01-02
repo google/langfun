@@ -72,9 +72,65 @@ class TestEvaluation(Evaluation):
     )
 
 
+class BadJsonConvertible(pg.Object):
+
+  def to_json(self, *args, **kwargs):
+    raise ValueError('Cannot convert to JSON.')
+
+
+class TestEvaluationWithExampleCheckpointingError(TestEvaluation):
+  """Test evaluation class with bad example checkpointing."""
+  inputs = test_inputs()
+  metrics = [metrics_lib.Match()]
+
+  def process(self, v):
+    return 1, dict(
+        x=BadJsonConvertible()
+    )
+
+
+class BadHtmlConvertible(pg.Object, pg.views.HtmlTreeView.Extension):
+
+  def _html_tree_view(self, *args, **kwargs):
+    raise ValueError('Cannot render HTML.')
+
+
+class TestEvaluationWithExampleHtmlGenerationError(Evaluation):
+  """Test evaluation class with bad example HTML generation."""
+  inputs = test_inputs()
+  metrics = [metrics_lib.Match()]
+
+  def process(self, v):
+    return 1, dict(
+        x=BadHtmlConvertible()
+    )
+
+
+class TestEvaluationWithIndexHtmlGenerationError(TestEvaluation):
+  """Test evaluation class with bad index HTML generation."""
+
+  def _html_tree_view(self, *args, **kwargs):
+    raise ValueError('Cannot render HTML.')
+
+
 def test_experiment():
   """Returns a test experiment."""
   return Suite([
       TestEvaluation(lm=TestLLM(offset=0)),
       TestEvaluation(lm=TestLLM(offset=pg.oneof(range(5)))),
   ])
+
+
+def test_experiment_with_example_checkpointing_error():
+  """Returns a test experiment with example checkpointing error."""
+  return TestEvaluationWithExampleCheckpointingError()
+
+
+def test_experiment_with_example_html_generation_error():
+  """Returns a test experiment with bad example HTML."""
+  return TestEvaluationWithExampleHtmlGenerationError()
+
+
+def test_experiment_with_index_html_generation_error():
+  """Returns a test experiment with bad index HTML."""
+  return TestEvaluationWithIndexHtmlGenerationError()

@@ -13,8 +13,10 @@
 # limitations under the License.
 """Checkpointing evaluation runs."""
 import abc
+import re
 import threading
 import traceback
+from typing import Annotated
 
 import langfun.core as lf
 from langfun.core.eval.v2 import example as example_lib
@@ -29,6 +31,11 @@ Runner = experiment_lib.Runner
 class Checkpointer(experiment_lib.Plugin):
   """Base class for checkpointing evaluation examples."""
 
+  checkpoint_filename: Annotated[
+      str,
+      'Checkpoint file pattern.'
+  ] = 'checkpoint.bagz'
+
   def on_experiment_start(
       self,
       runner: Runner,
@@ -37,37 +44,35 @@ class Checkpointer(experiment_lib.Plugin):
     if not experiment.is_leaf:
       return
 
-    # For refresh runs, we don't want to load the previous state.
-    if not runner.current_run.refresh:
-      if runner.current_run.input_root != runner.current_run.output_root:
+    current_run = runner.current_run
+    if current_run.reprocess is not True:  # pylint: disable=g-bool-id-comparison
+      if current_run.input_root != current_run.output_root:
         experiment.info(
-            f'Warm starting from directory: {runner.current_run.input_root}.'
+            f'Warm starting from directory: {current_run.input_root}.'
         )
       self._load_experiment(runner, experiment)
 
+    example_ids_to_evaluate = current_run.examples_to_evaluate(experiment)
     if experiment.state.evaluated_examples:
       loaded_example_ids = list(
           sorted(experiment.state.evaluated_examples.keys())
       )
-      example_ids_to_evaluate = (
-          set(runner.current_run.example_ids) if runner.current_run.example_ids
-          else set(range(1, experiment.num_examples + 1))
-      )
       example_ids_to_evaluate -= set(loaded_example_ids)
-
+      example_ids_to_evaluate = list(sorted(example_ids_to_evaluate))
       experiment.info(
-          f'{len(experiment.state.evaluated_examples)} examples have been '
+          f'{len(experiment.state.evaluated_examples)} examples '
           'loaded from checkpoint files. Their outputs will be used '
-          f'for recomputing metrics. Example IDs: {loaded_example_ids}'
+          f'for recomputing metrics. Example IDs: {loaded_example_ids}.'
       )
       experiment.info(
           f'{len(example_ids_to_evaluate)} examples will be processed from '
-          f'scratch. Example IDs: {list(sorted(example_ids_to_evaluate))}'
+          f'scratch. Example IDs: {example_ids_to_evaluate}.'
       )
     else:
       experiment.info(
           'No examples are loaded from checkpoint files. '
-          f'Experiment {experiment.id} starts from scratch.'
+          f'{len(example_ids_to_evaluate)} examples will be processed from '
+          f'scratch. Example IDs: {example_ids_to_evaluate}.'
       )
 
   def on_example_complete(
@@ -81,12 +86,82 @@ class Checkpointer(experiment_lib.Plugin):
       experiment.warning(
           f'Example {example.id} has error. Skipping checkpointing.'
       )
-    else:
+    elif example.newly_processed:
       self._save_example(runner, experiment, example)
 
+  def _load_experiment(
+      self,
+      runner: Runner,
+      experiment: Experiment,
+  ) -> None:
+    """Creates the checkpoint file."""
+    ckpt_files = self._list_checkpoint_filenames(runner, experiment)
+    experiment.info(f'Found {len(ckpt_files)} checkpoint files to load.')
+
+    # Load the checkpoint files in parallel.
+    current_run = runner.current_run
+    examples_to_load = current_run.examples_to_load(experiment)
+    examples_to_load_metadata = current_run.examples_to_load_metadata(
+        experiment
+    )
+    context = dict(counter=0, counter_lock=threading.Lock())
+    copy_ckpt = current_run.input_root != current_run.output_root
+
+    def _load_state(ckpt_file):
+      error = None
+      with pg.timeit() as t:
+        try:
+          experiment.load_state(
+              current_run.input_path_for(experiment, ckpt_file),
+              filter=lambda x: x.id in examples_to_load,
+              load_example_metadata=lambda x: x.id in examples_to_load_metadata,
+          )
+        except BaseException as e:  # pylint: disable=broad-except
+          error = e
+        finally:
+          with context['counter_lock']:
+            context['counter'] += 1
+
+          progress_str = f'{context["counter"]}/{len(ckpt_files)}'
+          if error is None:
+            experiment.info(
+                f'Checkpoint file {ckpt_file!r} loaded in {t.elapse:.2f} '
+                f'seconds. ({progress_str})'
+            )
+          else:
+            experiment.warning(
+                f'Failed to load checkpoint file {ckpt_file!r}: {error}. '
+                f'Skipping the file. ({progress_str})'
+            )
+
+        if not copy_ckpt:
+          return
+
+        # Copy the checkpoint records to the output directory.
+        try:
+          with pg.io.open_sequence(
+              current_run.output_path_for(experiment, ckpt_file), 'w'
+          ) as o, pg.io.open_sequence(
+              current_run.input_path_for(experiment, ckpt_file), 'r'
+          ) as i:
+            for x in i:
+              o.add(x)
+        except BaseException as e:  # pylint: disable=broad-except
+          experiment.warning(
+              f'Failed to copy checkpoint {ckpt_file!r}: {e}.'
+          )
+
+    _ = list(
+        lf.concurrent_map(
+            _load_state, ckpt_files, max_workers=16, silence_on_errors=None
+        )
+    )
+
   @abc.abstractmethod
-  def _load_experiment(self, runner: Runner, experiment: Experiment) -> None:
-    """Loads the experiment state from checkpoint files."""
+  def _list_checkpoint_filenames(
+      self, runner: Runner, experiment: Experiment
+  ) -> list[str]:
+    """Lists the checkpoint filenames to restore."""
 
   @abc.abstractmethod
   def _save_example(
@@ -101,63 +176,28 @@ class Checkpointer(experiment_lib.Plugin):
 class PerExampleCheckpointer(Checkpointer):
   """Checkpointer that saves each example to a separate file."""
 
-  checkpoint_filename: str = 'checkpoint.bagz'
-
   def _on_bound(self):
     super()._on_bound()
     prefix, ext = self._file_prefix_and_ext(self.checkpoint_filename)
     self._checkpoint_file_prefix = prefix
     self._checkpoint_file_ext = ext
 
-  def _load_experiment(
-      self,
-      runner: Runner,
-      experiment: Experiment,
-  ) -> None:
-    """Creates the checkpoint file."""
+  def _list_checkpoint_filenames(
+      self, runner: Runner, experiment: Experiment
+  ) -> list[str]:
     experiment_dir = runner.current_run.input_dir(experiment)
+    filenames = []
+    examples_to_load = runner.current_run.examples_to_load(experiment)
     if pg.io.path_exists(experiment_dir):
-      ckpt_files = [
-          runner.current_run.input_path_for(experiment, filename)
-          for filename in pg.io.listdir(experiment_dir)
-          if filename.startswith(self._checkpoint_file_prefix)
-          and filename.endswith(self._checkpoint_file_ext)
-      ]
-    else:
-      ckpt_files = []
-
-    experiment.info(f'Found {len(ckpt_files)} checkpoint files to load.')
-
-    # Load the checkpoint files in parallel.
-    context = dict(counter=0, counter_lock=threading.Lock())
-    def _load_state(ckpt_file):
-      error = None
-      with pg.timeit() as t:
-        try:
-          experiment.load_state(ckpt_file)
-        except BaseException as e:  # pylint: disable=broad-except
-          error = e
-        finally:
-          with context['counter_lock']:
-            context['counter'] += 1
-
-          progress_str = f'{context["counter"]}/{len(ckpt_files)}'
-          if error is None:
-            experiment.info(
-                f'Loaded checkpoint file {ckpt_file} in {t.elapse:.2f} '
-                f'seconds. ({progress_str})'
-            )
-          else:
-            experiment.warning(
-                f'Failed to load checkpoint file {ckpt_file}: {error}. '
-                f'Skipping the file. ({progress_str})'
-            )
-
-    _ = list(
-        lf.concurrent_map(
-            _load_state, ckpt_files, max_workers=16, silence_on_errors=None
-        )
-    )
+      regex = re.compile(
+          f'{self._checkpoint_file_prefix}_(\\d+){self._checkpoint_file_ext}'
+          .replace('.', '\\.')
+      )
+      for filename in pg.io.listdir(experiment_dir):
+        match = regex.match(filename)
+        if match and int(match.group(1)) in examples_to_load:
+          filenames.append(filename)
+    return filenames
 
   def _save_example(
       self,
@@ -180,11 +220,11 @@ class PerExampleCheckpointer(Checkpointer):
         writer.add(example)
         writer.close()
         experiment.info(
-            f'Example {example.id} saved to {writer.path}.',
+            f'Example {example.id} checkpointed to {writer.path}.',
         )
       except BaseException as e:  # pylint: disable=broad-except
         experiment.error(
-            f'Failed to save example {example.id} to {writer.path}. '
+            f'Failed to checkpoint example {example.id} to {writer.path}. '
             f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
         )
         raise e
@@ -200,8 +240,6 @@ class PerExampleCheckpointer(Checkpointer):
 
 class BulkCheckpointer(Checkpointer):
   """Checkpointer that saves all examples to a single file."""
-
-  checkpoint_filename: str = 'checkpoint.bagz'
 
   def _on_bound(self):
     super()._on_bound()
@@ -253,18 +291,14 @@ class BulkCheckpointer(Checkpointer):
         if self._sequence_writer is not None:
           self._sequence_writer[experiment.id] = sequence_writer
 
-  def _load_experiment(
-      self,
-      runner: Runner,
-      experiment: Experiment,
-  ) -> None:
-    """Creates the checkpoint file."""
-    experiment.load_state(
-        runner.current_run.input_path_for(
-            experiment, self.checkpoint_filename
-        ),
-        raise_if_not_exist=False
-    )
+  def _list_checkpoint_filenames(
+      self, runner: Runner, experiment: Experiment
+  ) -> list[str]:
+    if pg.io.path_exists(
+        runner.current_run.input_path_for(experiment, self.checkpoint_filename)
+    ):
+      return [self.checkpoint_filename]
+    return []
 
   def on_experiment_complete(
       self,
@@ -299,11 +333,11 @@ class BulkCheckpointer(Checkpointer):
       try:
         writer.add(example)
         experiment.info(
-            f'Example {example.id} added to {writer.path}.',
+            f'Example {example.id} checkpointed to {writer.path}.',
         )
       except BaseException as e:  # pylint: disable=broad-except
         experiment.error(
-            f'Failed to save example {example.id} to {writer.path}. '
+            f'Failed to checkpoint example {example.id} to {writer.path}. '
             f'Error: {e}, Stacktrace: \n{traceback.format_exc()}.',
         )
         raise e
@@ -316,7 +350,7 @@ class SequenceWriter:
   def __init__(self, path: str):
     self._lock = threading.Lock()
     self._path = path
-    self._sequence_writer = pg.io.open_sequence(path, 'w')
+    self._sequence_writer = pg.io.open_sequence(path, 'a')
 
   @property
   def path(self) -> str:

@@ -31,10 +31,10 @@ Runner = experiment_lib.Runner
 
 
 @pg.functor()
-def sample_inputs():
+def sample_inputs(num_examples: int = 1):
   return [
       pg.Dict(x=1)
-  ]
+  ] * num_examples
 
 
 class MyEvaluation(Evaluation):
@@ -208,7 +208,7 @@ class RunIdTest(unittest.TestCase):
 
 class RunTest(unittest.TestCase):
 
-  def test_basic(self):
+  def test_input_output_paths(self):
     run = Run(
         '/root',
         RunId.from_id('20241102_0'),
@@ -269,6 +269,107 @@ class RunTest(unittest.TestCase):
             run.experiment.leaf_nodes[0].hash
         )
     )
+
+  def test_examples_start_from_scratch(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+    )
+    root = run.experiment
+    self.assertEqual(run.examples_to_evaluate(root), set())
+    self.assertEqual(run.examples_to_reprocess(root), set())
+    self.assertEqual(run.examples_to_load(root), set())
+    self.assertEqual(run.examples_to_load_metadata(root), set())
+
+    exp = root.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set(range(1, 11)))
+    self.assertEqual(run.examples_to_reprocess(exp), set())
+    self.assertEqual(run.examples_to_load(exp), set(range(1, 11)))
+    self.assertEqual(run.examples_to_load_metadata(exp), set())
+
+  def test_examples_with_example_ids(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+        example_ids=[1, 3, 5]
+    )
+    exp = run.experiment.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_reprocess(exp), set())
+    self.assertEqual(run.examples_to_load(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_load_metadata(exp), set())
+
+  def test_examples_with_reprocess_all(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+        example_ids=[1, 3, 5],
+        reprocess=True
+    )
+    exp = run.experiment.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_reprocess(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_load(exp), set())
+    self.assertEqual(run.examples_to_load_metadata(exp), set())
+
+  def test_examples_with_reprocess_some(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+        example_ids=[1, 3, 5],
+        reprocess=[1],
+    )
+    exp = run.experiment.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_reprocess(exp), set([1]))
+    self.assertEqual(run.examples_to_load(exp), set([3, 5]))
+    self.assertEqual(run.examples_to_load_metadata(exp), set())
+
+  def test_examples_with_regenerate_example_html_all(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+        example_ids=[1, 3, 5],
+        reprocess=[1],
+        regenerate_example_html=True,
+    )
+    exp = run.experiment.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_reprocess(exp), set([1]))
+    self.assertEqual(run.examples_to_load(exp), set([3, 5]))
+    self.assertEqual(run.examples_to_load_metadata(exp), set([3, 5]))
+
+  def test_examples_with_regenerate_example_html_some(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+        example_ids=[1, 3, 5],
+        reprocess=[1],
+        regenerate_example_html=[1, 2, 3],
+    )
+    exp = run.experiment.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_reprocess(exp), set([1]))
+    self.assertEqual(run.examples_to_load(exp), set([2, 3, 5]))
+    self.assertEqual(run.examples_to_load_metadata(exp), set([2, 3]))
 
 
 class RunnerTest(unittest.TestCase):

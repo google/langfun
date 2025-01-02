@@ -264,11 +264,21 @@ class Evaluation(experiment_lib.Experiment):
     return self._state
 
   def load_state(
-      self, state_file: str, raise_if_not_exist: bool = False
+      self,
+      state_file: str,
+      *,
+      load_example_metadata: bool = True,
+      filter: Callable[[example_lib.Example], bool] | None = None,  # pylint: disable=redefined-builtin
+      raise_if_not_exist: bool = False
   ) -> None:
     """Loads saved state from a sequence IO file."""
     if pg.io.path_exists(state_file):
-      self._state.load(state_file, self.example_input_by_id)
+      self._state.load(
+          state_file,
+          example_input_by_id=self.example_input_by_id,
+          load_example_metadata=load_example_metadata,
+          filter=filter,
+      )
     elif raise_if_not_exist:
       raise ValueError(f'State file {state_file} does not exist.')
 
@@ -680,14 +690,25 @@ class EvaluationState:
     self._evaluated_examples: dict[int, example_lib.Example] = {}
 
   def load(
-      self, state_file: str, example_input_by_id: Callable[[int], Any]) -> None:
+      self,
+      state_file: str,
+      *,
+      example_input_by_id: Callable[[int], Any] | None = None,
+      load_example_metadata: bool | Callable[
+          [example_lib.Example], bool] = True,
+      filter: Callable[[example_lib.Example], bool] | None = None,  # pylint: disable=redefined-builtin
+  ) -> None:
     """Loads the state from the example sequence file."""
     with pg.io.sequence.open_sequence(state_file) as f:
       for record in f:
         example = pg.from_json_str(
-            record, example_input_by_id=example_input_by_id
+            record,
+            example_input_by_id=example_input_by_id,
+            load_example_metadata=load_example_metadata
         )
         assert isinstance(example, example_lib.Example), example
+        if filter is not None and not filter(example):
+          continue
         self._evaluated_examples[example.id] = example
 
   @property
