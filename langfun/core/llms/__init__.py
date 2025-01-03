@@ -32,6 +32,7 @@ from langfun.core.llms.rest import REST
 
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
+from langfun.core.llms.google_genai import GeminiFlash2_0ThinkingExp
 from langfun.core.llms.google_genai import GeminiFlash2_0Exp
 from langfun.core.llms.google_genai import GeminiExp_20241114
 from langfun.core.llms.google_genai import GeminiExp_20241206
@@ -126,6 +127,7 @@ from langfun.core.llms.groq import GroqWhisper_Large_v3Turbo
 from langfun.core.llms.vertexai import VertexAI
 from langfun.core.llms.vertexai import VertexAIGemini2_0
 from langfun.core.llms.vertexai import VertexAIGeminiFlash2_0Exp
+from langfun.core.llms.vertexai import VertexAIGeminiFlash2_0ThinkingExp
 from langfun.core.llms.vertexai import VertexAIGemini1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5
 from langfun.core.llms.vertexai import VertexAIGeminiPro1_5_001

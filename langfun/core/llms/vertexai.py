@@ -110,7 +110,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     ),
     # TODO(sharatsharat): Update costs when published
     'gemini-2.0-flash-exp': pg.Dict(
-        rpm=20,
+        rpm=10,
+        cost_per_1k_input_chars=0.000,
+        cost_per_1k_output_chars=0.000,
+    ),
+    # TODO(yifenglu): Update costs when published
+    'gemini-2.0-flash-thinking-exp-1219': pg.Dict(
+        rpm=10,
         cost_per_1k_input_chars=0.000,
         cost_per_1k_output_chars=0.000,
     ),
@@ -413,6 +419,12 @@ class VertexAIGeminiFlash2_0Exp(VertexAIGemini2_0):  # pylint: disable=invalid-n
   """Vertex AI Gemini 2.0 Flash model."""
 
   model = 'gemini-2.0-flash-exp'
+
+
+class VertexAIGeminiFlash2_0ThinkingExp(VertexAIGemini2_0):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 2.0 Flash model."""
+
+  model = 'gemini-2.0-flash-thinking-exp-1219'
 
 
 class VertexAIGemini1_5(VertexAI):  # pylint: disable=invalid-name

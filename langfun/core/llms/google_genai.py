@@ -48,6 +48,7 @@ class GenAI(lf.LanguageModel):
 
   model: Annotated[
       Literal[
+          'gemini-2.0-flash-thinking-exp-1219',
           'gemini-2.0-flash-exp',
           'gemini-exp-1206',
           'gemini-exp-1114',
@@ -307,6 +308,16 @@ _GOOGLE_GENAI_MODEL_HUB = _ModelHub()
 #
 # Public Gemini models.
 #
+class GeminiFlash2_0ThinkingExp(GenAI):  # pylint: disable=invalid-name
+  """Gemini 2.0 Flash Thinking Experimental model."""
+
+  model = 'gemini-2.0-flash-thinking-exp-1219'
+  supported_modalities = (
+      vertexai.DOCUMENT_TYPES
+      + vertexai.IMAGE_TYPES
+      + vertexai.AUDIO_TYPES
+      + vertexai.VIDEO_TYPES
+  )
 
 
 class GeminiFlash2_0Exp(GenAI):  # pylint: disable=invalid-name
