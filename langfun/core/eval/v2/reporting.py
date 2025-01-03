@@ -195,6 +195,7 @@ class HtmlReporter(experiment_lib.Plugin):
       self, runner: Runner, experiment: Experiment, example: Example
   ) -> None:
     """Saves the example in HTML format."""
+    current_run = runner.current_run
     def _generate():
       try:
         with pg.timeit() as t:
@@ -222,14 +223,19 @@ class HtmlReporter(experiment_lib.Plugin):
         raise e
 
     def _copy():
-      src_file = runner.current_run.input_path_for(
-          experiment, f'{example.id}.html'
-      )
-      dest_file = runner.current_run.output_path_for(
-          experiment, f'{example.id}.html'
-      )
+      src_file = current_run.input_path_for(experiment, f'{example.id}.html')
+      dest_file = current_run.output_path_for(experiment, f'{example.id}.html')
+
       if src_file == dest_file:
         return
+
+      if not pg.io.path_exists(src_file):
+        experiment.warning(
+            f'Skip copying \'{example.id}.html\' as '
+            f'{src_file!r} does not exist.'
+        )
+        return
+
       try:
         with pg.timeit() as t, pg.io.open(src_file, 'r') as src:
           content = src.read()
@@ -244,7 +250,11 @@ class HtmlReporter(experiment_lib.Plugin):
         )
         raise e
 
-    if example.newly_processed or runner.current_run.regenerate_example_html:
+    generate_example_html = current_run.generate_example_html
+    if (generate_example_html == 'all'
+        or (generate_example_html == 'new' and example.newly_processed)
+        or (isinstance(generate_example_html, list)
+            and example.id in generate_example_html)):
       op = _generate
     else:
       op = _copy

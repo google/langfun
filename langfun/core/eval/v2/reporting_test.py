@@ -148,7 +148,7 @@ class ReportingTest(unittest.TestCase):
         )
     found_error_log = False
     for log_entry in experiment._log_entries:
-      if log_entry.message.startswith('Failed to copy'):
+      if log_entry.message.startswith('Skip copying'):
         found_error_log = True
         break
     self.assertTrue(found_error_log)

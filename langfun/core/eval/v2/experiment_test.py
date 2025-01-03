@@ -337,7 +337,7 @@ class RunTest(unittest.TestCase):
     self.assertEqual(run.examples_to_load(exp), set([3, 5]))
     self.assertEqual(run.examples_to_load_metadata(exp), set())
 
-  def test_examples_with_regenerate_example_html_all(self):
+  def test_examples_with_generate_example_html_all(self):
     run = Run(
         '/root',
         RunId.from_id('20241102_0'),
@@ -346,7 +346,7 @@ class RunTest(unittest.TestCase):
         ])),
         example_ids=[1, 3, 5],
         reprocess=[1],
-        regenerate_example_html=True,
+        generate_example_html='all',
     )
     exp = run.experiment.leaf_nodes[0]
     self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
@@ -354,7 +354,7 @@ class RunTest(unittest.TestCase):
     self.assertEqual(run.examples_to_load(exp), set([3, 5]))
     self.assertEqual(run.examples_to_load_metadata(exp), set([3, 5]))
 
-  def test_examples_with_regenerate_example_html_some(self):
+  def test_examples_with_generate_example_html_new(self):
     run = Run(
         '/root',
         RunId.from_id('20241102_0'),
@@ -363,7 +363,24 @@ class RunTest(unittest.TestCase):
         ])),
         example_ids=[1, 3, 5],
         reprocess=[1],
-        regenerate_example_html=[1, 2, 3],
+        generate_example_html='new',
+    )
+    exp = run.experiment.leaf_nodes[0]
+    self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))
+    self.assertEqual(run.examples_to_reprocess(exp), set([1]))
+    self.assertEqual(run.examples_to_load(exp), set([3, 5]))
+    self.assertEqual(run.examples_to_load_metadata(exp), set())
+
+  def test_examples_with_generate_example_html_some(self):
+    run = Run(
+        '/root',
+        RunId.from_id('20241102_0'),
+        pg.Ref(Suite([
+            MyEvaluation(replica_id=0, inputs=sample_inputs(10)),
+        ])),
+        example_ids=[1, 3, 5],
+        reprocess=[1],
+        generate_example_html=[1, 2, 3],
     )
     exp = run.experiment.leaf_nodes[0]
     self.assertEqual(run.examples_to_evaluate(exp), set([1, 3, 5]))

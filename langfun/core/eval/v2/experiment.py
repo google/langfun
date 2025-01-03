@@ -381,7 +381,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       example_ids: list[int] | None = None,
       raise_if_has_error: bool = False,
       reprocess: bool | list[int] = False,
-      regenerate_example_html: bool | list[int] = False,
+      generate_example_html: Literal['new', 'all', 'no'] | list[int] = 'new',
       process_timeout: int | None = None,
       use_cache: Literal['global', 'per_dataset', 'no'] = 'per_dataset',
       note: str | None = None,
@@ -435,11 +435,13 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         meaning that existing checkpoints will be ignored. If a list of
         example IDs, it indicates that only the specified examples will be
         reprocessed.
-      regenerate_example_html: A boolean or a list of example IDs. If boolean,
-        it indicates that whether all the examples to be evaluated will have
-        their HTML files regenerated. If a list of example IDs, it indicates
-        that only the specified examples will have their HTML files
-        regenerated.
+      generate_example_html: Among 'new', 'all', 'no' or a list of example IDs.
+        If 'new', generate HTML files for all newly processed examples, and
+          keep/copy existing HTML files for unchanged examples.
+        If 'all', generate HTML files for all examples.
+        If 'no', do not generate HTML files for any examples.
+        If a list of example IDs, generate HTML files for the specified
+        examples.
       process_timeout: The timeout in seconds for each process. If None, it
         will use the default timeout for the runner.
       use_cache: Whether to use LLM cache for the experiment.
@@ -467,7 +469,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
             example_ids=example_ids,
             raise_if_has_error=raise_if_has_error,
             reprocess=reprocess,
-            regenerate_example_html=regenerate_example_html,
+            generate_example_html=generate_example_html,
             use_cache=use_cache,
             process_timeout=process_timeout,
             note=note,
@@ -837,14 +839,17 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
   ] = False
 
-  regenerate_example_html: Annotated[
-      bool | list[int],
+  generate_example_html: Annotated[
+      Literal['new', 'all', 'no'] | list[int],
       (
-          'If True, it will regenerate the HTML files for previously processed '
-          'examples. If a list of integers, the HTML files for the examples of '
-          'the given IDs will be regenerated'
+          'If "new", generate HTML files for all newly processed examples, '
+          'and keep/copy existing HTML files for unchanged examples. '
+          'If "all", generate HTML files for all examples. '
+          'If "no", do not generate HTML files for any examples. '
+          'If a list of example IDs, generate HTML files for the specified '
+          'examples.'
       )
-  ] = False
+  ] = 'new'
 
   filter: Annotated[
       Callable[[Experiment], bool] | None,
@@ -917,17 +922,17 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def examples_to_load(self, experiment: Experiment) -> set[int]:
     """Returns the example IDs to load from checkpoint files.."""
     load_ids = self.examples_to_evaluate(experiment)
-    if isinstance(self.regenerate_example_html, list):
-      load_ids |= set(self.regenerate_example_html)
+    if isinstance(self.generate_example_html, list):
+      load_ids |= set(self.generate_example_html)
     load_ids -= self.examples_to_reprocess(experiment)
     return load_ids
 
   def examples_to_load_metadata(self, experiment: Experiment) -> set[int]:
     """Returns the example IDs to load the metadata."""
     load_metadata_ids = set()
-    if isinstance(self.regenerate_example_html, list):
-      load_metadata_ids = set(self.regenerate_example_html)
-    elif self.regenerate_example_html:
+    if isinstance(self.generate_example_html, list):
+      load_metadata_ids = set(self.generate_example_html)
+    elif self.generate_example_html == 'all':
       load_metadata_ids = self.examples_to_evaluate(experiment)
     load_metadata_ids -= self.examples_to_reprocess(experiment)
     return load_metadata_ids
