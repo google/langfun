@@ -295,6 +295,11 @@ class InMemoryLMCacheTest(unittest.TestCase):
     self.assertEqual(cache2.stats.num_updates, 2)
     cache2.save()
 
+    # Corrupted file.
+    pg.io.writefile(path, 'bad_content')
+    cache3 = in_memory.InMemory(path)
+    self.assertEqual(len(cache3), 0)
+
 
 class LmCacheTest(unittest.TestCase):
 
