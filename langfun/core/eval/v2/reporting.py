@@ -51,6 +51,7 @@ class HtmlReporter(experiment_lib.Plugin):
     self._update_thread = None
     self._stop_update = False
     self._stop_update_experiment_ids = set()
+    self._experiment_index_lock = None
 
   def on_run_start(
       self,
@@ -61,6 +62,9 @@ class HtmlReporter(experiment_lib.Plugin):
     self._last_experiment_report_time = {leaf.id: 0 for leaf in root.leaf_nodes}
     self._stop_update = False
     self._stop_update_experiment_ids = set()
+    self._experiment_index_lock = {
+        leaf.id: threading.Lock() for leaf in root.leaf_nodes
+    }
     self._update_thread = threading.Thread(
         target=self._update_thread_func, args=(runner,)
     )
@@ -170,7 +174,8 @@ class HtmlReporter(experiment_lib.Plugin):
                   card_view=False,
               ),
           )
-          html.save(index_html_path)
+          with self._experiment_index_lock[experiment.id]:
+            html.save(index_html_path)
           experiment.info(
               f'Updated {index_html_path!r} in {t.elapse:.2f} seconds.',
           )
@@ -185,11 +190,11 @@ class HtmlReporter(experiment_lib.Plugin):
         time.time() - self._last_experiment_report_time[experiment.id]
         > self.experiment_report_interval
     ):
+      self._last_experiment_report_time[experiment.id] = time.time()
       if background:
         runner.background_run(_save)
       else:
         _save()
-      self._last_experiment_report_time[experiment.id] = time.time()
 
   def _save_example_html(
       self, runner: Runner, experiment: Experiment, example: Example
