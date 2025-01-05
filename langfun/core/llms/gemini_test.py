@@ -57,8 +57,12 @@ def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
                               f'top_k={c.topK}, '
                               f'max_tokens={c.maxOutputTokens}, '
                               f'stop={"".join(c.stopSequences)}.'
-                          )
+                          ),
                       },
+                      {
+                          'text': 'This is the thought.',
+                          'thought': True,
+                      }
                   ],
               },
           },
@@ -182,6 +186,7 @@ class GeminiTest(unittest.TestCase):
               'top_p=1.0, top_k=20, max_tokens=1024, stop=\n.'
           ),
       )
+      self.assertEqual(r.metadata.thought, 'This is the thought.')
       self.assertEqual(r.metadata.usage.prompt_tokens, 3)
       self.assertEqual(r.metadata.usage.completion_tokens, 4)
 

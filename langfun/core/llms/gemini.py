@@ -492,9 +492,16 @@ class Gemini(rest.REST):
   ) -> lf.Message:
     """Converts Vertex AI's content parts protocol to message."""
     chunks = []
+    thought_chunks = []
     for part in parts:
       if text_part := part.get('text'):
-        chunks.append(text_part)
+        if part.get('thought'):
+          thought_chunks.append(text_part)
+        else:
+          chunks.append(text_part)
       else:
         raise ValueError(f'Unsupported part: {part}')
-    return lf.AIMessage.from_chunks(chunks)
+    message = lf.AIMessage.from_chunks(chunks)
+    if thought_chunks:
+      message.set('thought', lf.AIMessage.from_chunks(thought_chunks))
+    return message
