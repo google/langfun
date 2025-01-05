@@ -138,9 +138,7 @@ If you want to customize your installation, you can select specific features usi
 | Tag                 |  Description                             |
 | ------------------- | ---------------------------------------- |
 | all                 | All Langfun features.                    |
-| llm                 | All supported LLMs.                      |
-| llm-google          | All supported Google-powered LLMs.       |
-| llm-google-genai    | LLMs powered by Google Generative AI API |
+| vertexai            | VertexAI access.                         |
 | mime                | All MIME supports.                       |
 | mime-auto           | Automatic MIME type detection.           |
 | mime-docx           | DocX format support.                     |
@@ -149,9 +147,9 @@ If you want to customize your installation, you can select specific features usi
 | ui                  | UI enhancements                          |
 
 
-For example, to install a nightly build that includes Google-powered LLMs, full modality support, and UI enhancements, use:
+For example, to install a nightly build that includes VertexAI access, full modality support, and UI enhancements, use:
 ```
-pip install langfun[llm-google,mime,ui] --pre
+pip install langfun[vertexai,mime,ui] --pre
 ```
 
 *Disclaimer: this is not an officially supported Google product.*
