@@ -15,6 +15,7 @@
 
 import collections
 import contextlib
+import json
 from typing import Annotated, Any, Iterator
 import langfun.core as lf
 from langfun.core.llms.cache import base
@@ -47,6 +48,11 @@ class InMemory(base.LMCacheBase):
       except FileNotFoundError:
         pg.logging.warning(
             "Creating a new cache as cache file '%s' does not exist.",
+            self.filename,
+        )
+      except json.JSONDecodeError:
+        pg.logging.warning(
+            "Creating a new cache as cache file '%s' is corrupted.",
             self.filename,
         )
 
