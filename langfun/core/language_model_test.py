@@ -117,6 +117,21 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(lm.sampling_options.top_k, 2)
     self.assertEqual(lm.max_attempts, 2)
 
+  def test_subclassing(self):
+
+    class ChildModel(lm_lib.LanguageModel):
+
+      sampling_options = lm_lib.LMSamplingOptions(
+          temperature=0.5, top_k=20
+      )
+
+      def _sample(self, *args, **kwargs):
+        pass
+
+    lm = ChildModel(top_k=10)
+    self.assertEqual(lm.sampling_options.temperature, 0.5)
+    self.assertEqual(lm.sampling_options.top_k, 10)
+
   def test_sample(self):
     lm = MockModel(top_k=1)
     self.assertEqual(

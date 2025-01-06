@@ -434,7 +434,10 @@ class LanguageModel(component.Component):
   def __init__(self, *args, **kwargs) -> None:
     """Overrides __init__ to pass through **kwargs to sampling options."""
 
-    sampling_options = kwargs.pop('sampling_options', LMSamplingOptions())
+    sampling_options = kwargs.pop(
+        'sampling_options',
+        pg.clone(self.__schema__.fields['sampling_options'].default_value)
+    )
     sampling_options_delta = {}
 
     for k, v in kwargs.items():
