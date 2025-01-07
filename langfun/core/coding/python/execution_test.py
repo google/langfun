@@ -63,6 +63,15 @@ class EvaluateTest(unittest.TestCase):
         ),
         3,
     )
+    with self.assertRaisesRegex(errors.CodeError, 'ValueError'):
+      execution.evaluate(
+          """
+          def foo():
+            raise ValueError("intentional error")
+          foo()
+          """,
+          permission=permissions.CodePermission.ALL
+      )
 
   def test_class_def(self):
     ret = execution.evaluate(
@@ -102,16 +111,20 @@ class EvaluateTest(unittest.TestCase):
     self.assertIs(ret['__result__'], ret['bar'])
 
   def test_function_def_and_call(self):
-    ret = execution.evaluate(
+    code = (
         """
         def foo(x, y):
           return x + y
 
         def bar(z):
+          print(f'z is {z}')
           return z + foo(z, z)
 
         bar(1)
-        """,
+        """
+    )
+    ret = execution.evaluate(
+        code,
         permission=permissions.CodePermission.ALL,
         outputs_intermediate=True,
     )
@@ -119,6 +132,12 @@ class EvaluateTest(unittest.TestCase):
         list(ret.keys()), ['foo', 'bar', '__result__', '__stdout__']
     )
     self.assertEqual(ret['__result__'], 3)
+    ret = execution.evaluate(
+        code,
+        permission=permissions.CodePermission.ALL,
+        returns_stdout=True,
+    )
+    self.assertEqual(ret, 'z is 1\n')
 
   def test_complex(self):
     ret = execution.evaluate(

@@ -88,6 +88,8 @@ class PythonCode(pg.Object):
       sandbox: bool | None = None,
       timeout: int | None = 5,
       global_vars: dict[str, Any] | None = None,
+      returns_stdout: bool = False,
+      outputs_intermediate: bool = False,
       autofix: int = 3,
       autofix_lm: lf.LanguageModel | None = None,
   ) -> Any:
@@ -101,13 +103,22 @@ class PythonCode(pg.Object):
       timeout: Timeout in seconds. If None, there is no timeout. Applicable when
         sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
+      returns_stdout: If True, the stdout (a str) will be returned.
+      outputs_intermediate: Applicable when returns_stdout is False. If True,
+        intermediate output will be outputted as a dict, with the last line's
+        value accessible by key '__result__' and the std output accessible by 
+        key '__stdout__'. Otherwise the value of the last line will be returned.
       autofix: Number of attempts to auto fix the generated code. If 0, autofix
         is disabled.
       autofix_lm: Language model to be used. If not specified, it will try to
         use the `lm` under `lf.context`.
 
     Returns:
-      The value of the last expression in the source code.
+      The value of the last expression in the source code. Or a dict of local
+      variable names defined in the source code to their values if
+      `outputs_intermediate` is set to True. The value for the last line can be
+      accessed by key '__result__'. Or the stdout as a str if `returns_stdout`
+      is set to True.
 
     Raises:
       TimeoutError: If `sandbox` is True and timeout has reached.
@@ -121,6 +132,8 @@ class PythonCode(pg.Object):
         max_attempts=autofix,
         lm=autofix_lm,
         returns_code=True,
+        returns_stdout=returns_stdout,
+        outputs_intermediate=outputs_intermediate,
     )
     self.rebind(source=updated_code)
     return result
@@ -158,18 +171,14 @@ class PythonCode(pg.Object):
       TimeoutError: If `sandbox` is True and timeout has reached.
       Exception: Any errors that the source code has raised.
     """
-    result, updated_code = correction.run_with_correction(
-        self.source,
-        global_vars=global_vars,
+    return self(
         sandbox=sandbox,
         timeout=timeout,
+        global_vars=global_vars,
+        autofix=autofix,
+        autofix_lm=autofix_lm,
         outputs_intermediate=True,
-        max_attempts=autofix,
-        lm=autofix_lm,
-        returns_code=True,
     )
-    self.rebind(source=updated_code)
-    return result
 
 
 class PythonFunction(pg.Object):

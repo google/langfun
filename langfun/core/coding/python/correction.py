@@ -40,6 +40,7 @@ def run_with_correction(
     sandbox: bool | None = None,
     timeout: int | None = 5,
     returns_code: bool = False,
+    returns_stdout: bool = False,
     outputs_intermediate: bool = False,
 ) -> Any | tuple[Any, str]:
   """Correct code with a language model via self-play.
@@ -62,6 +63,7 @@ def run_with_correction(
       timeout. Applicable only when sandbox is set to True.
     returns_code: If True, the return value is a tuple of (result, final code).
       Otherwise the return value is the result only.
+    returns_stdout: If True, the stdout (a str) will be returned.
     outputs_intermediate: If True, intermediate output will be outputted as a
       dict, with the last line's value accessible by key '__result__'. Otherwise
       the value of the last line will be returned.
@@ -87,6 +89,7 @@ def run_with_correction(
             global_vars=global_vars,
             sandbox=sandbox,
             timeout=timeout,
+            returns_stdout=returns_stdout,
             outputs_intermediate=outputs_intermediate,
         )
     )

@@ -57,6 +57,7 @@ def evaluate(
     *,
     global_vars: dict[str, Any] | None = None,
     permission: permissions.CodePermission | None = None,
+    returns_stdout: bool = False,
     outputs_intermediate: bool = False,
 ) -> Any | dict[str, Any]:
   """Executes Python code.
@@ -71,14 +72,17 @@ def evaluate(
     global_vars: An optional dict as the globals that could be referenced by the
       code.
     permission: Permission for the Python code to run.
-    outputs_intermediate: If True, intermediate output will be outputted as a
-      dict, with the last line's value accessible by key '__result__'. Otherwise
-      the value of the last line will be returned.
+    returns_stdout: If True, the stdout (a str) will be returned.
+    outputs_intermediate: Applicable when returns_stdout is False. If True,
+      intermediate output will be outputted as a dict, with the last line's
+      value accessible by key '__result__' and the std output accessible by
+      key '__stdout__'. Otherwise the value of the last line will be returned.
 
   Returns:
-    The value of the last line of the code. Or a dict of variable name to
-    their values if `outputs_intermediate` is set to True, with the final result
-    accessible by key '__result__'.
+    The value of the last line of the code block. Or a dict of variable
+    names of all locals to their evaluated values as the output of the code to
+    run. The value for the last line can be accessed by key '__result__'. Or the
+    stdout as a str.
   """
   # Set up the permission and context.
   permission = permission or permissions.get_permission()
@@ -136,6 +140,8 @@ def evaluate(
         raise errors.CodeError(code, e) from e
       global_vars[RESULT_KEY] = list(global_vars.values())[-1]
 
+  if returns_stdout:
+    return stdout.getvalue()
   if outputs_intermediate:
     outputs = {}
     for k, v in global_vars.items():
@@ -258,6 +264,7 @@ def run(
     *,
     global_vars: dict[str, Any] | None = None,
     permission: permissions.CodePermission | None = None,
+    returns_stdout: bool = False,
     outputs_intermediate: bool = False,
     sandbox: bool | None = None,
     timeout: float | None = None,
@@ -273,9 +280,11 @@ def run(
     code: Python code to run.
     global_vars: An optional dict of
     permission: Permission for the Python code to run.
-    outputs_intermediate: If True, all variables created as locals will be
-      returned, with the final result accessible by key '__result__'. Otherwise
-      only the final result will be returned.
+    returns_stdout: If True, the stdout (a str) will be returned.
+    outputs_intermediate: Applicable when returns_stdout is False. If True,
+      intermediate output will be outputted as a dict, with the last line's
+      value accessible by key '__result__' and the std output accessible by
+      key '__stdout__'. Otherwise the value of the last line will be returned.
     sandbox: If True, run code in sandbox; If False, run code in current
       process. If None, run in sandbox first, if the output could not be
       serialized and pass to current process, run the code again in current
@@ -285,7 +294,8 @@ def run(
   Returns:
     The value of the last line of the code block. Or a dict of variable
     names of all locals to their evaluated values as the output of the code to
-    run. The value for the last line can be accessed by key '__result__'.
+    run. The value for the last line can be accessed by key '__result__'. Or the
+    stdout as a str.
 
   Raises:
     TimeoutError: If the execution time exceeds the timeout.
@@ -293,5 +303,6 @@ def run(
   """
   return call(
       evaluate, code=code, global_vars=global_vars, permission=permission,
-      outputs_intermediate=outputs_intermediate,
-      sandbox=sandbox, timeout=timeout)
+      returns_stdout=returns_stdout, outputs_intermediate=outputs_intermediate,
+      sandbox=sandbox, timeout=timeout
+  )
