@@ -126,6 +126,7 @@ class VertexAIGeminiFlash2_0ThinkingExp_20241219(VertexAI):  # pylint: disable=i
 
   api_version = 'v1alpha'
   model = 'gemini-2.0-flash-thinking-exp-1219'
+  timeout = None
 
 
 class VertexAIGeminiFlash2_0Exp(VertexAI):  # pylint: disable=invalid-name

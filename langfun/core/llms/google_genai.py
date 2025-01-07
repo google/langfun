@@ -68,6 +68,7 @@ class GeminiFlash2_0ThinkingExp_20241219(GenAI):  # pylint: disable=invalid-name
 
   api_version = 'v1alpha'
   model = 'gemini-2.0-flash-thinking-exp-1219'
+  timeout = None
 
 
 class GeminiFlash2_0Exp(GenAI):  # pylint: disable=invalid-name

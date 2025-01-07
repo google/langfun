@@ -553,26 +553,31 @@ class GptO1(OpenAI):
 
   model = 'o1'
   multimodal = True
+  timeout = None
 
 
 class GptO1Preview(OpenAI):
   """GPT-O1."""
   model = 'o1-preview'
+  timeout = None
 
 
 class GptO1Preview_20240912(OpenAI):   # pylint: disable=invalid-name
   """GPT O1."""
   model = 'o1-preview-2024-09-12'
+  timeout = None
 
 
 class GptO1Mini(OpenAI):
   """GPT O1-mini."""
   model = 'o1-mini'
+  timeout = None
 
 
 class GptO1Mini_20240912(OpenAI):   # pylint: disable=invalid-name
   """GPT O1-mini."""
   model = 'o1-mini-2024-09-12'
+  timeout = None
 
 
 class Gpt4(OpenAI):
