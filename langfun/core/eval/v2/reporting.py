@@ -51,6 +51,7 @@ class HtmlReporter(experiment_lib.Plugin):
     self._update_thread = None
     self._stop_update = False
     self._stop_update_experiment_ids = set()
+    self._summary_lock = None
     self._experiment_index_lock = None
 
   def on_run_start(
@@ -62,6 +63,7 @@ class HtmlReporter(experiment_lib.Plugin):
     self._last_experiment_report_time = {leaf.id: 0 for leaf in root.leaf_nodes}
     self._stop_update = False
     self._stop_update_experiment_ids = set()
+    self._summary_lock = threading.Lock()
     self._experiment_index_lock = {
         leaf.id: threading.Lock() for leaf in root.leaf_nodes
     }
@@ -137,21 +139,23 @@ class HtmlReporter(experiment_lib.Plugin):
     """Maybe update the summary of current run."""
     run = runner.current_run
     def _summary():
-      run.experiment.to_html(
+      html = run.experiment.to_html(
           collapse_level=None,
           extra_flags=dict(
               current_run=run, interactive=False, card_view=True,
           )
-      ).save(
-          run.output_path_for(run.experiment, _SUMMARY_FILE)
       )
+      with self._summary_lock:
+        html.save(
+            run.output_path_for(run.experiment, _SUMMARY_FILE)
+        )
 
     if force or (time.time() - self._last_summary_time > self.summary_interval):
+      self._last_summary_time = time.time()
       if background:
         runner.background_run(_summary)
       else:
         _summary()
-      self._last_summary_time = time.time()
 
   def _maybe_update_experiment_html(
       self,
