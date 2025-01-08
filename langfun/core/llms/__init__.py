@@ -141,6 +141,10 @@ from langfun.core.llms.groq import GroqWhisper_Large_v3Turbo
 # LLaMA C++ models.
 from langfun.core.llms.llama_cpp import LlamaCppRemote
 
+# DeepSeek models.
+from langfun.core.llms.deepseek import DeepSeek
+from langfun.core.llms.deepseek import DeepSeekChat
+
 # Placeholder for Google-internal imports.
 
 # Include cache as sub-module.
