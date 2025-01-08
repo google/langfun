@@ -90,6 +90,8 @@ class VertexAI(gemini.Gemini):
       )
 
     self._project = project
+    self._location = location
+
     credentials = self.credentials
     if credentials is None:
       # Use default credentials.
@@ -114,9 +116,10 @@ class VertexAI(gemini.Gemini):
 
   @property
   def api_endpoint(self) -> str:
+    assert self._api_initialized
     return (
-        f'https://{self.location}-aiplatform.googleapis.com/v1/projects/'
-        f'{self.project}/locations/{self.location}/publishers/google/'
+        f'https://{self._location}-aiplatform.googleapis.com/v1/projects/'
+        f'{self._project}/locations/{self._location}/publishers/google/'
         f'models/{self.model}:generateContent'
     )
 
