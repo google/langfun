@@ -46,15 +46,15 @@ class MappingError(Exception):  # pylint: disable=g-bad-exception-name
     r = io.StringIO()
     error_message = str(self.cause).rstrip()
     r.write(
-        lf.colored(
+        pg.colored(
             f'{self.cause.__class__.__name__}: {error_message}', 'magenta'
         )
     )
     if include_lm_response:
       r.write('\n\n')
-      r.write(lf.colored('[LM Response]', 'blue', styles=['bold']))
+      r.write(pg.colored('[LM Response]', 'blue', styles=['bold']))
       r.write('\n')
-      r.write(lf.colored(self.lm_response.text, 'blue'))
+      r.write(pg.colored(self.lm_response.text, 'blue'))
     return r.getvalue()
 
 
@@ -163,27 +163,27 @@ class MappingExample(lf.NaturalLanguageFormattable,
   def natural_language_format(self) -> str:
     result = io.StringIO()
     if self.context:
-      result.write(lf.colored('[CONTEXT]\n', styles=['bold']))
-      result.write(lf.colored(self.context, color='magenta'))
+      result.write(pg.colored('[CONTEXT]\n', styles=['bold']))
+      result.write(pg.colored(self.context, color='magenta'))
       result.write('\n\n')
 
-    result.write(lf.colored('[INPUT]\n', styles=['bold']))
-    result.write(lf.colored(self.input_repr(), color='green'))
+    result.write(pg.colored('[INPUT]\n', styles=['bold']))
+    result.write(pg.colored(self.input_repr(), color='green'))
 
     if self.schema is not None:
       result.write('\n\n')
-      result.write(lf.colored('[SCHEMA]\n', styles=['bold']))
-      result.write(lf.colored(self.schema_repr(), color='red'))
+      result.write(pg.colored('[SCHEMA]\n', styles=['bold']))
+      result.write(pg.colored(self.schema_repr(), color='red'))
 
     if schema_lib.MISSING != self.output:
       result.write('\n\n')
-      result.write(lf.colored('[OUTPUT]\n', styles=['bold']))
-      result.write(lf.colored(self.output_repr(), color='blue'))
+      result.write(pg.colored('[OUTPUT]\n', styles=['bold']))
+      result.write(pg.colored(self.output_repr(), color='blue'))
 
     if self.metadata:
       result.write('\n\n')
-      result.write(lf.colored('[METADATA]\n', styles=['bold']))
-      result.write(lf.colored(str(self.metadata), color='cyan'))
+      result.write(pg.colored('[METADATA]\n', styles=['bold']))
+      result.write(pg.colored(str(self.metadata), color='cyan'))
     return result.getvalue().strip()
 
   @classmethod

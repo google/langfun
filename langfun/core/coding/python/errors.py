@@ -17,7 +17,8 @@ import io
 import sys
 import textwrap
 import traceback
-import langfun.core as lf
+
+import pyglove as pg
 
 
 class CodeError(RuntimeError):
@@ -62,13 +63,13 @@ class CodeError(RuntimeError):
     if 'line' not in error_message and self.lineno is not None:
       error_message += f' (<unknown>, line {self.lineno})'
     r.write(
-        lf.colored(
+        pg.colored(
             f'{self.cause.__class__.__name__}: {error_message}', 'magenta'))
 
     if self.lineno is not None:
       r.write('\n\n')
       r.write(textwrap.indent(
-          lf.colored(
+          pg.colored(
               self.code_lines(self.lineno - 1, self.end_lineno), 'magenta'),
           ' ' * 2
       ))
@@ -76,14 +77,14 @@ class CodeError(RuntimeError):
 
     if include_complete_code:
       r.write('\n')
-      r.write(lf.colored('[Generated Code]', 'green', styles=['bold']))
+      r.write(pg.colored('[Generated Code]', 'green', styles=['bold']))
       r.write('\n\n')
-      r.write(lf.colored('  ```python\n', 'green'))
+      r.write(pg.colored('  ```python\n', 'green'))
       r.write(textwrap.indent(
-          lf.colored(self.code, 'green'),
+          pg.colored(self.code, 'green'),
           ' ' * 2
       ))
-      r.write(lf.colored('\n  ```\n', 'green'))
+      r.write(pg.colored('\n  ```\n', 'green'))
     return r.getvalue()
 
 
@@ -98,10 +99,10 @@ class SerializationError(RuntimeError):
     r = io.StringIO()
     cause_message = str(self.cause).rstrip()
     if self.message:
-      r.write(lf.colored(self.message, 'magenta'))
+      r.write(pg.colored(self.message, 'magenta'))
       r.write('\n\n')
     r.write(
-        lf.colored(
+        pg.colored(
             f'{self.cause.__class__.__name__}: {cause_message}', 'magenta'
         )
     )

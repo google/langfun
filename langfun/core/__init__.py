@@ -77,11 +77,6 @@ from langfun.core.concurrent import concurrent_map
 from langfun.core.concurrent import with_context_access
 from langfun.core.concurrent import with_retry
 
-# Utility libraries for text formatting.
-from langfun.core.text_formatting import colored
-from langfun.core.text_formatting import colored_print as print  # pylint: disable=redefined-builtin
-from langfun.core.text_formatting import colored_template
-
 # Interface for natural language formattable.
 from langfun.core.natural_language import NaturalLanguageFormattable
 

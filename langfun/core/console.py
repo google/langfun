@@ -15,7 +15,7 @@
 
 import sys
 from typing import Any
-from langfun.core.text_formatting import colored
+import pyglove as pg
 
 
 def write(
@@ -42,10 +42,15 @@ def write(
   """
   # Print title if present.
   if title is not None:
-    print(colored(title, styles=['bold']))
+    print(pg.colored(title, styles=['bold']))
 
   # Print body.
-  print(colored(str(value), color=color, background=background, styles=styles))
+  print(dir(pg.utils))
+  print(
+      pg.colored(
+          str(value), color=color, background=background, styles=styles
+      )
+  )
 
 
 try:

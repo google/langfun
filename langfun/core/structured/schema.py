@@ -91,20 +91,25 @@ class SchemaError(Exception):   # pylint: disable=g-bad-exception-name
   def __str__(self):
     r = io.StringIO()
     r.write(
-        lf.colored(f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'))
+        pg.colored(
+            f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'
+        )
+    )
 
     r.write('\n')
-    r.write(lf.colored('Schema:', 'red'))
+    r.write(pg.colored('Schema:', 'red'))
     r.write('\n\n')
     r.write(textwrap.indent(
-        lf.colored(schema_repr(self.protocol).repr(self.schema), 'magenta'),
+        pg.colored(
+            schema_repr(self.protocol).repr(self.schema), 'magenta'
+        ),
         ' ' * 2
     ))
     r.write('\n\n')
-    r.write(lf.colored('Generated value:', 'red'))
+    r.write(pg.colored('Generated value:', 'red'))
     r.write('\n\n')
     r.write(textwrap.indent(
-        lf.colored(value_repr(self.protocol).repr(self.value), 'magenta'),
+        pg.colored(value_repr(self.protocol).repr(self.value), 'magenta'),
         ' ' * 2
     ))
     return r.getvalue()
@@ -759,12 +764,15 @@ class JsonError(Exception):
   def __str__(self) -> str:
     r = io.StringIO()
     r.write(
-        lf.colored(f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'))
+        pg.colored(
+            f'{self.cause.__class__.__name__}: {self.cause}', 'magenta'
+        )
+    )
 
     r.write('\n\n')
-    r.write(lf.colored('JSON text:', 'red'))
+    r.write(pg.colored('JSON text:', 'red'))
     r.write('\n\n')
-    r.write(textwrap.indent(lf.colored(self.json, 'magenta'), ' ' * 2))
+    r.write(textwrap.indent(pg.colored(self.json, 'magenta'), ' ' * 2))
     return r.getvalue()
 
 

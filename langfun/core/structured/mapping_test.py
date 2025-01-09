@@ -29,11 +29,11 @@ class MappingErrorTest(unittest.TestCase):
         lf.AIMessage('hi'), ValueError('Cannot parse message.')
     )
     self.assertEqual(
-        lf.text_formatting.decolored(str(error)),
+        pg.decolor(str(error)),
         'ValueError: Cannot parse message.\n\n[LM Response]\nhi',
     )
     self.assertEqual(
-        lf.text_formatting.decolored(error.format(include_lm_response=False)),
+        pg.decolor(error.format(include_lm_response=False)),
         'ValueError: Cannot parse message.',
     )
 

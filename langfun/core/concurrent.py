@@ -25,7 +25,6 @@ import time
 from typing import Any, Callable, Iterable, Iterator, Literal, Sequence, Tuple, Type, Union
 
 from langfun.core import component
-from langfun.core import text_formatting
 import pyglove as pg
 
 
@@ -844,10 +843,10 @@ class _ConsoleProgressControl(_ProgressControl):
   def refresh(self):
     s = io.StringIO()
     if self.label is not None:
-      s.write(text_formatting.colored(self.label, 'red', styles=['bold']))
+      s.write(pg.colored(self.label, 'red', styles=['bold']))
       s.write(': ')
     s.write(
-        text_formatting.colored(
+        pg.colored(
             '%d%% (%d/%d)' %
             (
                 self._progress * 100 // self.total,

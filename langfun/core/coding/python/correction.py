@@ -192,9 +192,7 @@ def correct(
 def _error_feedback_str(error: Exception) -> str:
   """Returns the error str for feedback."""
   if isinstance(error, errors.CodeError):
-    return lf.text_formatting.decolored(
-        error.format(include_complete_code=False)
-    )
+    return pg.decolor(error.format(include_complete_code=False))
   else:
     return f"Encountered {error.__class__.__name__}: {error}"
 

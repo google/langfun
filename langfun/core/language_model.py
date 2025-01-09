@@ -653,7 +653,7 @@ class LanguageModel(component.Component):
     """Outputs debugging information about the model."""
     title_suffix = ''
     if usage.total_tokens != 0:
-      title_suffix = console.colored(
+      title_suffix = pg.colored(
           f' (total {usage.total_tokens} tokens)', 'red'
       )
 
@@ -672,7 +672,7 @@ class LanguageModel(component.Component):
     """Outputs debugging information about the prompt."""
     title_suffix = ''
     if usage.prompt_tokens != 0:
-      title_suffix = console.colored(f' ({usage.prompt_tokens} tokens)', 'red')
+      title_suffix = pg.colored(f' ({usage.prompt_tokens} tokens)', 'red')
 
     console.write(
         # We use metadata 'formatted_text' for scenarios where the prompt text
@@ -703,7 +703,7 @@ class LanguageModel(component.Component):
     if usage.completion_tokens != 0:
       title_suffix += f'{usage.completion_tokens} tokens '
     title_suffix += f'in {elapse:.2f} seconds)'
-    title_suffix = console.colored(title_suffix, 'red')
+    title_suffix = pg.colored(title_suffix, 'red')
 
     console.write(
         str(response) + '\n',

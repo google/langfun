@@ -1298,7 +1298,7 @@ class Evaluation(Evaluable):
             id=self.id,
             dir=self.dir,
             model=self.lm.model_id,
-            prompt_template=lf.text_formatting.decolored(str(self.prompt)),
+            prompt_template=pg.decolor(str(self.prompt)),
             method=self.method,
             schema_fn=str(self.schema_fn),
         ),
@@ -2110,8 +2110,7 @@ class Summary(pg.Object):
 
 def _format_error(error: Exception):
   """Formats an error into a string."""
-  return (f'({error.__class__.__name__}) '
-          + lf.text_formatting.decolored(str(error)))
+  return (f'({error.__class__.__name__}) ' + pg.decolor(str(error)))
 
 
 def _error_key(error: Exception) -> str:
