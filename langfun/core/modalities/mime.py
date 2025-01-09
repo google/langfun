@@ -138,8 +138,16 @@ class Mime(lf.Modality):
 
   @property
   def content_uri(self) -> str:
+    """Returns the URI with encoded content."""
     base64_content = base64.b64encode(self.to_bytes()).decode()
     return f'data:{self.mime_type};base64,{base64_content}'
+
+  @property
+  def embeddable_uri(self) -> str:
+    """Returns the URI that can be embedded in HTML."""
+    if self.uri and self.uri.lower().startswith(('http:', 'https:', 'ftp:')):
+      return self.uri
+    return self.content_uri
 
   @classmethod
   def from_uri(cls, uri: str, **kwargs) -> 'Mime':

@@ -21,13 +21,13 @@ from langfun.core.llms import rest
 import pyglove as pg
 
 
-@lf.use_init_args(['model'])
+@lf.use_init_args(['api_endpoint', 'model'])
 class OpenAICompatible(rest.REST):
   """Base for OpenAI compatible models."""
 
   model: Annotated[
       str, 'The name of the model to use.',
-  ]
+  ] = ''
 
   multimodal: Annotated[
       bool, 'Whether this model has multimodal support.'
@@ -46,13 +46,13 @@ class OpenAICompatible(rest.REST):
     # https://platform.openai.com/docs/api-reference/completions/create
     # NOTE(daiyip): options.top_k is not applicable.
     args = dict(
-        model=self.model,
         n=options.n,
         top_logprobs=options.top_logprobs,
     )
+    if self.model:
+      args['model'] = self.model
     if options.logprobs:
       args['logprobs'] = options.logprobs
-
     if options.temperature is not None:
       args['temperature'] = options.temperature
     if options.max_tokens is not None:
@@ -67,19 +67,12 @@ class OpenAICompatible(rest.REST):
 
   def _content_from_message(self, message: lf.Message) -> list[dict[str, Any]]:
     """Returns a OpenAI content object from a Langfun message."""
-    def _uri_from(chunk: lf.Modality) -> str:
-      if chunk.uri and chunk.uri.lower().startswith(
-          ('http:', 'https:', 'ftp:')
-      ):
-        return chunk.uri
-      return chunk.content_uri
-
     content = []
     for chunk in message.chunk():
       if isinstance(chunk, str):
         item = dict(type='text', text=chunk)
       elif isinstance(chunk, lf_modalities.Image) and self.multimodal:
-        item = dict(type='image_url', image_url=dict(url=_uri_from(chunk)))
+        item = dict(type='image_url', image_url=dict(url=chunk.embeddable_uri))
       else:
         raise ValueError(f'Unsupported modality: {chunk!r}.')
       content.append(item)

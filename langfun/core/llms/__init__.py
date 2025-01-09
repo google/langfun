@@ -57,6 +57,9 @@ from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_002
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_001
 from langfun.core.llms.vertexai import VertexAIGeminiPro1
 
+# Base for OpenAI-compatible models.
+from langfun.core.llms.openai_compatible import OpenAICompatible
+
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
 

@@ -23,12 +23,12 @@ import pyglove as pg
 
 def mock_request(*args, **kwargs):
   del args, kwargs
-  return pg.Dict(content='foo')
+  return pg.Dict(content=b'foo')
 
 
 def mock_readfile(*args, **kwargs):
   del args, kwargs
-  return 'bar'
+  return b'bar'
 
 
 class CustomMimeTest(unittest.TestCase):
@@ -65,17 +65,32 @@ class CustomMimeTest(unittest.TestCase):
     ):
       mime.Custom('text/plain')
 
+  def test_uri(self):
+    content = mime.Custom.from_uri('http://mock/web/a.txt', mime='text/plain')
+    with mock.patch('requests.get') as mock_requests_stub:
+      mock_requests_stub.side_effect = mock_request
+      self.assertEqual(content.uri, 'http://mock/web/a.txt')
+      self.assertEqual(content.content_uri, 'data:text/plain;base64,Zm9v')
+      self.assertEqual(content.embeddable_uri, 'http://mock/web/a.txt')
+
+    content = mime.Custom.from_uri('a.txt', mime='text/plain')
+    with mock.patch('pyglove.io.readfile') as mock_readfile_stub:
+      mock_readfile_stub.side_effect = mock_readfile
+      self.assertEqual(content.uri, 'a.txt')
+      self.assertEqual(content.content_uri, 'data:text/plain;base64,YmFy')
+      self.assertEqual(content.embeddable_uri, 'data:text/plain;base64,YmFy')
+
   def test_from_uri(self):
     content = mime.Custom.from_uri('http://mock/web/a.txt', mime='text/plain')
     with mock.patch('requests.get') as mock_requests_stub:
       mock_requests_stub.side_effect = mock_request
-      self.assertEqual(content.to_bytes(), 'foo')
+      self.assertEqual(content.to_bytes(), b'foo')
       self.assertEqual(content.mime_type, 'text/plain')
 
     content = mime.Custom.from_uri('a.txt', mime='text/plain')
     with mock.patch('pyglove.io.readfile') as mock_readfile_stub:
       mock_readfile_stub.side_effect = mock_readfile
-      self.assertEqual(content.to_bytes(), 'bar')
+      self.assertEqual(content.to_bytes(), b'bar')
       self.assertEqual(content.mime_type, 'text/plain')
 
   def assert_html_content(self, html, expected):
