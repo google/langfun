@@ -119,6 +119,29 @@ class SessionTest(unittest.TestCase):
     json_str = session.to_json_str(save_ref_value=True)
     self.assertIsInstance(pg.from_json_str(json_str), action_lib.Session)
 
+  def test_sample(self):
+    class Foo(action_lib.Action):
+
+      def call(self, session, x=1):
+        return x
+
+    session = action_lib.Session()
+    self.assertEqual(Foo().sample(session, n=2, x=1, reduce_fn=sum), 2)
+    self.assertIsNotNone(session.root)
+    self.assertEqual(len(session.root.execution), 1)
+    topmost_invocation = session.root.execution.items[0]
+    self.assertEqual(topmost_invocation.result, 2)
+    self.assertEqual(
+        topmost_invocation.action,
+        action_lib.ActionSampling(Foo(), n=2, reduce_fn=sum)
+    )
+    self.assertEqual(len(topmost_invocation.execution.items), 2)
+    self.assertEqual(topmost_invocation.execution.items[0].action, Foo())
+    self.assertEqual(topmost_invocation.execution.items[0].result, 1)
+
+    # No reduce_fn.
+    self.assertEqual(Foo().sample(session, n=2, x=1), [1, 1])
+
   def test_log(self):
     session = action_lib.Session()
     session.debug('hi', x=1, y=2)
