@@ -16,19 +16,13 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-importing-member
 
-from langfun.core.coding.python.errors import CodeError
-
-from langfun.core.coding.python.permissions import CodePermission
-from langfun.core.coding.python.permissions import permission
-from langfun.core.coding.python.permissions import get_permission
-
-from langfun.core.coding.python.parsing import PythonCodeParser
-
+# Expose from `lf.coding` as aliases for `pg.coding` for backward compatibility.
+from langfun.core.coding.python.execution import CodeError
+from langfun.core.coding.python.execution import CodePermission
 from langfun.core.coding.python.execution import context
-from langfun.core.coding.python.execution import get_context
+
+from langfun.core.coding.python.parsing import clean
 from langfun.core.coding.python.execution import evaluate
-from langfun.core.coding.python.execution import sandbox_call
-from langfun.core.coding.python.execution import call
 from langfun.core.coding.python.execution import run
 
 from langfun.core.coding.python.generation import PythonCode

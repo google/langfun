@@ -14,7 +14,6 @@
 """Python code error correction."""
 from typing import Any
 import langfun.core as lf
-from langfun.core.coding.python import errors
 from langfun.core.coding.python import execution
 import pyglove as pg
 
@@ -125,7 +124,7 @@ def run_with_correction(
       correction = querying.query(
           CodeWithError(code=code, error=error), CorrectedCode, lm=lm, autofix=0
       )
-    except errors.CodeError:
+    except pg.coding.CodeError:
       break
 
     code = correction.corrected_code
@@ -133,7 +132,7 @@ def run_with_correction(
     if error is None:
       return (result, code) if returns_code else result
 
-  raise errors.CodeError(
+  raise pg.coding.CodeError(
       code,
       RuntimeError(
           f"Cannot correct code after {num_attempts} attempts. "
@@ -191,7 +190,7 @@ def correct(
 
 def _error_feedback_str(error: Exception) -> str:
   """Returns the error str for feedback."""
-  if isinstance(error, errors.CodeError):
+  if isinstance(error, pg.coding.CodeError):
     return pg.decolor(error.format(include_complete_code=False))
   else:
     return f"Encountered {error.__class__.__name__}: {error}"

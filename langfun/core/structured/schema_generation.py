@@ -58,7 +58,7 @@ class GenerateClass(mapping.Mapping):
     class_name = self.context
     cls = output_vars.get(class_name, None)
     if cls is None:
-      raise correction.errors.CodeError(
+      raise pg.coding.CodeError(
           final_code,
           TypeError(f'Class {class_name} is absent from LLM output.'),
       )

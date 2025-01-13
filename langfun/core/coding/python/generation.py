@@ -227,5 +227,6 @@ class PythonFunction(pg.Object):
       TimeoutError: If `sandbox` is True and timeout has reached.
       Exception: Any errors that the source code has raised.
     """
-    return execution.call(
-        self.implementation, *args, sandbox=sandbox, timeout=timeout, **kwargs)
+    return pg.coding.maybe_sandbox_call(
+        self.implementation, *args, sandbox=sandbox, timeout=timeout, **kwargs
+    )

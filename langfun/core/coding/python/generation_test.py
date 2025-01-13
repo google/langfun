@@ -16,7 +16,7 @@
 import inspect
 import unittest
 from langfun.core.coding.python import generation
-from langfun.core.coding.python import permissions
+import pyglove as pg
 
 
 class PythonCodeTest(unittest.TestCase):
@@ -58,7 +58,7 @@ class PythonCodeTest(unittest.TestCase):
     )
 
   def test_call_class_def(self):
-    with permissions.permission(permissions.CodePermission.CLASS_DEFINITION):
+    with pg.coding.permission(pg.coding.CodePermission.CLASS_DEFINITION):
       v = generation.PythonCode("""
           class A:
             pass

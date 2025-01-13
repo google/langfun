@@ -17,7 +17,6 @@ import inspect
 import unittest
 
 from langfun.core.coding.python import correction
-from langfun.core.coding.python import errors
 from langfun.core.llms import fake
 import pyglove as pg
 
@@ -82,7 +81,7 @@ class RunWithCorrectionTest(unittest.TestCase):
         max_attempts=0,
     )
     self.assertEqual(result, 4)
-    with self.assertRaises(errors.CodeError):
+    with self.assertRaises(pg.coding.CodeError):
       correction.run_with_correction(
           inspect.cleandoc("""
             x = 1,
@@ -125,7 +124,7 @@ class CorrectTest(unittest.TestCase):
 
   def test_correct_reaching_limit(self):
     with self.assertRaisesRegex(
-        errors.CodeError, 'Cannot correct code after 1 attempts'
+        pg.coding.CodeError, 'Cannot correct code after 1 attempts'
     ):
       correction.correct(
           inspect.cleandoc("""

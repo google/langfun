@@ -15,18 +15,16 @@
 
 import inspect
 import unittest
-from langfun.core.coding.python import errors
 from langfun.core.coding.python import parsing
-from langfun.core.coding.python import permissions
 
 
-class PythonCodeParserTest(unittest.TestCase):
+class CleanTest(unittest.TestCase):
 
   def assert_clean(self, code: str, cleaned_code: str, clean: bool = True):
     if clean:
       cleaned_code = inspect.cleandoc(cleaned_code)
     self.assertEqual(
-        parsing.PythonCodeParser().clean(code), cleaned_code
+        parsing.clean(code), cleaned_code
     )
 
   def test_clean(self):
@@ -270,107 +268,6 @@ class PythonCodeParserTest(unittest.TestCase):
         """
         x = 'Hello\\n        World'
         """
-    )
-
-  def assert_allowed(self, code: str, permission: permissions.CodePermission):
-    _, ast = parsing.PythonCodeParser().parse(code, permission)
-    self.assertIsNotNone(ast)
-
-  def assert_not_allowed(
-      self, code: str, permission: permissions.CodePermission
-  ):
-    with self.assertRaisesRegex(errors.CodeError, '.* is not allowed'):
-      parsing.PythonCodeParser().parse(code, permission)
-
-  def test_parse_with_allowed_code(self):
-    self.assert_allowed(
-        """
-        x = y + 1
-        z = x + y
-        """,
-        permissions.CodePermission.BASIC,
-    )
-    self.assert_allowed(
-        """
-        if x > 0:
-          print(x)
-        """,
-        permissions.CodePermission.CONDITION,
-    )
-    self.assert_allowed(
-        """
-        for i in range(5):
-          print(i)
-        """,
-        permissions.CodePermission.LOOP,
-    )
-    self.assert_allowed(
-        """
-        assert x > 1
-        """,
-        permissions.CodePermission.EXCEPTION,
-    )
-    self.assert_allowed(
-        """
-        class A:
-          pass
-        """,
-        permissions.CodePermission.CLASS_DEFINITION,
-    )
-    self.assert_allowed(
-        """
-        def foo(x, y):
-          return x + y
-        """,
-        permissions.CodePermission.FUNCTION_DEFINITION,
-    )
-    self.assert_allowed(
-        """
-        import re
-        """,
-        permissions.CodePermission.IMPORT,
-    )
-
-  def test_parse_with_not_allowed_code(self):
-    self.assert_not_allowed(
-        """
-        if x > 0:
-          print(x)
-        """,
-        permissions.CodePermission.BASIC,
-    )
-    self.assert_not_allowed(
-        """
-        for i in range(5):
-          print(i)
-        """,
-        permissions.CodePermission.BASIC,
-    )
-    self.assert_not_allowed(
-        """
-        assert x > 1
-        """,
-        permissions.CodePermission.BASIC,
-    )
-    self.assert_not_allowed(
-        """
-        class A:
-          pass
-        """,
-        permissions.CodePermission.BASIC,
-    )
-    self.assert_not_allowed(
-        """
-        def foo(x, y):
-          return x + y
-        """,
-        permissions.CodePermission.BASIC,
-    )
-    self.assert_not_allowed(
-        """
-        import re
-        """,
-        permissions.CodePermission.BASIC,
     )
 
 

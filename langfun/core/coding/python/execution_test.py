@@ -14,11 +14,8 @@
 """Tests for Python code execution."""
 
 import inspect
-import time
 import unittest
-from langfun.core.coding.python import errors
 from langfun.core.coding.python import execution
-from langfun.core.coding.python import permissions
 import pyglove as pg
 
 
@@ -63,14 +60,14 @@ class EvaluateTest(unittest.TestCase):
         ),
         3,
     )
-    with self.assertRaisesRegex(errors.CodeError, 'ValueError'):
+    with self.assertRaisesRegex(execution.CodeError, 'ValueError'):
       execution.evaluate(
           """
           def foo():
             raise ValueError("intentional error")
           foo()
           """,
-          permission=permissions.CodePermission.ALL
+          permission=execution.CodePermission.ALL
       )
 
   def test_class_def(self):
@@ -82,7 +79,7 @@ class EvaluateTest(unittest.TestCase):
           def __call__(self):
             return self.x + self.y
         """,
-        permission=permissions.CodePermission.ALL,
+        permission=execution.CodePermission.ALL,
         global_vars=dict(pg=pg),
         outputs_intermediate=True,
     )
@@ -100,7 +97,7 @@ class EvaluateTest(unittest.TestCase):
         def bar(z):
           return z + foo(z, z)
         """,
-        permission=permissions.CodePermission.ALL,
+        permission=execution.CodePermission.ALL,
         outputs_intermediate=True,
     )
     self.assertEqual(
@@ -125,7 +122,7 @@ class EvaluateTest(unittest.TestCase):
     )
     ret = execution.evaluate(
         code,
-        permission=permissions.CodePermission.ALL,
+        permission=execution.CodePermission.ALL,
         outputs_intermediate=True,
     )
     self.assertEqual(
@@ -134,7 +131,7 @@ class EvaluateTest(unittest.TestCase):
     self.assertEqual(ret['__result__'], 3)
     ret = execution.evaluate(
         code,
-        permission=permissions.CodePermission.ALL,
+        permission=execution.CodePermission.ALL,
         returns_stdout=True,
     )
     self.assertEqual(ret, 'z is 1\n')
@@ -153,7 +150,7 @@ class EvaluateTest(unittest.TestCase):
         k = A(1, 2)
         k(foo(3, 4))
         """,
-        permission=permissions.CodePermission.ALL,
+        permission=execution.CodePermission.ALL,
         global_vars=dict(pg=pg),
         outputs_intermediate=True,
     )
@@ -167,100 +164,24 @@ class EvaluateTest(unittest.TestCase):
 
   def test_run_with_error(self):
     with self.assertRaisesRegex(
-        errors.CodeError, 'NameError: name .* is not defined'
+        execution.CodeError, 'NameError: name .* is not defined'
     ):
       execution.evaluate(
           """
           x = 1
           y = x + z
           """,
-          permission=permissions.CodePermission.ALL,
+          permission=execution.CodePermission.ALL,
       )
-    with self.assertRaisesRegex(errors.CodeError, 'ValueError'):
+    with self.assertRaisesRegex(execution.CodeError, 'ValueError'):
       execution.evaluate(
-          'raise ValueError()', permission=permissions.CodePermission.ALL
+          'raise ValueError()', permission=execution.CodePermission.ALL
       )
 
 
 class Foo(pg.Object):
   x: int
   y: int
-
-
-class SandboxCallTest(unittest.TestCase):
-
-  def test_basics(self):
-    def f(x, y):
-      return x + y
-    self.assertEqual(execution.sandbox_call(f, 1, y=2), 3)
-
-  def test_complex_type(self):
-    def f(x, y):
-      return Foo(x, y)
-
-    self.assertEqual(execution.sandbox_call(f, 1, 2), Foo(1, 2))
-
-  def test_timeout(self):
-    def f(x):
-      time.sleep(x)
-
-    self.assertIsNone(execution.sandbox_call(f, 0, timeout=1))
-    with self.assertRaises(TimeoutError):
-      execution.sandbox_call(f, 2, timeout=1)
-
-  def test_raise(self):
-    def f(x):
-      if x == 0:
-        raise ValueError()
-
-    self.assertIsNone(execution.sandbox_call(f, 1))
-    with self.assertRaises(ValueError):
-      execution.sandbox_call(f, 0)
-
-
-class CallTest(unittest.TestCase):
-
-  def test_call_without_sandboxing(self):
-    def foo(x, y):
-      return x + y
-
-    self.assertEqual(
-        execution.call(foo, 1, y=2, sandbox=False),
-        3
-    )
-
-  def test_call_with_sandboxing(self):
-    def foo(x, y):
-      return x + y
-
-    self.assertEqual(
-        execution.call(foo, 1, y=2, sandbox=True),
-        3
-    )
-
-    def make_cls():
-      class A(pg.Object):
-        x: str
-      return A
-
-    with self.assertRaises(errors.SerializationError):
-      execution.call(make_cls, sandbox=True)
-
-  def test_call_with_automatic_sandboxing(self):
-    def foo(x, y):
-      return x + y
-
-    self.assertEqual(
-        execution.call(foo, 1, y=2),
-        3
-    )
-
-    def make_cls():
-      class A(pg.Object):
-        x: str
-      return A
-
-    self.assertTrue(inspect.isclass(execution.call(make_cls)))
 
 
 class RunTest(unittest.TestCase):
