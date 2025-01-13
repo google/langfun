@@ -152,6 +152,11 @@ class OpenAIComptibleTest(unittest.TestCase):
           api_endpoint='https://test-server', model='test-model',
       )
       results = lm.sample(['hello'], logprobs=True)
+      for result in results:
+        result.rebind(
+            {path: 0 for path in pg.query(result, '.*total_call_interval')},
+            skip_notification=True,
+        )
       self.assertEqual(len(results), 1)
       self.assertEqual(
           results[0],
@@ -245,6 +250,11 @@ class OpenAIComptibleTest(unittest.TestCase):
       results = lm.sample(
           ['hello', 'bye'], sampling_options=lf.LMSamplingOptions(n=3)
       )
+      for result in results:
+        result.rebind(
+            {path: 0 for path in pg.query(result, '.*total_call_interval')},
+            skip_notification=True,
+        )
 
     self.assertEqual(len(results), 2)
     self.assertEqual(
@@ -380,6 +390,11 @@ class OpenAIComptibleTest(unittest.TestCase):
       )
       with lf.use_settings(sampling_options=lf.LMSamplingOptions(n=2)):
         results = lm.sample(['hello'])
+      for result in results:
+        result.rebind(
+            {path: 0 for path in pg.query(result, '.*total_call_interval')},
+            skip_notification=True,
+        )
 
     self.assertEqual(len(results), 1)
     self.assertEqual(

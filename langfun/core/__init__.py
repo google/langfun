@@ -72,6 +72,7 @@ from langfun.core.sampling import random_sample
 
 # Concurrent execute a function with parallel inputs with inheriting current
 # context's defaults and overrides.
+from langfun.core.concurrent import RetryEntry
 from langfun.core.concurrent import concurrent_execute
 from langfun.core.concurrent import concurrent_map
 from langfun.core.concurrent import with_context_access

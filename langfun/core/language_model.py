@@ -81,6 +81,61 @@ class LMSample(pg.Object):
   ] = None
 
 
+class RetryStats(pg.Object):
+  """Retry stats, which is aggregated across multiple retry entries."""
+
+  num_occurences: Annotated[
+      int,
+      'Total number of retry attempts on LLM (excluding the first attempt).',
+  ] = 0
+  total_wait_interval: Annotated[
+      float, 'Total wait interval in seconds due to retry.'
+  ] = 0
+  total_call_interval: Annotated[
+      float, 'Total LLM call interval in seconds.'
+  ] = 0
+  errors: Annotated[
+      dict[str, int],
+      'A Counter of error types encountered during the retry attempts.',
+  ] = {}
+
+  @classmethod
+  def from_retry_entries(
+      cls, retry_entries: Sequence[concurrent.RetryEntry]
+  ) -> 'RetryStats':
+    """Creates a RetryStats from a sequence of RetryEntry."""
+    if not retry_entries:
+      return RetryStats()
+    errors = {}
+    for retry in retry_entries:
+      if retry.error is not None:
+        errors[retry.error.__class__.__name__] = (
+            errors.get(retry.error.__class__.__name__, 0) + 1
+        )
+    return RetryStats(
+        num_occurences=len(retry_entries) - 1,
+        total_wait_interval=sum(e.wait_interval for e in retry_entries),
+        total_call_interval=sum(e.call_interval for e in retry_entries),
+        errors=errors,
+    )
+
+  def __add__(self, other: 'RetryStats') -> 'RetryStats':
+    errors = self.errors.copy()
+    for error, count in other.errors.items():
+      errors[error] = errors.get(error, 0) + count
+    return RetryStats(
+        num_occurences=self.num_occurences + other.num_occurences,
+        total_wait_interval=self.total_wait_interval
+        + other.total_wait_interval,
+        total_call_interval=self.total_call_interval
+        + other.total_call_interval,
+        errors=errors,
+    )
+
+  def __radd__(self, other: 'RetryStats') -> 'RetryStats':
+    return self + other
+
+
 class LMSamplingUsage(pg.Object):
   """Usage information per completion."""
 
@@ -93,8 +148,9 @@ class LMSamplingUsage(pg.Object):
       (
           'Estimated cost in US dollars. If None, cost estimating is not '
           'suppported on the model being queried.'
-      )
+      ),
   ] = None
+  retry_stats: RetryStats = RetryStats()
 
   def __bool__(self) -> bool:
     return self.num_requests > 0
@@ -136,6 +192,7 @@ class LMSamplingUsage(pg.Object):
         total_tokens=self.total_tokens + other.total_tokens,
         num_requests=self.num_requests + other.num_requests,
         estimated_cost=estimated_cost,
+        retry_stats=self.retry_stats + other.retry_stats,
     )
 
   def __radd__(self, other: Optional['LMSamplingUsage']) -> 'LMSamplingUsage':
@@ -511,7 +568,18 @@ class LanguageModel(component.Component):
                 total_tokens=usage.total_tokens // n,
                 estimated_cost=(
                     usage.estimated_cost / n if usage.estimated_cost else None
-                )
+                ),
+                retry_stats=RetryStats(
+                    num_occurences=usage.retry_stats.num_occurences // n,
+                    total_wait_interval=usage.retry_stats.total_wait_interval
+                    / n,
+                    total_call_interval=usage.retry_stats.total_call_interval
+                    / n,
+                    errors={
+                        error: count // n
+                        for error, count in usage.retry_stats.errors.items()
+                    },
+                ),
             )
 
           # Track usage.
@@ -584,16 +652,16 @@ class LanguageModel(component.Component):
 
   def _parallel_execute_with_currency_control(
       self,
-      action: Callable[..., Any],
+      action: Callable[..., LMSamplingResult],
       inputs: Sequence[Any],
       retry_on_errors: Union[
           None,
           Union[Type[BaseException], Tuple[Type[BaseException], str]],
           Sequence[Union[Type[BaseException], Tuple[Type[BaseException], str]]],
       ] = RetryableLMError,
-  ) -> Any:
+  ) -> list[Any]:
     """Helper method for subclasses for implementing _sample."""
-    return concurrent.concurrent_execute(
+    executed_jobs = concurrent.concurrent_execute(
         action,
         inputs,
         executor=self.resource_id if self.max_concurrency else None,
@@ -603,7 +671,15 @@ class LanguageModel(component.Component):
         retry_interval=self.retry_interval,
         exponential_backoff=self.exponential_backoff,
         max_retry_interval=self.max_retry_interval,
+        return_jobs=True,
     )
+    for job in executed_jobs:
+      if isinstance(job.result, LMSamplingResult):
+        job.result.usage.rebind(
+            retry_stats=RetryStats.from_retry_entries(job.retry_entries),
+            skip_notification=True,
+        )
+    return [job.result for job in executed_jobs]
 
   def __call__(
       self, prompt: message_lib.Message, *, cache_seed: int = 0, **kwargs

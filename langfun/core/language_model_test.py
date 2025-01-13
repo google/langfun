@@ -35,34 +35,34 @@ class MockModel(lm_lib.LanguageModel):
               ) -> list[lm_lib.LMSamplingResult]:
     context = pg.Dict(attempt=0)
 
-    def fake_sample(prompts):
+    def fake_sample(prompt):
       if context.attempt >= self.failures_before_attempt:
-        return [
-            lm_lib.LMSamplingResult(
-                [
-                    lm_lib.LMSample(  # pylint: disable=g-complex-comprehension
-                        response=prompt.text * self.sampling_options.top_k,
-                        score=self.sampling_options.temperature or -1.0,
-                    )
-                ],
-                usage=lm_lib.LMSamplingUsage(
-                    prompt_tokens=100,
-                    completion_tokens=100,
-                    total_tokens=200,
-                    estimated_cost=1.0,
-                ),
-            )
-            for prompt in prompts
-        ]
-      context.attempt += 1
+        return lm_lib.LMSamplingResult(
+            [
+                lm_lib.LMSample(  # pylint: disable=g-complex-comprehension
+                    response=prompt.text * self.sampling_options.top_k,
+                    score=self.sampling_options.temperature or -1.0,
+                )
+            ],
+            usage=lm_lib.LMSamplingUsage(
+                prompt_tokens=100,
+                completion_tokens=100,
+                total_tokens=200,
+                estimated_cost=1.0,
+            ),
+        )
+      else:
+        context.attempt += 1
       raise ValueError('Failed to sample prompts.')
 
-    return concurrent.with_retry(
-        fake_sample,
-        retry_on_errors=ValueError,
-        max_attempts=self.max_attempts,
-        retry_interval=1,
-    )(prompts)
+    results = self._parallel_execute_with_currency_control(
+        fake_sample, prompts, retry_on_errors=ValueError
+    )
+    for result in results:
+      result.usage.retry_stats.rebind(
+          total_call_interval=0, skip_notification=True
+      )
+    return results
 
   @property
   def model_id(self) -> str:
@@ -448,13 +448,50 @@ class LanguageModelTest(unittest.TestCase):
 
   def test_retry(self):
     lm = MockModel(
-        failures_before_attempt=1, top_k=1,
+        failures_before_attempt=1, top_k=1, max_attempts=2, retry_interval=1
     )
     with self.assertRaisesRegex(
         concurrent.RetryError, 'Calling .* failed after 1 attempts'
     ):
       lm('foo', max_attempts=1)
-    self.assertEqual(lm('foo', max_attempts=2), 'foo')
+
+    usage = lm_lib.LMSamplingUsage(
+        prompt_tokens=100,
+        completion_tokens=100,
+        total_tokens=200,
+        num_requests=1,
+        estimated_cost=1.0,
+        retry_stats=lm_lib.RetryStats(
+            num_occurences=1,
+            total_wait_interval=1,
+            errors={'ValueError': 1},
+        ),
+    )
+    out = lm.sample(['foo'])
+    self.assertEqual(
+        # lm.sample(['foo'], max_attempts=2),
+        out,
+        [
+            lm_lib.LMSamplingResult(
+                [
+                    lm_lib.LMSample(
+                        message_lib.AIMessage(
+                            'foo',
+                            score=-1.0,
+                            logprobs=None,
+                            is_cached=False,
+                            usage=usage,
+                            tags=['lm-response'],
+                        ),
+                        score=-1.0,
+                        logprobs=None,
+                    )
+                ],
+                usage=usage,
+                is_cached=False,
+            )
+        ],
+    )
 
   def test_debug(self):
     class Image(modality.Modality):
@@ -755,16 +792,34 @@ class LMSamplingUsageTest(unittest.TestCase):
 
   def test_add(self):
     usage1 = lm_lib.LMSamplingUsage(100, 200, 300, 4, 5.0)
+    usage1.rebind(retry_stats=lm_lib.RetryStats(1, 3, 4, {'e1': 1}))
     usage2 = lm_lib.LMSamplingUsage(100, 200, 300, 4, 5.0)
     self.assertEqual(usage1 + usage2, usage1 + usage2)
     self.assertIs(usage1 + None, usage1)
     self.assertIs(None + usage1, usage1)
     usage3 = lm_lib.LMSamplingUsage(100, 200, 300, 4, None)
+    usage3.rebind(retry_stats=lm_lib.RetryStats(2, 4, 5, {'e1': 2, 'e2': 3}))
     self.assertEqual(
-        usage1 + usage3, lm_lib.LMSamplingUsage(200, 400, 600, 8, 5.0)
+        usage1 + usage3,
+        lm_lib.LMSamplingUsage(
+            200,
+            400,
+            600,
+            8,
+            5.0,
+            retry_stats=lm_lib.RetryStats(3, 7, 9, {'e1': 3, 'e2': 3}),
+        ),
     )
     self.assertEqual(
-        usage3 + usage1, lm_lib.LMSamplingUsage(200, 400, 600, 8, 5.0)
+        usage3 + usage1,
+        lm_lib.LMSamplingUsage(
+            200,
+            400,
+            600,
+            8,
+            5.0,
+            retry_stats=lm_lib.RetryStats(3, 7, 9, {'e1': 3, 'e2': 3}),
+        ),
     )
 
   def test_usage_not_available(self):

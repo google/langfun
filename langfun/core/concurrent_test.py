@@ -94,7 +94,7 @@ class RetryErrorTest(unittest.TestCase):
     )
 
 
-class WithRetryTest(unittest.TestCase):
+class RetryTest(unittest.TestCase):
 
   def assert_retry(self, func, expected_attempts, expected_wait_intervals):
     with pg.catch_errors(concurrent.RetryError) as error_context:
@@ -162,6 +162,31 @@ class WithRetryTest(unittest.TestCase):
     with self.assertRaises(ValueError):
       foo_with_retry()
 
+  def test_retry_with_job(self):
+    count = 0
+
+    def foo():
+      nonlocal count
+      count += 1
+      if count < 3:
+        raise ValueError('Foo temporary error.')
+      return 'Success'
+
+    job = concurrent.Job(
+        foo,
+        retry_on_errors=ValueError,
+        retry_interval=1,
+    )
+    job()
+    self.assertEqual(job.result, 'Success')
+    self.assertEqual(
+        [retry_entry.wait_interval for retry_entry in job.retry_entries],
+        [0, 1, 2],
+    )
+    self.assertIsInstance(job.retry_entries[0].error, ValueError)
+    self.assertIsInstance(job.retry_entries[1].error, ValueError)
+    self.assertIsNone(job.retry_entries[2].error)
+
 
 class ConcurrentExecuteTest(unittest.TestCase):
 
@@ -217,8 +242,8 @@ class ProgressTest(unittest.TestCase):
     def fun2(unused_x):
       raise ValueError('Intentional error.')
 
-    job1 = concurrent.Job(fun, 1)
-    job2 = concurrent.Job(fun2, 2)
+    job1 = concurrent.Job(fun, (1,))
+    job2 = concurrent.Job(fun2, (2,))
     job1()
     job2()
 
