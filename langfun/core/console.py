@@ -45,7 +45,6 @@ def write(
     print(pg.colored(title, styles=['bold']))
 
   # Print body.
-  print(dir(pg.utils))
   print(
       pg.colored(
           str(value), color=color, background=background, styles=styles
