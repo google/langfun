@@ -30,6 +30,9 @@ from langfun.core.llms.compositional import RandomChoice
 # REST-based models.
 from langfun.core.llms.rest import REST
 
+# VertexAI-based models.
+from langfun.core.llms.vertexai import VertexAI
+
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
 from langfun.core.llms.google_genai import GeminiFlash2_0ThinkingExp_20241219
@@ -44,7 +47,7 @@ from langfun.core.llms.google_genai import GeminiFlash1_5_002
 from langfun.core.llms.google_genai import GeminiFlash1_5_001
 from langfun.core.llms.google_genai import GeminiPro1
 
-from langfun.core.llms.vertexai import VertexAI
+from langfun.core.llms.vertexai import VertexAIGemini
 from langfun.core.llms.vertexai import VertexAIGeminiFlash2_0ThinkingExp_20241219
 from langfun.core.llms.vertexai import VertexAIGeminiFlash2_0Exp
 from langfun.core.llms.vertexai import VertexAIGeminiExp_20241206
@@ -114,6 +117,8 @@ from langfun.core.llms.openai import Gpt3Curie
 from langfun.core.llms.openai import Gpt3Babbage
 from langfun.core.llms.openai import Gpt3Ada
 
+# Anthropic models.
+
 from langfun.core.llms.anthropic import Anthropic
 from langfun.core.llms.anthropic import Claude35Sonnet
 from langfun.core.llms.anthropic import Claude35Sonnet20241022
@@ -121,11 +126,14 @@ from langfun.core.llms.anthropic import Claude35Sonnet20240620
 from langfun.core.llms.anthropic import Claude3Opus
 from langfun.core.llms.anthropic import Claude3Sonnet
 from langfun.core.llms.anthropic import Claude3Haiku
-from langfun.core.llms.anthropic import VertexAIAnthropic
-from langfun.core.llms.anthropic import VertexAIClaude3_5_Sonnet_20241022
-from langfun.core.llms.anthropic import VertexAIClaude3_5_Sonnet_20240620
-from langfun.core.llms.anthropic import VertexAIClaude3_5_Haiku_20241022
-from langfun.core.llms.anthropic import VertexAIClaude3_Opus_20240229
+
+from langfun.core.llms.vertexai import VertexAIAnthropic
+from langfun.core.llms.vertexai import VertexAIClaude3_5_Sonnet_20241022
+from langfun.core.llms.vertexai import VertexAIClaude3_5_Sonnet_20240620
+from langfun.core.llms.vertexai import VertexAIClaude3_5_Haiku_20241022
+from langfun.core.llms.vertexai import VertexAIClaude3_Opus_20240229
+
+# Misc open source models.
 
 from langfun.core.llms.groq import Groq
 from langfun.core.llms.groq import GroqLlama3_2_3B

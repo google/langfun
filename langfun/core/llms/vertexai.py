@@ -1,4 +1,4 @@
-# Copyright 2023 The Langfun Authors
+# Copyright 2025 The Langfun Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +15,12 @@
 
 import functools
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import langfun.core as lf
+from langfun.core.llms import anthropic
 from langfun.core.llms import gemini
+from langfun.core.llms import rest
 import pyglove as pg
 
 try:
@@ -36,10 +38,21 @@ except ImportError:
   Credentials = Any
 
 
-@lf.use_init_args(['model'])
-@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
-class VertexAI(gemini.Gemini):
-  """Language model served on VertexAI with REST API."""
+@pg.use_init_args(['api_endpoint'])
+class VertexAI(rest.REST):
+  """Base class for VertexAI models.
+
+  This class handles the authentication of vertex AI models. Subclasses
+  should implement `request` and `result` methods, as well as the `api_endpoint`
+  property. Or let users to provide them as __init__ arguments.
+
+  Please check out VertexAIGemini in `gemini.py` as an example.
+  """
+
+  model: Annotated[
+      str | None,
+      'Model ID.'
+  ] = None
 
   project: Annotated[
       str | None,
@@ -114,6 +127,17 @@ class VertexAI(gemini.Gemini):
     s.headers.update(self.headers or {})
     return s
 
+
+#
+# Gemini models served by Vertex AI.
+#
+
+
+@pg.use_init_args(['model'])
+@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
+class VertexAIGemini(VertexAI, gemini.Gemini):
+  """Gemini models served by Vertex AI.."""
+
   @property
   def api_endpoint(self) -> str:
     assert self._api_initialized
@@ -124,7 +148,7 @@ class VertexAI(gemini.Gemini):
     )
 
 
-class VertexAIGeminiFlash2_0ThinkingExp_20241219(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiFlash2_0ThinkingExp_20241219(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini Flash 2.0 Thinking model launched on 12/19/2024."""
 
   api_version = 'v1alpha'
@@ -132,61 +156,128 @@ class VertexAIGeminiFlash2_0ThinkingExp_20241219(VertexAI):  # pylint: disable=i
   timeout = None
 
 
-class VertexAIGeminiFlash2_0Exp(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiFlash2_0Exp(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 2.0 Flash model."""
 
   model = 'gemini-2.0-flash-exp'
 
 
-class VertexAIGeminiExp_20241206(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiExp_20241206(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini Experimental model launched on 12/06/2024."""
 
   model = 'gemini-exp-1206'
 
 
-class VertexAIGeminiExp_20241114(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiExp_20241114(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini Experimental model launched on 11/14/2024."""
 
   model = 'gemini-exp-1114'
 
 
-class VertexAIGeminiPro1_5(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiPro1_5(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-latest'
 
 
-class VertexAIGeminiPro1_5_002(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiPro1_5_002(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-002'
 
 
-class VertexAIGeminiPro1_5_001(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiPro1_5_001(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-001'
 
 
-class VertexAIGeminiFlash1_5(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiFlash1_5(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash'
 
 
-class VertexAIGeminiFlash1_5_002(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiFlash1_5_002(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash-002'
 
 
-class VertexAIGeminiFlash1_5_001(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiFlash1_5_001(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash-001'
 
 
-class VertexAIGeminiPro1(VertexAI):  # pylint: disable=invalid-name
+class VertexAIGeminiPro1(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.0 Pro model."""
 
   model = 'gemini-1.0-pro'
+
+
+#
+# Anthropic models on Vertex AI.
+#
+
+
+@pg.use_init_args(['model'])
+@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
+class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
+  """Anthropic models on VertexAI."""
+
+  location: Annotated[
+      Literal['us-east5', 'europe-west1'],
+      'GCP location with Anthropic models hosted.'
+  ] = 'us-east5'
+
+  api_version = 'vertex-2023-10-16'
+
+  @property
+  def headers(self):
+    return {
+        'Content-Type': 'application/json; charset=utf-8',
+    }
+
+  @property
+  def api_endpoint(self) -> str:
+    return (
+        f'https://{self.location}-aiplatform.googleapis.com/v1/projects/'
+        f'{self._project}/locations/{self.location}/publishers/anthropic/'
+        f'models/{self.model}:streamRawPredict'
+    )
+
+  def request(
+      self,
+      prompt: lf.Message,
+      sampling_options: lf.LMSamplingOptions
+  ):
+    request = super().request(prompt, sampling_options)
+    request['anthropic_version'] = self.api_version
+    del request['model']
+    return request
+
+
+# pylint: disable=invalid-name
+
+
+class VertexAIClaude3_Opus_20240229(VertexAIAnthropic):
+  """Anthropic's Claude 3 Opus model on VertexAI."""
+  model = 'claude-3-opus@20240229'
+
+
+class VertexAIClaude3_5_Sonnet_20241022(VertexAIAnthropic):
+  """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
+  model = 'claude-3-5-sonnet-v2@20241022'
+
+
+class VertexAIClaude3_5_Sonnet_20240620(VertexAIAnthropic):
+  """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
+  model = 'claude-3-5-sonnet@20240620'
+
+
+class VertexAIClaude3_5_Haiku_20241022(VertexAIAnthropic):
+  """Anthropic's Claude 3.5 Haiku model on VertexAI."""
+  model = 'claude-3-5-haiku@20241022'
+
+# pylint: enable=invalid-name

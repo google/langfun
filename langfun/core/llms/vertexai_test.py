@@ -17,6 +17,8 @@ import os
 import unittest
 from unittest import mock
 
+from google.auth import exceptions
+import langfun.core as lf
 from langfun.core.llms import vertexai
 
 
@@ -46,6 +48,56 @@ class VertexAITest(unittest.TestCase):
     self.assertIsNotNone(model._session)
     del os.environ['VERTEXAI_PROJECT']
     del os.environ['VERTEXAI_LOCATION']
+
+
+class VertexAIAnthropicTest(unittest.TestCase):
+  """Tests for VertexAI Anthropic models."""
+
+  def test_basics(self):
+    with self.assertRaisesRegex(ValueError, 'Please specify `project`'):
+      lm = vertexai.VertexAIClaude3_5_Sonnet_20241022()
+      lm('hi')
+
+    model = vertexai.VertexAIClaude3_5_Sonnet_20241022(project='langfun')
+
+    # NOTE(daiyip): For OSS users, default credentials are not available unless
+    # users have already set up their GCP project. Therefore we ignore the
+    # exception here.
+    try:
+      model._initialize()
+    except exceptions.DefaultCredentialsError:
+      pass
+
+    self.assertEqual(
+        model.api_endpoint,
+        (
+            'https://us-east5-aiplatform.googleapis.com/v1/projects/'
+            'langfun/locations/us-east5/publishers/anthropic/'
+            'models/claude-3-5-sonnet-v2@20241022:streamRawPredict'
+        )
+    )
+    self.assertEqual(
+        model.headers,
+        {
+            'Content-Type': 'application/json; charset=utf-8',
+        },
+    )
+    request = model.request(
+        lf.UserMessage('hi'), lf.LMSamplingOptions(temperature=0.0),
+    )
+    self.assertEqual(
+        request,
+        {
+            'anthropic_version': 'vertex-2023-10-16',
+            'max_tokens': 8192,
+            'messages': [
+                {'content': [{'text': 'hi', 'type': 'text'}], 'role': 'user'}
+            ],
+            'stream': False,
+            'temperature': 0.0,
+            'top_k': 40,
+        },
+    )
 
 
 if __name__ == '__main__':
