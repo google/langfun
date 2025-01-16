@@ -29,22 +29,6 @@ class A(component.Component):
   y: int = component.contextual()
 
 
-class WithContextAccessTest(unittest.TestCase):
-
-  def test_context_access(self):
-    inputs = [A(1), A(2)]
-    with futures.ThreadPoolExecutor() as executor:
-      with component.context(y=3):
-        self.assertEqual(
-            list(
-                executor.map(
-                    concurrent.with_context_access(lambda x: x.y), inputs
-                )
-            ),
-            [3, 3],
-        )
-
-
 class RetryErrorTest(unittest.TestCase):
 
   def test_basics(self):

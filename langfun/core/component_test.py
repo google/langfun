@@ -73,26 +73,7 @@ class ComponentContextTest(unittest.TestCase):
     self.assertEqual(a1.y, 2)
     self.assertEqual(a1.z, -1)
 
-    with lf.context(x=3, y=3, z=3) as parent_override:
-      self.assertEqual(
-          parent_override,
-          dict(
-              x=lf.ContextualOverride(3, cascade=False, override_attrs=False),
-              y=lf.ContextualOverride(3, cascade=False, override_attrs=False),
-              z=lf.ContextualOverride(3, cascade=False, override_attrs=False),
-          ),
-      )
-      self.assertEqual(
-          lf.get_contextual_override('y'),
-          lf.ContextualOverride(3, cascade=False, override_attrs=False),
-      )
-      self.assertEqual(lf.context_value('x'), 3)
-      self.assertIsNone(lf.context_value('f', None))
-      with self.assertRaisesRegex(KeyError, '.* does not exist'):
-        lf.context_value('f')
-
-      self.assertEqual(lf.all_contextual_values(), dict(x=3, y=3, z=3))
-
+    with lf.context(x=3, y=3, z=3):
       # Member attributes take precedence over `lf.context`.
       self.assertEqual(a1.x, 1)
       self.assertEqual(a1.y, 2)
@@ -109,15 +90,7 @@ class ComponentContextTest(unittest.TestCase):
       self.assertEqual(a1.z, 3)
 
       # Test nested contextual override with override_attrs=True (default).
-      with lf.context(y=4, z=4, override_attrs=True) as nested_override:
-        self.assertEqual(
-            nested_override,
-            dict(
-                x=lf.ContextualOverride(3, cascade=False, override_attrs=False),
-                y=lf.ContextualOverride(4, cascade=False, override_attrs=True),
-                z=lf.ContextualOverride(4, cascade=False, override_attrs=True),
-            ),
-        )
+      with lf.context(y=4, z=4, override_attrs=True):
 
         # Member attribute is not overriden as current scope does not override
         # `x``.

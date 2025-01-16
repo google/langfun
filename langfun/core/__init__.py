@@ -75,7 +75,6 @@ from langfun.core.sampling import random_sample
 from langfun.core.concurrent import RetryEntry
 from langfun.core.concurrent import concurrent_execute
 from langfun.core.concurrent import concurrent_map
-from langfun.core.concurrent import with_context_access
 from langfun.core.concurrent import with_retry
 
 # Interface for natural language formattable.

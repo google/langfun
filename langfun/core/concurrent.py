@@ -25,7 +25,6 @@ import threading
 import time
 from typing import Annotated, Any, Callable, Iterable, Iterator, Literal, Sequence, Tuple, Type, Union
 
-from langfun.core import component
 import pyglove as pg
 
 
@@ -37,18 +36,6 @@ try:
 except ImportError:
   progress_bar = 'console'
   tqdm = None
-
-
-def with_context_access(func: Callable[..., Any]) -> Callable[..., Any]:
-  """Derives a user function with the access to the current context."""
-  with component.context() as current_context:
-    pass
-
-  def _func(*args, **kwargs) -> Any:
-    with component.context(**current_context):
-      return func(*args, **kwargs)
-
-  return _func
 
 
 class RetryError(RuntimeError):
@@ -249,7 +236,8 @@ def concurrent_execute(
   try:
     executed_jobs = list(
         executor.map(
-            lambda job: job(), [with_context_access(job) for job in jobs]
+            lambda job: job(),
+            [pg.with_contextual_override(job) for job in jobs]
         )
     )
     for job in executed_jobs:
@@ -736,9 +724,7 @@ def concurrent_map(
         retry_interval=retry_interval,
         exponential_backoff=exponential_backoff,
     )
-    future = executor.submit(
-        with_context_access(job),
-    )
+    future = executor.submit(pg.with_contextual_override(job))
     pending_futures.append(future)
     future_to_job[future] = job
     total += 1
