@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal
 import langfun.core as lf
 from langfun.core.llms import anthropic
 from langfun.core.llms import gemini
+from langfun.core.llms import openai_compatible
 from langfun.core.llms import rest
 import pyglove as pg
 
@@ -280,4 +281,281 @@ class VertexAIClaude3_5_Haiku_20241022(VertexAIAnthropic):
   """Anthropic's Claude 3.5 Haiku model on VertexAI."""
   model = 'claude-3-5-haiku@20241022'
 
+# pylint: enable=invalid-name
+
+#
+# Llama models on Vertex AI.
+# pylint: disable=line-too-long
+# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing?_gl=1*ukuk6u*_ga*MjEzMjc4NjM2My4xNzMzODg4OTg3*_ga_WH2QY8WWF5*MTczNzEzNDU1Mi4xMjQuMS4xNzM3MTM0NzczLjU5LjAuMA..#meta-models
+# pylint: enable=line-too-long
+
+LLAMA_MODELS = {
+    'llama-3.2-90b-vision-instruct-maas': pg.Dict(
+        latest_update='2024-09-25',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # Free during preview.
+        cost_per_1m_input_tokens=None,
+        cost_per_1m_output_tokens=None,
+    ),
+    'llama-3.1-405b-instruct-maas': pg.Dict(
+        latest_update='2024-09-25',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # GA.
+        cost_per_1m_input_tokens=5,
+        cost_per_1m_output_tokens=16,
+    ),
+    'llama-3.1-70b-instruct-maas': pg.Dict(
+        latest_update='2024-09-25',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # Free during preview.
+        cost_per_1m_input_tokens=None,
+        cost_per_1m_output_tokens=None,
+    ),
+    'llama-3.1-8b-instruct-maas': pg.Dict(
+        latest_update='2024-09-25',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # Free during preview.
+        cost_per_1m_input_tokens=None,
+        cost_per_1m_output_tokens=None,
+    )
+}
+
+
+@pg.use_init_args(['model'])
+@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
+class VertexAILlama(VertexAI, openai_compatible.OpenAICompatible):
+  """Llama models on VertexAI."""
+
+  model: pg.typing.Annotated[
+      pg.typing.Enum(pg.MISSING_VALUE, list(LLAMA_MODELS.keys())),
+      'Llama model ID.',
+  ]
+
+  locations: Annotated[
+      Literal['us-central1'],
+      (
+          'GCP locations with Llama models hosted. '
+          'See https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama#regions-quotas'
+      )
+  ] = 'us-central1'
+
+  @property
+  def api_endpoint(self) -> str:
+    assert self._api_initialized
+    return (
+        f'https://{self._location}-aiplatform.googleapis.com/v1beta1/projects/'
+        f'{self._project}/locations/{self._location}/endpoints/'
+        f'openapi/chat/completions'
+    )
+
+  def request(
+      self,
+      prompt: lf.Message,
+      sampling_options: lf.LMSamplingOptions
+  ):
+    request = super().request(prompt, sampling_options)
+    request['model'] = f'meta/{self.model}'
+    return request
+
+  @property
+  def max_concurrency(self) -> int:
+    rpm = LLAMA_MODELS[self.model].get('rpm', 0)
+    tpm = LLAMA_MODELS[self.model].get('tpm', 0)
+    return self.rate_to_max_concurrency(
+        requests_per_min=rpm, tokens_per_min=tpm
+    )
+
+  def estimate_cost(
+      self,
+      num_input_tokens: int,
+      num_output_tokens: int
+  ) -> float | None:
+    """Estimate the cost based on usage."""
+    cost_per_1m_input_tokens = LLAMA_MODELS[self.model].get(
+        'cost_per_1m_input_tokens', None
+    )
+    cost_per_1m_output_tokens = LLAMA_MODELS[self.model].get(
+        'cost_per_1m_output_tokens', None
+    )
+    if cost_per_1m_output_tokens is None or cost_per_1m_input_tokens is None:
+      return None
+    return (
+        cost_per_1m_input_tokens * num_input_tokens
+        + cost_per_1m_output_tokens * num_output_tokens
+    ) / 1000_000
+
+
+# pylint: disable=invalid-name
+class VertexAILlama3_2_90B(VertexAILlama):
+  """Llama 3.2 90B vision instruct model on VertexAI."""
+
+  model = 'llama-3.2-90b-vision-instruct-maas'
+
+
+class VertexAILlama3_1_405B(VertexAILlama):
+  """Llama 3.1 405B vision instruct model on VertexAI."""
+
+  model = 'llama-3.1-405b-instruct-maas'
+
+
+class VertexAILlama3_1_70B(VertexAILlama):
+  """Llama 3.1 70B vision instruct model on VertexAI."""
+
+  model = 'llama-3.1-70b-instruct-maas'
+
+
+class VertexAILlama3_1_8B(VertexAILlama):
+  """Llama 3.1 8B vision instruct model on VertexAI."""
+
+  model = 'llama-3.1-8b-instruct-maas'
+# pylint: enable=invalid-name
+
+#
+# Mistral models on Vertex AI.
+# pylint: disable=line-too-long
+# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing?_gl=1*ukuk6u*_ga*MjEzMjc4NjM2My4xNzMzODg4OTg3*_ga_WH2QY8WWF5*MTczNzEzNDU1Mi4xMjQuMS4xNzM3MTM0NzczLjU5LjAuMA..#mistral-models
+# pylint: enable=line-too-long
+
+
+MISTRAL_MODELS = {
+    'mistral-large-2411': pg.Dict(
+        latest_update='2024-11-21',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # GA.
+        cost_per_1m_input_tokens=2,
+        cost_per_1m_output_tokens=6,
+    ),
+    'mistral-large@2407': pg.Dict(
+        latest_update='2024-07-24',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # GA.
+        cost_per_1m_input_tokens=2,
+        cost_per_1m_output_tokens=6,
+    ),
+    'mistral-nemo@2407': pg.Dict(
+        latest_update='2024-07-24',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # GA.
+        cost_per_1m_input_tokens=0.15,
+        cost_per_1m_output_tokens=0.15,
+    ),
+    'codestral-2501': pg.Dict(
+        latest_update='2025-01-13',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # GA.
+        cost_per_1m_input_tokens=0.3,
+        cost_per_1m_output_tokens=0.9,
+    ),
+    'codestral@2405': pg.Dict(
+        latest_update='2024-05-29',
+        in_service=True,
+        rpm=0,
+        tpm=0,
+        # GA.
+        cost_per_1m_input_tokens=0.2,
+        cost_per_1m_output_tokens=0.6,
+    ),
+}
+
+
+@pg.use_init_args(['model'])
+@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
+class VertexAIMistral(VertexAI, openai_compatible.OpenAICompatible):
+  """Mistral AI models on VertexAI."""
+
+  model: pg.typing.Annotated[
+      pg.typing.Enum(pg.MISSING_VALUE, list(MISTRAL_MODELS.keys())),
+      'Mistral model ID.',
+  ]
+
+  locations: Annotated[
+      Literal['us-central1', 'europe-west4'],
+      (
+          'GCP locations with Mistral models hosted. '
+          'See https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/mistral#regions-quotas'
+      )
+  ] = 'us-central1'
+
+  @property
+  def api_endpoint(self) -> str:
+    assert self._api_initialized
+    return (
+        f'https://{self._location}-aiplatform.googleapis.com/v1/projects/'
+        f'{self._project}/locations/{self._location}/publishers/mistralai/'
+        f'models/{self.model}:rawPredict'
+    )
+
+  @property
+  def max_concurrency(self) -> int:
+    rpm = MISTRAL_MODELS[self.model].get('rpm', 0)
+    tpm = MISTRAL_MODELS[self.model].get('tpm', 0)
+    return self.rate_to_max_concurrency(
+        requests_per_min=rpm, tokens_per_min=tpm
+    )
+
+  def estimate_cost(
+      self,
+      num_input_tokens: int,
+      num_output_tokens: int
+  ) -> float | None:
+    """Estimate the cost based on usage."""
+    cost_per_1m_input_tokens = MISTRAL_MODELS[self.model].get(
+        'cost_per_1m_input_tokens', None
+    )
+    cost_per_1m_output_tokens = MISTRAL_MODELS[self.model].get(
+        'cost_per_1m_output_tokens', None
+    )
+    if cost_per_1m_output_tokens is None or cost_per_1m_input_tokens is None:
+      return None
+    return (
+        cost_per_1m_input_tokens * num_input_tokens
+        + cost_per_1m_output_tokens * num_output_tokens
+    ) / 1000_000
+
+
+# pylint: disable=invalid-name
+class VertexAIMistralLarge_20241121(VertexAIMistral):
+  """Mistral Large model on VertexAI released on 2024/11/21."""
+
+  model = 'mistral-large-2411'
+
+
+class VertexAIMistralLarge_20240724(VertexAIMistral):
+  """Mistral Large model on VertexAI released on 2024/07/24."""
+
+  model = 'mistral-large@2407'
+
+
+class VertexAIMistralNemo_20240724(VertexAIMistral):
+  """Mistral Nemo model on VertexAI released on 2024/07/24."""
+
+  model = 'mistral-nemo@2407'
+
+
+class VertexAICodestral_20250113(VertexAIMistral):
+  """Mistral Nemo model on VertexAI released on 2024/07/24."""
+
+  model = 'codestral-2501'
+
+
+class VertexAICodestral_20240529(VertexAIMistral):
+  """Mistral Nemo model on VertexAI released on 2024/05/29."""
+
+  model = 'codestral@2405'
 # pylint: enable=invalid-name

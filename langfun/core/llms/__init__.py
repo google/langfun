@@ -27,11 +27,15 @@ from langfun.core.llms.fake import StaticSequence
 # Compositional models.
 from langfun.core.llms.compositional import RandomChoice
 
-# REST-based models.
+# Base models by request/response protocol.
 from langfun.core.llms.rest import REST
+from langfun.core.llms.openai_compatible import OpenAICompatible
+from langfun.core.llms.gemini import Gemini
+from langfun.core.llms.anthropic import Anthropic
 
-# VertexAI-based models.
+# Base models by serving platforms.
 from langfun.core.llms.vertexai import VertexAI
+from langfun.core.llms.groq import Groq
 
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
@@ -59,9 +63,6 @@ from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_002
 from langfun.core.llms.vertexai import VertexAIGeminiFlash1_5_001
 from langfun.core.llms.vertexai import VertexAIGeminiPro1
-
-# Base for OpenAI-compatible models.
-from langfun.core.llms.openai_compatible import OpenAICompatible
 
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
@@ -119,7 +120,6 @@ from langfun.core.llms.openai import Gpt3Ada
 
 # Anthropic models.
 
-from langfun.core.llms.anthropic import Anthropic
 from langfun.core.llms.anthropic import Claude35Sonnet
 from langfun.core.llms.anthropic import Claude35Sonnet20241022
 from langfun.core.llms.anthropic import Claude35Sonnet20240620
@@ -135,7 +135,17 @@ from langfun.core.llms.vertexai import VertexAIClaude3_Opus_20240229
 
 # Misc open source models.
 
-from langfun.core.llms.groq import Groq
+# Gemma models.
+from langfun.core.llms.groq import GroqGemma2_9B_IT
+from langfun.core.llms.groq import GroqGemma_7B_IT
+
+# Llama models.
+from langfun.core.llms.vertexai import VertexAILlama
+from langfun.core.llms.vertexai import VertexAILlama3_2_90B
+from langfun.core.llms.vertexai import VertexAILlama3_1_405B
+from langfun.core.llms.vertexai import VertexAILlama3_1_70B
+from langfun.core.llms.vertexai import VertexAILlama3_1_8B
+
 from langfun.core.llms.groq import GroqLlama3_2_3B
 from langfun.core.llms.groq import GroqLlama3_2_1B
 from langfun.core.llms.groq import GroqLlama3_1_70B
@@ -143,18 +153,28 @@ from langfun.core.llms.groq import GroqLlama3_1_8B
 from langfun.core.llms.groq import GroqLlama3_70B
 from langfun.core.llms.groq import GroqLlama3_8B
 from langfun.core.llms.groq import GroqLlama2_70B
+
+# Mistral models.
+from langfun.core.llms.vertexai import VertexAIMistral
+from langfun.core.llms.vertexai import VertexAIMistralLarge_20241121
+from langfun.core.llms.vertexai import VertexAIMistralLarge_20240724
+from langfun.core.llms.vertexai import VertexAIMistralNemo_20240724
+from langfun.core.llms.vertexai import VertexAICodestral_20250113
+from langfun.core.llms.vertexai import VertexAICodestral_20240529
+
 from langfun.core.llms.groq import GroqMistral_8x7B
-from langfun.core.llms.groq import GroqGemma2_9B_IT
-from langfun.core.llms.groq import GroqGemma_7B_IT
+
+# DeepSeek models.
+from langfun.core.llms.deepseek import DeepSeek
+from langfun.core.llms.deepseek import DeepSeekChat
+
+# Whisper models.
 from langfun.core.llms.groq import GroqWhisper_Large_v3
 from langfun.core.llms.groq import GroqWhisper_Large_v3Turbo
 
 # LLaMA C++ models.
 from langfun.core.llms.llama_cpp import LlamaCppRemote
 
-# DeepSeek models.
-from langfun.core.llms.deepseek import DeepSeek
-from langfun.core.llms.deepseek import DeepSeekChat
 
 # Placeholder for Google-internal imports.
 
