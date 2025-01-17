@@ -380,7 +380,7 @@ class Gemini(rest.REST):
     return (
         cost_per_1m_input_tokens * num_input_tokens
         + cost_per_1m_output_tokens * num_output_tokens
-    ) / 1000_1000
+    ) / 1000_000
 
   @property
   def model_id(self) -> str:
