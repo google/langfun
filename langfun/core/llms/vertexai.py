@@ -109,7 +109,7 @@ class VertexAI(rest.REST):
     credentials = self.credentials
     if credentials is None:
       # Use default credentials.
-      credentials = google_auth.default(
+      credentials, _ = google_auth.default(
           scopes=['https://www.googleapis.com/auth/cloud-platform']
       )
     self._credentials = credentials
