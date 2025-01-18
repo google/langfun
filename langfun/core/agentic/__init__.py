@@ -18,6 +18,7 @@
 # pylint: disable=g-import-not-at-top
 
 from langfun.core.agentic.action import Action
+from langfun.core.agentic.action import ActionSampling
 from langfun.core.agentic.action import ActionInvocation
 from langfun.core.agentic.action import Session
 
