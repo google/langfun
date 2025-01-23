@@ -516,7 +516,9 @@ class Evaluation(experiment_lib.Experiment):
                       target='example-view',
                       css_classes=['example-link'],
                   )
-                  for dp in metric_value.data_points
+                  for dp in sorted(
+                      metric_value.data_points, key=lambda dp: dp.example_id
+                  )
               ]
           )
       )
