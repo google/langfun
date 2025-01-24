@@ -88,6 +88,9 @@ class REST(lf.LanguageModel):
           timeout=self.timeout,
       )
       return self._parse_response(response)
+    except (requests.exceptions.ReadTimeout,
+            requests.exceptions.ConnectTimeout) as e:
+      raise lf.TemporaryLMError(str(e)) from e
     except ConnectionError as e:
       raise lf.LMError(str(e)) from e
 
