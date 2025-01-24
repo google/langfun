@@ -38,7 +38,7 @@ def sample_inputs(num_examples: int = 1):
 
 
 class MyEvaluation(Evaluation):
-  NAME = 'my_eval'
+  ID = 'my_eval'
   RUN_ARGS = dict(
       runner='test'
   )
@@ -394,7 +394,7 @@ class RunnerTest(unittest.TestCase):
   def test_basic(self):
 
     class TestRunner(Runner):
-      NAME = 'test'
+      ID = 'test'
 
       def run(self):
         pass
@@ -420,13 +420,6 @@ class RunnerTest(unittest.TestCase):
     MyEvaluation(replica_id=0).run_preconfigured(
         root_dir=root_dir, id='20241101_1'
     )
-
-    with self.assertRaisesRegex(
-        ValueError, 'Runner class must define a NAME constant'
-    ):
-      class AnotherRunner(Runner):  # pylint: disable=unused-variable
-        def run(self):
-          pass
 
 
 if __name__ == '__main__':

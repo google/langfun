@@ -20,7 +20,7 @@ import hashlib
 import inspect
 import os
 import re
-from typing import Annotated, Any, Callable, Literal, Optional
+from typing import Annotated, Any, Callable, ClassVar, Literal, Optional, Type
 
 import langfun.core as lf
 from langfun.core.eval.v2 import example as example_lib
@@ -111,21 +111,22 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
 
   # Experiment Registration and Lookup
 
-  Experiments can be registered by setting a class-level NAME attribute.
-  Users can then retrieve a registered experiment using Experiment.find(name).
+  Experiments can be registered by setting a class-level ID attribute
+  (e.g. a path-like string). Users can then retrieve a registered experiment
+  using `Experiment.find(id_or_regex)`.
 
   For example:
 
   ```
   class MyEval(lf.eval.v2.Evaluation):
-    NAME = 'my_eval'
+    ID = 'my_eval'
 
   class MyEvalVariation1(MyEval):
-    NAME = 'my_eval/gemini'
+    ID = 'my_eval/gemini'
     lm = pg.oneof([lf.llms.GeminiPro(), lf.llms.GeminiFlash(), ...])
 
   class MyEvalVariation2(MyEval):
-    NAME = 'my_eval/openai'
+    ID = 'my_eval/openai'
     lm = pg.oneof([lf.llms.Gpt4o(), lf.llms.Gpt4Turbo(), ...])
 
   # Run all experiments with "gemini" in their name.
@@ -179,14 +180,14 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
   # Class-level functionalities.
   #
 
-  # An global unique str as a well-known name for an experiment,
-  # which can be retrieved by `Experiment.find(name)`. If None, the experiment
-  # does not have a well-known name, thus users need to create the experiment
-  # by constructing it explicitly.
-  NAME = None
+  # An global unique str as a well-known ID for an experiment,
+  # which can be retrieved by `Experiment.find(id_or_regex)`.
+  # If None, the experiment does not have a well-known ID, thus users need to
+  # create the experiment by constructing it explicitly.
+  ID: ClassVar[str | None] = None
 
-  # Global registry for experiment classes with GLOBAL_ID.
-  _NAME_TO_CLASS = {}
+  # Global registry for experiment classes with ID.
+  _ID_TO_CLASS: ClassVar[dict[str, Type['Experiment']]] = {}
 
   def __init_subclass__(cls):
     super().__init_subclass__()
@@ -194,15 +195,15 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     if inspect.isabstract(cls):
       return
 
-    if cls.NAME is not None:
-      cls._NAME_TO_CLASS[cls.NAME] = cls
+    if cls.ID is not None:
+      cls._ID_TO_CLASS[cls.ID] = cls
 
   @classmethod
-  def find(cls, pattern: str) -> 'Experiment':
+  def find(cls, id_or_regex: str) -> 'Experiment':
     """Finds an experiment by global name.
 
     Args:
-      pattern: A regular expression to match the global names of registered 
+      id_or_regex: A regular expression to match the global names of registered 
         experiments.
 
     Returns:
@@ -210,11 +211,11 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         `Suite` of matched experiments will be returned. If no experiment is
         found, an empty `Suite` will be returned.
     """
-    if pattern in cls._NAME_TO_CLASS:
-      return cls._NAME_TO_CLASS[pattern]()
-    regex = re.compile(pattern)
+    if id_or_regex in cls._ID_TO_CLASS:
+      return cls._ID_TO_CLASS[id_or_regex]()
+    regex = re.compile(id_or_regex)
     selected = []
-    for cls_name, exp_cls in cls._NAME_TO_CLASS.items():
+    for cls_name, exp_cls in cls._ID_TO_CLASS.items():
       if regex.match(cls_name):
         selected.append(exp_cls())
     return selected[0] if len(selected) == 1 else Suite(selected)
@@ -420,8 +421,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         create a new run based on the current time if no previous run exists.
         If `latest`, it will use the latest run ID under the root directory.
         If `new`, it will create a new run ID based on the current time.
-      runner: The runner to use. If None, it will use the default runner for
-        the experiment.
+      runner: The ID of the runner to use. If None, it will use the parallel
+        runner by default.
       warm_start_from: The ID of the previous run to warm start from. If None,
         it will continue the experiment identified by `id` from where it left
         off. Otherwise, it will create a new experiment run by warming start.
@@ -941,8 +942,9 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
 class Runner(pg.Object):
   """Interface for experiment runner."""
 
-  # Class-level variable for registering the runner.
-  NAME = None
+  # The ID for the runner, which will be referred by the `runner` argument of
+  # `Experiment.run()` method.
+  ID: ClassVar[str]
 
   _REGISTRY = {}
 
@@ -960,12 +962,7 @@ class Runner(pg.Object):
     super().__init_subclass__()
     if inspect.isabstract(cls):
       return
-    if cls.NAME is None:
-      raise ValueError(
-          'Runner class must define a NAME constant. '
-          'Please use the same constant in the runner class.'
-      )
-    cls._REGISTRY[cls.NAME] = cls
+    cls._REGISTRY[cls.ID] = cls
 
   @abc.abstractmethod
   def run(self) -> None:
