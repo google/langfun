@@ -67,6 +67,7 @@ from langfun.core.llms.vertexai import VertexAIGeminiPro1
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
 
+from langfun.core.llms.openai import GptO3Mini
 from langfun.core.llms.openai import GptO1
 from langfun.core.llms.openai import GptO1Preview
 from langfun.core.llms.openai import GptO1Preview_20240912
@@ -167,6 +168,7 @@ from langfun.core.llms.groq import GroqMistral_8x7B
 # DeepSeek models.
 from langfun.core.llms.deepseek import DeepSeek
 from langfun.core.llms.deepseek import DeepSeekChat
+from langfun.core.llms.deepseek import DeepSeekReasoner
 
 # Whisper models.
 from langfun.core.llms.groq import GroqWhisper_Large_v3

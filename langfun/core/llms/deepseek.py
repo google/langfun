@@ -25,6 +25,13 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # TODO(yifenglu): The RPM and TPM are arbitrary numbers. Update them once DeepSeek provides concrete guidelines.
     # DeepSeek doesn't control the rate limit at the moment: https://api-docs.deepseek.com/quick_start/rate_limit
     # The cost is based on: https://api-docs.deepseek.com/quick_start/pricing
+    'deepseek-reasoner': pg.Dict(
+        in_service=True,
+        rpm=100,
+        tpm=1000000,
+        cost_per_1k_input_tokens=0.00055,
+        cost_per_1k_output_tokens=0.00219,
+    ),
     'deepseek-chat': pg.Dict(
         in_service=True,
         rpm=100,
@@ -105,6 +112,16 @@ class DeepSeek(openai_compatible.OpenAICompatible):
   @classmethod
   def dir(cls):
     return [k for k, v in SUPPORTED_MODELS_AND_SETTINGS.items() if v.in_service]
+
+
+class DeepSeekReasoner(DeepSeek):
+  """DeepSeek Reasoner model.
+
+  Currently it is powered by DeepSeek-R1 model, 64k input context, 8k max
+  output, 32k max CoT output.
+  """
+
+  model = 'deepseek-reasoner'
 
 
 class DeepSeekChat(DeepSeek):

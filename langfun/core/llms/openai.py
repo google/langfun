@@ -31,6 +31,20 @@ SUPPORTED_MODELS_AND_SETTINGS = {
     # o1 (preview) models.
     # Pricing in US dollars, from https://openai.com/api/pricing/
     # as of 2024-10-10.
+    'o3-mini-2025-01-31': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.0011,
+        cost_per_1k_output_tokens=0.0044,
+    ),
+    'o3-mini': pg.Dict(
+        in_service=True,
+        rpm=10000,
+        tpm=5000000,
+        cost_per_1k_input_tokens=0.0011,
+        cost_per_1k_output_tokens=0.0044,
+    ),
     'o1': pg.Dict(
         in_service=True,
         rpm=10000,
@@ -408,6 +422,14 @@ class OpenAI(openai_compatible.OpenAICompatible):
     if options.logprobs and self.model.startswith(('o1-', 'o3-')):
       raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
     return super()._request_args(options)
+
+
+class GptO3Mini(OpenAI):
+  """GPT-O3-mini."""
+
+  model = 'o3-mini'
+  multimodal = True
+  timeout = None
 
 
 class GptO1(OpenAI):
