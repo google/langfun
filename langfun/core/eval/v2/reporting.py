@@ -59,7 +59,6 @@ class HtmlReporter(experiment_lib.Plugin):
       runner: Runner,
       root: Experiment
   ) -> None:
-    self._maybe_update_summary(runner)
     self._last_experiment_report_time = {leaf.id: 0 for leaf in root.leaf_nodes}
     self._stop_update = False
     self._stop_update_experiment_ids = set()
