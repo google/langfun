@@ -13,7 +13,6 @@
 # limitations under the License.
 """Vertex AI generative models."""
 
-import functools
 import os
 from typing import Annotated, Any, Literal
 
@@ -119,14 +118,10 @@ class VertexAI(rest.REST):
     """Returns a string to identify the model."""
     return f'VertexAI({self.model})'
 
-  @functools.cached_property
-  def _session(self):
-    assert self._api_initialized
+  def _create_session(self):
     assert self._credentials is not None
     assert auth_requests is not None
-    s = auth_requests.AuthorizedSession(self._credentials)
-    s.headers.update(self.headers or {})
-    return s
+    return auth_requests.AuthorizedSession(self._credentials)
 
 
 #

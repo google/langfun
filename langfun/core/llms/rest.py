@@ -17,6 +17,7 @@ import functools
 from typing import Annotated, Any, Callable
 
 import langfun.core as lf
+# Placeholder for Google-internal internet access import.
 import requests
 
 
@@ -65,9 +66,14 @@ class REST(lf.LanguageModel):
   @functools.cached_property
   def _session(self) -> requests.Session:
     assert self._api_initialized
-    s = requests.Session()
+    s = self._create_session()
+    # Placeholder for Google-internal session adapter.
     s.headers.update(self.headers or {})
     return s
+
+  def _create_session(self) -> requests.Session:
+    """Creates a new session."""
+    return requests.Session()
 
   def _on_bound(self):
     super()._on_bound()
