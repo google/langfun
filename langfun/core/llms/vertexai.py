@@ -144,6 +144,31 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
     )
 
 
+class VertexAIGemini2Flash(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 model launched on 02/05/2025."""
+
+  api_version = 'v1beta'
+  model = 'gemini-2.0-flash-001'
+  location = 'us-central1'
+
+
+class VertexAIGemini2ProExp_20250205(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 Pro model launched on 02/05/2025."""
+
+  api_version = 'v1beta'
+  model = 'gemini-2.0-pro-exp-02-05'
+  location = 'us-central1'
+
+
+class VertexAIGemini2FlashThinkingExp_20250121(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 Thinking model launched on 01/21/2025."""
+
+  api_version = 'v1beta'
+  model = 'gemini-2.0-flash-thinking-exp-01-21'
+  timeout = None
+  location = 'us-central1'
+
+
 class VertexAIGeminiFlash2_0ThinkingExp_20241219(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini Flash 2.0 Thinking model launched on 12/19/2024."""
 

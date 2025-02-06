@@ -39,6 +39,9 @@ from langfun.core.llms.groq import Groq
 
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
+from langfun.core.llms.google_genai import Gemini2Flash
+from langfun.core.llms.google_genai import Gemini2ProExp_20250205
+from langfun.core.llms.google_genai import Gemini2FlashThinkingExp_20250121
 from langfun.core.llms.google_genai import GeminiFlash2_0ThinkingExp_20241219
 from langfun.core.llms.google_genai import GeminiFlash2_0Exp
 from langfun.core.llms.google_genai import GeminiExp_20241206
@@ -52,6 +55,9 @@ from langfun.core.llms.google_genai import GeminiFlash1_5_001
 from langfun.core.llms.google_genai import GeminiPro1
 
 from langfun.core.llms.vertexai import VertexAIGemini
+from langfun.core.llms.vertexai import VertexAIGemini2Flash
+from langfun.core.llms.vertexai import VertexAIGemini2ProExp_20250205
+from langfun.core.llms.vertexai import VertexAIGemini2FlashThinkingExp_20250121
 from langfun.core.llms.vertexai import VertexAIGeminiFlash2_0ThinkingExp_20241219
 from langfun.core.llms.vertexai import VertexAIGeminiFlash2_0Exp
 from langfun.core.llms.vertexai import VertexAIGeminiExp_20241206

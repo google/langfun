@@ -63,10 +63,32 @@ class GenAI(gemini.Gemini):
     )
 
 
+class Gemini2Flash(GenAI):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 model launched on 02/05/2025."""
+
+  api_version = 'v1beta'
+  model = 'gemini-2.0-flash'
+
+
+class Gemini2ProExp_20250205(GenAI):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 Pro model launched on 02/05/2025."""
+
+  api_version = 'v1beta'
+  model = 'gemini-2.0-pro-exp-02-05'
+
+
+class Gemini2FlashThinkingExp_20250121(GenAI):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 Thinking model launched on 01/21/2025."""
+
+  api_version = 'v1beta'
+  model = 'gemini-2.0-flash-thinking-exp-01-21'
+  timeout = None
+
+
 class GeminiFlash2_0ThinkingExp_20241219(GenAI):  # pylint: disable=invalid-name
   """Gemini Flash 2.0 Thinking model launched on 12/19/2024."""
 
-  api_version = 'v1alpha'
+  api_version = 'v1beta'
   model = 'gemini-2.0-flash-thinking-exp-1219'
   timeout = None
 
