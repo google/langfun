@@ -45,7 +45,7 @@ class VertexAITest(unittest.TestCase):
     self.assertTrue(model.model_id.startswith('VertexAI('))
     self.assertIn('us-central1', model.api_endpoint)
     self.assertTrue(model._api_initialized)
-    self.assertIsNotNone(model._session)
+    self.assertIsNotNone(model.session())
     del os.environ['VERTEXAI_PROJECT']
     del os.environ['VERTEXAI_LOCATION']
 

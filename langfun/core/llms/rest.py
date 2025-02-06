@@ -63,15 +63,14 @@ class REST(lf.LanguageModel):
   def _initialize(self) -> None:
     """Initializes the API. Subclasses can override."""
 
-  @functools.cached_property
-  def _session(self) -> requests.Session:
+  def session(self) -> requests.Session:
     assert self._api_initialized
-    s = self._create_session()
+    s = self._session()
     # Placeholder for Google-internal session adapter.
     s.headers.update(self.headers or {})
     return s
 
-  def _create_session(self) -> requests.Session:
+  def _session(self) -> requests.Session:
     """Creates a new session."""
     return requests.Session()
 
@@ -88,12 +87,14 @@ class REST(lf.LanguageModel):
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
     try:
-      response = self._session.post(
-          self.api_endpoint,
-          json=self.request(prompt, self.sampling_options),
-          timeout=self.timeout,
-      )
-      return self._parse_response(response)
+      with self.session() as session:
+        return self._parse_response(
+            session.post(
+                self.api_endpoint,
+                json=self.request(prompt, self.sampling_options),
+                timeout=self.timeout,
+            )
+        )
     except (requests.exceptions.ReadTimeout,
             requests.exceptions.ConnectTimeout) as e:
       raise lf.TemporaryLMError(str(e)) from e

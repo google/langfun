@@ -118,7 +118,7 @@ class VertexAI(rest.REST):
     """Returns a string to identify the model."""
     return f'VertexAI({self.model})'
 
-  def _create_session(self):
+  def _session(self):
     assert self._credentials is not None
     assert auth_requests is not None
     return auth_requests.AuthorizedSession(self._credentials)
