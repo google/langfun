@@ -17,8 +17,9 @@ import base64
 import functools
 from typing import Annotated, Any, Iterable, Type, Union
 import langfun.core as lf
+# Placeholder for Google-internal internet access import.
 import pyglove as pg
-import requests
+import requests   # pylint: disable=unused-import
 
 
 try:
@@ -177,10 +178,7 @@ class Mime(lf.Modality):
   def download(cls, uri: str) -> bytes | str:
     """Downloads the content of the given URI."""
     if uri.lower().startswith(('http:', 'https:', 'ftp:')):
-      return requests.get(
-          uri,
-          headers={'User-Agent': 'Mozilla/5.0'},
-      ).content
+      return requests.get(uri, headers={'User-Agent': 'Mozilla/5.0'}).content
     else:
       content = pg.io.readfile(uri, mode='rb')
       assert content is not None

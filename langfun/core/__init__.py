@@ -121,8 +121,6 @@ from langfun.core import console
 # Utility for event logging.
 from langfun.core import logging
 
-# Import internal modules.
-
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order
