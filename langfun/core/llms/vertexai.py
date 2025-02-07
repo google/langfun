@@ -198,37 +198,43 @@ class VertexAIGeminiExp_20241114(VertexAIGemini):  # pylint: disable=invalid-nam
 class VertexAIGeminiPro1_5(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
-  model = 'gemini-1.5-pro-latest'
+  model = 'gemini-1.5-pro-002'
+  location = 'us-central1'
 
 
 class VertexAIGeminiPro1_5_002(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-002'
+  location = 'us-central1'
 
 
 class VertexAIGeminiPro1_5_001(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Pro model."""
 
   model = 'gemini-1.5-pro-001'
+  location = 'us-central1'
 
 
 class VertexAIGeminiFlash1_5(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash'
+  location = 'us-central1'
 
 
 class VertexAIGeminiFlash1_5_002(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash-002'
+  location = 'us-central1'
 
 
 class VertexAIGeminiFlash1_5_001(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 1.5 Flash model."""
 
   model = 'gemini-1.5-flash-001'
+  location = 'us-central1'
 
 
 class VertexAIGeminiPro1(VertexAIGemini):  # pylint: disable=invalid-name
