@@ -1081,9 +1081,12 @@ class TrackQueriesTest(unittest.TestCase):
     with querying.track_queries() as queries:
       querying.query('foo', lm=lm)
       with querying.track_queries() as child_queries:
-        querying.query('give me an activity', Activity, lm=lm)
+        querying.query('give me an activity', Activity, lm=lm, examples=[
+            mapping.MappingExample(input='2 + 2', schema=int, output=4)
+        ])
 
     self.assertEqual(len(queries), 2)
+    self.assertEqual(queries[0].lm_response, 'bar')
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
     self.assertIsNone(queries[0].schema)
     self.assertEqual(queries[0].output, 'bar')
@@ -1091,7 +1094,11 @@ class TrackQueriesTest(unittest.TestCase):
 
     self.assertTrue(pg.eq(queries[1].input, lf.Template('give me an activity')))
     self.assertEqual(queries[1].schema.spec.cls, Activity)
+    self.assertIn('2 + 2', queries[1].lm_request.text)
     self.assertTrue(pg.eq(queries[1].output, Activity(description='hi')))
+    self.assertTrue(pg.eq(queries[1].examples, [
+        mapping.MappingExample(input='2 + 2', schema=int, output=4)
+    ]))
     self.assertIs(queries[1].lm, lm)
     self.assertGreater(queries[0].elapse, 0)
     self.assertGreater(queries[0].usage_summary.total.total_tokens, 0)

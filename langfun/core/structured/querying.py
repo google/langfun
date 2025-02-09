@@ -579,7 +579,7 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
 
   @functools.cached_property
   def lm_request(self) -> lf.Message:
-    return query_prompt(self.input, self.schema)
+    return query_prompt(self.input, self.schema, examples=self.examples or None)
 
   @functools.cached_property
   def output(self) -> Any:
