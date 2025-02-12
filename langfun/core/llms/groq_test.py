@@ -17,12 +17,13 @@ import langfun.core as lf
 from langfun.core.llms import groq
 
 
-class AuthropicTest(unittest.TestCase):
+class GroqTest(unittest.TestCase):
 
   def test_basics(self):
     self.assertEqual(groq.GroqMistral_8x7B().model_id, 'mixtral-8x7b-32768')
-    self.assertEqual(groq.GroqMistral_8x7B().max_concurrency, 16)
-    self.assertEqual(groq.GroqMistral_8x7B().estimate_cost(100, 100), 4.8e-5)
+    self.assertEqual(
+        groq.GroqMistral_8x7B().resource_id, 'groq://mixtral-8x7b-32768'
+    )
 
   def test_request_args(self):
     args = groq.GroqMistral_8x7B()._request_args(
@@ -59,6 +60,11 @@ class AuthropicTest(unittest.TestCase):
     )
     del os.environ['GROQ_API_KEY']
 
+  def test_lm_get(self):
+    self.assertIsInstance(
+        lf.LanguageModel.get('groq://gemma2-9b-it'),
+        groq.Groq,
+    )
 
 if __name__ == '__main__':
   unittest.main()

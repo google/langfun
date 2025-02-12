@@ -14,6 +14,8 @@
 """Language models from Anthropic."""
 
 import base64
+import datetime
+import functools
 import os
 from typing import Annotated, Any
 
@@ -23,107 +25,388 @@ from langfun.core.llms import rest
 import pyglove as pg
 
 
-SUPPORTED_MODELS_AND_SETTINGS = {
-    # See https://docs.anthropic.com/claude/docs/models-overview
-    # Rate limits from https://docs.anthropic.com/claude/reference/rate-limits
-    #     RPM/TPM for Claude-2.1, Claude-2.0, and Claude-Instant-1.2 estimated
-    #     as RPM/TPM of the largest-available model (Claude-3-Opus).
-    # Price in US dollars at https://www.anthropic.com/pricing
-    # as of 2024-10-10.
-    # Anthropic models hosted on VertexAI.
-    'claude-3-5-sonnet-v2@20241022': pg.Dict(
-        max_tokens=8192,
-        rpm=1000,
-        tpm=100000,
-        cost_per_1k_input_tokens=0.003,
-        cost_per_1k_output_tokens=0.015,
+class AnthropicModelInfo(lf.ModelInfo):
+  """Anthropic model info."""
+
+  # Constants for supported MIME types.
+  INPUT_IMAGE_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/webp',
+  ]
+  INPUT_DOC_TYPES = [
+      'application/pdf',
+  ]
+
+  LINKS = dict(
+      models='https://docs.anthropic.com/claude/docs/models-overview',
+      pricing='https://www.anthropic.com/pricing#anthropic-api',
+      rate_limits='https://docs.anthropic.com/en/api/rate-limits',
+      error_codes='https://docs.anthropic.com/en/api/errors',
+  )
+
+  class RateLimits(lf.ModelInfo.RateLimits):
+    """Rate limits for Anthropic models."""
+
+    max_input_tokens_per_minute: int
+    max_output_tokens_per_minute: int
+
+    @property
+    def max_tokens_per_minute(self) -> int:
+      return (self.max_input_tokens_per_minute
+              + self.max_output_tokens_per_minute)
+
+
+SUPPORTED_MODELS = [
+    # 3.5 Sonnet models.
+    AnthropicModelInfo(
+        model_id='claude-3-5-sonnet-latest',
+        alias_for='claude-3-5-sonnet-20241022',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3.5 Sonnet model (latest).'
+        ),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-5-sonnet@20240620': pg.Dict(
-        max_tokens=8192,
-        rpm=1000,
-        tpm=100000,
-        cost_per_1k_input_tokens=0.003,
-        cost_per_1k_output_tokens=0.015,
+    AnthropicModelInfo(
+        model_id='claude-3-5-sonnet-20241022',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3.5 Sonnet model (10/22/2024).'
+        ),
+        release_date=datetime.datetime(2024, 10, 22),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-5-haiku@20241022': pg.Dict(
-        max_tokens=8192,
-        rpm=1000,
-        tpm=100000,
-        cost_per_1k_input_tokens=0.001,
-        cost_per_1k_output_tokens=0.005,
+    AnthropicModelInfo(
+        model_id='claude-3-5-sonnet-v2@20241022',
+        alias_for='claude-3-5-sonnet-20241022',
+        provider='VertexAI',
+        in_service=True,
+        description=(
+            'Claude 3.5 Sonnet model served on VertexAI (10/22/2024).'
+        ),
+        release_date=datetime.datetime(2024, 10, 22),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-opus@20240229': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.015,
-        cost_per_1k_output_tokens=0.075,
+    # 3.5 Haiku models.
+    AnthropicModelInfo(
+        model_id='claude-3-5-haiku-latest',
+        alias_for='claude-3-5-haiku-20241022',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3.5 Haiku v2 model (10/22/2024).'
+        ),
+        input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.08,
+            cost_per_1m_input_tokens=0.8,
+            cost_per_1m_output_tokens=4,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    # Anthropic hosted models.
-    'claude-3-5-sonnet-20241022': pg.Dict(
-        max_tokens=8192,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.003,
-        cost_per_1k_output_tokens=0.015,
+    AnthropicModelInfo(
+        model_id='claude-3-5-haiku-20241022',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3.5 Haiku v2 model (10/22/2024).'
+        ),
+        release_date=datetime.datetime(2024, 10, 22),
+        input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.08,
+            cost_per_1m_input_tokens=0.8,
+            cost_per_1m_output_tokens=4,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-5-sonnet-20240620': pg.Dict(
-        max_tokens=8192,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.003,
-        cost_per_1k_output_tokens=0.015,
+    AnthropicModelInfo(
+        model_id='claude-3-5-haiku@20241022',
+        alias_for='claude-3-5-haiku-20241022',
+        provider='VertexAI',
+        in_service=True,
+        description=(
+            'Claude 3.5 Haiku model served on VertexAI (10/22/2024).'
+        ),
+        release_date=datetime.datetime(2024, 10, 22),
+        input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.08,
+            cost_per_1m_input_tokens=0.8,
+            cost_per_1m_output_tokens=4,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-5-haiku-20241022': pg.Dict(
-        max_tokens=8192,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.001,
-        cost_per_1k_output_tokens=0.005,
+    # 3.0 Opus models.
+    AnthropicModelInfo(
+        model_id='claude-3-opus-latest',
+        alias_for='claude-3-opus-20240229',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3 Opus model (latest).'
+        ),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.5,
+            cost_per_1m_input_tokens=15,
+            cost_per_1m_output_tokens=75,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-opus-20240229': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.015,
-        cost_per_1k_output_tokens=0.075,
+    AnthropicModelInfo(
+        model_id='claude-3-opus-20240229',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3 Opus model (02/29/2024).'
+        ),
+        release_date=datetime.datetime(2024, 2, 29),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.5,
+            cost_per_1m_input_tokens=15,
+            cost_per_1m_output_tokens=75,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-sonnet-20240229': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.003,
-        cost_per_1k_output_tokens=0.015,
+    AnthropicModelInfo(
+        model_id='claude-3-opus@20240229',
+        alias_for='claude-3-opus-20240229',
+        provider='VertexAI',
+        in_service=True,
+        description=(
+            'Claude 3 Opus model served on VertexAI (02/29/2024).'
+        ),
+        release_date=datetime.datetime(2024, 2, 29),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.5,
+            cost_per_1m_input_tokens=15,
+            cost_per_1m_output_tokens=75,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-3-haiku-20240307': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.00025,
-        cost_per_1k_output_tokens=0.00125,
+    # 3.0 Sonnet models.
+    AnthropicModelInfo(
+        model_id='claude-3-sonnet-20240229',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3 Sonnet model (02/29/2024).'
+        ),
+        release_date=datetime.datetime(2024, 2, 29),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=None,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-2.1': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.008,
-        cost_per_1k_output_tokens=0.024,
+    AnthropicModelInfo(
+        model_id='claude-3-sonnet@20240229',
+        alias_for='claude-3-sonnet-20240229',
+        provider='VertexAI',
+        in_service=True,
+        description=(
+            'Claude 3 Sonnet model served on VertexAI (02/29/2024).'
+        ),
+        release_date=datetime.datetime(2024, 2, 29),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=None,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-2.0': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.008,
-        cost_per_1k_output_tokens=0.024,
+    # 3.0 Haiku models.
+    AnthropicModelInfo(
+        model_id='claude-3-haiku-20240307',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3 Haiku model (03/07/2024).'
+        ),
+        release_date=datetime.datetime(2024, 3, 7),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=None,
+            cost_per_1m_input_tokens=0.25,
+            cost_per_1m_output_tokens=1.25,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-    'claude-instant-1.2': pg.Dict(
-        max_tokens=4096,
-        rpm=4000,
-        tpm=400000,
-        cost_per_1k_input_tokens=0.0008,
-        cost_per_1k_output_tokens=0.0024,
+    AnthropicModelInfo(
+        model_id='claude-3-haiku@20240307',
+        alias_for='claude-3-haiku-20240307',
+        provider='Anthropic',
+        in_service=True,
+        description=(
+            'Claude 3 Haiku model served on VertexAI (03/07/2024).'
+        ),
+        release_date=datetime.datetime(2024, 3, 7),
+        input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=4_096,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=None,
+            cost_per_1m_input_tokens=0.25,
+            cost_per_1m_output_tokens=1.25,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
     ),
-}
+]
+
+
+_SUPPORTED_MODELS_BY_MODEL_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 
 @lf.use_init_args(['model'])
@@ -135,14 +418,10 @@ class Anthropic(rest.REST):
 
   model: pg.typing.Annotated[
       pg.typing.Enum(
-          pg.MISSING_VALUE, list(SUPPORTED_MODELS_AND_SETTINGS.keys())
+          pg.MISSING_VALUE, [m.model_id for m in SUPPORTED_MODELS]
       ),
       'The name of the model to use.',
   ]
-
-  multimodal: Annotated[bool, 'Whether this model has multimodal support.'] = (
-      True
-  )
 
   api_key: Annotated[
       str | None,
@@ -182,37 +461,14 @@ class Anthropic(rest.REST):
         'anthropic-beta': 'pdfs-2024-09-25',
     }
 
-  @property
-  def model_id(self) -> str:
-    """Returns a string to identify the model."""
-    return self.model
-
-  @property
-  def max_concurrency(self) -> int:
-    rpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('rpm', 0)
-    tpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('tpm', 0)
-    return self.rate_to_max_concurrency(
-        requests_per_min=rpm, tokens_per_min=tpm
-    )
-
-  def estimate_cost(
-      self,
-      num_input_tokens: int,
-      num_output_tokens: int
-  ) -> float | None:
-    """Estimate the cost based on usage."""
-    cost_per_1k_input_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
-        'cost_per_1k_input_tokens', None
-    )
-    cost_per_1k_output_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
-        'cost_per_1k_output_tokens', None
-    )
-    if cost_per_1k_output_tokens is None or cost_per_1k_input_tokens is None:
-      return None
-    return (
-        cost_per_1k_input_tokens * num_input_tokens
-        + cost_per_1k_output_tokens * num_output_tokens
-    ) / 1000
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    mi = _SUPPORTED_MODELS_BY_MODEL_ID[self.model]
+    if mi.provider != 'Anthropic':
+      assert mi.alias_for is not None
+      mi = _SUPPORTED_MODELS_BY_MODEL_ID[mi.alias_for]
+      assert mi.provider == 'Anthropic', mi
+    return mi
 
   def request(
       self,
@@ -235,8 +491,7 @@ class Anthropic(rest.REST):
     """Returns a dict as request arguments."""
     # Authropic requires `max_tokens` to be specified.
     max_tokens = (
-        options.max_tokens
-        or SUPPORTED_MODELS_AND_SETTINGS[self.model].max_tokens
+        options.max_tokens or self.model_info.context_length.max_output_tokens
     )
     args = dict(
         model=self.model,
@@ -256,12 +511,14 @@ class Anthropic(rest.REST):
   def _content_from_message(self, prompt: lf.Message) -> list[dict[str, Any]]:
     """Converts an message to Anthropic's content protocol (list of dicts)."""
     # Refer: https://docs.anthropic.com/claude/reference/messages-examples
-    if self.multimodal:
-      content = []
-      for chunk in prompt.chunk():
-        if isinstance(chunk, str):
-          item = dict(type='text', text=chunk)
-        elif isinstance(chunk, lf_modalities.Image):
+    content = []
+    for chunk in prompt.chunk():
+      if isinstance(chunk, str):
+        content.append(dict(type='text', text=chunk))
+      elif isinstance(chunk, lf_modalities.Mime):
+        if not self.supports_input(chunk.mime_type):
+          raise ValueError(f'Unsupported modality: {chunk!r}.')
+        if isinstance(chunk, lf_modalities.Image):
           item = dict(
               type='image',
               source=dict(
@@ -280,11 +537,11 @@ class Anthropic(rest.REST):
               ),
           )
         else:
-          raise ValueError(f'Unsupported modality object: {chunk!r}.')
+          raise NotImplementedError(
+              f'Modality conversion not implemented: {chunk!r}'
+          )
         content.append(item)
-      return content
-    else:
-      return [dict(type='text', text=prompt.text)]
+    return content
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
     message = self._message_from_content(json['content'])
@@ -296,10 +553,6 @@ class Anthropic(rest.REST):
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
-            estimated_cost=self.estimate_cost(
-                num_input_tokens=input_tokens,
-                num_output_tokens=output_tokens,
-            ),
         ),
     )
 
@@ -311,56 +564,74 @@ class Anthropic(rest.REST):
     )
 
 
+class Claude35(Anthropic):
+  """Base class for Claude 3.5 models."""
+
+
+class Claude35Sonnet(Claude35):
+  """Claude 3.5 Sonnet model (latest)."""
+  model = 'claude-3-5-sonnet-latest'
+
+
+class Claude35Sonnet_20241022(Claude35):  # pylint: disable=invalid-name
+  """Claude 3.5 Sonnet model (10/22/2024)."""
+  model = 'claude-3-5-sonnet-20241022'
+
+
+class Claude35Haiku(Claude35):
+  """Claude 3.5 Haiku model (latest)."""
+  model = 'claude-3-5-haiku-latest'
+
+
+class Claude35Haiku_20241022(Claude35):  # pylint: disable=invalid-name
+  """Claude 3.5 Haiku model (10/22/2024)."""
+  model = 'claude-3-5-haiku-20241022'
+
+
 class Claude3(Anthropic):
-  """Base class for Claude 3 models. 200K input tokens and 4K output tokens."""
-  multimodal = True
-
-
-class Claude35Sonnet(Claude3):
-  """A balance between between Opus and Haiku."""
-  model = 'claude-3-5-sonnet-20241022'
-
-
-class Claude35Sonnet20241022(Claude3):
-  """A balance between between Opus and Haiku."""
-
-  model = 'claude-3-5-sonnet-20241022'
-
-
-class Claude35Sonnet20240620(Claude3):
-  """A balance between between Opus and Haiku."""
-
-  model = 'claude-3-5-sonnet-20240620'
+  """Base class for Claude 3 models."""
 
 
 class Claude3Opus(Claude3):
-  """Anthropic's most powerful model."""
+  """Claude 3 Opus model (latest)."""
+
+  model = 'claude-3-opus-latest'
+
+
+class Claude3Opus_20240229(Claude3):  # pylint: disable=invalid-name
+  """Claude 3 Opus model (02/29/2024)."""
 
   model = 'claude-3-opus-20240229'
 
 
 class Claude3Sonnet(Claude3):
-  """A balance between between Opus and Haiku."""
+  """Claude 3 Sonnet model."""
+
+  model = 'claude-3-sonnet-20240229'
+
+
+class Claude3Sonnet_20240229(Claude3):  # pylint: disable=invalid-name
+  """Claude 3 Sonnet model (02/29/2024)."""
 
   model = 'claude-3-sonnet-20240229'
 
 
 class Claude3Haiku(Claude3):
-  """Anthropic's most compact model."""
+  """Claude 3 Haiku model."""
 
   model = 'claude-3-haiku-20240307'
 
 
-class Claude2(Anthropic):
-  """Predecessor to Claude 3 with 100K context window.."""
-  model = 'claude-2.0'
+class Claude3Haiku_20240307(Claude3):  # pylint: disable=invalid-name
+  """Claude 3 Haiku model (03/07/2024)."""
+
+  model = 'claude-3-haiku-20240307'
 
 
-class Claude21(Anthropic):
-  """Updated Claude 2 model with improved accuracy and 200K context window."""
-  model = 'claude-2.1'
+def _register_anthropic_models():
+  """Registers Anthropic models."""
+  for m in SUPPORTED_MODELS:
+    if m.provider == 'Anthropic':
+      lf.LanguageModel.register(m.model_id, Anthropic)
 
-
-class ClaudeInstant(Anthropic):
-  """Cheapest small and fast model, 100K context window."""
-  model = 'claude-instant-1.2'
+_register_anthropic_models()

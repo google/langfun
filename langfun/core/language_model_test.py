@@ -9,7 +9,7 @@
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
+# See the License for the infoific language governing permissions and
 # limitations under the License.
 """Tests for language model."""
 
@@ -29,6 +29,14 @@ class MockModel(lm_lib.LanguageModel):
   """A mock model that echo back user prompts."""
   failures_before_attempt: int = 0
   name: str = 'MockModel'
+
+  class ModelInfo(lm_lib.ModelInfo):
+    def estimate_cost(self, usage: lm_lib.LMSamplingUsage) -> float | None:
+      return 1.0
+
+  @property
+  def model_info(self) -> lm_lib.ModelInfo:
+    return MockModel.ModelInfo(model_id=self.name)
 
   def _sample(self,
               prompts: list[message_lib.Message]
@@ -89,6 +97,73 @@ class MockTokenizeModel(MockModel):
     return [(w, i) for i, w in enumerate(prompt.text.split(' '))]
 
 
+class ModelInfoTest(unittest.TestCase):
+  """Tests for ModelInfo."""
+
+  def test_basics(self):
+    info = lm_lib.ModelInfo(
+        model_id='model1_alias',
+        provider='Test Provider',
+        alias_for='model1'
+    )
+    self.assertEqual(info.model_id, 'model1_alias')
+    self.assertEqual(info.alias_for, 'model1')
+    self.assertEqual(info.model_type, 'unknown')
+    self.assertEqual(info.provider, 'Test Provider')
+    self.assertIsNone(info.description)
+    self.assertIsNone(info.url)
+    self.assertIsNone(info.release_date)
+    self.assertTrue(info.in_service)
+    self.assertIsNone(info.context_length)
+    self.assertIsNone(info.pricing)
+    self.assertIsNone(info.rate_limits)
+    self.assertIsNone(info.input_modalities)
+
+  def test_resource_id(self):
+    info = lm_lib.ModelInfo(
+        model_id='model1',
+    )
+    self.assertEqual(info.resource_id, 'model1')
+    info = lm_lib.ModelInfo(
+        model_id='model1_alias',
+        provider='Test Provider',
+        alias_for='model1'
+    )
+    self.assertEqual(info.resource_id, 'test_provider://model1')
+    info = lm_lib.ModelInfo(
+        model_id='model1_alias',
+        provider=pg.oneof(['Provider1', 'Provider2']),
+        alias_for='model1'
+    )
+    self.assertEqual(info.resource_id, 'model1')
+
+  def test_estimate_cost(self):
+    self.assertIsNone(
+        lm_lib.ModelInfo('unknown').estimate_cost(
+            lm_lib.LMSamplingUsage(100, 100, 200, 1)
+        )
+    )
+    self.assertIsNone(
+        lm_lib.ModelInfo(
+            'unknown', pricing=lm_lib.ModelInfo.Pricing()
+        ).estimate_cost(
+            lm_lib.LMSamplingUsage(100, 100, 200, 1)
+        )
+    )
+    self.assertEqual(
+        lm_lib.ModelInfo(
+            'unknown', pricing=lm_lib.ModelInfo.Pricing(
+                cost_per_1m_input_tokens=1.0,
+                cost_per_1m_output_tokens=2.0,
+                cost_per_1m_cached_input_tokens=1.0,
+            )
+        ).estimate_cost(
+            lm_lib.LMSamplingUsage(100, 100, 200, 1)
+        ),
+        0.0003
+    )
+
+
 class LMSamplingOptionsTest(unittest.TestCase):
   """Tests for LMSamplingOptions."""
 
@@ -107,15 +182,49 @@ class LMSamplingOptionsTest(unittest.TestCase):
 class LanguageModelTest(unittest.TestCase):
   """Tests for LanguageModel."""
 
-  def test_init(self):
-    lm = MockModel(1, temperature=0.5, top_k=2, max_attempts=2)
+  def test_register_and_get(self):
+    def mock_model(model_id: str, *args, **kwargs):
+      del model_id
+      return MockModel(*args, **kwargs)
+
+    lm_lib.LanguageModel.register('MockModel', mock_model)
+    lm = lm_lib.LanguageModel.get(
+        'MockModel', 1, temperature=0.2
+    )
     self.assertEqual(lm.model_id, 'MockModel')
     self.assertEqual(lm.resource_id, 'MockModel')
+    self.assertEqual(lm.failures_before_attempt, 1)
+    self.assertEqual(lm.sampling_options.temperature, 0.2)
+    self.assertIn('MockModel', lm_lib.LanguageModel.dir())
+
+    lm_lib.LanguageModel.register('mock://.*', mock_model)
+    lm_lib.LanguageModel.register('mock.*', mock_model)
+    self.assertIsInstance(lm_lib.LanguageModel.get('mock'), MockModel)
+    with self.assertRaisesRegex(ValueError, 'Multiple models found'):
+      lm_lib.LanguageModel.get('mock://test2')
+
+    with self.assertRaisesRegex(ValueError, 'Model not found'):
+      lm_lib.LanguageModel.get('non-existent://test2')
+
+  def test_basics(self):
+    lm = MockModel(1, temperature=0.5, top_k=2, max_attempts=2)
+    self.assertEqual(
+        lm.model_info, MockModel.ModelInfo(model_id='MockModel')
+    )
+    self.assertEqual(lm.model_id, 'MockModel')
     self.assertIsNone(lm.max_concurrency)
     self.assertEqual(lm.failures_before_attempt, 1)
     self.assertEqual(lm.sampling_options.temperature, 0.5)
     self.assertEqual(lm.sampling_options.top_k, 2)
     self.assertEqual(lm.max_attempts, 2)
+    self.assertIsNone(lm.context_length)
+    self.assertIsNone(lm.pricing)
+    self.assertIsNone(lm.rate_limits)
+    self.assertTrue(lm.supports_input('image/png'))
+    self.assertEqual(
+        lm.estimate_cost(lm_lib.LMSamplingUsage(100, 100, 200, 1)),
+        1.0
+    )
 
   def test_subclassing(self):
 
@@ -446,6 +555,17 @@ class LanguageModelTest(unittest.TestCase):
     lm = MockModel(cache=cache, top_k=1)
     self.assertEqual(lm('a'), 'a')
 
+  def test_estimate_max_concurrency(self):
+    self.assertIsNone(lm_lib.LanguageModel.estimate_max_concurrency(None, None))
+    self.assertEqual(
+        lm_lib.LanguageModel.estimate_max_concurrency(250 * 60 * 10, None),
+        10
+    )
+    self.assertEqual(
+        lm_lib.LanguageModel.estimate_max_concurrency(None, 60 * 10),
+        10
+    )
+
   def test_retry(self):
     lm = MockModel(
         failures_before_attempt=1, top_k=1, max_attempts=2, retry_interval=1
@@ -691,38 +811,6 @@ class LanguageModelTest(unittest.TestCase):
   def test_tokenize_with_unsupported_model(self):
     with self.assertRaises(NotImplementedError):
       MockModel().tokenize('hi')
-
-  def test_rate_to_max_concurrency_no_rpm_no_tpm(self) -> None:
-    lm = MockModel()
-    self.assertEqual(
-        lm_lib.DEFAULT_MAX_CONCURRENCY,
-        lm.rate_to_max_concurrency(requests_per_min=0, tokens_per_min=0),
-    )
-    self.assertEqual(
-        lm_lib.DEFAULT_MAX_CONCURRENCY,
-        lm.rate_to_max_concurrency(requests_per_min=-1, tokens_per_min=-1),
-    )
-
-  def test_rate_to_max_concurrency_only_rpm_specified_uses_rpm(self) -> None:
-    lm = MockModel()
-    test_rpm = 1e4
-    self.assertEqual(
-        lm.rate_to_max_concurrency(requests_per_min=test_rpm),
-        int(test_rpm / 60)
-    )
-
-  def test_rate_to_max_concurrency_tpm_specified_uses_tpm(self) -> None:
-    lm = MockModel()
-    test_tpm = 1e7
-    self.assertEqual(
-        lm.rate_to_max_concurrency(requests_per_min=1, tokens_per_min=test_tpm),
-        int(test_tpm / lm_lib.TOKENS_PER_REQUEST / 60),
-    )
-
-  def test_rate_to_max_concurrency_small_rate_returns_one(self) -> None:
-    lm = MockModel()
-    self.assertEqual(lm.rate_to_max_concurrency(requests_per_min=1), 1)
-    self.assertEqual(lm.rate_to_max_concurrency(tokens_per_min=1), 1)
 
   def test_track_usages(self):
     lm = MockModel(name='model1')

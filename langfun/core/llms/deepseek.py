@@ -13,33 +13,81 @@
 # limitations under the License.
 """Language models from DeepSeek."""
 
+import datetime
+import functools
 import os
-from typing import Annotated, Any
+from typing import Annotated, Any, Final
 
 import langfun.core as lf
 from langfun.core.llms import openai_compatible
 import pyglove as pg
 
-SUPPORTED_MODELS_AND_SETTINGS = {
-    # pylint: disable=g-line-too-long
-    # TODO(yifenglu): The RPM and TPM are arbitrary numbers. Update them once DeepSeek provides concrete guidelines.
-    # DeepSeek doesn't control the rate limit at the moment: https://api-docs.deepseek.com/quick_start/rate_limit
-    # The cost is based on: https://api-docs.deepseek.com/quick_start/pricing
-    'deepseek-reasoner': pg.Dict(
+
+class DeepSeekModelInfo(lf.ModelInfo):
+  """DeepSeek model info."""
+
+  LINKS = dict(
+      models='https://api-docs.deepseek.com/quick_start/pricing',
+      pricing='https://api-docs.deepseek.com/quick_start/pricing',
+      rate_limits='https://api-docs.deepseek.com/quick_start/rate_limit',
+      error_codes='https://api-docs.deepseek.com/quick_start/error_codes',
+  )
+
+  provider: Final[str] = 'DeepSeek'  # pylint: disable=invalid-name
+
+  api_model_name: Annotated[
+      str,
+      'The model name used in the DeepSeek API.'
+  ]
+
+
+SUPPORTED_MODELS = [
+    DeepSeekModelInfo(
+        model_id='deepseek-r1',
         in_service=True,
-        rpm=100,
-        tpm=1000000,
-        cost_per_1k_input_tokens=0.00055,
-        cost_per_1k_output_tokens=0.00219,
+        model_type='thinking',
+        api_model_name='deepseek-reasoner',
+        description='DeepSeek Reasoner model (01/20/2025).',
+        url='https://api-docs.deepseek.com/news/news250120',
+        release_date=datetime.datetime(2025, 1, 20),
+        input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=64_000,
+            max_output_tokens=8_000,
+            max_cot_tokens=32_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.14,
+            cost_per_1m_input_tokens=0.55,
+            cost_per_1m_output_tokens=2.19,
+        ),
+        # No rate limits is enforced by DeepSeek for now.
+        rate_limits=None
     ),
-    'deepseek-chat': pg.Dict(
+    DeepSeekModelInfo(
+        model_id='deepseek-v3',
         in_service=True,
-        rpm=100,
-        tpm=1000000,
-        cost_per_1k_input_tokens=0.00014,
-        cost_per_1k_output_tokens=0.00028,
+        model_type='instruction-tuned',
+        api_model_name='deepseek-chat',
+        description='DeepSeek V3 model (12/26/2024).',
+        url='https://api-docs.deepseek.com/news/news1226',
+        release_date=datetime.datetime(2024, 12, 26),
+        input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=64_000,
+            max_output_tokens=8_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.07,
+            cost_per_1m_input_tokens=0.27,
+            cost_per_1m_output_tokens=1.1,
+        ),
+        # No rate limits is enforced by DeepSeek for now.
+        rate_limits=None
     ),
-}
+]
+
+_SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 
 # DeepSeek API uses an API format compatible with OpenAI.
@@ -50,7 +98,7 @@ class DeepSeek(openai_compatible.OpenAICompatible):
 
   model: pg.typing.Annotated[
       pg.typing.Enum(
-          pg.MISSING_VALUE, list(SUPPORTED_MODELS_AND_SETTINGS.keys())
+          pg.MISSING_VALUE, [m.model_id for m in SUPPORTED_MODELS]
       ),
       'The name of the model to use.',
   ]
@@ -79,56 +127,47 @@ class DeepSeek(openai_compatible.OpenAICompatible):
     })
     return headers
 
-  @property
-  def model_id(self) -> str:
-    """Returns a string to identify the model."""
-    return f'DeepSeek({self.model})'
+  @functools.cached_property
+  def model_info(self) -> DeepSeekModelInfo:
+    return _SUPPORTED_MODELS_BY_ID[self.model]
 
-  @property
-  def max_concurrency(self) -> int:
-    rpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('rpm', 0)
-    tpm = SUPPORTED_MODELS_AND_SETTINGS[self.model].get('tpm', 0)
-    return self.rate_to_max_concurrency(
-        requests_per_min=rpm, tokens_per_min=tpm
-    )
-
-  def estimate_cost(
-      self, num_input_tokens: int, num_output_tokens: int
-  ) -> float | None:
-    """Estimate the cost based on usage."""
-    cost_per_1k_input_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
-        'cost_per_1k_input_tokens', None
-    )
-    cost_per_1k_output_tokens = SUPPORTED_MODELS_AND_SETTINGS[self.model].get(
-        'cost_per_1k_output_tokens', None
-    )
-    if cost_per_1k_output_tokens is None or cost_per_1k_input_tokens is None:
-      return None
-    return (
-        cost_per_1k_input_tokens * num_input_tokens
-        + cost_per_1k_output_tokens * num_output_tokens
-    ) / 1000
+  def _request_args(
+      self, options: lf.LMSamplingOptions) -> dict[str, Any]:
+    """Returns a dict as request arguments."""
+    # NOTE(daiyip): Replace model name with the API model name instead of the
+    # model ID.
+    args = super()._request_args(options)
+    args['model'] = self.model_info.api_model_name
+    return args
 
   @classmethod
   def dir(cls):
-    return [k for k, v in SUPPORTED_MODELS_AND_SETTINGS.items() if v.in_service]
+    return [m.model_id for m in SUPPORTED_MODELS if m.in_service]
 
 
-class DeepSeekReasoner(DeepSeek):
+class DeepSeekR1(DeepSeek):
   """DeepSeek Reasoner model.
 
   Currently it is powered by DeepSeek-R1 model, 64k input context, 8k max
   output, 32k max CoT output.
   """
 
-  model = 'deepseek-reasoner'
+  model = 'deepseek-r1'
 
 
-class DeepSeekChat(DeepSeek):
+class DeepSeekV3(DeepSeek):
   """DeepSeek Chat model.
 
   Currently, it is powered by DeepSeek-V3 model, 64K input contenxt window and
   8k max output tokens.
   """
 
-  model = 'deepseek-chat'
+  model = 'deepseek-v3'
+
+
+def _register_deepseek_models():
+  """Registers DeepSeek models."""
+  for m in SUPPORTED_MODELS:
+    lf.LanguageModel.register(m.model_id, DeepSeek)
+
+_register_deepseek_models()

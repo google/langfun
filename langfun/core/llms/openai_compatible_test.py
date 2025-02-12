@@ -207,37 +207,52 @@ class OpenAIComptibleTest(unittest.TestCase):
       )
 
   def test_call_chat_completion_vision(self):
+
+    class FakeImage(lf_modalities.Image):
+
+      @property
+      def mime_type(self) -> str:
+        return 'image/png'
+
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request_vision
       lm_1 = openai_compatible.OpenAICompatible(
           api_endpoint='https://test-server',
           model='test-model1',
-          multimodal=True
       )
       lm_2 = openai_compatible.OpenAICompatible(
           api_endpoint='https://test-server',
           model='test-model2',
-          multimodal=True
       )
       for lm in (lm_1, lm_2):
         self.assertEqual(
             lm(
                 lf.UserMessage(
                     'hello <<[[image]]>>',
-                    image=lf_modalities.Image.from_uri('https://fake/image')
+                    image=FakeImage.from_uri('https://fake/image')
                 ),
                 sampling_options=lf.LMSamplingOptions(n=2)
             ),
             'Sample 0 for message: https://fake/image',
         )
-    lm_3 = openai_compatible.OpenAICompatible(
+
+    class TextOnlyModel(openai_compatible.OpenAICompatible):
+
+      class ModelInfo(lf.ModelInfo):
+        input_modalities: list[str] = lf.ModelInfo.TEXT_INPUT_ONLY
+
+      @property
+      def model_info(self) -> lf.ModelInfo:
+        return TextOnlyModel.ModelInfo('text-only-model')
+
+    lm_3 = TextOnlyModel(
         api_endpoint='https://test-server', model='test-model3'
     )
     with self.assertRaisesRegex(ValueError, 'Unsupported modality'):
       lm_3(
           lf.UserMessage(
               'hello <<[[image]]>>',
-              image=lf_modalities.Image.from_uri('https://fake/image')
+              image=FakeImage.from_uri('https://fake/image')
           ),
       )
 

@@ -15,6 +15,7 @@
 
 import os
 import unittest
+import langfun.core as lf
 from langfun.core.llms import google_genai
 
 
@@ -23,16 +24,22 @@ class GenAITest(unittest.TestCase):
 
   def test_basics(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
-      _ = google_genai.GeminiPro1_5().api_endpoint
+      _ = google_genai.Gemini15Pro().api_endpoint
 
-    self.assertIsNotNone(google_genai.GeminiPro1_5(api_key='abc').api_endpoint)
+    self.assertIsNotNone(google_genai.Gemini15Pro(api_key='abc').api_endpoint)
 
     os.environ['GOOGLE_API_KEY'] = 'abc'
-    lm = google_genai.GeminiPro1_5()
+    lm = google_genai.Gemini15Pro_001()
     self.assertIsNotNone(lm.api_endpoint)
-    self.assertTrue(lm.model_id.startswith('GenAI('))
+    self.assertEqual(lm.model_id, 'gemini-1.5-pro-001')
+    self.assertEqual(lm.resource_id, 'google_genai://gemini-1.5-pro-001')
     del os.environ['GOOGLE_API_KEY']
 
+  def test_lm_get(self):
+    self.assertIsInstance(
+        lf.LanguageModel.get('google_genai://gemini-1.5-pro'),
+        google_genai.GenAI,
+    )
 
 if __name__ == '__main__':
   unittest.main()

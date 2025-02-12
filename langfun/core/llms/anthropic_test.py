@@ -19,6 +19,7 @@ from typing import Any
 import unittest
 from unittest import mock
 
+import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 from langfun.core.llms import anthropic
 import pyglove as pg
@@ -119,6 +120,17 @@ class AnthropicTest(unittest.TestCase):
     )
     self.assertGreater(anthropic.Claude3Haiku().max_concurrency, 0)
 
+  def test_model_alias(self):
+    # Alias will be normalized to the official version.
+    self.assertEqual(
+        anthropic.Anthropic('claude-3-5-sonnet-20241022').model_id,
+        'claude-3-5-sonnet-20241022'
+    )
+    self.assertEqual(
+        anthropic.Anthropic('claude-3-5-sonnet-v2@20241022').model_id,
+        'claude-3-5-sonnet-20241022'
+    )
+
   def test_api_key(self):
     lm = anthropic.Claude3Haiku()
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
@@ -151,6 +163,7 @@ class AnthropicTest(unittest.TestCase):
       self.assertIsNotNone(response.usage.prompt_tokens, 2)
       self.assertIsNotNone(response.usage.completion_tokens, 1)
       self.assertIsNotNone(response.usage.total_tokens, 3)
+      self.assertGreater(response.usage.estimated_cost, 0)
 
   def test_mm_call(self):
     with mock.patch('requests.Session.post') as mock_mm_request:
@@ -162,7 +175,7 @@ class AnthropicTest(unittest.TestCase):
   def test_pdf_call(self):
     with mock.patch('requests.Session.post') as mock_mm_request:
       mock_mm_request.side_effect = mock_mm_requests_post
-      lm = anthropic.Claude3Haiku(api_key='fake_key')
+      lm = anthropic.Claude35Sonnet(api_key='fake_key')
       response = lm(lf_modalities.PDF.from_bytes(pdf_content), lm=lm)
       self.assertEqual(response.text, 'document: application/pdf')
 
@@ -181,6 +194,12 @@ class AnthropicTest(unittest.TestCase):
             Exception, f'.*{status_code}: .*{error_message}'
         ):
           lm('hello', max_attempts=1)
+
+  def test_lm_get(self):
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-3-5-sonnet-latest'),
+        anthropic.Anthropic,
+    )
 
 
 if __name__ == '__main__':

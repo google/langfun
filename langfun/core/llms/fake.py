@@ -14,6 +14,7 @@
 """Fake LMs for testing."""
 
 import abc
+import functools
 from typing import Annotated
 import langfun.core as lf
 
@@ -43,6 +44,11 @@ class Fake(lf.LanguageModel):
           )
       )
     return results
+
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    """Returns the specification of the model."""
+    return lf.ModelInfo(model_id=self.__class__.__name__)
 
   @abc.abstractmethod
   def _response_from(self, prompt: lf.Message) -> lf.Message:

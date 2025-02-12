@@ -20,6 +20,7 @@ from unittest import mock
 from google.auth import exceptions
 import langfun.core as lf
 from langfun.core.llms import vertexai
+import pyglove as pg
 
 
 class VertexAITest(unittest.TestCase):
@@ -28,21 +29,22 @@ class VertexAITest(unittest.TestCase):
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_project_and_location_check(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `project`'):
-      _ = vertexai.VertexAIGeminiPro1()._api_initialized
+      _ = vertexai.VertexAIGemini15Pro()._api_initialized
 
     with self.assertRaisesRegex(ValueError, 'Please specify `location`'):
-      _ = vertexai.VertexAIGeminiPro1(project='abc')._api_initialized
+      _ = vertexai.VertexAIGemini15Pro(
+          project='abc', location=None)._api_initialized
 
     self.assertTrue(
-        vertexai.VertexAIGeminiPro1(
+        vertexai.VertexAIGemini15Pro(
             project='abc', location='us-central1'
         )._api_initialized
     )
 
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'
-    model = vertexai.VertexAIGeminiPro1()
-    self.assertTrue(model.model_id.startswith('VertexAI('))
+    model = vertexai.VertexAIGemini15Pro(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-1.5-pro-002')
     self.assertIn('us-central1', model.api_endpoint)
     self.assertTrue(model._api_initialized)
     self.assertIsNotNone(model.session())
@@ -55,11 +57,18 @@ class VertexAIAnthropicTest(unittest.TestCase):
 
   def test_basics(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `project`'):
-      lm = vertexai.VertexAIClaude3_5_Sonnet_20241022()
+      lm = vertexai.VertexAIClaude35Sonnet_20241022()
       lm('hi')
 
-    model = vertexai.VertexAIClaude3_5_Sonnet_20241022(project='langfun')
-
+    model = vertexai.VertexAIClaude35Sonnet_20241022(project='langfun')
+    self.assertEqual(model.resource_id, 'vertexai://claude-3-5-sonnet-20241022')
+    # Map a Anthropic model back to VertexAI model.
+    self.assertTrue(
+        vertexai.VertexAIAnthropic(
+            'claude-3-5-sonnet-20241022', project='langfun'
+        ).model,
+        'claude-3-5-sonnet-v2@20241022',
+    )
     # NOTE(daiyip): For OSS users, default credentials are not available unless
     # users have already set up their GCP project. Therefore we ignore the
     # exception here.
@@ -97,6 +106,24 @@ class VertexAIAnthropicTest(unittest.TestCase):
             'temperature': 0.0,
             'top_k': 40,
         },
+    )
+
+  def test_lm_get(self):
+    self.assertIsInstance(
+        lf.LanguageModel.get('gemini-2.0-flash'),
+        vertexai.VertexAIGemini,
+    )
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-3-5-sonnet-v2@20241022'),
+        vertexai.VertexAIAnthropic,
+    )
+    self.assertIsInstance(
+        lf.LanguageModel.get('llama-3.1-405b-instruct-maas'),
+        vertexai.VertexAILlama,
+    )
+    self.assertIsInstance(
+        lf.LanguageModel.get('mistral-large-2411'),
+        vertexai.VertexAIMistral,
     )
 
 

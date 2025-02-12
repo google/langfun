@@ -30,11 +30,12 @@ class OpenAITest(unittest.TestCase):
 
   def test_model_id(self):
     self.assertEqual(
-        openai.Gpt35(api_key='test_key').model_id, 'OpenAI(text-davinci-003)')
+        openai.Gpt35(api_key='test_key').model_id, 'text-davinci-003')
 
   def test_resource_id(self):
     self.assertEqual(
-        openai.Gpt35(api_key='test_key').resource_id, 'OpenAI(text-davinci-003)'
+        openai.Gpt35(api_key='test_key').resource_id,
+        'openai://text-davinci-003'
     )
 
   def test_headers(self):
@@ -47,7 +48,9 @@ class OpenAITest(unittest.TestCase):
     )
 
   def test_max_concurrency(self):
-    self.assertGreater(openai.Gpt35(api_key='test_key').max_concurrency, 0)
+    self.assertGreater(
+        openai.Gpt4o(api_key='test_key').max_concurrency, 0
+    )
 
   def test_request_args(self):
     self.assertEqual(
@@ -75,10 +78,17 @@ class OpenAITest(unittest.TestCase):
   def test_estimate_cost(self):
     self.assertEqual(
         openai.Gpt4(api_key='test_key').estimate_cost(
-            num_input_tokens=100, num_output_tokens=100
+            lf.LMSamplingUsage(
+                total_tokens=200,
+                prompt_tokens=100,
+                completion_tokens=100,
+            )
         ),
         0.009
     )
+
+  def test_lm_get(self):
+    self.assertIsInstance(lf.LanguageModel.get('gpt-4o'), openai.OpenAI)
 
 
 if __name__ == '__main__':

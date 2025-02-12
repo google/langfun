@@ -93,14 +93,18 @@ from langfun.core.modality import ModalityRef
 from langfun.core.modality import ModalityError
 
 # Interfaces for languge models.
+from langfun.core.language_model import ModelInfo
 from langfun.core.language_model import LanguageModel
+
 from langfun.core.language_model import LMSample
 from langfun.core.language_model import LMSamplingOptions
+from langfun.core.language_model import LMSamplingResult
+from langfun.core.language_model import LMScoringResult
+
 from langfun.core.language_model import LMSamplingUsage
 from langfun.core.language_model import UsageNotAvailable
 from langfun.core.language_model import UsageSummary
-from langfun.core.language_model import LMSamplingResult
-from langfun.core.language_model import LMScoringResult
+
 from langfun.core.language_model import LMCache
 from langfun.core.language_model import LMDebugMode
 

@@ -14,386 +14,518 @@
 """Gemini REST API (Shared by Google GenAI and Vertex AI)."""
 
 import base64
-from typing import Any
+import datetime
+import functools
+from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 from langfun.core.llms import rest
 import pyglove as pg
 
-# Supported modalities.
 
-IMAGE_TYPES = [
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-    'image/heic',
-    'image/heif',
+class GeminiModelInfo(lf.ModelInfo):
+  """Gemini model info."""
+
+  # Constants for supported MIME types.
+  INPUT_IMAGE_TYPES = [
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+  ]
+
+  INPUT_AUDIO_TYPES = [
+      'audio/aac',
+      'audio/flac',
+      'audio/mp3',
+      'audio/m4a',
+      'audio/mpeg',
+      'audio/mpga',
+      'audio/mp4',
+      'audio/opus',
+      'audio/pcm',
+      'audio/wav',
+      'audio/webm',
+  ]
+
+  INPUT_VIDEO_TYPES = [
+      'video/mov',
+      'video/mpeg',
+      'video/mpegps',
+      'video/mpg',
+      'video/mp4',
+      'video/webm',
+      'video/wmv',
+      'video/x-flv',
+      'video/3gpp',
+      'video/quicktime',
+  ]
+
+  INPUT_DOC_TYPES = [
+      'application/pdf',
+      'text/plain',
+      'text/csv',
+      'text/html',
+      'text/xml',
+      'text/x-script.python',
+      'application/json',
+  ]
+
+  ALL_SUPPORTED_INPUT_TYPES = (
+      INPUT_IMAGE_TYPES
+      + INPUT_AUDIO_TYPES
+      + INPUT_VIDEO_TYPES
+      + INPUT_DOC_TYPES
+  )
+
+  LINKS = dict(
+      models='https://ai.google.dev/gemini-api/docs/models/gemini',
+      pricing='https://ai.google.dev/gemini-api/docs/pricing',
+      rate_limits='https://ai.google.dev/gemini-api/docs/models/gemini',
+      error_codes='https://ai.google.dev/gemini-api/docs/troubleshooting?lang=python#error-codes',
+  )
+
+  class Pricing(lf.ModelInfo.Pricing):
+    """Pricing for Gemini models."""
+
+    cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k: Annotated[
+        float | None,
+        (
+            'The cost per 1M cached input tokens for prompts longer than 128K. '
+            'If None, the 128k constraint is not applicable.'
+        )
+    ] = None
+
+    cost_per_1m_input_tokens_with_prompt_longer_than_128k: Annotated[
+        float | None,
+        (
+            'The cost per 1M input tokens for prompts longer than 128K. '
+            'If None, the 128k constraint is not applicable.'
+        )
+    ] = None
+
+    cost_per_1m_output_tokens_with_prompt_longer_than_128k: Annotated[
+        float | None,
+        (
+            'The cost per 1M output tokens for prompts longer than 128K.'
+            'If None, the 128k constraint is not applicable.'
+        )
+    ] = None
+
+    def estimate_cost(self, usage: lf.LMSamplingUsage) -> float | None:
+      """Estimates the cost of using the model. Subclass could override.
+
+      Args:
+        usage: The usage information of the model.
+
+      Returns:
+        The estimated cost in US dollars. If None, cost estimating is not
+        supported on the model.
+      """
+      if (usage.prompt_tokens is None
+          or usage.prompt_tokens < 128_000
+          or not self.cost_per_1m_input_tokens_with_prompt_longer_than_128k):
+        return super().estimate_cost(usage)
+
+      return (
+          self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+          * usage.prompt_tokens
+          + self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
+          * usage.completion_tokens
+      ) / 1000_000
+
+  experimental: Annotated[
+      bool,
+      (
+          'If True, the model is experimental and may retire without notice.'
+      )
+  ] = False
+
+
+# !!! PLEASE KEEP MODELS SORTED BY MODEL FAMILY AND RELEASE DATE !!!
+
+
+SUPPORTED_MODELS = [
+
+    #
+    # Production models.
+    #
+
+    # Gemini 2.0 Flash.
+    GeminiModelInfo(
+        model_id='gemini-2.0-flash',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 2.0 Flash model.'
+        ),
+        release_date=datetime.datetime(2025, 2, 5),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.025,
+            cost_per_1m_input_tokens=0.1,
+            cost_per_1m_output_tokens=0.4,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-2.0-flash-001',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 2.0 Flash model (version 001).'
+        ),
+        release_date=datetime.datetime(2025, 2, 5),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.025,
+            cost_per_1m_input_tokens=0.1,
+            cost_per_1m_output_tokens=0.4,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 2.0 Flash Lite.
+    GeminiModelInfo(
+        model_id='gemini-2.0-flash-lite-preview-02-05',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 2.0 Lite preview model.'
+        ),
+        release_date=datetime.datetime(2025, 2, 5),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.01875,
+            cost_per_1m_input_tokens=0.075,
+            cost_per_1m_output_tokens=0.3,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 1.5 Flash.
+    GeminiModelInfo(
+        model_id='gemini-1.5-flash',
+        alias_for='gemini-1.5-flash-002',
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        in_service=True,
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Flash model (latest stable).'
+        ),
+        release_date=datetime.datetime(2024, 9, 30),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.01875,
+            cost_per_1m_input_tokens=0.075,
+            cost_per_1m_output_tokens=0.3,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.0375,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=0.15,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=0.6,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-1.5-flash-001',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Flash model (version 001).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.01875,
+            cost_per_1m_input_tokens=0.075,
+            cost_per_1m_output_tokens=0.3,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.0375,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=0.15,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=0.6,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-1.5-flash-002',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Flash model (version 002).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.01875,
+            cost_per_1m_input_tokens=0.075,
+            cost_per_1m_output_tokens=0.3,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.0375,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=0.15,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=0.6,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 1.5 Flash-8B.
+    GeminiModelInfo(
+        model_id='gemini-1.5-flash-8b',
+        in_service=True,
+        provider='Google GenAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Flash 8B model (latest stable).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.01,
+            cost_per_1m_input_tokens=0.0375,
+            cost_per_1m_output_tokens=0.15,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.02,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=0.075,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=0.3,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-1.5-flash-8b-001',
+        in_service=True,
+        provider='Google GenAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Flash 8B model (version 001).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.01,
+            cost_per_1m_input_tokens=0.0375,
+            cost_per_1m_output_tokens=0.15,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.02,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=0.075,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=0.3,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 1.5 Pro.
+    GeminiModelInfo(
+        model_id='gemini-1.5-pro',
+        alias_for='gemini-1.5-pro-002',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Pro model (latest stable).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=2_097_152,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3125,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=5,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.625,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.5,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=10,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=1000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-1.5-pro-001',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Pro model (version 001).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=2_097_152,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3125,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=5,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.625,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.5,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=10,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=1000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-1.5-pro-002',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 1.5 Pro model (version 002).'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=2_097_152,
+            max_output_tokens=8_192,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3125,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=5,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.625,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.5,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=10,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=1000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+
+    #
+    # Experimental models.
+    #
+
+    GeminiModelInfo(
+        model_id='gemini-2.0-pro-exp-02-05',
+        in_service=True,
+        experimental=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 2.0 Pro experimental model (02/05/2025).'
+        ),
+        release_date=datetime.datetime(2025, 2, 5),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-2.0-flash-thinking-exp-01-21',
+        in_service=True,
+        experimental=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='thinking',
+        description=(
+            'Gemini 2.0 Flash thinking experimental model (01/21/2025).'
+        ),
+        release_date=datetime.datetime(2025, 1, 21),
+        input_modalities=GeminiModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-exp-1206',
+        in_service=True,
+        experimental=True,
+        provider='Google GenAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini year 1 experimental model (12/06/2024)'
+        ),
+        release_date=datetime.datetime(2025, 1, 21),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='learnlm-1.5-pro-experimental',
+        in_service=True,
+        experimental=True,
+        provider='Google GenAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini experimental model on learning science principles.'
+        ),
+        url='https://ai.google.dev/gemini-api/docs/learnlm',
+        release_date=datetime.datetime(2024, 11, 19),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=8_192,
+        ),
+    ),
 ]
 
-AUDIO_TYPES = [
-    'audio/aac',
-    'audio/flac',
-    'audio/mp3',
-    'audio/m4a',
-    'audio/mpeg',
-    'audio/mpga',
-    'audio/mp4',
-    'audio/opus',
-    'audio/pcm',
-    'audio/wav',
-    'audio/webm',
-]
 
-VIDEO_TYPES = [
-    'video/mov',
-    'video/mpeg',
-    'video/mpegps',
-    'video/mpg',
-    'video/mp4',
-    'video/webm',
-    'video/wmv',
-    'video/x-flv',
-    'video/3gpp',
-    'video/quicktime',
-]
-
-DOCUMENT_TYPES = [
-    'application/pdf',
-    'text/plain',
-    'text/csv',
-    'text/html',
-    'text/xml',
-    'text/x-script.python',
-    'application/json',
-]
-
-TEXT_ONLY = []
-
-ALL_MODALITIES = (
-    IMAGE_TYPES + AUDIO_TYPES + VIDEO_TYPES + DOCUMENT_TYPES
-)
-
-SUPPORTED_MODELS_AND_SETTINGS = {
-    # For automatically rate control and cost estimation, we explicitly register
-    # supported models here. This may be inconvenient for new models, but it
-    # helps us to keep track of the models and their pricing.
-    # Models and RPM are from
-    # https://ai.google.dev/gemini-api/docs/models/gemini?_gl=1*114hbho*_up*MQ..&gclid=Cj0KCQiAst67BhCEARIsAKKdWOljBY5aQdNQ41zOPkXFCwymUfMNFl_7ukm1veAf75ZTD9qWFrFr11IaApL3EALw_wcB
-    # Pricing in US dollars, from https://ai.google.dev/pricing
-    # as of 2025-01-03.
-    # NOTE: Please update google_genai.py, vertexai.py, __init__.py when
-    # adding new models.
-    # !!! PLEASE KEEP MODELS SORTED BY RELEASE DATE !!!
-    'gemini-2.0-flash-001': pg.Dict(
-        latest_update='2025-02-05',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10_000,
-        tpm_free=40_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0.1,
-        cost_per_1m_output_tokens_up_to_128k=0.4,
-        cost_per_1m_cached_tokens_up_to_128k=0.025,
-        cost_per_1m_input_tokens_longer_than_128k=0.1,
-        cost_per_1m_output_tokens_longer_than_128k=0.4,
-        cost_per_1m_cached_tokens_longer_than_128k=0.025,
-    ),
-    'gemini-2.0-flash': pg.Dict(
-        latest_update='2025-02-05',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10_000,
-        tpm_free=40_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0.1,
-        cost_per_1m_output_tokens_up_to_128k=0.4,
-        cost_per_1m_cached_tokens_up_to_128k=0.025,
-        cost_per_1m_input_tokens_longer_than_128k=0.1,
-        cost_per_1m_output_tokens_longer_than_128k=0.4,
-        cost_per_1m_cached_tokens_longer_than_128k=0.025,
-    ),
-    'gemini-2.0-pro-exp-02-05': pg.Dict(
-        latest_update='2025-02-05',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=4_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0.1,
-        cost_per_1m_output_tokens_up_to_128k=0.4,
-        cost_per_1m_cached_tokens_up_to_128k=0.025,
-        cost_per_1m_input_tokens_longer_than_128k=0.1,
-        cost_per_1m_output_tokens_longer_than_128k=0.4,
-        cost_per_1m_cached_tokens_longer_than_128k=0.025,
-    ),
-    'gemini-2.0-flash-thinking-exp-01-21': pg.Dict(
-        latest_update='2024-01-21',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=40_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0,
-        cost_per_1m_output_tokens_up_to_128k=0,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0,
-        cost_per_1m_output_tokens_longer_than_128k=0,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-    'gemini-2.0-flash-thinking-exp-1219': pg.Dict(
-        latest_update='2024-12-19',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=4_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0,
-        cost_per_1m_output_tokens_up_to_128k=0,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0,
-        cost_per_1m_output_tokens_longer_than_128k=0,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-    'gemini-2.0-flash-exp': pg.Dict(
-        latest_update='2024-12-11',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=4_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0,
-        cost_per_1m_output_tokens_up_to_128k=0,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0,
-        cost_per_1m_output_tokens_longer_than_128k=0,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-    'gemini-exp-1206': pg.Dict(
-        latest_update='2024-12-06',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=4_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0,
-        cost_per_1m_output_tokens_up_to_128k=0,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0,
-        cost_per_1m_output_tokens_longer_than_128k=0,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-    'learnlm-1.5-pro-experimental': pg.Dict(
-        latest_update='2024-11-19',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=4_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0,
-        cost_per_1m_output_tokens_up_to_128k=0,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0,
-        cost_per_1m_output_tokens_longer_than_128k=0,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-    'gemini-exp-1114': pg.Dict(
-        latest_update='2024-11-14',
-        experimental=True,
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=10,
-        tpm_free=4_000_000,
-        rpm_paid=0,
-        tpm_paid=0,
-        cost_per_1m_input_tokens_up_to_128k=0,
-        cost_per_1m_output_tokens_up_to_128k=0,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0,
-        cost_per_1m_output_tokens_longer_than_128k=0,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-    'gemini-1.5-flash-latest': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=15,
-        tpm_free=1_000_000,
-        rpm_paid=2000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=0.075,
-        cost_per_1m_output_tokens_up_to_128k=0.3,
-        cost_per_1m_cached_tokens_up_to_128k=0.01875,
-        cost_per_1m_input_tokens_longer_than_128k=0.15,
-        cost_per_1m_output_tokens_longer_than_128k=0.6,
-        cost_per_1m_cached_tokens_longer_than_128k=0.0375,
-    ),
-    'gemini-1.5-flash': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=15,
-        tpm_free=1_000_000,
-        rpm_paid=2000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=0.075,
-        cost_per_1m_output_tokens_up_to_128k=0.3,
-        cost_per_1m_cached_tokens_up_to_128k=0.01875,
-        cost_per_1m_input_tokens_longer_than_128k=0.15,
-        cost_per_1m_output_tokens_longer_than_128k=0.6,
-        cost_per_1m_cached_tokens_longer_than_128k=0.0375,
-    ),
-    'gemini-1.5-flash-001': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=15,
-        tpm_free=1_000_000,
-        rpm_paid=2000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=0.075,
-        cost_per_1m_output_tokens_up_to_128k=0.3,
-        cost_per_1m_cached_tokens_up_to_128k=0.01875,
-        cost_per_1m_input_tokens_longer_than_128k=0.15,
-        cost_per_1m_output_tokens_longer_than_128k=0.6,
-        cost_per_1m_cached_tokens_longer_than_128k=0.0375,
-    ),
-    'gemini-1.5-flash-002': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=15,
-        tpm_free=1_000_000,
-        rpm_paid=2000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=0.075,
-        cost_per_1m_output_tokens_up_to_128k=0.3,
-        cost_per_1m_cached_tokens_up_to_128k=0.01875,
-        cost_per_1m_input_tokens_longer_than_128k=0.15,
-        cost_per_1m_output_tokens_longer_than_128k=0.6,
-        cost_per_1m_cached_tokens_longer_than_128k=0.0375,
-    ),
-    'gemini-1.5-flash-8b': pg.Dict(
-        latest_update='2024-10-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=15,
-        tpm_free=1_000_000,
-        rpm_paid=4000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=0.0375,
-        cost_per_1m_output_tokens_up_to_128k=0.15,
-        cost_per_1m_cached_tokens_up_to_128k=0.01,
-        cost_per_1m_input_tokens_longer_than_128k=0.075,
-        cost_per_1m_output_tokens_longer_than_128k=0.3,
-        cost_per_1m_cached_tokens_longer_than_128k=0.02,
-    ),
-    'gemini-1.5-flash-8b-001': pg.Dict(
-        latest_update='2024-10-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=15,
-        tpm_free=1_000_000,
-        rpm_paid=4000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=0.0375,
-        cost_per_1m_output_tokens_up_to_128k=0.15,
-        cost_per_1m_cached_tokens_up_to_128k=0.01,
-        cost_per_1m_input_tokens_longer_than_128k=0.075,
-        cost_per_1m_output_tokens_longer_than_128k=0.3,
-        cost_per_1m_cached_tokens_longer_than_128k=0.02,
-    ),
-    'gemini-1.5-pro-latest': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=2,
-        tpm_free=32_000,
-        rpm_paid=1000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=1.25,
-        cost_per_1m_output_tokens_up_to_128k=5.00,
-        cost_per_1m_cached_tokens_up_to_128k=0.3125,
-        cost_per_1m_input_tokens_longer_than_128k=2.5,
-        cost_per_1m_output_tokens_longer_than_128k=10.00,
-        cost_per_1m_cached_tokens_longer_than_128k=0.625,
-    ),
-    'gemini-1.5-pro': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=2,
-        tpm_free=32_000,
-        rpm_paid=1000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=1.25,
-        cost_per_1m_output_tokens_up_to_128k=5.00,
-        cost_per_1m_cached_tokens_up_to_128k=0.3125,
-        cost_per_1m_input_tokens_longer_than_128k=2.5,
-        cost_per_1m_output_tokens_longer_than_128k=10.00,
-        cost_per_1m_cached_tokens_longer_than_128k=0.625,
-    ),
-    'gemini-1.5-pro-001': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=2,
-        tpm_free=32_000,
-        rpm_paid=1000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=1.25,
-        cost_per_1m_output_tokens_up_to_128k=5.00,
-        cost_per_1m_cached_tokens_up_to_128k=0.3125,
-        cost_per_1m_input_tokens_longer_than_128k=2.5,
-        cost_per_1m_output_tokens_longer_than_128k=10.00,
-        cost_per_1m_cached_tokens_longer_than_128k=0.625,
-    ),
-    'gemini-1.5-pro-002': pg.Dict(
-        latest_update='2024-09-30',
-        in_service=True,
-        supported_modalities=ALL_MODALITIES,
-        rpm_free=2,
-        tpm_free=32_000,
-        rpm_paid=1000,
-        tpm_paid=4_000_000,
-        cost_per_1m_input_tokens_up_to_128k=1.25,
-        cost_per_1m_output_tokens_up_to_128k=5.00,
-        cost_per_1m_cached_tokens_up_to_128k=0.3125,
-        cost_per_1m_input_tokens_longer_than_128k=2.5,
-        cost_per_1m_output_tokens_longer_than_128k=10.00,
-        cost_per_1m_cached_tokens_longer_than_128k=0.625,
-    ),
-    'gemini-1.0-pro': pg.Dict(
-        in_service=False,
-        supported_modalities=TEXT_ONLY,
-        rpm_free=15,
-        tpm_free=32_000,
-        rpm_paid=360,
-        tpm_paid=120_000,
-        cost_per_1m_input_tokens_up_to_128k=0.5,
-        cost_per_1m_output_tokens_up_to_128k=1.5,
-        cost_per_1m_cached_tokens_up_to_128k=0,
-        cost_per_1m_input_tokens_longer_than_128k=0.5,
-        cost_per_1m_output_tokens_longer_than_128k=1.5,
-        cost_per_1m_cached_tokens_longer_than_128k=0,
-    ),
-}
+_SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 
 @pg.use_init_args(['model'])
@@ -402,58 +534,18 @@ class Gemini(rest.REST):
 
   model: pg.typing.Annotated[
       pg.typing.Enum(
-          pg.MISSING_VALUE, list(SUPPORTED_MODELS_AND_SETTINGS.keys())
+          pg.MISSING_VALUE, [m.model_id for m in SUPPORTED_MODELS]
       ),
       'The name of the model to use.',
   ]
 
-  @property
-  def supported_modalities(self) -> list[str]:
-    """Returns the list of supported modalities."""
-    return SUPPORTED_MODELS_AND_SETTINGS[self.model].supported_modalities
-
-  @property
-  def max_concurrency(self) -> int:
-    """Returns the maximum number of concurrent requests."""
-    return self.rate_to_max_concurrency(
-        requests_per_min=max(
-            SUPPORTED_MODELS_AND_SETTINGS[self.model].rpm_free,
-            SUPPORTED_MODELS_AND_SETTINGS[self.model].rpm_paid
-        ),
-        tokens_per_min=max(
-            SUPPORTED_MODELS_AND_SETTINGS[self.model].tpm_free,
-            SUPPORTED_MODELS_AND_SETTINGS[self.model].tpm_paid,
-        ),
-    )
-
-  def estimate_cost(
-      self,
-      num_input_tokens: int,
-      num_output_tokens: int
-  ) -> float | None:
-    """Estimate the cost based on usage."""
-    entry = SUPPORTED_MODELS_AND_SETTINGS[self.model]
-    if num_input_tokens < 128_000:
-      cost_per_1m_input_tokens = entry.cost_per_1m_input_tokens_up_to_128k
-      cost_per_1m_output_tokens = entry.cost_per_1m_output_tokens_up_to_128k
-    else:
-      cost_per_1m_input_tokens = entry.cost_per_1m_input_tokens_longer_than_128k
-      cost_per_1m_output_tokens = (
-          entry.cost_per_1m_output_tokens_longer_than_128k
-      )
-    return (
-        cost_per_1m_input_tokens * num_input_tokens
-        + cost_per_1m_output_tokens * num_output_tokens
-    ) / 1000_000
-
-  @property
-  def model_id(self) -> str:
-    """Returns a string to identify the model."""
-    return self.model
+  @functools.cached_property
+  def model_info(self) -> GeminiModelInfo:
+    return _SUPPORTED_MODELS_BY_ID[self.model]
 
   @classmethod
   def dir(cls):
-    return [k for k, v in SUPPORTED_MODELS_AND_SETTINGS.items() if v.in_service]
+    return [m.model_id for m in SUPPORTED_MODELS if m.in_service]
 
   @property
   def headers(self):
@@ -510,7 +602,7 @@ class Gemini(rest.REST):
       elif isinstance(lf_chunk, lf_modalities.Mime):
         try:
           modalities = lf_chunk.make_compatible(
-              self.supported_modalities + ['text/plain']
+              self.model_info.input_modalities + ['text/plain']
           )
           if isinstance(modalities, lf_modalities.Mime):
             modalities = [modalities]
@@ -527,7 +619,9 @@ class Gemini(rest.REST):
         except lf.ModalityError as e:
           raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}') from e
       else:
-        raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}')
+        raise NotImplementedError(
+            f'Input conversion not implemented: {lf_chunk!r}'
+        )
     return dict(role='user', parts=parts)
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
@@ -544,10 +638,6 @@ class Gemini(rest.REST):
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             total_tokens=input_tokens + output_tokens,
-            estimated_cost=self.estimate_cost(
-                num_input_tokens=input_tokens,
-                num_output_tokens=output_tokens,
-            ),
         ),
     )
 

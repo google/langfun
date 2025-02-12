@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import unittest
+import langfun.core as lf
 from langfun.core.llms import deepseek
 
 
@@ -19,13 +20,13 @@ class DeepSeekTest(unittest.TestCase):
   """Tests for DeepSeek language model."""
 
   def test_dir(self):
-    self.assertIn('deepseek-chat', deepseek.DeepSeek.dir())
+    self.assertIn('deepseek-v3', deepseek.DeepSeek.dir())
 
   def test_key(self):
     with self.assertRaisesRegex(ValueError, 'Please specify `api_key`'):
-      _ = deepseek.DeepSeekChat().headers
+      _ = deepseek.DeepSeekV3().headers
     self.assertEqual(
-        deepseek.DeepSeekChat(api_key='test_key').headers,
+        deepseek.DeepSeekV3(api_key='test_key').headers,
         {
             'Content-Type': 'application/json',
             'Authorization': 'Bearer test_key',
@@ -34,27 +35,25 @@ class DeepSeekTest(unittest.TestCase):
 
   def test_model_id(self):
     self.assertEqual(
-        deepseek.DeepSeekChat(api_key='test_key').model_id,
-        'DeepSeek(deepseek-chat)',
+        deepseek.DeepSeekV3(api_key='test_key').model_id,
+        'deepseek-v3',
     )
 
   def test_resource_id(self):
     self.assertEqual(
-        deepseek.DeepSeekChat(api_key='test_key').resource_id,
-        'DeepSeek(deepseek-chat)',
+        deepseek.DeepSeekV3(api_key='test_key').resource_id,
+        'deepseek://deepseek-v3',
     )
 
-  def test_max_concurrency(self):
-    self.assertGreater(
-        deepseek.DeepSeekChat(api_key='test_key').max_concurrency, 0
+  def test_request(self):
+    request = deepseek.DeepSeekV3(api_key='test_key').request(
+        lf.UserMessage('hi'), lf.LMSamplingOptions(temperature=0.0),
     )
+    self.assertEqual(request['model'], 'deepseek-chat')
 
-  def test_estimate_cost(self):
-    self.assertEqual(
-        deepseek.DeepSeekChat(api_key='test_key').estimate_cost(
-            num_input_tokens=100, num_output_tokens=100
-        ),
-        4.2e-5
+  def test_lm_get(self):
+    self.assertIsInstance(
+        lf.LanguageModel.get('deepseek-v3'), deepseek.DeepSeek
     )
 
 if __name__ == '__main__':

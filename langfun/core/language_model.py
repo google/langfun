@@ -16,22 +16,20 @@
 import abc
 import contextlib
 import dataclasses
+import datetime
 import enum
 import functools
 import math
+import re
 import threading
 import time
-from typing import Annotated, Any, Callable, Iterator, Optional, Sequence, Tuple, Type, Union
+from typing import Annotated, Any, Callable, ClassVar, Iterator, Literal, Optional, Sequence, Tuple, Type, Union, final
 from langfun.core import component
 from langfun.core import concurrent
 from langfun.core import console
 from langfun.core import message as message_lib
 
 import pyglove as pg
-
-TOKENS_PER_REQUEST = 250  # Estimated num tokens for a single request
-DEFAULT_MAX_CONCURRENCY = 1  # Use this as max concurrency if no RPM or TPM data
-
 
 #
 # Common errors during calling language models.
@@ -52,6 +50,254 @@ class RateLimitError(RetryableLMError):
 
 class TemporaryLMError(RetryableLMError):
   """Error for temporary service issues that can be retried."""
+
+
+#
+# Language model information.
+#
+
+
+class ModelInfo(pg.Object):
+  """Common information for a language model."""
+
+  # Constant for modalities.
+  TEXT_INPUT_ONLY = []
+
+  model_id: Annotated[
+      str,
+      'A global unique identifier of the language model. ',
+  ]
+
+  alias_for: Annotated[
+      str | None,
+      'The fixed-version model ID that this model is aliased for.',
+  ] = None
+
+  #
+  # Basic information.
+  #
+
+  model_type: Annotated[
+      Literal['unknown', 'pretrained', 'instruction-tuned', 'thinking'],
+      'The type of the model.'
+  ] = 'unknown'
+
+  provider: Annotated[
+      str | None,
+      (
+          'The service provider (host) of the LLM. E.g. VertexAI, Microsoft, '
+          'etc.'
+      )
+  ] = None
+
+  description: Annotated[
+      str | None,
+      'An optional description of the model family.'
+  ] = None
+
+  url: Annotated[
+      str | None,
+      'The URL of the model.'
+  ] = None
+
+  release_date: Annotated[
+      datetime.date | None,
+      'The release date of the model. '
+  ] = None
+
+  in_service: Annotated[
+      bool,
+      'If True, the model is in service.'
+  ] = True
+
+  #
+  # LLM capabilities.
+  #
+
+  input_modalities: Annotated[
+      list[str] | None,
+      (
+          'Supported MIME types as model inputs. '
+          'If None, this information is unknown, so Langfun allows all '
+          'modalities from the input to be passed to the model.'
+      )
+  ] = None
+
+  class ContextLength(pg.Object):
+    """Context length information."""
+
+    max_input_tokens: Annotated[
+        int | None,
+        (
+            'The maximum number of input tokens of the language model. '
+            'If None, there is no limit or this information is unknown.'
+        )
+    ] = None
+
+    max_output_tokens: Annotated[
+        int | None,
+        (
+            'The maximum number of output tokens of the language model. '
+            'If None, there is no limit or this information is unknown.'
+        )
+    ] = None
+
+    max_cot_tokens: Annotated[
+        int | None,
+        (
+            'The maximum number of Chain-of-Thought tokens to generate. '
+            'If None, there is not limit or not applicable.'
+        )
+    ] = None
+
+  context_length: Annotated[
+      ContextLength | None,
+      (
+          'Context length information of the model. '
+          'If None, this information is unknown.'
+      )
+  ] = None
+
+  #
+  # Common pricing information.
+  #
+
+  class Pricing(pg.Object):
+    """Pricing information."""
+
+    cost_per_1m_cached_input_tokens: Annotated[
+        float | None,
+        (
+            'The cost per 1M cached input tokens in US dollars. '
+            'If None, this information is unknown.'
+        )
+    ] = None
+
+    cost_per_1m_input_tokens: Annotated[
+        float | None,
+        (
+            'The cost per 1M input tokens in US dollars. '
+            'If None, this information is unknown.'
+        )
+    ] = None
+
+    cost_per_1m_output_tokens: Annotated[
+        float | None,
+        (
+            'The cost per 1M output tokens in US dollars. '
+            'If None, this information is unknown.'
+        )
+    ] = None
+
+    def estimate_cost(self, usage: 'LMSamplingUsage') -> float | None:
+      """Estimates the cost of using the model. Subclass could override.
+
+      Args:
+        usage: The usage information of the model.
+
+      Returns:
+        The estimated cost in US dollars. If None, cost estimating is not
+        supported on the model.
+      """
+      # NOTE(daiyip): supported cached tokens accounting in future.
+      if (self.cost_per_1m_input_tokens is None
+          or self.cost_per_1m_output_tokens is None):
+        return None
+      return (
+          self.cost_per_1m_input_tokens * usage.prompt_tokens
+          + self.cost_per_1m_output_tokens * usage.completion_tokens
+      ) / 1000_000
+
+  pricing: Annotated[
+      Pricing | None,
+      (
+          'Pricing information. If None, this information is unknown.'
+      )
+  ] = None
+
+  #
+  # Rate limits.
+  #
+
+  class RateLimits(pg.Object):
+    """Preset rate limits."""
+
+    max_requests_per_minute: Annotated[
+        int | None,
+        (
+            'The max number of requests per minute.'
+            'If None, there is no limit.'
+        )
+    ] = None
+
+    max_tokens_per_minute: Annotated[
+        int | None,
+        (
+            'The max number of tokens per minute.'
+            'If None, there is no limit.'
+        )
+    ] = None
+
+  rate_limits: Annotated[
+      RateLimits | None,
+      (
+          'Rate limits. If None, this information is unknown.'
+      )
+  ] = None
+
+  #
+  # Additional information.
+  #
+
+  metadata: Annotated[
+      dict[str, Any],
+      (
+          'Model metadata. This could be used to store model-specific '
+          'information, which could be consumed by modules that need to '
+          'apply model-specific logic.'
+      ),
+  ] = {}
+
+  #
+  # Common model protocols.
+  #
+
+  @final
+  def estimate_cost(self, usage: 'LMSamplingUsage') -> float | None:
+    """Estimates the cost of using the model."""
+    if self.pricing is None:
+      return None
+    return self.pricing.estimate_cost(usage)
+
+  def supports_input(self, mime_type: str) -> bool:
+    """Returns True if an input MIME type is supported.
+
+    Subclass could override.
+
+    Args:
+      mime_type: The MIME type of the input.
+
+    Returns:
+      True if the input MIME type is supported.
+    """
+    if self._input_modalities is None:
+      return True
+    return mime_type.lower() in self._input_modalities
+
+  @property
+  def resource_id(self) -> str:
+    """Returns the resource ID of the LLM. Subclass could override."""
+    canonical_model_id = self.alias_for or self.model_id
+    if self.provider is None or not pg.is_deterministic(self.provider):
+      return canonical_model_id
+    provider = self.provider.lower().replace(' ', '_')
+    return f'{provider}://{canonical_model_id}'
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._input_modalities = set(
+        [mime_type.lower() for mime_type in self.input_modalities]
+    ) if self.input_modalities is not None else None
 
 
 #
@@ -88,12 +334,15 @@ class RetryStats(pg.Object):
       int,
       'Total number of retry attempts on LLM (excluding the first attempt).',
   ] = 0
+
   total_wait_interval: Annotated[
       float, 'Total wait interval in seconds due to retry.'
   ] = 0
+
   total_call_interval: Annotated[
       float, 'Total LLM call interval in seconds.'
   ] = 0
+
   errors: Annotated[
       dict[str, int],
       'A Counter of error types encountered during the retry attempts.',
@@ -426,13 +675,12 @@ class LanguageModel(component.Component):
           'Max concurrent requests being sent to the server. '
           'If None, there is no limit. '
           'Please note that the concurrency control is based on the '
-          '`resource_id` property, meaning that model instances shared '
+          '`info.resource_id` property, meaning that model instances shared '
           'the same resource ID will be accounted under the same concurrency '
           'control key. This allows a process-level concurrency control '
           'for specific models regardless the number of LM (client) instances '
-          'created by the program. Subclasses could override this number or '
-          'replace it with a `max_concurrency` property to allow dynamic '
-          'concurrency control.'
+          'created by the program. Subclasses could override the '
+          '`max_concurrency` property to allow dynamic concurrency control.'
       ),
   ] = None
 
@@ -487,6 +735,40 @@ class LanguageModel(component.Component):
       ),
   ] = False
 
+  _MODEL_FACTORY: ClassVar[dict[str, Callable[..., 'LanguageModel']]] = {}
+
+  @classmethod
+  def register(
+      cls,
+      model_id_or_prefix: str, factory: Callable[..., 'LanguageModel']
+  ) -> None:
+    """Registers a factory function for a model ID."""
+    cls._MODEL_FACTORY[model_id_or_prefix] = factory
+
+  @classmethod
+  def get(cls, model_id: str, *args, **kwargs):
+    """Creates a language model instance from a model ID."""
+    factory = cls._MODEL_FACTORY.get(model_id)
+    if factory is None:
+      factories = []
+      for k, v in cls._MODEL_FACTORY.items():
+        if re.match(k, model_id):
+          factories.append((k, v))
+      if not factories:
+        raise ValueError(f'Model not found: {model_id!r}.')
+      elif len(factories) > 1:
+        raise ValueError(
+            f'Multiple models found for {model_id!r}: '
+            f'{[x[0] for x in factories]}. '
+            'Please specify a more specific model ID.'
+        )
+      factory = factories[0][1]
+    return factory(model_id, *args, **kwargs)
+
+  @classmethod
+  def dir(cls):
+    return sorted(list(LanguageModel._MODEL_FACTORY.keys()))
+
   @pg.explicit_method_override
   def __init__(self, *args, **kwargs) -> None:
     """Overrides __init__ to pass through **kwargs to sampling options."""
@@ -512,16 +794,62 @@ class LanguageModel(component.Component):
   def _on_bound(self):
     super()._on_bound()
     self._call_counter = 0
+    self.__dict__.pop('model_info', None)
 
+  @functools.cached_property
+  def model_info(self) -> ModelInfo:
+    """Returns the specification of the model."""
+    return ModelInfo(model_id='unknown')
+
+  #
+  # Shortcut properties/methods from `model_info`.
+  # If these behaviors need to be changed, please override the corresponding
+  # methods in the ModelInfo subclasses instead of these properties/methods.
+  #
+
+  @final
   @property
   def model_id(self) -> str:
     """Returns a string to identify the model."""
-    return self.__class__.__name__
+    return self.model_info.alias_for or self.model_info.model_id
 
+  @final
   @property
   def resource_id(self) -> str:
     """Resource ID for performing request parallism control."""
-    return self.model_id
+    return self.model_info.resource_id
+
+  @final
+  @property
+  def context_length(self) -> ModelInfo.ContextLength | None:
+    """Returns the context length of the model."""
+    return self.model_info.context_length
+
+  @final
+  @property
+  def pricing(self) -> ModelInfo.Pricing | None:
+    """Returns the pricing information of the model."""
+    return self.model_info.pricing
+
+  @final
+  @property
+  def rate_limits(self) -> ModelInfo.RateLimits | None:
+    """Returns the rate limits to the model."""
+    return self.model_info.rate_limits
+
+  @final
+  def supports_input(self, mime_type: str):
+    """Returns True if an input type is supported. Subclasses can override."""
+    return self.model_info.supports_input(mime_type)
+
+  @final
+  def estimate_cost(self, usage: LMSamplingUsage) -> float | None:
+    """Returns the estimated cost of a usage. Subclasses can override."""
+    return self.model_info.estimate_cost(usage)
+
+  #
+  # Language model operations.
+  #
 
   def sample(
       self,
@@ -554,10 +882,17 @@ class LanguageModel(component.Component):
           response.metadata.logprobs = sample.logprobs
           response.metadata.is_cached = result.is_cached
 
+          # Update estimated cost.
+          usage = result.usage
+          estimated_cost = self.estimate_cost(usage)
+          if estimated_cost is not None:
+            usage.rebind(
+                estimated_cost=estimated_cost, skip_notification=True
+            )
+
           # NOTE(daiyip): Current usage is computed at per-result level,
           # which is accurate when n=1. For n > 1, we average the usage across
           # multiple samples.
-          usage = result.usage
           if len(result.samples) == 1 or isinstance(usage, UsageNotAvailable):
             response.metadata.usage = usage
           else:
@@ -945,16 +1280,24 @@ class LanguageModel(component.Component):
           color='blue',
       )
 
-  def rate_to_max_concurrency(
-      self, requests_per_min: float = 0, tokens_per_min: float = 0
-  ) -> int:
-    """Converts a rate to a max concurrency."""
-    if tokens_per_min > 0:
-      return max(int(tokens_per_min / TOKENS_PER_REQUEST / 60), 1)
-    elif requests_per_min > 0:
-      return max(int(requests_per_min / 60), 1)  # Max concurrency can't be zero
-    else:
-      return DEFAULT_MAX_CONCURRENCY  # Default of 1
+  @classmethod
+  def estimate_max_concurrency(
+      cls,
+      max_tokens_per_minute: int | None,
+      max_requests_per_minute: int | None,
+      average_tokens_per_request: int = 250
+  ) -> int | None:
+    """Estimates max concurrency concurrency based on the rate limits."""
+    # NOTE(daiyip): max concurrency is estimated based on the rate limit.
+    # We assume each request has approximately 250 tokens, and each request
+    # takes 1 second to complete. This might not be accurate for all models.
+    if max_tokens_per_minute is not None:
+      return max(
+          int(max_tokens_per_minute / average_tokens_per_request / 60), 1
+      )
+    elif max_requests_per_minute is not None:
+      return max(int(max_requests_per_minute / 60), 1)
+    return None
 
 
 class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):

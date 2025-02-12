@@ -13,6 +13,7 @@
 # limitations under the License.
 """Language models from Google GenAI."""
 
+import functools
 import os
 from typing import Annotated, Literal
 
@@ -25,6 +26,20 @@ import pyglove as pg
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class GenAI(gemini.Gemini):
   """Language models provided by Google GenAI."""
+
+  model: pg.typing.Annotated[
+      pg.typing.Enum(
+          pg.MISSING_VALUE,
+          [
+              m.model_id for m in gemini.SUPPORTED_MODELS
+              if m.provider == 'Google GenAI' or (
+                  isinstance(m.provider, pg.hyper.OneOf)
+                  and 'Google GenAI' in m.provider.candidates
+              )
+          ]
+      ),
+      'The name of the model to use.',
+  ]
 
   api_key: Annotated[
       str | None,
@@ -40,10 +55,11 @@ class GenAI(gemini.Gemini):
       'The API version to use.'
   ] = 'v1beta'
 
-  @property
-  def model_id(self) -> str:
-    """Returns a string to identify the model."""
-    return f'GenAI({self.model})'
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    return super().model_info.clone(
+        override=dict(provider='Google GenAI')
+    )
 
   @property
   def api_endpoint(self) -> str:
@@ -63,91 +79,105 @@ class GenAI(gemini.Gemini):
     )
 
 
-class Gemini2Flash(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 2.0 model launched on 02/05/2025."""
+# pylint: disable=invalid-name
 
-  api_version = 'v1beta'
-  model = 'gemini-2.0-flash'
+#
+# Experimental models.
+#
 
 
-class Gemini2ProExp_20250205(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 2.0 Pro model launched on 02/05/2025."""
-
-  api_version = 'v1beta'
+class Gemini2ProExp_20250205(GenAI):
+  """Gemini 2.0 Pro experimental model launched on 02/05/2025."""
   model = 'gemini-2.0-pro-exp-02-05'
 
 
-class Gemini2FlashThinkingExp_20250121(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 2.0 Thinking model launched on 01/21/2025."""
-
+class Gemini2FlashThinkingExp_20250121(GenAI):
+  """Gemini 2.0 Flash Thinking model launched on 01/21/2025."""
   api_version = 'v1beta'
   model = 'gemini-2.0-flash-thinking-exp-01-21'
   timeout = None
 
 
-class GeminiFlash2_0ThinkingExp_20241219(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 2.0 Thinking model launched on 12/19/2024."""
-
-  api_version = 'v1beta'
-  model = 'gemini-2.0-flash-thinking-exp-1219'
-  timeout = None
-
-
-class GeminiFlash2_0Exp(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 2.0 model launched on 12/11/2024."""
-
-  model = 'gemini-2.0-flash-exp'
-
-
-class GeminiExp_20241206(GenAI):  # pylint: disable=invalid-name
+class GeminiExp_20241206(GenAI):
   """Gemini Experimental model launched on 12/06/2024."""
-
   model = 'gemini-exp-1206'
 
 
-class GeminiExp_20241114(GenAI):  # pylint: disable=invalid-name
-  """Gemini Experimental model launched on 11/14/2024."""
-
-  model = 'gemini-exp-1114'
-
-
-class GeminiPro1_5(GenAI):  # pylint: disable=invalid-name
-  """Gemini Pro latest model."""
-
-  model = 'gemini-1.5-pro-latest'
+#
+# Production models.
+#
 
 
-class GeminiPro1_5_002(GenAI):  # pylint: disable=invalid-name
-  """Gemini Pro latest model."""
+class Gemini2Flash(GenAI):
+  """Gemini 2.0 Flash model (latest stable)."""
+  model = 'gemini-2.0-flash'
 
+
+class Gemini2Flash_001(GenAI):
+  """Gemini 2.0 Flash model launched on 02/05/2025."""
+  model = 'gemini-2.0-flash-001'
+
+
+class Gemini2FlashLitePreview_20250205(GenAI):
+  """Gemini 2.0 Flash lite preview model launched on 02/05/2025."""
+  model = 'gemini-2.0-flash-lite-preview-02-05'
+
+
+class Gemini15Pro(GenAI):
+  """Gemini 1.5 Pro latest stable model."""
+  model = 'gemini-1.5-pro'
+
+
+class Gemini15Pro_002(GenAI):
+  """Gemini 1.5 Pro stable version 002."""
   model = 'gemini-1.5-pro-002'
 
 
-class GeminiPro1_5_001(GenAI):  # pylint: disable=invalid-name
-  """Gemini Pro latest model."""
-
+class Gemini15Pro_001(GenAI):
+  """Gemini 1.5 Pro stable version 001."""
   model = 'gemini-1.5-pro-001'
 
 
-class GeminiFlash1_5(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash latest model."""
+class Gemini15Flash(GenAI):
+  """Gemini 1.5 Flash latest model."""
+  model = 'gemini-1.5-flash'
 
-  model = 'gemini-1.5-flash-latest'
 
-
-class GeminiFlash1_5_002(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 1.5 model stable version 002."""
-
+class Gemini15Flash_002(GenAI):
+  """Gemini 1.5 Flash model stable version 002."""
   model = 'gemini-1.5-flash-002'
 
 
-class GeminiFlash1_5_001(GenAI):  # pylint: disable=invalid-name
-  """Gemini Flash 1.5 model stable version 001."""
-
+class Gemini15Flash_001(GenAI):
+  """Gemini 1.5 Flash model stable version 001."""
   model = 'gemini-1.5-flash-001'
 
 
-class GeminiPro1(GenAI):  # pylint: disable=invalid-name
-  """Gemini 1.0 Pro model."""
+class Gemini15Flash8B(GenAI):
+  """Gemini 1.5 Flash 8B modle (latest stable)."""
+  model = 'gemini-1.5-flash-8b'
 
-  model = 'gemini-1.0-pro'
+
+class Gemini15Flash8B_001(GenAI):
+  """Gemini 1.5 Flash 8B model (version 001)."""
+  model = 'gemini-1.5-flash-8b-001'
+
+
+# For backward compatibility.
+GeminiPro1_5 = Gemini15Pro
+GeminiFlash1_5 = Gemini15Flash
+
+# pylint: enable=invalid-name
+
+
+def _genai_model(model: str, *args, **kwargs) -> GenAI:
+  model = model.removeprefix('google_genai://')
+  return GenAI(model=model, *args, **kwargs)
+
+
+def _register_genai_models():
+  """Register GenAI models."""
+  for m in gemini.SUPPORTED_MODELS:
+    lf.LanguageModel.register('google_genai://' + m.model_id, _genai_model)
+
+_register_genai_models()

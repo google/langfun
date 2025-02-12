@@ -13,6 +13,8 @@
 # limitations under the License.
 """Vertex AI generative models."""
 
+import datetime
+import functools
 import os
 from typing import Annotated, Any, Literal
 
@@ -49,9 +51,23 @@ class VertexAI(rest.REST):
   Please check out VertexAIGemini in `gemini.py` as an example.
   """
 
+  model: pg.typing.Annotated[
+      pg.typing.Enum(
+          pg.MISSING_VALUE,
+          [
+              m.model_id for m in gemini.SUPPORTED_MODELS
+              if m.provider == 'VertexAI' or (
+                  isinstance(m.provider, pg.hyper.OneOf)
+                  and 'VertexAI' in m.provider.candidates
+              )
+          ]
+      ),
+      'The name of the model to use.',
+  ]
+
   model: Annotated[
       str | None,
-      'Model ID.'
+      'Model name.'
   ] = None
 
   project: Annotated[
@@ -113,11 +129,6 @@ class VertexAI(rest.REST):
       )
     self._credentials = credentials
 
-  @property
-  def model_id(self) -> str:
-    """Returns a string to identify the model."""
-    return f'VertexAI({self.model})'
-
   def _session(self):
     assert self._credentials is not None
     assert auth_requests is not None
@@ -134,6 +145,9 @@ class VertexAI(rest.REST):
 class VertexAIGemini(VertexAI, gemini.Gemini):
   """Gemini models served by Vertex AI.."""
 
+  # Set default location to us-central1.
+  location = 'us-central1'
+
   @property
   def api_endpoint(self) -> str:
     assert self._api_initialized
@@ -143,104 +157,93 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
         f'models/{self.model}:generateContent'
     )
 
+  @functools.cached_property
+  def model_info(self) -> gemini.GeminiModelInfo:
+    return super().model_info.clone(override=dict(provider='VertexAI'))
+
+#
+# Production models.
+#
+
 
 class VertexAIGemini2Flash(VertexAIGemini):  # pylint: disable=invalid-name
-  """Gemini Flash 2.0 model launched on 02/05/2025."""
+  """Gemini Flash 2.0 model (latest stable)."""
+  model = 'gemini-2.0-flash'
 
-  api_version = 'v1beta'
+
+class VertexAIGemini2Flash_001(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini Flash 2.0 model version 001."""
   model = 'gemini-2.0-flash-001'
-  location = 'us-central1'
+
+
+class VertexAIGemini2FlashLitePreview_20250205(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 2.0 Flash lite preview model launched on 02/05/2025."""
+  model = 'gemini-2.0-flash-lite-preview-02-05'
+
+
+class VertexAIGemini15Pro(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model (latest stable)."""
+  model = 'gemini-1.5-pro'
+
+
+class VertexAIGemini15Pro_002(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model (version 002)."""
+  model = 'gemini-1.5-pro-002'
+
+
+class VertexAIGemini15Pro_001(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Pro model (version 001)."""
+  model = 'gemini-1.5-pro-001'
+
+
+class VertexAIGemini15Flash(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model (latest stable)."""
+  model = 'gemini-1.5-flash'
+
+
+class VertexAIGemini15Flash_002(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model (version 002)."""
+  model = 'gemini-1.5-flash-002'
+
+
+class VertexAIGemini15Flash_001(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash model (version 001)."""
+  model = 'gemini-1.5-flash-001'
+
+
+class VertexAIGemini15Flash8B(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash 8B model (latest stable)."""
+  model = 'gemini-1.5-flash-8b'
+
+
+class VertexAIGemini15Flash8B_001(VertexAIGemini):  # pylint: disable=invalid-name
+  """Vertex AI Gemini 1.5 Flash 8B model (version 001)."""
+  model = 'gemini-1.5-flash-8b-001'
+
+#
+# Experimental models.
+#
 
 
 class VertexAIGemini2ProExp_20250205(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini Flash 2.0 Pro model launched on 02/05/2025."""
-
-  api_version = 'v1beta'
   model = 'gemini-2.0-pro-exp-02-05'
-  location = 'us-central1'
 
 
 class VertexAIGemini2FlashThinkingExp_20250121(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini Flash 2.0 Thinking model launched on 01/21/2025."""
-
-  api_version = 'v1beta'
   model = 'gemini-2.0-flash-thinking-exp-01-21'
-  timeout = None
-  location = 'us-central1'
-
-
-class VertexAIGeminiFlash2_0ThinkingExp_20241219(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini Flash 2.0 Thinking model launched on 12/19/2024."""
-
-  api_version = 'v1alpha'
-  model = 'gemini-2.0-flash-thinking-exp-1219'
   timeout = None
 
 
 class VertexAIGeminiFlash2_0Exp(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini 2.0 Flash model."""
-
   model = 'gemini-2.0-flash-exp'
 
 
 class VertexAIGeminiExp_20241206(VertexAIGemini):  # pylint: disable=invalid-name
   """Vertex AI Gemini Experimental model launched on 12/06/2024."""
-
   model = 'gemini-exp-1206'
-
-
-class VertexAIGeminiExp_20241114(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini Experimental model launched on 11/14/2024."""
-
-  model = 'gemini-exp-1114'
-
-
-class VertexAIGeminiPro1_5(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Pro model."""
-
-  model = 'gemini-1.5-pro-002'
-  location = 'us-central1'
-
-
-class VertexAIGeminiPro1_5_002(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Pro model."""
-
-  model = 'gemini-1.5-pro-002'
-  location = 'us-central1'
-
-
-class VertexAIGeminiPro1_5_001(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Pro model."""
-
-  model = 'gemini-1.5-pro-001'
-  location = 'us-central1'
-
-
-class VertexAIGeminiFlash1_5(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Flash model."""
-
-  model = 'gemini-1.5-flash'
-  location = 'us-central1'
-
-
-class VertexAIGeminiFlash1_5_002(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Flash model."""
-
-  model = 'gemini-1.5-flash-002'
-  location = 'us-central1'
-
-
-class VertexAIGeminiFlash1_5_001(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.5 Flash model."""
-
-  model = 'gemini-1.5-flash-001'
-  location = 'us-central1'
-
-
-class VertexAIGeminiPro1(VertexAIGemini):  # pylint: disable=invalid-name
-  """Vertex AI Gemini 1.0 Pro model."""
-
-  model = 'gemini-1.0-pro'
 
 
 #
@@ -259,6 +262,17 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
   ] = 'us-east5'
 
   api_version = 'vertex-2023-10-16'
+
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    mi = anthropic._SUPPORTED_MODELS_BY_MODEL_ID[self.model]  # pylint: disable=protected-access
+    if mi.provider != 'VertexAI':
+      for m in anthropic.SUPPORTED_MODELS:
+        if m.provider == 'VertexAI' and m.alias_for == m.model_id:
+          mi = m
+          self.rebind(model=mi.model_id, skip_notification=True)
+          break
+    return mi
 
   @property
   def headers(self):
@@ -288,71 +302,102 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
 # pylint: disable=invalid-name
 
 
-class VertexAIClaude3_Opus_20240229(VertexAIAnthropic):
-  """Anthropic's Claude 3 Opus model on VertexAI."""
-  model = 'claude-3-opus@20240229'
-
-
-class VertexAIClaude3_5_Sonnet_20241022(VertexAIAnthropic):
+class VertexAIClaude35Sonnet_20241022(VertexAIAnthropic):
   """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
   model = 'claude-3-5-sonnet-v2@20241022'
 
 
-class VertexAIClaude3_5_Sonnet_20240620(VertexAIAnthropic):
-  """Anthropic's Claude 3.5 Sonnet model on VertexAI."""
-  model = 'claude-3-5-sonnet@20240620'
-
-
-class VertexAIClaude3_5_Haiku_20241022(VertexAIAnthropic):
+class VertexAIClaude35Haiku_20241022(VertexAIAnthropic):
   """Anthropic's Claude 3.5 Haiku model on VertexAI."""
   model = 'claude-3-5-haiku@20241022'
+
+
+class VertexAIClaude3Opus_20240229(VertexAIAnthropic):
+  """Anthropic's Claude 3 Opus model on VertexAI."""
+  model = 'claude-3-opus@20240229'
 
 # pylint: enable=invalid-name
 
 #
 # Llama models on Vertex AI.
-# pylint: disable=line-too-long
-# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing?_gl=1*ukuk6u*_ga*MjEzMjc4NjM2My4xNzMzODg4OTg3*_ga_WH2QY8WWF5*MTczNzEzNDU1Mi4xMjQuMS4xNzM3MTM0NzczLjU5LjAuMA..#meta-models
-# pylint: enable=line-too-long
+# https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama
+# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing#meta-models
 
-LLAMA_MODELS = {
-    'llama-3.2-90b-vision-instruct-maas': pg.Dict(
-        latest_update='2024-09-25',
+LLAMA_MODELS = [
+    lf.ModelInfo(
+        model_id='llama-3.1-405b-instruct-maas',
         in_service=True,
-        rpm=0,
-        tpm=0,
-        # Free during preview.
-        cost_per_1m_input_tokens=None,
-        cost_per_1m_output_tokens=None,
+        model_type='instruction-tuned',
+        provider='VertexAI',
+        description=(
+            'Llama 3.2 405B vision instruct model on VertexAI (Preview)'
+        ),
+        url='https://huggingface.co/meta-llama/Llama-3.1-405B',
+        release_date=datetime.datetime(2024, 7, 23),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=128_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=5.0,
+            cost_per_1m_output_tokens=16.0,
+        ),
+        rate_limits=None,
     ),
-    'llama-3.1-405b-instruct-maas': pg.Dict(
-        latest_update='2024-09-25',
+    lf.ModelInfo(
+        model_id='llama-3.2-90b-vision-instruct-maas',
         in_service=True,
-        rpm=0,
-        tpm=0,
-        # GA.
-        cost_per_1m_input_tokens=5,
-        cost_per_1m_output_tokens=16,
-    ),
-    'llama-3.1-70b-instruct-maas': pg.Dict(
-        latest_update='2024-09-25',
-        in_service=True,
-        rpm=0,
-        tpm=0,
+        model_type='instruction-tuned',
+        provider='VertexAI',
+        description=(
+            'Llama 3.2 90B vision instruct model on VertexAI (Preview)'
+        ),
+        release_date=datetime.datetime(2024, 7, 23),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=128_000,
+            max_output_tokens=8_192,
+        ),
         # Free during preview.
-        cost_per_1m_input_tokens=None,
-        cost_per_1m_output_tokens=None,
+        pricing=None,
+        rate_limits=None,
     ),
-    'llama-3.1-8b-instruct-maas': pg.Dict(
-        latest_update='2024-09-25',
+    lf.ModelInfo(
+        model_id='llama-3.1-70b-instruct-maas',
         in_service=True,
-        rpm=0,
-        tpm=0,
+        model_type='instruction-tuned',
+        provider='VertexAI',
+        description=(
+            'Llama 3.2 70B vision instruct model on VertexAI (Preview)'
+        ),
+        release_date=datetime.datetime(2024, 7, 23),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=128_000,
+            max_output_tokens=8_192,
+        ),
         # Free during preview.
-        cost_per_1m_input_tokens=None,
-        cost_per_1m_output_tokens=None,
-    )
-}
+        pricing=None,
+        rate_limits=None,
+    ),
+    lf.ModelInfo(
+        model_id='llama-3.1-8b-instruct-maas',
+        in_service=True,
+        model_type='instruction-tuned',
+        provider='VertexAI',
+        description=(
+            'Llama 3.2 8B vision instruct model on VertexAI (Preview)'
+        ),
+        release_date=datetime.datetime(2024, 7, 23),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=0,
+            max_output_tokens=0,
+        ),
+        # Free during preview.
+        pricing=None,
+        rate_limits=None,
+    ),
+]
+
+_LLAMA_MODELS_BY_MODEL_ID = {m.model_id: m for m in LLAMA_MODELS}
 
 
 @pg.use_init_args(['model'])
@@ -361,7 +406,7 @@ class VertexAILlama(VertexAI, openai_compatible.OpenAICompatible):
   """Llama models on VertexAI."""
 
   model: pg.typing.Annotated[
-      pg.typing.Enum(pg.MISSING_VALUE, list(LLAMA_MODELS.keys())),
+      pg.typing.Enum(pg.MISSING_VALUE, [m.model_id for m in LLAMA_MODELS]),
       'Llama model ID.',
   ]
 
@@ -372,6 +417,10 @@ class VertexAILlama(VertexAI, openai_compatible.OpenAICompatible):
           'See https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/llama#regions-quotas'
       )
   ] = 'us-central1'
+
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    return _LLAMA_MODELS_BY_MODEL_ID[self.model]
 
   @property
   def api_endpoint(self) -> str:
@@ -391,113 +440,77 @@ class VertexAILlama(VertexAI, openai_compatible.OpenAICompatible):
     request['model'] = f'meta/{self.model}'
     return request
 
-  @property
-  def max_concurrency(self) -> int:
-    rpm = LLAMA_MODELS[self.model].get('rpm', 0)
-    tpm = LLAMA_MODELS[self.model].get('tpm', 0)
-    return self.rate_to_max_concurrency(
-        requests_per_min=rpm, tokens_per_min=tpm
-    )
-
-  def estimate_cost(
-      self,
-      num_input_tokens: int,
-      num_output_tokens: int
-  ) -> float | None:
-    """Estimate the cost based on usage."""
-    cost_per_1m_input_tokens = LLAMA_MODELS[self.model].get(
-        'cost_per_1m_input_tokens', None
-    )
-    cost_per_1m_output_tokens = LLAMA_MODELS[self.model].get(
-        'cost_per_1m_output_tokens', None
-    )
-    if cost_per_1m_output_tokens is None or cost_per_1m_input_tokens is None:
-      return None
-    return (
-        cost_per_1m_input_tokens * num_input_tokens
-        + cost_per_1m_output_tokens * num_output_tokens
-    ) / 1000_000
-
 
 # pylint: disable=invalid-name
-class VertexAILlama3_2_90B(VertexAILlama):
+class VertexAILlama32_90B(VertexAILlama):
   """Llama 3.2 90B vision instruct model on VertexAI."""
-
   model = 'llama-3.2-90b-vision-instruct-maas'
 
 
-class VertexAILlama3_1_405B(VertexAILlama):
+class VertexAILlama31_405B(VertexAILlama):
   """Llama 3.1 405B vision instruct model on VertexAI."""
-
   model = 'llama-3.1-405b-instruct-maas'
 
 
-class VertexAILlama3_1_70B(VertexAILlama):
+class VertexAILlama31_70B(VertexAILlama):
   """Llama 3.1 70B vision instruct model on VertexAI."""
-
   model = 'llama-3.1-70b-instruct-maas'
 
 
-class VertexAILlama3_1_8B(VertexAILlama):
+class VertexAILlama31_8B(VertexAILlama):
   """Llama 3.1 8B vision instruct model on VertexAI."""
-
   model = 'llama-3.1-8b-instruct-maas'
+
+
 # pylint: enable=invalid-name
 
 #
 # Mistral models on Vertex AI.
 # pylint: disable=line-too-long
-# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing?_gl=1*ukuk6u*_ga*MjEzMjc4NjM2My4xNzMzODg4OTg3*_ga_WH2QY8WWF5*MTczNzEzNDU1Mi4xMjQuMS4xNzM3MTM0NzczLjU5LjAuMA..#mistral-models
+# Models: https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/mistral
+# Pricing: https://cloud.google.com/vertex-ai/generative-ai/pricing#mistral-models
 # pylint: enable=line-too-long
 
+MISTRAL_MODELS = [
+    lf.ModelInfo(
+        model_id='mistral-large-2411',
+        in_service=True,
+        model_type='instruction-tuned',
+        provider='VertexAI',
+        description='Mistral Large model on VertexAI (GA) version 11/21/2024',
+        release_date=datetime.datetime(2024, 11, 21),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=128_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=6.0,
+        ),
+        rate_limits=None,
+    ),
+    lf.ModelInfo(
+        model_id='codestral-2501',
+        in_service=True,
+        model_type='instruction-tuned',
+        provider='VertexAI',
+        description=(
+            'Mistral Codestral model on VertexAI (GA) (version 01/13/2025)'
+        ),
+        release_date=datetime.datetime(2025, 1, 13),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=128_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=0.3,
+            cost_per_1m_output_tokens=0.9,
+        ),
+        rate_limits=None,
+    ),
+]
 
-MISTRAL_MODELS = {
-    'mistral-large-2411': pg.Dict(
-        latest_update='2024-11-21',
-        in_service=True,
-        rpm=0,
-        tpm=0,
-        # GA.
-        cost_per_1m_input_tokens=2,
-        cost_per_1m_output_tokens=6,
-    ),
-    'mistral-large@2407': pg.Dict(
-        latest_update='2024-07-24',
-        in_service=True,
-        rpm=0,
-        tpm=0,
-        # GA.
-        cost_per_1m_input_tokens=2,
-        cost_per_1m_output_tokens=6,
-    ),
-    'mistral-nemo@2407': pg.Dict(
-        latest_update='2024-07-24',
-        in_service=True,
-        rpm=0,
-        tpm=0,
-        # GA.
-        cost_per_1m_input_tokens=0.15,
-        cost_per_1m_output_tokens=0.15,
-    ),
-    'codestral-2501': pg.Dict(
-        latest_update='2025-01-13',
-        in_service=True,
-        rpm=0,
-        tpm=0,
-        # GA.
-        cost_per_1m_input_tokens=0.3,
-        cost_per_1m_output_tokens=0.9,
-    ),
-    'codestral@2405': pg.Dict(
-        latest_update='2024-05-29',
-        in_service=True,
-        rpm=0,
-        tpm=0,
-        # GA.
-        cost_per_1m_input_tokens=0.2,
-        cost_per_1m_output_tokens=0.6,
-    ),
-}
+_MISTRAL_MODELS_BY_MODEL_ID = {m.model_id: m for m in MISTRAL_MODELS}
 
 
 @pg.use_init_args(['model'])
@@ -506,7 +519,7 @@ class VertexAIMistral(VertexAI, openai_compatible.OpenAICompatible):
   """Mistral AI models on VertexAI."""
 
   model: pg.typing.Annotated[
-      pg.typing.Enum(pg.MISSING_VALUE, list(MISTRAL_MODELS.keys())),
+      pg.typing.Enum(pg.MISSING_VALUE, [m.model_id for m in MISTRAL_MODELS]),
       'Mistral model ID.',
   ]
 
@@ -518,6 +531,10 @@ class VertexAIMistral(VertexAI, openai_compatible.OpenAICompatible):
       )
   ] = 'us-central1'
 
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    return _MISTRAL_MODELS_BY_MODEL_ID[self.model]
+
   @property
   def api_endpoint(self) -> str:
     assert self._api_initialized
@@ -527,61 +544,42 @@ class VertexAIMistral(VertexAI, openai_compatible.OpenAICompatible):
         f'models/{self.model}:rawPredict'
     )
 
-  @property
-  def max_concurrency(self) -> int:
-    rpm = MISTRAL_MODELS[self.model].get('rpm', 0)
-    tpm = MISTRAL_MODELS[self.model].get('tpm', 0)
-    return self.rate_to_max_concurrency(
-        requests_per_min=rpm, tokens_per_min=tpm
-    )
-
-  def estimate_cost(
-      self,
-      num_input_tokens: int,
-      num_output_tokens: int
-  ) -> float | None:
-    """Estimate the cost based on usage."""
-    cost_per_1m_input_tokens = MISTRAL_MODELS[self.model].get(
-        'cost_per_1m_input_tokens', None
-    )
-    cost_per_1m_output_tokens = MISTRAL_MODELS[self.model].get(
-        'cost_per_1m_output_tokens', None
-    )
-    if cost_per_1m_output_tokens is None or cost_per_1m_input_tokens is None:
-      return None
-    return (
-        cost_per_1m_input_tokens * num_input_tokens
-        + cost_per_1m_output_tokens * num_output_tokens
-    ) / 1000_000
-
 
 # pylint: disable=invalid-name
 class VertexAIMistralLarge_20241121(VertexAIMistral):
   """Mistral Large model on VertexAI released on 2024/11/21."""
-
   model = 'mistral-large-2411'
-
-
-class VertexAIMistralLarge_20240724(VertexAIMistral):
-  """Mistral Large model on VertexAI released on 2024/07/24."""
-
-  model = 'mistral-large@2407'
-
-
-class VertexAIMistralNemo_20240724(VertexAIMistral):
-  """Mistral Nemo model on VertexAI released on 2024/07/24."""
-
-  model = 'mistral-nemo@2407'
 
 
 class VertexAICodestral_20250113(VertexAIMistral):
   """Mistral Nemo model on VertexAI released on 2024/07/24."""
-
   model = 'codestral-2501'
 
-
-class VertexAICodestral_20240529(VertexAIMistral):
-  """Mistral Nemo model on VertexAI released on 2024/05/29."""
-
-  model = 'codestral@2405'
 # pylint: enable=invalid-name
+
+
+#
+# Register Vertex AI models so they can be retrieved with LanguageModel.get().
+#
+
+
+def _register_vertexai_models():
+  """Register Vertex AI models."""
+  for m in gemini.SUPPORTED_MODELS:
+    if m.provider == 'VertexAI' or (
+        isinstance(m.provider, pg.hyper.OneOf)
+        and 'VertexAI' in m.provider.candidates
+    ):
+      lf.LanguageModel.register(m.model_id, VertexAIGemini)
+
+  for m in anthropic.SUPPORTED_MODELS:
+    if m.provider == 'VertexAI':
+      lf.LanguageModel.register(m.model_id, VertexAIAnthropic)
+
+  for m in LLAMA_MODELS:
+    lf.LanguageModel.register(m.model_id, VertexAILlama)
+
+  for m in MISTRAL_MODELS:
+    lf.LanguageModel.register(m.model_id, VertexAIMistral)
+
+_register_vertexai_models()

@@ -78,6 +78,33 @@ def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
 class GeminiTest(unittest.TestCase):
   """Tests for Vertex model with REST API."""
 
+  def test_dir(self):
+    self.assertIn('gemini-1.5-pro', gemini.Gemini.dir())
+
+  def test_estimate_cost(self):
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    self.assertEqual(
+        model.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=100_000,
+                completion_tokens=1000,
+                total_tokens=101_000,
+            )
+        ),
+        0.13
+    )
+    # Prompt length greater than 128K.
+    self.assertEqual(
+        model.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=200_000,
+                completion_tokens=1000,
+                total_tokens=201_000,
+            )
+        ),
+        0.51
+    )
+
   def test_content_from_message_text_only(self):
     text = 'This is a beautiful day'
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
@@ -89,13 +116,6 @@ class GeminiTest(unittest.TestCase):
     message = lf.UserMessage(
         'This is an <<[[image]]>>, what is it?', image=image
     )
-
-    # Non-multimodal model.
-    with self.assertRaisesRegex(lf.ModalityError, 'Unsupported modality'):
-      gemini.Gemini(
-          'gemini-1.0-pro', api_endpoint=''
-      )._content_from_message(message)
-
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
     content = model._content_from_message(message)
     self.assertEqual(

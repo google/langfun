@@ -49,11 +49,6 @@ class REST(lf.LanguageModel):
       'The headers for the REST API.'
   ] = None
 
-  @property
-  def model_id(self) -> str:
-    """Returns a string to identify the model."""
-    return self.model or 'unknown'
-
   @functools.cached_property
   def _api_initialized(self) -> bool:
     """Returns whether the API is initialized."""
@@ -76,7 +71,6 @@ class REST(lf.LanguageModel):
 
   def _on_bound(self):
     super()._on_bound()
-    self.__dict__.pop('_session', None)
     self.__dict__.pop('_api_initialized', None)
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
@@ -121,3 +115,14 @@ class REST(lf.LanguageModel):
       return self.result(response.json())
     else:
       raise self._error(response.status_code, response.content)
+
+  @property
+  def max_concurrency(self) -> int | None:
+    """Returns the max concurrency for this model."""
+    rate_limits = self.model_info.rate_limits
+    if rate_limits is not None:
+      return self.estimate_max_concurrency(
+          max_requests_per_minute=rate_limits.max_requests_per_minute,
+          max_tokens_per_minute=rate_limits.max_tokens_per_minute
+      )
+    return None

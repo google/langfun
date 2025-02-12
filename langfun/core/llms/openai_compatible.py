@@ -29,10 +29,6 @@ class OpenAICompatible(rest.REST):
       str, 'The name of the model to use.',
   ] = ''
 
-  multimodal: Annotated[
-      bool, 'Whether this model has multimodal support.'
-  ] = False
-
   @property
   def headers(self) -> dict[str, Any]:
     return {
@@ -71,7 +67,8 @@ class OpenAICompatible(rest.REST):
     for chunk in message.chunk():
       if isinstance(chunk, str):
         item = dict(type='text', text=chunk)
-      elif isinstance(chunk, lf_modalities.Image) and self.multimodal:
+      elif (isinstance(chunk, lf_modalities.Image)
+            and self.supports_input(chunk.mime_type)):
         item = dict(type='image_url', image_url=dict(url=chunk.embeddable_uri))
       else:
         raise ValueError(f'Unsupported modality: {chunk!r}.')
@@ -162,18 +159,6 @@ class OpenAICompatible(rest.REST):
             prompt_tokens=usage['prompt_tokens'],
             completion_tokens=usage['completion_tokens'],
             total_tokens=usage['total_tokens'],
-            estimated_cost=self.estimate_cost(
-                num_input_tokens=usage['prompt_tokens'],
-                num_output_tokens=usage['completion_tokens'],
-            )
+
         ),
     )
-
-  def estimate_cost(
-      self,
-      num_input_tokens: int,
-      num_output_tokens: int
-  ) -> float | None:
-    """Estimate the cost based on usage."""
-    del num_input_tokens, num_output_tokens
-    return None
