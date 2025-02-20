@@ -19,7 +19,7 @@ import datetime
 import time
 
 import typing
-from typing import Annotated, Any, ContextManager, Iterable, Iterator, Optional, Type, Union
+from typing import Annotated, Any, Callable, ContextManager, Iterable, Iterator, Optional, Type, Union
 import langfun.core as lf
 from langfun.core import structured as lf_structured
 import pyglove as pg
@@ -83,6 +83,55 @@ class Action(pg.Object):
     Returns:
       The result of the action.
     """
+
+  def sample(
+      self,
+      session: Optional['Session'] = None,
+      n: int = 1,
+      *,
+      show_progress: bool = True,
+      reduce_fn: Callable[[list[Any]], Any] | None = None,
+      **kwargs
+  ) -> Any:
+    """Samples the action multiple times."""
+    return ActionSampling(
+        action=self,
+        n=n,
+        reduce_fn=reduce_fn,
+    )(
+        session=session,
+        show_progress=show_progress,
+        **kwargs
+    )
+
+
+class ActionSampling(Action):
+  """Sampling an action multiple times."""
+
+  action: Annotated[
+      Action,
+      'Action to sample.'
+  ]
+
+  n: Annotated[
+      int,
+      'Number of samples to generate.'
+  ] = 1
+
+  reduce_fn: Annotated[
+      Callable[[list[Any]], Any] | None,
+      'Function to reduce the samples to a single result.'
+  ] = None
+
+  def call(self, session: 'Session', **kwargs) -> Any:
+    """Calls the action."""
+    results = []
+    for _ in range(self.n):
+      result = self.action.clone(deep=True)(session=session, **kwargs)
+      results.append(result)
+    if self.reduce_fn is not None:
+      return self.reduce_fn(results)
+    return results
 
 
 # Type definition for traced item during execution.
