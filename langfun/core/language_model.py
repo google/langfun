@@ -1507,7 +1507,7 @@ def track_usages(
     with lf.track_usages() as usages:
       # invoke any code that will call LLMs.
 
-    print(usages[lm.model_id])
+    print(usages.uncached.breakdown[lm.model_id])
     ```
 
   Args:
