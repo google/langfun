@@ -3,3 +3,5 @@
 .vscode
 *.egg-info
 __pycache__/
+.env
+.aider*
