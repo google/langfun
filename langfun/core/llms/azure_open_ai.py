@@ -21,8 +21,6 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
         'The name of the Azure OpenAI deployment.'
     ] = 'gpt-4'
 
-    api_endpoint: str = ''
-
     api_version: Annotated[
         str,
         'The API version for Azure OpenAI.'
