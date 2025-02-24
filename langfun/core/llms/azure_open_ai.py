@@ -15,7 +15,12 @@ from langfun.core.llms.openai import (
 @lf.use_init_args(['model', 'deployment_name'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class AzureOpenAI(openai_compatible.OpenAICompatible):
-    """Azure OpenAI model service."""
+    """Azure OpenAI model service.
+
+    This service interacts with the Azure OpenAI API to generate chat completions.
+    It uses the deployment_name and API version to construct the endpoint, and authenticates
+    using an API key provided via parameter or the AZURE_OPENAI_API_KEY environment variable.
+    """
 
     deployment_name: Annotated[
         str,
