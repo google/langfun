@@ -13,6 +13,7 @@ from langfun.core.llms.openai import (
 
 
 @lf.use_init_args(['model', 'deployment_name'])
+@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class AzureOpenAI(openai_compatible.OpenAICompatible):
     """Azure OpenAI model service."""
 
@@ -39,8 +40,6 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
             "'AZURE_OPENAI_API_KEY'."
         ),
     ] = None
-
-    api_endpoint: str = ''
 
     def _on_bound(self):
         super()._on_bound()
