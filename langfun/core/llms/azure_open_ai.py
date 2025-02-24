@@ -21,10 +21,6 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
         'The name of the Azure OpenAI deployment.'
     ] = 'gpt-4'
 
-    api_endpoint: Annotated[
-        str,
-        'The API endpoint for Azure OpenAI.'
-    ] = 'https://api.openai.azure.com/v1/chat/completions'
 
     api_version: Annotated[
         str,
