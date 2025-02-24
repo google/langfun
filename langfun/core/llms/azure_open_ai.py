@@ -20,6 +20,17 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
     This service interacts with the Azure OpenAI API to generate chat completions.
     It uses the deployment_name and API version to construct the endpoint, and authenticates
     using an API key provided via parameter or the AZURE_OPENAI_API_KEY environment variable.
+
+    Example:
+        lm = AzureOpenAI(
+            model='gpt-4o',
+            deployment_name='gpt-4o',
+            api_version='2024-08-01-preview',
+            azure_endpoint='https://trackname.openai.azure.com/',
+            api_key='token'
+        )
+        response = lf.query(prompt="what the capital of France", lm=lm)
+        print(response)
     """
 
     deployment_name: Annotated[
