@@ -40,6 +40,8 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
         ),
     ] = None
 
+    api_endpoint: str = ''
+
     def _on_bound(self):
         super()._on_bound()
         self.__dict__.pop('model_info', None)
