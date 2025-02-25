@@ -81,7 +81,7 @@ class ScoringTest(unittest.TestCase):
         s.result,
         dict(
             experiment_setup=dict(
-                id='ConstraintFollowing@5c88a5eb',
+                id='ConstraintFollowing@90671d5e',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example}}',

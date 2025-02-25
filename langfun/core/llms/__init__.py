@@ -127,6 +127,8 @@ from langfun.core.llms.openai import Gpt35
 
 # Anthropic models.
 
+from langfun.core.llms.anthropic import Claude37
+from langfun.core.llms.anthropic import Claude37Sonnet_20250219
 from langfun.core.llms.anthropic import Claude35Sonnet
 from langfun.core.llms.anthropic import Claude35Sonnet_20241022
 from langfun.core.llms.anthropic import Claude35Haiku
@@ -139,6 +141,7 @@ from langfun.core.llms.anthropic import Claude3Haiku
 from langfun.core.llms.anthropic import Claude3Haiku_20240307
 
 from langfun.core.llms.vertexai import VertexAIAnthropic
+from langfun.core.llms.vertexai import VertexAIClaude37Sonnet_20250219
 from langfun.core.llms.vertexai import VertexAIClaude35Sonnet_20241022
 from langfun.core.llms.vertexai import VertexAIClaude35Haiku_20241022
 from langfun.core.llms.vertexai import VertexAIClaude3Opus_20240229
