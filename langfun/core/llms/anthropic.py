@@ -100,7 +100,7 @@ SUPPORTED_MODELS = [
         ),
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=200_000,
-            max_output_tokens=128_000,
+            max_output_tokens=8_192,
         ),
         pricing=lf.ModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
@@ -109,8 +109,8 @@ SUPPORTED_MODELS = [
         ),
         rate_limits=AnthropicModelInfo.RateLimits(
             # Tier 4 rate limits
-            max_requests_per_minute=4000,
-            max_input_tokens_per_minute=400_000,
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=100_000,
             max_output_tokens_per_minute=80_000,
         ),
     ),
