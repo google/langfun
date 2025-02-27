@@ -89,6 +89,32 @@ SUPPORTED_MODELS = [
         ),
     ),
     AnthropicModelInfo(
+        model_id='claude-3-7-sonnet-20250219',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 3.7 Sonnet model (2/19/2025).',
+        release_date=datetime.datetime(2025, 2, 19),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=100_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-3-5-sonnet-20241022',
         provider='Anthropic',
         in_service=True,
@@ -139,9 +165,34 @@ SUPPORTED_MODELS = [
             cost_per_1m_output_tokens=15,
         ),
         rate_limits=AnthropicModelInfo.RateLimits(
-            # Tier 4 rate limits
-            max_requests_per_minute=4000,
-            max_input_tokens_per_minute=400_000,
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-3-7-sonnet@20250219',
+        alias_for='claude-3-7-sonnet-20250219',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 3.7 Sonnet model served on VertexAI (02/19/2025).',
+        release_date=datetime.datetime(2025, 2, 19),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
             max_output_tokens_per_minute=80_000,
         ),
     ),
@@ -457,8 +508,7 @@ class Anthropic(rest.REST):
         'x-api-key': self._api_key,
         'anthropic-version': self.api_version,
         'content-type': 'application/json',
-        # TODO(yifenglu): Remove beta flag once the feature is fully supported.
-        'anthropic-beta': 'pdfs-2024-09-25',
+        'anthropic-beta': 'output-128k-2025-02-19',
     }
 
   @functools.cached_property
@@ -506,6 +556,17 @@ class Anthropic(rest.REST):
       args['top_k'] = options.top_k
     if options.top_p is not None:
       args['top_p'] = options.top_p
+    if options.max_thinking_tokens is not None:
+      args['thinking'] = {
+          'type': 'enabled',
+          # Minimum budget is 1,024 tokens.
+          'budget_tokens': options.max_thinking_tokens,
+      }
+      # Thinking isn’t compatible with temperature, top_p, or top_k.
+      # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
+      args.pop('temperature', None)
+      args.pop('top_k', None)
+      args.pop('top_p', None)
     return args
 
   def _content_from_message(self, prompt: lf.Message) -> list[dict[str, Any]]:
@@ -559,9 +620,27 @@ class Anthropic(rest.REST):
   def _message_from_content(self, content: list[dict[str, Any]]) -> lf.Message:
     """Converts Anthropic's content protocol to message."""
     # Refer: https://docs.anthropic.com/claude/reference/messages-examples
-    return lf.AIMessage.from_chunks(
+    # Thinking: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking # pylint: disable=line-too-long
+    response = lf.AIMessage.from_chunks(
         [x['text'] for x in content if x['type'] == 'text']
     )
+    thinking = lf.AIMessage.from_chunks(
+        [x['thinking'] for x in content if x['type'] == 'thinking']
+    )
+    # thinking is added into the metadata.thinking field.
+    response.set('thinking', thinking)
+    return response
+
+
+class Claude37(Anthropic):
+  """Base class for Claude 3.7 models."""
+
+
+# pylint: disable=invalid-name
+class Claude37Sonnet_20250219(Claude37):
+  """Claude 3.7 Sonnet model (latest)."""
+
+  model = 'claude-3-7-sonnet-20250219'
 
 
 class Claude35(Anthropic):

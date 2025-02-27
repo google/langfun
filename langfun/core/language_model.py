@@ -560,6 +560,10 @@ class LMSamplingOptions(component.Component):
       ),
   ] = None
 
+  max_thinking_tokens: Annotated[
+      int | None, 'Number of max thinking tokens.'
+  ] = None
+
   def cache_key(self) -> tuple[Any, ...]:
     """Returns a tuple of current values as cache key."""
     return (
