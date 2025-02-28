@@ -49,6 +49,30 @@ class OpenAIModelInfo(lf.ModelInfo):
 #
 
 SUPPORTED_MODELS = [
+    # GPT-4.5 models
+    OpenAIModelInfo(
+        model_id='gpt-4.5-preview-2025-02-27',
+        alias_for='gpt-4.5-preview-2025-02-27',
+        in_service=True,
+        model_type='instruction-tuned',
+        description='GPT 4.5 preview model.',
+        url='https://platform.openai.com/docs/models#gpt-4-5',
+        input_modalities=OpenAIModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=128_000,
+            max_output_tokens=16_384,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=37.5,
+            cost_per_1m_input_tokens=75,
+            cost_per_1m_output_tokens=150.0,
+        ),
+        # Tier 5 rate limits.
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=10_000,
+            max_tokens_per_minute=2_000_000,
+        ),
+    ),
     # o3-mini models.
     OpenAIModelInfo(
         model_id='o3-mini',
@@ -971,6 +995,12 @@ class OpenAI(openai_compatible.OpenAICompatible):
     if options.logprobs and self.model.startswith(('o1-', 'o3-')):
       raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
     return super()._request_args(options)
+
+
+class Gpt45Preview_20250227(OpenAI):  # pylint: disable=invalid-name
+  """Gpt-4.5 Preview 2025-02-27."""
+
+  model = 'gpt-4.5-preview-2025-02-27'
 
 
 class GptO3Mini(OpenAI):
