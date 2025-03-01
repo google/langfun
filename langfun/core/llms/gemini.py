@@ -626,7 +626,7 @@ class Gemini(rest.REST):
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
     messages = [
-        self._message_from_content_parts(candidate['content']['parts'])
+        self._message_from_content_parts(candidate['content'].get('parts', []))
         for candidate in json['candidates']
     ]
     usage = json['usageMetadata']
