@@ -4,8 +4,8 @@ from typing import Annotated, Any
 
 import pyglove as pg
 import langfun.core as lf
-from langfun.core.llms import openai_compatible
 from langfun.core.llms.openai import (
+    OpenAI,
     OpenAIModelInfo,
     SUPPORTED_MODELS,
     _SUPPORTED_MODELS_BY_MODEL_ID,
@@ -14,7 +14,7 @@ from langfun.core.llms.openai import (
 
 @lf.use_init_args(['model', 'deployment_name'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
-class AzureOpenAI(openai_compatible.OpenAICompatible):
+class AzureOpenAI(OpenAI):
     """Azure OpenAI model service.
 
     This service interacts with the Azure OpenAI API to generate chat completions.
@@ -57,11 +57,6 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
         ),
     ] = None
 
-    def _on_bound(self):
-        super()._on_bound()
-        self.__dict__.pop('model_info', None)
-        self._api_key = None
-        self._api_endpoint = None
 
     def _initialize(self):
         # Authentication
@@ -92,10 +87,3 @@ class AzureOpenAI(openai_compatible.OpenAICompatible):
         })
         return headers
 
-    @functools.cached_property
-    def model_info(self) -> OpenAIModelInfo:
-        return _SUPPORTED_MODELS_BY_MODEL_ID[self.model]
-
-    @classmethod
-    def dir(cls):
-        return [s.model_id for s in SUPPORTED_MODELS if s.in_service]
