@@ -1,6 +1,5 @@
 import os
 import unittest
-import langfun.core as lf
 from langfun.core.llms import azure_openai
 
 class AzureOpenAITest(unittest.TestCase):
