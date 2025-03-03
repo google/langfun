@@ -43,15 +43,6 @@ class AzureOpenAI(OpenAI):
         'The base URL for Azure OpenAI (e.g. "https://<your-resource>.openai.azure.com/")'
     ] = 'https://api.openai.azure.com/'
 
-    api_key: Annotated[
-        str | None,
-        (
-            'API key. If None, reads from environment variable '
-            "'AZURE_OPENAI_API_KEY'."
-        ),
-    ] = None
-
-
     def _initialize(self):
         # Authentication
         self._api_key = self.api_key or os.environ.get('AZURE_OPENAI_API_KEY')
