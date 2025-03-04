@@ -32,6 +32,7 @@ from langfun.core.llms.rest import REST
 from langfun.core.llms.openai_compatible import OpenAICompatible
 from langfun.core.llms.gemini import Gemini
 from langfun.core.llms.anthropic import Anthropic
+from langfun.core.llms.azure_openai import AzureOpenAI
 
 # Base models by serving platforms.
 from langfun.core.llms.vertexai import VertexAI
