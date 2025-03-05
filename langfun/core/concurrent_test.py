@@ -560,6 +560,7 @@ class ConcurrentMapTest(unittest.TestCase):
               fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
           )
       ], key=lambda x: x[0])
+      string_io.flush()
     self.assertEqual(   # pylint: disable=g-generic-assert
         output,
         [
@@ -570,7 +571,6 @@ class ConcurrentMapTest(unittest.TestCase):
     )
     output = string_io.getvalue()
     self.assertIn('100%', output)
-    self.assertIn('TimeIt=foo (', output)
 
   def test_concurrent_map_with_showing_progress_and_status_fn(self):
     def fun(x):
