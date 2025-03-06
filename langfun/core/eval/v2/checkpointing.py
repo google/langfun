@@ -361,7 +361,7 @@ class SequenceWriter:
         example,
         hide_default_values=True,
         save_ref_value=True,
-        exclude_input=True
+        exclude_input=False,
     )
     with self._lock:
       if self._sequence_writer is None:
