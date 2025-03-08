@@ -65,9 +65,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-5-sonnet-20241022',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3.5 Sonnet model (latest).'
-        ),
+        description='Claude 3.5 Sonnet model (latest).',
         input_modalities=(
             AnthropicModelInfo.INPUT_IMAGE_TYPES
             + AnthropicModelInfo.INPUT_DOC_TYPES
@@ -118,9 +116,7 @@ SUPPORTED_MODELS = [
         model_id='claude-3-5-sonnet-20241022',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3.5 Sonnet model (10/22/2024).'
-        ),
+        description='Claude 3.5 Sonnet model (10/22/2024).',
         release_date=datetime.datetime(2024, 10, 22),
         input_modalities=(
             AnthropicModelInfo.INPUT_IMAGE_TYPES
@@ -147,9 +143,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-5-sonnet-20241022',
         provider='VertexAI',
         in_service=True,
-        description=(
-            'Claude 3.5 Sonnet model served on VertexAI (10/22/2024).'
-        ),
+        description='Claude 3.5 Sonnet model served on VertexAI (10/22/2024).',
         release_date=datetime.datetime(2024, 10, 22),
         input_modalities=(
             AnthropicModelInfo.INPUT_IMAGE_TYPES
@@ -183,7 +177,7 @@ SUPPORTED_MODELS = [
         ),
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=200_000,
-            max_output_tokens=128_000,
+            max_output_tokens=8_192,
         ),
         pricing=lf.ModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
@@ -202,9 +196,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-5-haiku-20241022',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3.5 Haiku v2 model (10/22/2024).'
-        ),
+        description='Claude 3.5 Haiku v2 model (10/22/2024).',
         input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=200_000,
@@ -226,9 +218,7 @@ SUPPORTED_MODELS = [
         model_id='claude-3-5-haiku-20241022',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3.5 Haiku v2 model (10/22/2024).'
-        ),
+        description='Claude 3.5 Haiku v2 model (10/22/2024).',
         release_date=datetime.datetime(2024, 10, 22),
         input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
         context_length=lf.ModelInfo.ContextLength(
@@ -252,9 +242,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-5-haiku-20241022',
         provider='VertexAI',
         in_service=True,
-        description=(
-            'Claude 3.5 Haiku model served on VertexAI (10/22/2024).'
-        ),
+        description='Claude 3.5 Haiku model served on VertexAI (10/22/2024).',
         release_date=datetime.datetime(2024, 10, 22),
         input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
         context_length=lf.ModelInfo.ContextLength(
@@ -279,9 +267,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-opus-20240229',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3 Opus model (latest).'
-        ),
+        description='Claude 3 Opus model (latest).',
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=200_000,
@@ -303,9 +289,7 @@ SUPPORTED_MODELS = [
         model_id='claude-3-opus-20240229',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3 Opus model (02/29/2024).'
-        ),
+        description='Claude 3 Opus model (02/29/2024).',
         release_date=datetime.datetime(2024, 2, 29),
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -329,9 +313,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-opus-20240229',
         provider='VertexAI',
         in_service=True,
-        description=(
-            'Claude 3 Opus model served on VertexAI (02/29/2024).'
-        ),
+        description='Claude 3 Opus model served on VertexAI (02/29/2024).',
         release_date=datetime.datetime(2024, 2, 29),
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -355,9 +337,7 @@ SUPPORTED_MODELS = [
         model_id='claude-3-sonnet-20240229',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3 Sonnet model (02/29/2024).'
-        ),
+        description='Claude 3 Sonnet model (02/29/2024).',
         release_date=datetime.datetime(2024, 2, 29),
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -381,9 +361,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-sonnet-20240229',
         provider='VertexAI',
         in_service=True,
-        description=(
-            'Claude 3 Sonnet model served on VertexAI (02/29/2024).'
-        ),
+        description='Claude 3 Sonnet model served on VertexAI (02/29/2024).',
         release_date=datetime.datetime(2024, 2, 29),
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -407,9 +385,7 @@ SUPPORTED_MODELS = [
         model_id='claude-3-haiku-20240307',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3 Haiku model (03/07/2024).'
-        ),
+        description='Claude 3 Haiku model (03/07/2024).',
         release_date=datetime.datetime(2024, 3, 7),
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -433,9 +409,7 @@ SUPPORTED_MODELS = [
         alias_for='claude-3-haiku-20240307',
         provider='Anthropic',
         in_service=True,
-        description=(
-            'Claude 3 Haiku model served on VertexAI (03/07/2024).'
-        ),
+        description='Claude 3 Haiku model served on VertexAI (03/07/2024).',
         release_date=datetime.datetime(2024, 3, 7),
         input_modalities=AnthropicModelInfo.INPUT_IMAGE_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -562,6 +536,11 @@ class Anthropic(rest.REST):
           # Minimum budget is 1,024 tokens.
           'budget_tokens': options.max_thinking_tokens,
       }
+      # max_tokens, which is thinking tokens + response tokens, must be greater
+      # than the thinking tokens.
+      if args['max_tokens'] < options.max_thinking_tokens:
+        args['max_tokens'] += options.max_thinking_tokens
+
       # Thinking isn’t compatible with temperature, top_p, or top_k.
       # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
       args.pop('temperature', None)
