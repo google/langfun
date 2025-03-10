@@ -391,6 +391,13 @@ def query(
   if pg.MISSING_VALUE != prompt and not skip_lm:
     trackers = lf.context_value('__query_trackers__', [])
     if trackers:
+      # To minimize payload for serialization, we remove the result and usage
+      # fields from the metadata. They will be computed on the fly when the
+      # invocation is rendered.
+      metadata = dict(output_message.metadata)
+      metadata.pop('result', None)
+      metadata.pop('usage', None)
+
       invocation = QueryInvocation(
           input=pg.Ref(query_input),
           schema=(
@@ -399,7 +406,7 @@ def query(
           ),
           lm=pg.Ref(lm),
           examples=pg.Ref(examples) if examples else [],
-          lm_response=lf.AIMessage(output_message.text),
+          lm_response=lf.AIMessage(output_message.text, metadata=metadata),
           usage_summary=usage_summary,
           start_time=start_time,
           end_time=end_time,

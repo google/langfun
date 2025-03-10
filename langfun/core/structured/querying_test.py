@@ -1069,6 +1069,8 @@ class QueryInvocationTest(unittest.TestCase):
       querying.query('foo', Activity, lm=lm)
 
     self.assertIn('schema', queries[0].to_html_str())
+    self.assertEqual(queries[0].lm_response.score, 1.0)
+    self.assertFalse(queries[0].lm_response.is_cached)
 
 
 class TrackQueriesTest(unittest.TestCase):
