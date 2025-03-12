@@ -31,9 +31,10 @@ class ActionEval(lf.eval.v2.Evaluation):
       'Arguments to call the action.'
   ] = {}
 
-  def process(self, example: pg.Dict) -> tuple[str, dict[str, Any]]:
-    action = example.action
-    session = action_lib.Session()
+  def process(self, example: lf.eval.v2.Example) -> tuple[str, dict[str, Any]]:
+    example_input = example.input
+    action = example_input.action
+    session = action_lib.Session(id=str(example.id))
     with lf.logging.use_log_level('fatal'):
       action(session=session, **self.action_args)
     return session.final_result, dict(session=session)
@@ -68,7 +69,7 @@ class ActionEvalV1(lf_eval.Matching):
 
   def process(self, example: pg.Dict, **kwargs):
     action = example.action
-    session = action_lib.Session()
+    session = action_lib.Session(id=str(getattr(example, 'id', '<empty>')))
     action(session=session, lm=self.lm, **kwargs)
     return session.as_message()
 

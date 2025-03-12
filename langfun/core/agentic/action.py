@@ -674,6 +674,10 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   """Session for performing an agentic task."""
 
   root: ActionInvocation = ActionInvocation(RootAction())
+  id: Annotated[
+      str | None,
+      'An optional identifier for the sessin, which will be used for logging.'
+  ] = None
 
   def _on_bound(self):
     super()._on_bound()

@@ -127,13 +127,17 @@ class Evaluation(experiment_lib.Experiment):
   #
 
   @abc.abstractmethod
-  def process(self, example_input: Any) -> Any | tuple[Any, dict[str, Any]]:
+  def process(
+      self,
+      example: example_lib.Example
+  ) -> Any | tuple[Any, dict[str, Any]]:
     """Processes a single example from the evaluation set.
 
     Users should override this method to implement the evaluation logic.
 
     Args:
-      example_input: An object returned from `Evaluable.inputs`.
+      example: An example object to process. `example.input` is an object
+        returned from `Evaluable.inputs`.
 
     Returns:
       A processed output. Or a tuple of (output, metadata).
@@ -221,7 +225,7 @@ class Evaluation(experiment_lib.Experiment):
     ):
       try:
         with pg.timeit('process'):
-          output = self.process(example.input)
+          output = self.process(example)
         if (isinstance(output, tuple)
             and len(output) == 2
             and isinstance(output[1], dict)):

@@ -63,7 +63,8 @@ class TestEvaluation(Evaluation):
   metrics = [metrics_lib.Match()]
   lm: language_model.LanguageModel = TestLLM()
 
-  def process(self, v):
+  def process(self, example):
+    v = example.input
     if v.x == 5:
       raise ValueError('x should not be 5')
     return structured.query(
@@ -83,7 +84,7 @@ class TestEvaluationWithExampleCheckpointingError(TestEvaluation):
   inputs = test_inputs()
   metrics = [metrics_lib.Match()]
 
-  def process(self, v):
+  def process(self, example):
     return 1, dict(
         x=BadJsonConvertible()
     )
@@ -100,7 +101,7 @@ class TestEvaluationWithExampleHtmlGenerationError(Evaluation):
   inputs = test_inputs()
   metrics = [metrics_lib.Match()]
 
-  def process(self, v):
+  def process(self, example):
     return 1, dict(
         x=BadHtmlConvertible()
     )
