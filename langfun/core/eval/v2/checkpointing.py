@@ -53,14 +53,14 @@ class Checkpointer(experiment_lib.Plugin):
       self._load_experiment(runner, experiment)
 
     example_ids_to_evaluate = current_run.examples_to_evaluate(experiment)
-    if experiment.state.evaluated_examples:
+    if experiment.state.ckpt_examples:
       loaded_example_ids = list(
-          sorted(experiment.state.evaluated_examples.keys())
+          sorted(experiment.state.ckpt_examples.keys())
       )
       example_ids_to_evaluate -= set(loaded_example_ids)
       example_ids_to_evaluate = list(sorted(example_ids_to_evaluate))
       experiment.info(
-          f'{len(experiment.state.evaluated_examples)} examples '
+          f'{len(experiment.state.ckpt_examples)} examples '
           'loaded from checkpoint files. Their outputs will be used '
           f'for recomputing metrics. Example IDs: {loaded_example_ids}.'
       )
@@ -316,7 +316,7 @@ class BulkCheckpointer(Checkpointer):
         writer = self._sequence_writer.pop(experiment.id)
         writer.close()
         experiment.info(
-            f'{len(experiment.state.evaluated_examples)} examples are '
+            f'{len(experiment.state.evaluation_status)} examples are '
             f'checkpointed to {writer.path}.'
         )
 

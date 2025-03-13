@@ -78,7 +78,9 @@ class EvaluationTest(unittest.TestCase):
   def test_evaluate(self):
     exp = eval_test_helper.TestEvaluation()
     example = exp.evaluate(Example(id=3))
-    self.assertIs(exp.state.get(3), example)
+    self.assertTrue(exp.state.get_status(3).evaluated)
+    self.assertTrue(exp.state.get_status(3).newly_processed)
+    self.assertFalse(exp.state.get_status(3).has_error)
     self.assertTrue(example.newly_processed)
     self.assertEqual(example.input, pg.Dict(x=2, y=4, groundtruth=6))
     self.assertEqual(example.output, 6)
@@ -111,7 +113,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.metadata, {})
     self.assertEqual(example.metric_metadata, dict(error='ValueError'))
 
-  def test_evaluate_with_state(self):
+  def test_evaluate_withstate(self):
     eval_dir = os.path.join(tempfile.gettempdir(), 'test_eval')
     pg.io.mkdirs(eval_dir, exist_ok=True)
     state_file = os.path.join(eval_dir, 'state.jsonl')
@@ -121,13 +123,14 @@ class EvaluationTest(unittest.TestCase):
       self.assertTrue(example.newly_processed)
       self.assertEqual(example.input, pg.Dict(x=2, y=4, groundtruth=6))
       self.assertEqual(example.output, 6)
-      self.assertEqual(len(exp._state.evaluated_examples), 1)
+      self.assertEqual(len(exp.state.evaluation_status), 1)
       f.add(pg.to_json_str(example))
 
     exp.reset()
-    self.assertEqual(len(exp._state.evaluated_examples), 0)
+    self.assertEqual(len(exp.state.ckpt_examples), 0)
     exp.load_state(state_file)
-    self.assertEqual(len(exp._state.evaluated_examples), 1)
+    self.assertEqual(len(exp.state.ckpt_examples), 1)
+    self.assertEqual(len(exp.state.evaluation_status), 0)
     example = exp.evaluate(3)
     self.assertFalse(example.newly_processed)
     self.assertEqual(example.input, pg.Dict(x=2, y=4, groundtruth=6))
@@ -140,14 +143,14 @@ class EvaluationTest(unittest.TestCase):
 
     # Test load_state with filter.
     exp.reset()
-    self.assertEqual(len(exp._state.evaluated_examples), 0)
+    self.assertEqual(len(exp.state.ckpt_examples), 0)
     exp.load_state(state_file, filter=lambda x: x.id == 3)
-    self.assertEqual(len(exp._state.evaluated_examples), 1)
+    self.assertEqual(len(exp.state.ckpt_examples), 1)
 
     exp.reset()
-    self.assertEqual(len(exp._state.evaluated_examples), 0)
+    self.assertEqual(len(exp.state.ckpt_examples), 0)
     exp.load_state(state_file, filter=lambda x: x.id == 1)
-    self.assertEqual(len(exp._state.evaluated_examples), 0)
+    self.assertEqual(len(exp.state.ckpt_examples), 0)
 
   def test_html_view(self):
     exp = eval_test_helper.TestEvaluation()

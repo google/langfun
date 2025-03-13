@@ -181,8 +181,8 @@ class RunnerBase(Runner):
     )
     num_from_checkpoint, num_processed = 0, 0
     for example_id in example_ids:
-      example = experiment.state.get(example_id)
-      if example.newly_processed:
+      status = experiment.state.get_status(example_id)
+      if status.newly_processed:
         num_processed += 1
       else:
         num_from_checkpoint += 1
@@ -358,7 +358,8 @@ class RunnerBase(Runner):
     """Runs the evaluation example."""
     self.on_example_start(evaluation, item)
     item = evaluation.evaluate(
-        item, raise_if_has_error=self.current_run.raise_if_has_error
+        item,
+        raise_if_has_error=self.current_run.raise_if_has_error,
     )
     self.on_example_complete(evaluation, item)
     return item

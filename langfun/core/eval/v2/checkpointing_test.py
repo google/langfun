@@ -18,6 +18,7 @@ import unittest
 from langfun.core.eval.v2 import checkpointing
 from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import example as example_lib
+from langfun.core.eval.v2 import experiment as experiment_lib
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
 import pyglove as pg
 
@@ -52,6 +53,26 @@ class SequenceWriterTest(unittest.TestCase):
       self.assertEqual(len(list(iter(f))), 1)
 
 
+class ExampleCollector(experiment_lib.Plugin):
+  """Collects all examples."""
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._examples = {}
+
+  @property
+  def examples(self) -> dict[int, example_lib.Example]:
+    return self._examples
+
+  def on_example_complete(
+      self, runner: runners_lib.Runner,
+      experiment: experiment_lib.Experiment,
+      example: example_lib.Example,
+  ):
+    assert experiment.is_leaf, None
+    self._examples[example.id] = example
+
+
 class CheckpointerTest(unittest.TestCase):
 
   def assert_found_in_log(self, experiment, message):
@@ -70,13 +91,15 @@ class PerExampleCheckpointerTest(CheckpointerTest):
     experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
     checkpointer = checkpointing.PerExampleCheckpointer(checkpoint_filename)
+    collector = ExampleCollector()
     run = experiment.run(
-        root_dir, 'new', runner='sequential', plugins=[checkpointer]
+        root_dir, 'new', runner='sequential', plugins=[checkpointer, collector]
     )
     num_processed = {}
     for leaf in experiment.leaf_nodes:
       for i in range(leaf.num_examples):
-        example = leaf.state.get(i + 1)
+        self.assertIn(i + 1, collector.examples)
+        example = collector.examples[i + 1]
         ckpt = run.output_path_for(leaf, f'checkpoint_{example.id}.jsonl')
         if example.has_error:
           self.assertFalse(pg.io.path_exists(ckpt))
@@ -134,12 +157,15 @@ class PerExampleCheckpointerTest(CheckpointerTest):
     experiment = eval_test_helper.TestEvaluation()
     checkpoint_filename = 'checkpoint.jsonl'
     checkpointer = checkpointing.PerExampleCheckpointer(checkpoint_filename)
+    collector = ExampleCollector()
+
     run = experiment.run(
-        root_dir, 'new', runner='sequential', plugins=[checkpointer]
+        root_dir, 'new', runner='sequential', plugins=[checkpointer, collector]
     )
     num_processed = {}
     for i in range(experiment.num_examples):
-      example = experiment.state.get(i + 1)
+      self.assertIn(i + 1, collector.examples)
+      example = collector.examples[i + 1]
       ckpt = run.output_path_for(experiment, f'checkpoint_{example.id}.jsonl')
       if not example.has_error:
         self.assertTrue(pg.io.path_exists(ckpt))

@@ -166,25 +166,24 @@ class Evaluation(experiment_lib.Experiment):
     if pg.MISSING_VALUE == example.input:
       example.input = self.example_input_by_id(example.id)
 
-    cached = self._state.get(example.id)
-
+    checkpointed = self._state.ckpt_example(example.id)
     with pg.timeit('evaluate') as timeit, lf.track_usages() as usage_summary:
-      if cached is None or cached.has_error:
+      if checkpointed is None or checkpointed.has_error:
         example.start_time = time.time()
         self._process(example, raise_if_has_error=raise_if_has_error)
       else:
-        example.start_time = cached.start_time
+        example.start_time = checkpointed.start_time
 
-        # Use cached output and metadata obtained from the previous processing.
-        example.output = cached.output
-        example.metadata = cached.metadata
+        # Use the output and metadata obtained from the previous processing.
+        example.output = checkpointed.output
+        example.metadata = checkpointed.metadata
         example.newly_processed = False
 
         # For previously processed examples, we merge previous usages as
         # cached, so the usage summary will account previous usages, but as
         # cached.
-        assert cached.usage_summary is not None
-        usage_summary.merge(cached.usage_summary, as_cached=True)
+        assert checkpointed.usage_summary is not None
+        usage_summary.merge(checkpointed.usage_summary, as_cached=True)
 
       # Recompute the metrics and metadata for the example even its processed
       # output and metadata were from the cache.
@@ -691,9 +690,29 @@ class Evaluation(experiment_lib.Experiment):
 class EvaluationState:
   """Evaluation state."""
 
+  class ExampleStatus(pg.Object):
+    """Example state."""
+    evaluated: Annotated[
+        bool,
+        'Whether the example is evaluated.'
+    ] = False
+
+    newly_processed: Annotated[
+        bool,
+        'Whether the example is newly processed.'
+    ] = False
+
+    has_error: Annotated[
+        bool,
+        'Whether the example has error.'
+    ] = False
+
   def __init__(self):
     super().__init__()
-    self._evaluated_examples: dict[int, example_lib.Example] = {}
+    self._ckpt_examples: dict[int, example_lib.Example] = {}
+    self._evaluation_status: dict[
+        int, EvaluationState.ExampleStatus
+    ] = {}
 
   def load(
       self,
@@ -715,17 +734,41 @@ class EvaluationState:
         assert isinstance(example, example_lib.Example), example
         if filter is not None and not filter(example):
           continue
-        self._evaluated_examples[example.id] = example
+        example.newly_processed = False
+        self._ckpt_examples[example.id] = example
 
   @property
-  def evaluated_examples(self) -> dict[int, example_lib.Example]:
-    """Returns the examples in the state."""
-    return self._evaluated_examples
+  def evaluation_status(self) -> dict[int, ExampleStatus]:
+    """Returns the evaluation status of the examples."""
+    return self._evaluation_status
 
-  def get(self, example_id: int) -> example_lib.Example | None:
-    """Returns the example with the given ID."""
-    return self._evaluated_examples.get(example_id)
+  @property
+  def ckpt_examples(self) -> dict[int, example_lib.Example]:
+    """Returns the unevaluated examples from checkpoints."""
+    return self._ckpt_examples
+
+  def ckpt_example(self, example_id: int) -> example_lib.Example | None:
+    """Returns the unevaluated example from checkpoints for a given ID."""
+    return self._ckpt_examples.get(example_id)
+
+  def get_status(self, example_id: int) -> ExampleStatus:
+    """Returns the evaluation status of the example."""
+    return self._evaluation_status.get(
+        example_id, EvaluationState.ExampleStatus()
+    )
 
   def update(self, example: example_lib.Example) -> None:
     """Updates the state with the given example."""
-    self._evaluated_examples[example.id] = example
+    self._update_status(example)
+    # Processed examples will be removed once it's done.
+    self._ckpt_examples.pop(example.id, None)
+
+  def _update_status(self, example: example_lib.Example) -> None:
+    """Updates the evaluation status of the example."""
+    self._evaluation_status[example.id] = (
+        EvaluationState.ExampleStatus(
+            evaluated=example.output != pg.MISSING_VALUE,
+            newly_processed=example.newly_processed,
+            has_error=example.has_error,
+        )
+    )
