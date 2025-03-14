@@ -608,7 +608,16 @@ class Gemini(rest.REST):
             modalities = [modalities]
           for modality in modalities:
             if modality.is_text:
-              parts.append({'text': modality.to_text()})
+              # Add YouTube video into the context window.
+              # https://ai.google.dev/gemini-api/docs/vision?lang=python#youtube
+              if modality.mime_type == 'text/html' and modality.uri.startswith(
+                  'https://www.youtube.com/watch?v='
+              ):
+                parts.append({
+                    'fileData': {'mimeType': 'video/*', 'fileUri': modality.uri}
+                })
+              else:
+                parts.append({'text': modality.to_text()})
             else:
               parts.append({
                   'inlineData': {
