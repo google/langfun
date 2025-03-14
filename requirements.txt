@@ -11,10 +11,5 @@ google-auth>=2.16.0
 
 # extras:mime-auto
 python-magic>=0.4.27
-# extras:mime-docx
-python-docx>=0.8.11
 # extras:mime-pil
 pillow>=10.0.0
-# extras:mime-xlsx
-openpyxl>=3.1.0
-pandas>=2.0.3
