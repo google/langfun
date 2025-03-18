@@ -640,7 +640,10 @@ class Gemini(rest.REST):
     ]
     usage = json['usageMetadata']
     input_tokens = usage['promptTokenCount']
-    output_tokens = usage['candidatesTokenCount']
+    # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.
+    # Therefore, we use 0 as the default value.
+    output_tokens = usage.get('candidatesTokenCount', 0)
+
     return lf.LMSamplingResult(
         [lf.LMSample(message) for message in messages],
         usage=lf.LMSamplingUsage(
