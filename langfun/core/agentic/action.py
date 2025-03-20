@@ -16,10 +16,10 @@
 import abc
 import contextlib
 import datetime
+import threading
 import time
-
 import typing
-from typing import Annotated, Any, ContextManager, Iterable, Iterator, Optional, Type, Union
+from typing import Annotated, Any, Callable, Iterable, Iterator, Optional, Type, Union
 import langfun.core as lf
 from langfun.core import structured as lf_structured
 import pyglove as pg
@@ -90,6 +90,7 @@ TracedItem = Union[
     lf_structured.QueryInvocation,
     'ActionInvocation',
     'ExecutionTrace',
+    'ParallelExecutions',
     # NOTE(daiyip): Consider remove log entry once we migrate existing agents.
     lf.logging.LogEntry,
 ]
@@ -206,6 +207,9 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
         child_items.append(item)
       elif isinstance(item, ExecutionTrace):
         child_items.extend(item._child_items(item_cls))  # pylint: disable=protected-access
+      elif isinstance(item, ParallelExecutions):
+        for branch in item.branches:
+          child_items.extend(branch._child_items(item_cls))  # pylint: disable=protected-access
     return child_items
 
   def _all_child_items(self, item_cls: Type[Any]) -> list[Any]:
@@ -217,6 +221,9 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
         child_items.extend(item.execution._all_child_items(item_cls))  # pylint: disable=protected-access
       elif isinstance(item, ExecutionTrace):
         child_items.extend(item._all_child_items(item_cls))  # pylint: disable=protected-access
+      elif isinstance(item, ParallelExecutions):
+        for branch in item.branches:
+          child_items.extend(branch._all_child_items(item_cls))  # pylint: disable=protected-access
     return child_items
 
   def append(self, item: TracedItem) -> None:
@@ -334,6 +341,8 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
       css_class = 'log'
     elif isinstance(item, ExecutionTrace):
       css_class = 'phase'
+    elif isinstance(item, ParallelExecutions):
+      css_class = 'parallel'
     else:
       raise ValueError(f'Unsupported item type: {type(item)}')
 
@@ -383,6 +392,11 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           item.name or 'Phase',
           tooltip=f'Execution phase {item.name!r}.'
       )
+    elif isinstance(item, ParallelExecutions):
+      return pg.views.html.controls.Label(
+          item.name or 'Parallel',
+          tooltip='Parallel executions.'
+      )
     else:
       raise ValueError(f'Unsupported item type: {type(item)}')
 
@@ -399,6 +413,12 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           content: "P";
           font-weight: bold;
           color: purple;
+          padding: 10px;
+        }
+        .tab-button.parallel > ::before {
+          content: "||";
+          font-weight: bold;
+          color: blue;
           padding: 10px;
         }
         .tab-button.query > ::before {
@@ -439,6 +459,79 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     ]
 
 
+class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
+  """A class for encapsulating parallel execution traces."""
+
+  name: Annotated[
+      str | None,
+      'The name of the parallel execution.'
+  ] = None
+
+  branches: Annotated[
+      list[ExecutionTrace],
+      'The branches of the parallel execution.'
+  ] = []
+
+  def __getitem__(self, key: int) -> ExecutionTrace:
+    return self.branches[key]
+
+  def __len__(self) -> int:
+    return len(self.branches)
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._tab_control = None
+    self._lock = threading.Lock()
+
+  def add(self) -> ExecutionTrace:
+    """Appends a branch to the parallel execution."""
+    with self._lock, pg.notify_on_change(False):
+      branch = ExecutionTrace(name=f'[{len(self)}]')
+      self.branches.append(branch)
+      if self._tab_control is not None:
+        self._tab_control.append(self._branch_tab(branch))
+      return branch
+
+  #
+  # HTML views.
+  #
+
+  def _html_tree_view_summary(
+      self,
+      *,
+      name: str | None = None,
+      extra_flags: dict[str, Any] | None = None,
+      view: pg.views.html.HtmlTreeView, **kwargs
+  ):
+    return None
+
+  def _html_tree_view_content(
+      self,
+      *,
+      extra_flags: dict[str, Any] | None = None,
+      **kwargs
+  ):
+    del kwargs
+    extra_flags = extra_flags or {}
+    interactive = extra_flags.get('interactive', True)
+    if interactive or self.branches:
+      self._tab_control = pg.views.html.controls.TabControl(
+          [self._branch_tab(branch) for branch in self.branches],
+          tab_position='left'
+      )
+      return self._tab_control.to_html()
+    return '(no tracked parallel executions)'
+
+  def _branch_tab(self, branch: ExecutionTrace) -> pg.views.html.controls.Tab:
+    return pg.views.html.controls.Tab(
+        label=pg.views.html.controls.Label(
+            branch.name,
+            tooltip=f'Execution thread {branch.name!r}.'
+        ),
+        content=pg.view(branch),
+    )
+
+
 class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   """A class for capturing the invocation of an action."""
   action: Action
@@ -463,27 +556,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
   def _on_bound(self):
     super()._on_bound()
-    self._current_phase = self.execution
     self._tab_control = None
-
-  @property
-  def current_phase(self) -> ExecutionTrace:
-    """Returns the current execution phase."""
-    return self._current_phase
-
-  @contextlib.contextmanager
-  def phase(self, name: str) -> Iterator[ExecutionTrace]:
-    """Context manager for starting a new execution phase."""
-    phase = ExecutionTrace(name=name)
-    phase.start()
-    parent_phase = self._current_phase
-    self._current_phase.append(phase)
-    self._current_phase = phase
-    try:
-      yield phase
-    finally:
-      phase.stop()
-      self._current_phase = parent_phase
 
   @property
   def logs(self) -> list[lf.logging.LogEntry]:
@@ -679,52 +752,80 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       'An optional identifier for the sessin, which will be used for logging.'
   ] = None
 
+  # NOTE(daiyip): Action execution may involve multi-threading, hence current
+  # action and execution are thread-local.
+
+  @property
+  def _current_action(self) -> ActionInvocation:
+    """Returns the current invocation."""
+    return getattr(self._tls, '__current_action__')
+
+  @_current_action.setter
+  def _current_action(self, value: ActionInvocation):
+    setattr(self._tls, '__current_action__', value)
+
+  @property
+  def _current_execution(self) -> ExecutionTrace:
+    """Returns the current execution."""
+    return getattr(self._tls, '__current_execution__')
+
+  @_current_execution.setter
+  def _current_execution(self, value: ExecutionTrace):
+    setattr(self._tls, '__current_execution__', value)
+
   def _on_bound(self):
     super()._on_bound()
+    self._tls = threading.local()
     self._current_action = self.root
+    self._current_execution = self.root.execution
 
-  @property
-  def final_result(self) -> Any:
-    """Returns the final result of the session."""
-    return self.root.result
-
-  @property
-  def current_action(self) -> ActionInvocation:
-    """Returns the current invocation."""
-    return self._current_action
-
-  def add_metadata(self, **kwargs: Any) -> None:
-    """Adds metadata to the current invocation."""
-    with pg.notify_on_change(False):
-      self._current_action.metadata.update(kwargs)
-
-  def phase(self, name: str) -> ContextManager[ExecutionTrace]:
-    """Context manager for starting a new execution phase."""
-    return self.current_action.phase(name)
+  #
+  # Context-manager for information tracking.
+  #
 
   @contextlib.contextmanager
   def track_action(self, action: Action) -> Iterator[ActionInvocation]:
     """Track the execution of an action."""
-    if not self.root.execution.has_started:
-      self.root.start()
+    if not self._current_execution.has_started:
+      self._current_execution.start()
 
     invocation = ActionInvocation(pg.maybe_ref(action))
     parent_action = self._current_action
-    parent_action.current_phase.append(invocation)
+    parent_execution = self._current_execution
+    parent_execution.append(invocation)
 
     try:
       self._current_action = invocation
+      self._current_execution = invocation.execution
       # Start the execution of the current action.
       self._current_action.start()
       yield invocation
     finally:
       # Stop the execution of the current action.
-      self._current_action.end(action.result, action.metadata)
+      invocation.end(action.result, action.metadata)
+      self._current_execution = parent_execution
       self._current_action = parent_action
       if parent_action is self.root:
-        parent_action.end(
-            result=action.result, metadata=action.metadata,
-        )
+        parent_action.end(result=action.result, metadata=action.metadata)
+
+  @contextlib.contextmanager
+  def track_phase(self, name: str | None) -> Iterator[ExecutionTrace]:
+    """Context manager for starting a new execution phase."""
+    parent_execution = self._current_execution
+    if name is None:
+      phase = parent_execution
+    else:
+      phase = ExecutionTrace(name=name)
+      phase.start()
+      parent_execution.append(phase)
+
+    try:
+      self._current_execution = phase
+      yield phase
+    finally:
+      if phase is not parent_execution:
+        phase.stop()
+        self._current_execution = parent_execution
 
   @contextlib.contextmanager
   def track_queries(
@@ -741,12 +842,21 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       A list of `lf.QueryInvocation` objects, each for a single `lf.query`
       call.
     """
-    with self.phase(phase) if phase else contextlib.nullcontext():
+    with self.track_phase(phase) as execution:
       with lf_structured.track_queries(include_child_scopes=False) as queries:
         try:
           yield queries
         finally:
-          self._current_action.current_phase.extend(queries)
+          execution.extend(queries)
+
+  #
+  # Operations with activity tracking.
+  #
+
+  def add_metadata(self, **kwargs: Any) -> None:
+    """Adds metadata to the current invocation."""
+    with pg.notify_on_change(False):
+      self._current_action.metadata.update(kwargs)
 
   def query(
       self,
@@ -785,7 +895,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       lm: The language model to use for the query.
       examples: The examples to use for the query.
       **kwargs: Additional keyword arguments to pass to `lf.query`.
-    
+
     Returns:
       The result of the query.
     """
@@ -799,6 +909,49 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           **kwargs
       )
 
+  def concurrent_map(
+      self,
+      func: Callable[[Any], Any],
+      parallel_inputs: Iterable[Any],
+      *,
+      phase: str | None = None,
+      max_workers: int = 32,
+      timeout: int | None = None,
+      silence_on_errors: Union[
+          Type[BaseException], tuple[Type[BaseException], ...], None
+      ] = Exception
+  ) -> Iterator[Any]:
+    """Starts and tracks parallel execution with `lf.concurrent_map`."""
+    parallel_inputs = list(parallel_inputs)
+    parallel_execution = ParallelExecutions(name=phase)
+    self._current_execution.append(parallel_execution)
+    parent_action = self._current_action
+
+    def _map_single(input_value):
+      execution = parallel_execution.add()
+
+      # This happens on a new thread. Therefore, we update the thread-local
+      # states from the parent thread.
+      self._current_execution = execution
+      self._current_action = parent_action
+      execution.start()
+      try:
+        with self.track_queries():
+          return func(input_value)
+      finally:
+        execution.stop()
+
+    for input_value, result, error in lf.concurrent_map(
+        _map_single,
+        parallel_inputs,
+        max_workers=max_workers,
+        timeout=timeout,
+        silence_on_errors=silence_on_errors
+    ):
+      yield input_value, result, error
+
+  # NOTE(daiyip): Clean up `query_prompt` and `query_output` once TS
+  # code migration is done.
   def query_prompt(
       self,
       prompt: Union[str, lf.Template, Any],
@@ -878,7 +1031,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       return lf_structured.query_output(response, schema=schema, **kwargs)
 
   def _log(self, level: lf.logging.LogLevel, message: str, **kwargs):
-    self._current_action.current_phase.append(
+    self._current_execution.append(
         lf.logging.LogEntry(
             level=level,
             time=datetime.datetime.now(),
@@ -913,6 +1066,16 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         'Agentic task session.',
         result=self.root
     )
+
+  @property
+  def final_result(self) -> Any:
+    """Returns the final result of the session."""
+    return self.root.result
+
+  @property
+  def current_action(self) -> ActionInvocation:
+    """Returns the current invocation."""
+    return self._current_action
 
   #
   # HTML views.

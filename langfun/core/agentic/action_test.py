@@ -41,12 +41,23 @@ class SessionTest(unittest.TestCase):
 
       def call(self, session, *, lm, **kwargs):
         test.assertIs(session.current_action.action, self)
-        with session.phase('prepare'):
+        with session.track_phase('prepare'):
           session.info('Begin Foo', x=1)
           session.query('foo', lm=lm)
         with session.track_queries():
           self.make_additional_query(lm)
         session.add_metadata(note='foo')
+
+        def _sub_task(i):
+          session.add_metadata(**{f'subtask_{i}': i})
+          return lf_structured.query(f'subtask_{i}', lm=lm)
+
+        for i, output, error in session.concurrent_map(
+            _sub_task, range(3), max_workers=2, silence_on_errors=None,
+        ):
+          assert isinstance(i, int), i
+          assert isinstance(output, str), output
+          assert error is None, error
         return self.x + Bar()(session, lm=lm)
 
       def make_additional_query(self, lm):
@@ -73,21 +84,24 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(root.execution.has_stopped)
     self.assertGreater(root.execution.elapse, 0)
     self.assertEqual(root.result, 3)
-    self.assertEqual(root.metadata, dict(note='foo'))
+    self.assertEqual(
+        root.metadata,
+        dict(note='foo', subtask_0=0, subtask_1=1, subtask_2=2)
+    )
 
     # The root space should have one action (foo), no queries, and no logs.
     self.assertEqual(len(list(root.actions)), 1)
     self.assertEqual(len(list(root.queries)), 0)
     self.assertEqual(len(list(root.logs)), 0)
-    # 1 query from Bar and 2 from Foo.
-    self.assertEqual(len(list(root.all_queries)), 3)
+    # 1 query from Bar, 2 from Foo and 3 from parallel executions.
+    self.assertEqual(len(list(root.all_queries)), 6)
     # 1 log from Bar and 1 from Foo.
     self.assertEqual(len(list(root.all_logs)), 2)
-    self.assertEqual(root.usage_summary.total.num_requests, 3)
+    self.assertEqual(root.usage_summary.total.num_requests, 6)
 
     # Inspecting the top-level action (Foo)
     foo_invocation = root.execution.items[0]
-    self.assertEqual(len(foo_invocation.execution.items), 3)
+    self.assertEqual(len(foo_invocation.execution.items), 4)
 
     # Prepare phase.
     prepare_phase = foo_invocation.execution.items[0]
@@ -104,8 +118,16 @@ class SessionTest(unittest.TestCase):
     self.assertIsInstance(query_invocation, lf_structured.QueryInvocation)
     self.assertIs(query_invocation.lm, lm)
 
+    # Tracked parallel executions.
+    parallel_executions = foo_invocation.execution.items[2]
+    self.assertIsInstance(parallel_executions, action_lib.ParallelExecutions)
+    self.assertEqual(len(parallel_executions), 3)
+    self.assertEqual(len(parallel_executions[0].queries), 1)
+    self.assertEqual(len(parallel_executions[1].queries), 1)
+    self.assertEqual(len(parallel_executions[2].queries), 1)
+
     # Invocation to Bar.
-    bar_invocation = foo_invocation.execution.items[2]
+    bar_invocation = foo_invocation.execution.items[3]
     self.assertIsInstance(bar_invocation, action_lib.ActionInvocation)
     self.assertIsInstance(bar_invocation.action, Bar)
     self.assertEqual(bar_invocation.result, 2)
