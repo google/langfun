@@ -89,11 +89,21 @@ class REST(lf.LanguageModel):
                 timeout=self.timeout,
             )
         )
-    except (requests.exceptions.ReadTimeout,
-            requests.exceptions.ConnectTimeout) as e:
+    except (
+        requests.exceptions.Timeout,
+        requests.exceptions.ReadTimeout,
+        requests.exceptions.ConnectTimeout,
+        TimeoutError,
+    ) as e:
       raise lf.TemporaryLMError(str(e)) from e
-    except ConnectionError as e:
-      raise lf.LMError(str(e)) from e
+    except (
+        requests.exceptions.ConnectionError,
+        ConnectionError,
+    ) as e:
+      error_message = str(e)
+      if 'REJECTED_CLIENT_THROTTLED' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
+      raise lf.LMError(error_message) from e
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 429:

@@ -38,6 +38,13 @@ def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
   return response
 
 
+def mock_requests_post_exception(error):
+  def _mock_requests(url: str, json: dict[str, Any], **kwargs):
+    del url, json, kwargs
+    raise error
+  return _mock_requests
+
+
 def mock_requests_post_error(status_code, error_type, error_message):
   def _mock_requests(url: str, json: dict[str, Any], **kwargs):
     del url, json, kwargs
@@ -105,6 +112,50 @@ class RestTest(unittest.TestCase):
             Exception, f'.*{status_code}: .*{error_message}'
         ):
           self._lm('hello', max_attempts=1)
+
+    for error, expected_lm_error_cls, expected_lm_error_msg in [
+        (
+            requests.exceptions.Timeout('Timeout.'),
+            lf.TemporaryLMError,
+            'Timeout.',
+        ),
+        (
+            requests.exceptions.ReadTimeout('Read timeout.'),
+            lf.TemporaryLMError,
+            'Read timeout.',
+        ),
+        (
+            requests.exceptions.ConnectTimeout('Connect timeout.'),
+            lf.TemporaryLMError,
+            'Connect timeout.',
+        ),
+        (
+            TimeoutError('Timeout error.'),
+            lf.TemporaryLMError,
+            'Timeout error.',
+        ),
+        (
+            requests.exceptions.ConnectionError('REJECTED_CLIENT_THROTTLED'),
+            lf.TemporaryLMError,
+            'REJECTED_CLIENT_THROTTLED',
+        ),
+        (
+            requests.exceptions.ConnectionError('Connection error.'),
+            lf.LMError,
+            'Connection error.',
+        ),
+        (
+            ConnectionError('Connection error.'),
+            lf.LMError,
+            'Connection error.',
+        )
+    ]:
+      with mock.patch('requests.Session.post') as mock_post:
+        mock_post.side_effect = mock_requests_post_exception(error)
+        with self.assertRaisesRegex(
+            expected_lm_error_cls, expected_lm_error_msg
+        ):
+          self._lm._sample_single(lf.UserMessage('hello'))
 
 
 if __name__ == '__main__':
