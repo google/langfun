@@ -276,6 +276,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
 
   @classmethod
   def link(cls, path: str) -> str:
+    assert path.startswith('/'), path
     return f'file://{path}'
 
   #
@@ -886,6 +887,10 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
     if experiment.is_leaf:
       return os.path.join(self.output_root, experiment.id.replace('@', '/'))
     return self.output_root
+
+  def output_link(self, relative_path: str):
+    """Returns the output link for the relative path."""
+    return Experiment.link(os.path.join(self.output_root, relative_path))
 
   def input_dir(self, experiment: Experiment) -> str:
     """Returns the input directory of the experiment."""

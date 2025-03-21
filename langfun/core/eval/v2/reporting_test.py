@@ -31,7 +31,7 @@ class ReportingTest(unittest.TestCase):
     reporter = reporting.HtmlReporter()
     run = experiment.run(root_dir, 'new', plugins=[checkpointer, reporter])
     self.assertTrue(
-        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+        pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
     for leaf in experiment.leaf_nodes:
       self.assertTrue(
@@ -56,7 +56,7 @@ class ReportingTest(unittest.TestCase):
         warm_start_from=run.output_root
     )
     self.assertTrue(
-        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+        pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
     for leaf in experiment.leaf_nodes:
       self.assertTrue(
@@ -83,7 +83,7 @@ class ReportingTest(unittest.TestCase):
     reporter = reporting.HtmlReporter()
     run = experiment.run(root_dir, 'new', plugins=[reporter])
     self.assertFalse(
-        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+        pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
     for leaf in experiment.leaf_nodes:
       self.assertFalse(
@@ -107,7 +107,7 @@ class ReportingTest(unittest.TestCase):
     reporter = reporting.HtmlReporter()
     run = experiment.run(root_dir, 'new', plugins=[checkpointer, reporter])
     self.assertTrue(
-        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+        pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
     for leaf in experiment.leaf_nodes:
       self.assertTrue(
@@ -136,7 +136,7 @@ class ReportingTest(unittest.TestCase):
         warm_start_from=run.output_root
     )
     self.assertTrue(
-        pg.io.path_exists(run.output_path_for(experiment, 'summary.html'))
+        pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
     for leaf in experiment.leaf_nodes:
       self.assertTrue(

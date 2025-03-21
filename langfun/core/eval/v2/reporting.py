@@ -13,6 +13,7 @@
 # limitations under the License.
 """Reporting evaluation results."""
 
+import os
 import threading
 import time
 import traceback
@@ -145,9 +146,7 @@ class HtmlReporter(experiment_lib.Plugin):
           )
       )
       with self._summary_lock:
-        html.save(
-            run.output_path_for(run.experiment, _SUMMARY_FILE)
-        )
+        html.save(os.path.join(run.output_root, _SUMMARY_FILE))
 
     if force or (time.time() - self._last_summary_time > self.summary_interval):
       self._last_summary_time = time.time()

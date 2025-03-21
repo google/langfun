@@ -425,7 +425,7 @@ class Evaluation(experiment_lib.Experiment):
                   [
                       pg.views.html.controls.Label(
                           'Summary',
-                          link=run.experiment.output_link(run, 'summary.html'),
+                          link=run.output_link('summary.html'),
                           css_classes=['summary-link'],
                       ),
                       '|',
@@ -571,7 +571,7 @@ class Evaluation(experiment_lib.Experiment):
             pg.Html.element(
                 'iframe', [],
                 name='example-view',
-                src='./1.html',
+                src='about:blank',
                 title='Example view.',
                 css_classes=['example-view'],
             ),

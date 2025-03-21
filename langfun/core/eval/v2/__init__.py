@@ -28,6 +28,8 @@ from langfun.core.eval.v2.metric_values import Average
 from langfun.core.eval.v2.metrics import Metric
 from langfun.core.eval.v2 import metrics
 
+from langfun.core.eval.v2.experiment import Run
+from langfun.core.eval.v2.experiment import RunId
 from langfun.core.eval.v2.experiment import Plugin
 from langfun.core.eval.v2.experiment import Runner
 from langfun.core.eval.v2 import runners

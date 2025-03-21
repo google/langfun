@@ -77,6 +77,7 @@ class Evaluable(lf.Component):
 
   @classmethod
   def link(cls, path: str) -> str:
+    assert path.startswith('/'), path
     return f'file://{path}'
 
   @property

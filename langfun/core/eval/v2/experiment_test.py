@@ -219,6 +219,10 @@ class RunTest(unittest.TestCase):
     self.assertEqual(run.output_root, '/root/run_20241102_0')
     self.assertEqual(run.input_root, '/root/run_20241102_0')
     self.assertEqual(
+        run.output_link('summary.html'),
+        'file:///root/run_20241102_0/summary.html'
+    )
+    self.assertEqual(
         run.output_dir(run.experiment.leaf_nodes[0]),
         (
             '/root/run_20241102_0/MyEvaluation/'
