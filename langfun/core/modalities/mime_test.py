@@ -93,6 +93,22 @@ class CustomMimeTest(unittest.TestCase):
       self.assertEqual(content.to_bytes(), b'bar')
       self.assertEqual(content.mime_type, 'text/plain')
 
+    content = mime.Mime.from_uri('data:text/plain;base64,Zm9v')
+    self.assertIsNone(content.uri)
+    self.assertEqual(content.mime_type, 'text/plain')
+    self.assertEqual(content.content, b'foo')
+    self.assertEqual(content.content_uri, 'data:text/plain;base64,Zm9v')
+    self.assertEqual(content.embeddable_uri, 'data:text/plain;base64,Zm9v')
+
+    with self.assertRaisesRegex(ValueError, 'Invalid data URI'):
+      mime.Mime.from_uri('data:text/plain')
+
+    with self.assertRaisesRegex(ValueError, 'Invalid data URI'):
+      mime.Mime.from_uri('data:text/plain;abcd')
+
+    with self.assertRaisesRegex(ValueError, 'Unsupported encoding'):
+      mime.Mime.from_uri('data:text/plain;base16,abcd')
+
   def assert_html_content(self, html, expected):
     expected = inspect.cleandoc(expected).strip()
     actual = html.content.strip()

@@ -152,11 +152,32 @@ class Mime(lf.Modality):
 
   @classmethod
   def from_uri(cls, uri: str, **kwargs) -> 'Mime':
+    if uri.startswith('data:'):
+      mime_type, content = cls._parse_data_uri(uri)
+      return cls.class_from_mime_type(mime_type).from_bytes(content, **kwargs)
+
     if cls is Mime:
       content = cls.download(uri)
       mime = from_buffer(content, mime=True).lower()
       return cls.class_from_mime_type(mime)(uri=uri, content=content, **kwargs)
     return cls(uri=uri, content=None, **kwargs)
+
+  @classmethod
+  def _parse_data_uri(cls, uri: str) -> tuple[str, bytes]:
+    """Returns the MIME type and content from the given data URI."""
+    assert uri.startswith('data:'), uri
+    mime_end_pos = uri.find(';', 0)
+    if mime_end_pos == -1:
+      raise ValueError(f'Invalid data URI: {uri!r}.')
+    mime_type = uri[5: mime_end_pos].strip().lower()
+    encoding_end_pos = uri.find(',', mime_end_pos + 1)
+    if encoding_end_pos == -1:
+      raise ValueError(f'Invalid data URI: {uri!r}.')
+    encoding = uri[mime_end_pos + 1: encoding_end_pos].strip().lower()
+    if encoding != 'base64':
+      raise ValueError(f'Unsupported encoding: {encoding!r}.')
+    base64_content = uri[encoding_end_pos + 1:].strip().encode()
+    return mime_type, base64.b64decode(base64_content)
 
   @classmethod
   def from_bytes(cls, content: bytes | str, **kwargs) -> 'Mime':
