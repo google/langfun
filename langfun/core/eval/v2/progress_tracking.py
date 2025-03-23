@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tracking evaluation run progress."""
 
+import os
 import langfun.core as lf
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import experiment as experiment_lib
@@ -95,7 +96,7 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
         for i, leaf in enumerate(root.leaf_nodes)
     }
     summary_link = Experiment.link(
-        runner.current_run.output_path_for(root, 'summary.html')
+        os.path.join(runner.current_run.output_root, 'summary.html')
     )
     lf.console.write(f'Summary: {summary_link}.', color='green')
 
