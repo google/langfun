@@ -13,13 +13,11 @@
 # limitations under the License.
 """Tests for Gemini API."""
 
-import base64
 from typing import Any
 import unittest
 from unittest import mock
 
 import langfun.core as lf
-from langfun.core import modalities as lf_modalities
 from langfun.core.llms import gemini
 import pyglove as pg
 import requests
@@ -103,36 +101,6 @@ class GeminiTest(unittest.TestCase):
             )
         ),
         0.51
-    )
-
-  def test_content_from_message_text_only(self):
-    text = 'This is a beautiful day'
-    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
-    chunks = model._content_from_message(lf.UserMessage(text))
-    self.assertEqual(chunks, {'role': 'user', 'parts': [{'text': text}]})
-
-  def test_content_from_message_mm(self):
-    image = lf_modalities.Image.from_bytes(example_image)
-    message = lf.UserMessage(
-        'This is an <<[[image]]>>, what is it?', image=image
-    )
-    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
-    content = model._content_from_message(message)
-    self.assertEqual(
-        content,
-        {
-            'role': 'user',
-            'parts': [
-                {'text': 'This is an'},
-                {
-                    'inlineData': {
-                        'data': base64.b64encode(example_image).decode(),
-                        'mimeType': 'image/png',
-                    }
-                },
-                {'text': ', what is it?'},
-            ],
-        },
     )
 
   def test_generation_config(self):

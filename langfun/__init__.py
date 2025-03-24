@@ -48,6 +48,7 @@ query_output = structured.query_output
 source_form = structured.source_form
 function_gen = structured.function_gen
 
+from langfun.core import data
 from langfun.core import eval  # pylint: disable=redefined-builtin
 from langfun.core import templates
 from langfun.core import coding

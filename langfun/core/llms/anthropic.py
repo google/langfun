@@ -13,7 +13,6 @@
 # limitations under the License.
 """Language models from Anthropic."""
 
-import base64
 import datetime
 import functools
 import os
@@ -21,6 +20,7 @@ from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+from langfun.core.data.conversion import anthropic as anthropic_conversion  # pylint: disable=unused-import
 from langfun.core.llms import rest
 import pyglove as pg
 
@@ -502,10 +502,17 @@ class Anthropic(rest.REST):
     """Returns the JSON input for a message."""
     request = dict()
     request.update(self._request_args(sampling_options))
+
+    def modality_check(chunk: Any) -> Any:
+      if isinstance(chunk, lf_modalities.Mime):
+        if not self.supports_input(chunk.mime_type):
+          raise ValueError(f'Unsupported modality: {chunk!r}.')
+      return chunk
+
     request.update(
         dict(
             messages=[
-                dict(role='user', content=self._content_from_message(prompt))
+                prompt.as_format('anthropic', chunk_preprocessor=modality_check)
             ]
         )
     )
@@ -548,43 +555,8 @@ class Anthropic(rest.REST):
       args.pop('top_p', None)
     return args
 
-  def _content_from_message(self, prompt: lf.Message) -> list[dict[str, Any]]:
-    """Converts an message to Anthropic's content protocol (list of dicts)."""
-    # Refer: https://docs.anthropic.com/claude/reference/messages-examples
-    content = []
-    for chunk in prompt.chunk():
-      if isinstance(chunk, str):
-        content.append(dict(type='text', text=chunk))
-      elif isinstance(chunk, lf_modalities.Mime):
-        if not self.supports_input(chunk.mime_type):
-          raise ValueError(f'Unsupported modality: {chunk!r}.')
-        if isinstance(chunk, lf_modalities.Image):
-          item = dict(
-              type='image',
-              source=dict(
-                  type='base64',
-                  media_type=chunk.mime_type,
-                  data=base64.b64encode(chunk.to_bytes()).decode(),
-              ),
-          )
-        elif isinstance(chunk, lf_modalities.PDF):
-          item = dict(
-              type='document',
-              source=dict(
-                  type='base64',
-                  media_type=chunk.mime_type,
-                  data=base64.b64encode(chunk.to_bytes()).decode(),
-              ),
-          )
-        else:
-          raise NotImplementedError(
-              f'Modality conversion not implemented: {chunk!r}'
-          )
-        content.append(item)
-    return content
-
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
-    message = self._message_from_content(json['content'])
+    message = lf.Message.from_value(json, format='anthropic')
     input_tokens = json['usage']['input_tokens']
     output_tokens = json['usage']['output_tokens']
     return lf.LMSamplingResult(
@@ -595,20 +567,6 @@ class Anthropic(rest.REST):
             total_tokens=input_tokens + output_tokens,
         ),
     )
-
-  def _message_from_content(self, content: list[dict[str, Any]]) -> lf.Message:
-    """Converts Anthropic's content protocol to message."""
-    # Refer: https://docs.anthropic.com/claude/reference/messages-examples
-    # Thinking: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking # pylint: disable=line-too-long
-    response = lf.AIMessage.from_chunks(
-        [x['text'] for x in content if x['type'] == 'text']
-    )
-    thinking = lf.AIMessage.from_chunks(
-        [x['thinking'] for x in content if x['type'] == 'thinking']
-    )
-    # thinking is added into the metadata.thinking field.
-    response.set('thinking', thinking)
-    return response
 
 
 class Claude37(Anthropic):

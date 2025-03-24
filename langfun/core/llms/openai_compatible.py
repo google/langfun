@@ -17,6 +17,7 @@ from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+from langfun.core.data.conversion import openai as openai_conversion  # pylint: disable=unused-import
 from langfun.core.llms import rest
 import pyglove as pg
 
@@ -61,20 +62,6 @@ class OpenAICompatible(rest.REST):
       args['seed'] = options.random_seed
     return args
 
-  def _content_from_message(self, message: lf.Message) -> list[dict[str, Any]]:
-    """Returns a OpenAI content object from a Langfun message."""
-    content = []
-    for chunk in message.chunk():
-      if isinstance(chunk, str):
-        item = dict(type='text', text=chunk)
-      elif (isinstance(chunk, lf_modalities.Image)
-            and self.supports_input(chunk.mime_type)):
-        item = dict(type='image_url', image_url=dict(url=chunk.embeddable_uri))
-      else:
-        raise ValueError(f'Unsupported modality: {chunk!r}.')
-      content.append(item)
-    return content
-
   def request(
       self,
       prompt: lf.Message,
@@ -114,16 +101,25 @@ class OpenAICompatible(rest.REST):
 
     # Prepare messages.
     messages = []
+
+    def modality_check(chunk: str | lf.Modality) -> Any:
+      if (isinstance(chunk, lf_modalities.Mime)
+          and not self.supports_input(chunk.mime_type)):
+        raise ValueError(
+            f'Unsupported modality: {chunk!r}.'
+        )
+      return chunk
+
     # Users could use `metadata_system_message` to pass system message.
     system_message = prompt.metadata.get('system_message')
     if system_message:
-      system_message = lf.SystemMessage.from_value(system_message)
       messages.append(
-          dict(role='system',
-               content=self._content_from_message(system_message))
+          lf.SystemMessage.from_value(system_message).as_format(
+              'openai', chunk_preprocessor=modality_check
+          )
       )
     messages.append(
-        dict(role='user', content=self._content_from_message(prompt))
+        prompt.as_format('openai', chunk_preprocessor=modality_check)
     )
     request = dict()
     request.update(request_args)
@@ -145,7 +141,7 @@ class OpenAICompatible(rest.REST):
           for t in choice_logprobs['content']
       ]
     return lf.LMSample(
-        choice['message']['content'],
+        lf.Message.from_value(choice['message'], format='openai'),
         score=0.0,
         logprobs=logprobs,
     )

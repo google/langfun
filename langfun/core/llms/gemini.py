@@ -13,13 +13,13 @@
 # limitations under the License.
 """Gemini REST API (Shared by Google GenAI and Vertex AI)."""
 
-import base64
 import datetime
 import functools
 from typing import Annotated, Any
 
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
+from langfun.core.data.conversion import gemini as gemini_conversion  # pylint: disable=unused-import
 from langfun.core.llms import rest
 import pyglove as pg
 
@@ -559,7 +559,19 @@ class Gemini(rest.REST):
     request = dict(
         generationConfig=self._generation_config(prompt, sampling_options)
     )
-    request['contents'] = [self._content_from_message(prompt)]
+    def modality_conversion(chunk: str | lf.Modality) -> Any:
+      if isinstance(chunk, lf_modalities.Mime):
+        try:
+          return chunk.make_compatible(
+              self.model_info.input_modalities + ['text/plain']
+          )
+        except lf.ModalityError as e:
+          raise lf.ModalityError(f'Unsupported modality: {chunk!r}') from e
+      return chunk
+
+    request['contents'] = [
+        prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
+    ]
     return request
 
   def _generation_config(
@@ -593,49 +605,9 @@ class Gemini(rest.REST):
       )
     return config
 
-  def _content_from_message(self, prompt: lf.Message) -> dict[str, Any]:
-    """Gets generation content from langfun message."""
-    parts = []
-    for lf_chunk in prompt.chunk():
-      if isinstance(lf_chunk, str):
-        parts.append({'text': lf_chunk})
-      elif isinstance(lf_chunk, lf_modalities.Mime):
-        try:
-          modalities = lf_chunk.make_compatible(
-              self.model_info.input_modalities + ['text/plain']
-          )
-          if isinstance(modalities, lf_modalities.Mime):
-            modalities = [modalities]
-          for modality in modalities:
-            if modality.is_text:
-              # Add YouTube video into the context window.
-              # https://ai.google.dev/gemini-api/docs/vision?lang=python#youtube
-              if modality.mime_type == 'text/html' and modality.uri.startswith(
-                  'https://www.youtube.com/watch?v='
-              ):
-                parts.append({
-                    'fileData': {'mimeType': 'video/*', 'fileUri': modality.uri}
-                })
-              else:
-                parts.append({'text': modality.to_text()})
-            else:
-              parts.append({
-                  'inlineData': {
-                      'data': base64.b64encode(modality.to_bytes()).decode(),
-                      'mimeType': modality.mime_type,
-                  }
-              })
-        except lf.ModalityError as e:
-          raise lf.ModalityError(f'Unsupported modality: {lf_chunk!r}') from e
-      else:
-        raise NotImplementedError(
-            f'Input conversion not implemented: {lf_chunk!r}'
-        )
-    return dict(role='user', parts=parts)
-
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
     messages = [
-        self._message_from_content_parts(candidate['content'].get('parts', []))
+        lf.Message.from_value(candidate['content'], format='gemini')
         for candidate in json['candidates']
     ]
     usage = json['usageMetadata']
@@ -652,22 +624,3 @@ class Gemini(rest.REST):
             total_tokens=input_tokens + output_tokens,
         ),
     )
-
-  def _message_from_content_parts(
-      self, parts: list[dict[str, Any]]
-  ) -> lf.Message:
-    """Converts Vertex AI's content parts protocol to message."""
-    chunks = []
-    thought_chunks = []
-    for part in parts:
-      if text_part := part.get('text'):
-        if part.get('thought'):
-          thought_chunks.append(text_part)
-        else:
-          chunks.append(text_part)
-      else:
-        raise ValueError(f'Unsupported part: {part}')
-    message = lf.AIMessage.from_chunks(chunks)
-    if thought_chunks:
-      message.set('thought', lf.AIMessage.from_chunks(thought_chunks))
-    return message
