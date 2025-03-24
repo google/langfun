@@ -87,6 +87,8 @@ from langfun.core.message import AIMessage
 from langfun.core.message import SystemMessage
 from langfun.core.message import MemoryRecord
 
+from langfun.core.message import MessageConverter
+
 # Interface for modality.
 from langfun.core.modality import Modality
 from langfun.core.modality import ModalityRef

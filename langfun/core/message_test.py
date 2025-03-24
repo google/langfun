@@ -187,10 +187,6 @@ class MessageTest(unittest.TestCase):
     m = message.UserMessage('hi')
     self.assertEqual(m.text, 'hi')
     self.assertEqual(m.sender, 'User')
-    self.assertTrue(m.from_user)
-    self.assertFalse(m.from_agent)
-    self.assertFalse(m.from_system)
-    self.assertFalse(m.from_memory)
     self.assertEqual(str(m), m.text)
 
     m = message.UserMessage('hi', sender='Tom')
@@ -201,10 +197,6 @@ class MessageTest(unittest.TestCase):
     m = message.AIMessage('hi')
     self.assertEqual(m.text, 'hi')
     self.assertEqual(m.sender, 'AI')
-    self.assertFalse(m.from_user)
-    self.assertTrue(m.from_agent)
-    self.assertFalse(m.from_system)
-    self.assertFalse(m.from_memory)
     self.assertEqual(str(m), m.text)
 
     m = message.AIMessage('hi', sender='Model')
@@ -215,10 +207,6 @@ class MessageTest(unittest.TestCase):
     m = message.SystemMessage('hi')
     self.assertEqual(m.text, 'hi')
     self.assertEqual(m.sender, 'System')
-    self.assertFalse(m.from_user)
-    self.assertFalse(m.from_agent)
-    self.assertTrue(m.from_system)
-    self.assertFalse(m.from_memory)
     self.assertEqual(str(m), m.text)
 
     m = message.SystemMessage('hi', sender='Environment1')
@@ -229,10 +217,6 @@ class MessageTest(unittest.TestCase):
     m = message.MemoryRecord('hi')
     self.assertEqual(m.text, 'hi')
     self.assertEqual(m.sender, 'Memory')
-    self.assertFalse(m.from_user)
-    self.assertFalse(m.from_agent)
-    self.assertFalse(m.from_system)
-    self.assertTrue(m.from_memory)
     self.assertEqual(str(m), m.text)
 
     m = message.MemoryRecord('hi', sender="Someone's Memory")
@@ -492,6 +476,138 @@ class MessageTest(unittest.TestCase):
         """
     )
 
+
+class MessageConverterTest(unittest.TestCase):
+
+  def test_basics(self):
+
+    class IntConverter(message.MessageConverter):
+      OUTPUT_TYPE = int
+
+    class TestConverter(IntConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'test_format1'
+
+      def to_value(self, m: message.Message) -> int:
+        return int(m.text)
+
+      def from_value(self, value: int) -> message.Message:
+        return message.UserMessage(str(value))
+
+    class TestConverter2(IntConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'test_format2'
+
+      def to_value(self, m: message.Message) -> int:
+        return int(m.text) + 1
+
+      def from_value(self, value: int) -> message.Message:
+        return message.UserMessage(str(value - 1))
+
+    class TestConverter3(message.MessageConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'test_format3'
+      OUTPUT_TYPE = tuple
+
+      def to_value(self, m: message.Message) -> tuple[int, ...]:
+        return tuple(int(x) for x in m.text.split(','))
+
+      def from_value(self, value: tuple[int, ...]) -> message.Message:
+        return message.UserMessage(','.join(str(x) for x in value))
+
+    self.assertEqual(
+        message.Message.convertible_formats,
+        ['test_format1', 'test_format2', 'test_format3']
+    )
+    self.assertEqual(
+        message.Message.convertible_types,
+        [int, tuple]
+    )
+    self.assertEqual(
+        message.Message.from_value(1, format='test_format1'),
+        message.UserMessage('1')
+    )
+    self.assertEqual(
+        message.UserMessage('1').as_format('test_format1'),
+        1
+    )
+    self.assertEqual(
+        message.Message.from_value(1, format='test_format2'),
+        message.UserMessage('0')
+    )
+    self.assertEqual(
+        message.UserMessage('1').as_format('test_format2'),
+        2
+    )
+    with self.assertRaisesRegex(ValueError, 'Unsupported format: .*'):
+      message.UserMessage('1').as_format('test4')
+
+    with self.assertRaisesRegex(TypeError, 'Cannot convert Message to .*'):
+      message.UserMessage('1').as_format(float)
+
+    with self.assertRaisesRegex(
+        TypeError, 'More than one converters found for output type .*'
+    ):
+      message.UserMessage('1').as_format(int)
+    self.assertEqual(
+        message.UserMessage('1,2,3').as_format('test_format3'),
+        (1, 2, 3)
+    )
+    self.assertEqual(
+        message.UserMessage('1,2,3').as_format(tuple),
+        (1, 2, 3)
+    )
+    self.assertEqual(
+        message.Message.from_value((1, 2, 3)),
+        message.UserMessage('1,2,3')
+    )
+
+  def test_get_role(self):
+    self.assertEqual(
+        message.MessageConverter.get_role(message.SystemMessage('hi')),
+        'system',
+    )
+    self.assertEqual(
+        message.MessageConverter.get_role(message.UserMessage('hi')),
+        'user',
+    )
+    self.assertEqual(
+        message.MessageConverter.get_role(message.AIMessage('hi')),
+        'assistant',
+    )
+    with self.assertRaisesRegex(ValueError, 'Unsupported message type: .*'):
+      message.MessageConverter.get_role(message.MemoryRecord('hi'))
+
+  def test_get_message_cls(self):
+    self.assertEqual(
+        message.MessageConverter.get_message_cls('system'),
+        message.SystemMessage,
+    )
+    self.assertEqual(
+        message.MessageConverter.get_message_cls('user'),
+        message.UserMessage,
+    )
+    self.assertEqual(
+        message.MessageConverter.get_message_cls('assistant'),
+        message.AIMessage,
+    )
+    with self.assertRaisesRegex(ValueError, 'Unsupported role: .*'):
+      message.MessageConverter.get_message_cls('foo')
+
+  def test_safe_read(self):
+    self.assertEqual(
+        message.MessageConverter._safe_read({'a': 1}, 'a'),
+        1,
+    )
+    self.assertEqual(
+        message.MessageConverter._safe_read({'a': 1}, 'a', default=2),
+        1,
+    )
+    self.assertEqual(
+        message.MessageConverter._safe_read({'a': 1}, 'b', default=2),
+        2,
+    )
+    with self.assertRaisesRegex(ValueError, 'Invalid data type: .*'):
+      message.MessageConverter._safe_read(1, 'a')
+    with self.assertRaisesRegex(ValueError, 'Missing key .*'):
+      message.MessageConverter._safe_read({'a': 1}, 'b')
 
 if __name__ == '__main__':
   unittest.main()

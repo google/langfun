@@ -13,10 +13,14 @@
 # limitations under the License.
 """Messages that are exchanged between users and agents."""
 
+import abc
+import collections
+from collections.abc import Mapping
 import contextlib
 import functools
+import inspect
 import io
-from typing import Annotated, Any, Optional, Union
+from typing import Annotated, Any, ClassVar, Optional, Type, Union
 
 from langfun.core import modality
 from langfun.core import natural_language
@@ -146,13 +150,91 @@ class Message(
     self._source = source
 
   @classmethod
-  def from_value(cls, value: Union[str, 'Message']) -> 'Message':
-    """Creates a message from a value or return value itself if a Message."""
+  def from_value(
+      cls,
+      value: Union[str, 'Message', Any],
+      *,
+      format: str | None = None,    # pylint: disable=redefined-builtin
+      **kwargs
+  ) -> 'Message':
+    """Creates a message from a str, message or object of registered format.
+
+    Example:
+      # Create a user message from a str.
+      lf.UserMessage.from_value('hi')
+
+      # Create a user message from a multi-modal object.
+      lf.UserMessage.from_value(lf.Image.from_uri('...'))
+
+      # Create a user message from OpenAI API format.
+      lf.Message.from_value(
+          {
+              'role': 'user',
+              'content': [{'type': 'text', 'text': 'hi'}],
+          },
+          format='openai.api',
+      )
+
+    Args:
+      value: The value to create a message from.
+      format: The format ID to convert to. If None, the conversion will be
+        performed according to the type of `value`. Otherwise, the converter
+        registered for the format will be used.
+      **kwargs: The keyword arguments passed to the __init__ of the converter.
+
+    Returns:
+      A message created from the value.
+    """
     if isinstance(value, modality.Modality):
       return cls('<<[[object]]>>', object=value)
     if isinstance(value, Message):
       return value
-    return cls(value)
+    if isinstance(value, str):
+      return cls(value)
+    value_type = type(value)
+    if format is None:
+      converter = MessageConverter.get_by_type(value_type, **kwargs)
+    else:
+      converter = MessageConverter.get_by_format(format, **kwargs)
+      if (converter.OUTPUT_TYPE is not None
+          and not isinstance(value, converter.OUTPUT_TYPE)):
+        raise ValueError(f'{format!r} is not applicable to {value!r}.')
+    return converter.from_value(value)
+
+  #
+  # Conversion to other formats or types.
+  #
+
+  def as_format(self, format_or_type: str | type[Any], **kwargs) -> Any:
+    """Converts the message to a registered format or type.
+
+    Example:
+
+      m = lf.Template('What is this {{image}}?').render()
+      m.as_format('openai')  # Convert to OpenAI message format.
+      m.as_format('gemini')  # Convert to Gemini message format.
+      m.as_format('anthropic')  # Convert to Anthropic message format.
+
+    Args:
+      format_or_type: The format ID or type to convert to.
+      **kwargs: The conversion arguments.
+
+    Returns:
+      The converted object according to the format or type.
+    """
+    return MessageConverter.get(format_or_type, **kwargs).to_value(self)
+
+  @classmethod
+  @property
+  def convertible_formats(cls) -> list[str]:
+    """Returns supported format for message conversion."""
+    return MessageConverter.convertible_formats()
+
+  @classmethod
+  @property
+  def convertible_types(cls) -> list[str]:
+    """Returns supported types for message conversion."""
+    return MessageConverter.convertible_types()
 
   #
   # Unified interface for accessing text, result and metadata.
@@ -376,29 +458,6 @@ class Message(
         metadata[var_name] = pg.maybe_ref(chunk)
         ref_index += 1
     return cls(fused_text.getvalue().strip(), metadata=metadata)
-
-  #
-  # API for testing the message types.
-  #
-
-  @property
-  def from_user(self) -> bool:
-    """Returns True if it's user message."""
-    return isinstance(self, UserMessage)
-
-  @property
-  def from_agent(self) -> bool:
-    """Returns True if it's agent message."""
-    return isinstance(self, AIMessage)
-
-  @property
-  def from_system(self) -> bool:
-    """Returns True if it's agent message."""
-    return isinstance(self, SystemMessage)
-
-  @property
-  def from_memory(self) -> bool:
-    return isinstance(self, MemoryRecord)
 
   #
   # Tagging
@@ -798,6 +857,152 @@ class Message(
         """
     ]
 
+
+class _MessageConverterRegistry:
+  """Message converter registry."""
+
+  def __init__(self):
+    self._name_to_converter: dict[str, Type[MessageConverter]] = {}
+    self._type_to_converters: dict[Type[Any], list[Type[MessageConverter]]] = (
+        collections.defaultdict(list)
+    )
+
+  def register(self, converter: Type['MessageConverter']) -> None:
+    """Registers a message converter."""
+    self._name_to_converter[converter.FORMAT_ID] = converter
+    if converter.OUTPUT_TYPE is not None:
+      self._type_to_converters[converter.OUTPUT_TYPE].append(converter)
+
+  def get_by_type(self, t: Type[Any], **kwargs) -> 'MessageConverter':
+    """Returns a message converter for the given type."""
+    t = self._type_to_converters[t]
+    if not t:
+      raise TypeError(
+          f'Cannot convert Message to {t!r}.'
+      )
+    if len(t) > 1:
+      raise TypeError(
+          f'More than one converters found for output type {t!r}. '
+          f'Please specify one for this conversion: {[x.FORMAT_ID for x in t]}.'
+      )
+    return t[0](**kwargs)
+
+  def get_by_format(self, format: str, **kwargs) -> 'MessageConverter':   # pylint: disable=redefined-builtin
+    """Returns a message converter for the given format."""
+    if format not in self._name_to_converter:
+      raise ValueError(f'Unsupported format: {format!r}.')
+    return self._name_to_converter[format](**kwargs)
+
+  def get(
+      self,
+      format_or_type: str | Type[Any], **kwargs
+  ) -> 'MessageConverter':
+    """Returns a message converter for the given format or type."""
+    if isinstance(format_or_type, str):
+      return self.get_by_format(format_or_type, **kwargs)
+    assert isinstance(format_or_type, type), format_or_type
+    return self.get_by_type(format_or_type, **kwargs)
+
+  def convertible_formats(self) -> list[str]:
+    """Returns a list of converter names."""
+    return sorted(list(self._name_to_converter.keys()))
+
+  def convertible_types(self) -> list[Type[Any]]:
+    """Returns a list of converter types."""
+    return list(self._type_to_converters.keys())
+
+
+class MessageConverter(pg.Object):
+  """Interface for converting a Langfun message to other formats."""
+
+  # A global unique identifier for the converter.
+  FORMAT_ID: ClassVar[str]
+
+  # The output type of the converter.
+  # If None, the converter will not be registered to handle
+  # `lf.Message.to_value(output_type)`.
+  OUTPUT_TYPE: ClassVar[Type[Any] | None] = None
+
+  _REGISTRY = _MessageConverterRegistry()
+
+  def __init_subclass__(cls, *args, **kwargs):
+    super().__init_subclass__(*args, **kwargs)
+    if not inspect.isabstract(cls):
+      cls._REGISTRY.register(cls)
+
+  @abc.abstractmethod
+  def to_value(self, message: Message) -> Any:
+    """Converts a Langfun message to other formats."""
+
+  @abc.abstractmethod
+  def from_value(self, value: Message) -> Message:
+    """Returns a MessageConverter from a Langfun message."""
+
+  @classmethod
+  def _safe_read(
+      cls,
+      data: Mapping[str, Any],
+      key: str,
+      default: Any = pg.MISSING_VALUE
+  ) -> Any:
+    """Safe reads a key from a mapping."""
+    if not isinstance(data, Mapping):
+      raise ValueError(f'Invalid data type: {data!r}.')
+    if key not in data:
+      if pg.MISSING_VALUE == default:
+        raise ValueError(f'Missing key {key!r} in {data!r}')
+      return default
+    return data[key]
+
+  @classmethod
+  def get_role(cls, message: Message) -> str:
+    """Returns the role of the message."""
+    if isinstance(message, SystemMessage):
+      return 'system'
+    elif isinstance(message, UserMessage):
+      return 'user'
+    elif isinstance(message, AIMessage):
+      return 'assistant'
+    else:
+      raise ValueError(f'Unsupported message type: {message!r}.')
+
+  @classmethod
+  def get_message_cls(cls, role: str) -> type[Message]:
+    """Returns the message class of the message."""
+    match role:
+      case 'system':
+        return SystemMessage
+      case 'user':
+        return UserMessage
+      case 'assistant':
+        return AIMessage
+      case _:
+        raise ValueError(f'Unsupported role: {role!r}.')
+
+  @classmethod
+  def get(cls, format_or_type: str | Type[Any], **kwargs) -> 'MessageConverter':
+    """Returns a message converter."""
+    return cls._REGISTRY.get(format_or_type, **kwargs)
+
+  @classmethod
+  def get_by_format(cls, format: str, **kwargs) -> 'MessageConverter':  # pylint: disable=redefined-builtin
+    """Returns a message converter for the given format."""
+    return cls._REGISTRY.get_by_format(format, **kwargs)
+
+  @classmethod
+  def get_by_type(cls, t: Type[Any], **kwargs) -> 'MessageConverter':
+    """Returns a message converter for the given type."""
+    return cls._REGISTRY.get_by_type(t, **kwargs)
+
+  @classmethod
+  def convertible_formats(cls) -> list[str]:
+    """Returns a list of converter names."""
+    return cls._REGISTRY.convertible_formats()
+
+  @classmethod
+  def convertible_types(cls) -> list[Type[Any]]:
+    """Returns a list of converter types."""
+    return cls._REGISTRY.convertible_types()
 
 #
 # Messages of different roles.
