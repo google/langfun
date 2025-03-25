@@ -46,6 +46,7 @@ class Image(mime.Mime):
 
   @functools.cached_property
   def size(self) -> tuple[int, int]:
+    """Returns the size (width, height) of the image in pixels."""
     img = pil_open(io.BytesIO(self.to_bytes()))
     return img.size
 

@@ -147,7 +147,7 @@ def _as_gemini_format(
     chunk_preprocessor: Callable[[str | lf.Modality], Any] | None = None,
     **kwargs
 ) -> dict[str, Any]:
-  """Returns the Gemini format of the chunk."""
+  """Returns a Gemini (REST) format message."""
   return GeminiMessageConverter(
       chunk_preprocessor=chunk_preprocessor, **kwargs
   ).to_value(self)
@@ -158,8 +158,8 @@ def _from_gemini_format(
     cls,
     gemini_message: dict[str, Any],
     **kwargs
-) -> dict[str, Any]:
-  """Returns the Gemini format of the chunk."""
+) -> lf.Message:
+  """Creates a Langfun message from the Gemini (REST) format message."""
   del cls
   return GeminiMessageConverter(**kwargs).from_value(gemini_message)
 

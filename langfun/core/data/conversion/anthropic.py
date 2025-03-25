@@ -110,7 +110,7 @@ def _as_anthropic_format(
     chunk_preprocessor: Callable[[str | lf.Modality], Any] | None = None,
     **kwargs
 ) -> dict[str, Any]:
-  """Returns the Anthropic format of the chunk."""
+  """Returns an Anthropic format message."""
   return AnthropicMessageConverter(
       chunk_preprocessor=chunk_preprocessor, **kwargs
   ).to_value(self)
@@ -121,8 +121,8 @@ def _from_anthropic_format(
     cls,
     anthropic_message: dict[str, Any],
     **kwargs
-) -> dict[str, Any]:
-  """Returns the Anthropic format of the chunk."""
+) -> lf.Message:
+  """Creates a Langfun message from the Anthropic format message."""
   del cls
   return AnthropicMessageConverter(**kwargs).from_value(anthropic_message)
 

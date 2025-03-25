@@ -110,7 +110,7 @@ def _as_openai_format(
     chunk_preprocessor: Callable[[str | lf.Modality], Any] | None = None,
     **kwargs
 ) -> dict[str, Any]:
-  """Returns the OpenAI format of the chunk."""
+  """Returns an OpenAI format message."""
   return OpenAIMessageConverter(
       chunk_preprocessor=chunk_preprocessor, **kwargs
   ).to_value(self)
@@ -121,8 +121,8 @@ def _from_openai_format(
     cls,
     openai_message: dict[str, Any],
     **kwargs
-) -> dict[str, Any]:
-  """Returns the OpenAI format of the chunk."""
+) -> lf.Message:
+  """Creates a Langfun message from the OpenAI format message."""
   del cls
   return OpenAIMessageConverter(**kwargs).from_value(openai_message)
 
