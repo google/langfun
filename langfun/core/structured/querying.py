@@ -19,7 +19,6 @@ import time
 from typing import Annotated, Any, Callable, Iterator, Type, Union
 
 import langfun.core as lf
-from langfun.core.llms import fake
 from langfun.core.structured import mapping
 from langfun.core.structured import schema as schema_lib
 import pyglove as pg
@@ -477,6 +476,10 @@ def query_output(
     **kwargs,
 ) -> Any:
   """Returns the final output of `lf.query` from a provided LLM response."""
+  # Delay import to avoid circular dependency in Colab.
+  # llms > data/conversion > structured > querying
+  from langfun.core.llms import fake  # pylint: disable=g-import-not-at-top
+
   kwargs.pop('prompt', None)
   kwargs.pop('lm', None)
   return query(
@@ -605,6 +608,18 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   def elapse(self) -> float:
     """Returns query elapse in seconds."""
     return self.end_time - self.start_time
+
+  def as_mapping_example(
+      self,
+      metadata: dict[str, Any] | None = None
+  ) -> mapping.MappingExample:
+    """Returns a `MappingExample` object for this query invocation."""
+    return mapping.MappingExample(
+        input=self.input,
+        schema=self.schema,
+        output=self.output,
+        metadata=metadata or {},
+    )
 
   def _on_bound(self):
     super()._on_bound()

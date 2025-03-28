@@ -1072,6 +1072,29 @@ class QueryInvocationTest(unittest.TestCase):
     self.assertEqual(queries[0].lm_response.score, 1.0)
     self.assertFalse(queries[0].lm_response.is_cached)
 
+  def test_as_mapping_example(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi")',
+    ])
+    with querying.track_queries() as queries:
+      querying.query(lf.Template('foo {{x}}', x=1), Activity, lm=lm)
+    mapping_example = queries[0].as_mapping_example()
+    self.assertTrue(pg.eq(mapping_example.input, lf.Template('foo {{x}}', x=1)))
+    self.assertEqual(mapping_example.schema.spec.cls, Activity)
+    self.assertEqual(mapping_example.output, Activity(description='hi'))
+
+    lm = fake.StaticSequence(['Activity(description="hi"'])
+    with querying.track_queries() as queries:
+      querying.query(
+          lf.Template('foo {{x}}', x=1), Activity, default=None, lm=lm
+      )
+
+    self.assertTrue(queries[0].has_error)
+    mapping_example = queries[0].as_mapping_example()
+    self.assertTrue(pg.eq(mapping_example.input, lf.Template('foo {{x}}', x=1)))
+    self.assertEqual(mapping_example.schema.spec.cls, Activity)
+    self.assertIsInstance(mapping_example.output, mapping.MappingError)
+
 
 class TrackQueriesTest(unittest.TestCase):
 
