@@ -166,6 +166,11 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 #
 
 
+class VertexAIGemini25ProExp_20250325(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 2.5 Pro model launched on 03/25/2025."""
+  model = 'gemini-2.5-pro-exp-03-25'
+
+
 class VertexAIGemini2Flash(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini Flash 2.0 model (latest stable)."""
   model = 'gemini-2.0-flash'

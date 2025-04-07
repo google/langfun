@@ -40,6 +40,7 @@ from langfun.core.llms.azure_openai import AzureOpenAI
 
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
+from langfun.core.llms.google_genai import Gemini25ProPreview_20250325
 from langfun.core.llms.google_genai import Gemini2Flash
 from langfun.core.llms.google_genai import Gemini2Flash_001
 from langfun.core.llms.google_genai import Gemini2FlashLitePreview_20250205
@@ -72,6 +73,7 @@ from langfun.core.llms.vertexai import VertexAIGemini15Flash8B_001
 from langfun.core.llms.vertexai import VertexAIGemini2ProExp_20250205
 from langfun.core.llms.vertexai import VertexAIGemini2FlashThinkingExp_20250121
 from langfun.core.llms.vertexai import VertexAIGeminiExp_20241206
+from langfun.core.llms.vertexai import VertexAIGemini25ProExp_20250325
 
 # For backward compatibility.
 GeminiPro1_5 = Gemini15Pro

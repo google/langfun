@@ -148,20 +148,61 @@ class GeminiModelInfo(lf.ModelInfo):
 
 
 SUPPORTED_MODELS = [
-
     #
     # Production models.
     #
-
+    # Gemini 2.5 Pro
+    GeminiModelInfo(
+        model_id='gemini-2.5-pro-preview-03-25',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI']),
+        model_type='instruction-tuned',
+        description='Gemini 2.5 Pro.',
+        release_date=datetime.datetime(2025, 3, 25),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=10.0,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=20,
+            max_tokens_per_minute=1_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-2.5-pro-exp-03-25',
+        in_service=True,
+        provider=pg.oneof(['VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 2.5 Pro.',
+        release_date=datetime.datetime(2025, 3, 25),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=10.0,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=20,
+            max_tokens_per_minute=1_000_000,
+        ),
+    ),
     # Gemini 2.0 Flash.
     GeminiModelInfo(
         model_id='gemini-2.0-flash',
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 2.0 Flash model.'
-        ),
+        description='Gemini 2.0 Flash model.',
         release_date=datetime.datetime(2025, 2, 5),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -184,9 +225,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 2.0 Flash model (version 001).'
-        ),
+        description='Gemini 2.0 Flash model (version 001).',
         release_date=datetime.datetime(2025, 2, 5),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -210,9 +249,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 2.0 Lite preview model.'
-        ),
+        description='Gemini 2.0 Lite preview model.',
         release_date=datetime.datetime(2025, 2, 5),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -237,9 +274,7 @@ SUPPORTED_MODELS = [
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         in_service=True,
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Flash model (latest stable).'
-        ),
+        description='Gemini 1.5 Flash model (latest stable).',
         release_date=datetime.datetime(2024, 9, 30),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -265,9 +300,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Flash model (version 001).'
-        ),
+        description='Gemini 1.5 Flash model (version 001).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=1_048_576,
@@ -292,9 +325,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Flash model (version 002).'
-        ),
+        description='Gemini 1.5 Flash model (version 002).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=1_048_576,
@@ -320,9 +351,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider='Google GenAI',
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Flash 8B model (latest stable).'
-        ),
+        description='Gemini 1.5 Flash 8B model (latest stable).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=1_048_576,
@@ -347,9 +376,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider='Google GenAI',
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Flash 8B model (version 001).'
-        ),
+        description='Gemini 1.5 Flash 8B model (version 001).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=1_048_576,
@@ -376,9 +403,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Pro model (latest stable).'
-        ),
+        description='Gemini 1.5 Pro model (latest stable).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=2_097_152,
@@ -403,9 +428,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Pro model (version 001).'
-        ),
+        description='Gemini 1.5 Pro model (version 001).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=2_097_152,
@@ -430,9 +453,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 1.5 Pro model (version 002).'
-        ),
+        description='Gemini 1.5 Pro model (version 002).',
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=2_097_152,
@@ -452,20 +473,16 @@ SUPPORTED_MODELS = [
             max_tokens_per_minute=4_000_000,
         ),
     ),
-
     #
     # Experimental models.
     #
-
     GeminiModelInfo(
         model_id='gemini-2.0-pro-exp-02-05',
         in_service=True,
         experimental=True,
         provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
-        description=(
-            'Gemini 2.0 Pro experimental model (02/05/2025).'
-        ),
+        description='Gemini 2.0 Pro experimental model (02/05/2025).',
         release_date=datetime.datetime(2025, 2, 5),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -495,9 +512,7 @@ SUPPORTED_MODELS = [
         experimental=True,
         provider='Google GenAI',
         model_type='instruction-tuned',
-        description=(
-            'Gemini year 1 experimental model (12/06/2024)'
-        ),
+        description='Gemini year 1 experimental model (12/06/2024)',
         release_date=datetime.datetime(2025, 1, 21),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
@@ -511,9 +526,7 @@ SUPPORTED_MODELS = [
         experimental=True,
         provider='Google GenAI',
         model_type='instruction-tuned',
-        description=(
-            'Gemini experimental model on learning science principles.'
-        ),
+        description='Gemini experimental model on learning science principles.',
         url='https://ai.google.dev/gemini-api/docs/learnlm',
         release_date=datetime.datetime(2024, 11, 19),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
