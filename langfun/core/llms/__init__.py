@@ -74,6 +74,7 @@ from langfun.core.llms.vertexai import VertexAIGemini2ProExp_20250205
 from langfun.core.llms.vertexai import VertexAIGemini2FlashThinkingExp_20250121
 from langfun.core.llms.vertexai import VertexAIGeminiExp_20241206
 from langfun.core.llms.vertexai import VertexAIGemini25ProExp_20250325
+from langfun.core.llms.vertexai import VertexAIGemini25ProPreview_20250325
 
 # For backward compatibility.
 GeminiPro1_5 = Gemini15Pro
