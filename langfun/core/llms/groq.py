@@ -253,6 +253,26 @@ SUPPORTED_MODELS = [
             max_tokens_per_minute=25_000,
         ),
     ),
+    GroqModelInfo(
+        model_id='mistral-saba-24b',
+        in_service=True,
+        model_type='instruction-tuned',
+        description='Mistral SABA 24B model on Groq (Production)',
+        url='https://huggingface.co/mistralai/Mistral-Small-24B-Base-2501',
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=32_768,
+            max_output_tokens=None,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=0.79,
+            cost_per_1m_output_tokens=0.79,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            # Developer tier.
+            max_requests_per_minute=100,
+            max_tokens_per_minute=25_000,
+        ),
+    ),
 ]
 
 _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
@@ -358,6 +378,10 @@ class GroqGemma2_9B_IT(Groq):  # pylint: disable=invalid-name
   """Gemma2 9B."""
   model = 'gemma2-9b-it'
 
+
+class GroqMistral_Saba_24B(Groq):  # pylint: disable=invalid-name
+  """Mistral SABA 24B."""
+  model = 'mistral-saba-24b'
 
 #
 # Register Groq models so they can be retrieved with LanguageModel.get().
