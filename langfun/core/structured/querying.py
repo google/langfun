@@ -706,7 +706,7 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
             'lm_response',
             pg.view(
                 self.lm_response,
-                extra_flags=dict(include_message_metadata=False)
+                extra_flags=dict(include_message_metadata=True)
             ),
         ),
     ], tab_position='top', selected=1).to_html()
