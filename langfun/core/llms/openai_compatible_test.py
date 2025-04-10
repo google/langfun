@@ -465,7 +465,7 @@ class OpenAIComptibleTest(unittest.TestCase):
           lm(
               lf.UserMessage(
                   'hello',
-                  system_message='hi',
+                  system_message=lf.SystemMessage('hi'),
               ),
               sampling_options=lf.LMSamplingOptions(n=2)
           ),

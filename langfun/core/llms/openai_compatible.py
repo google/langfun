@@ -113,8 +113,9 @@ class OpenAICompatible(rest.REST):
     # Users could use `metadata_system_message` to pass system message.
     system_message = prompt.metadata.get('system_message')
     if system_message:
+      assert isinstance(system_message, lf.SystemMessage), type(system_message)
       messages.append(
-          lf.SystemMessage.from_value(system_message).as_format(
+          system_message.as_format(
               'openai', chunk_preprocessor=modality_check
           )
       )

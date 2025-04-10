@@ -509,13 +509,18 @@ class Anthropic(rest.REST):
           raise ValueError(f'Unsupported modality: {chunk!r}.')
       return chunk
 
-    request.update(
-        dict(
-            messages=[
-                prompt.as_format('anthropic', chunk_preprocessor=modality_check)
-            ]
-        )
+    messages = []
+    if system_message := prompt.get('system_message'):
+      assert isinstance(system_message, lf.SystemMessage), type(system_message)
+      messages.append(
+          system_message.as_format(
+              'anthropic', chunk_preprocessor=modality_check
+          )
+      )
+    messages.append(
+        prompt.as_format('anthropic', chunk_preprocessor=modality_check)
     )
+    request.update(messages=messages)
     return request
 
   def _request_args(self, options: lf.LMSamplingOptions) -> dict[str, Any]:

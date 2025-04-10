@@ -38,7 +38,7 @@ example_image = (
 def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
   del url, kwargs
   c = pg.Dict(json['generationConfig'])
-  content = json['contents'][0]['parts'][0]['text']
+  content = '\n'.join(c['parts'][0]['text'] for c in json['contents'])
   response = requests.Response()
   response.status_code = 200
   response._content = pg.to_json_str({
@@ -177,6 +177,27 @@ class GeminiTest(unittest.TestCase):
       self.assertEqual(r.metadata.thought, 'This is the thought.')
       self.assertEqual(r.metadata.usage.prompt_tokens, 3)
       self.assertEqual(r.metadata.usage.completion_tokens, 4)
+
+  def test_call_model_with_system_message(self):
+    with mock.patch('requests.Session.post') as mock_generate:
+      mock_generate.side_effect = mock_requests_post
+
+      lm = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+      r = lm(
+          lf.UserMessage('hello', system_message=lf.SystemMessage('system')),
+          temperature=2.0,
+          top_p=1.0,
+          top_k=20,
+          max_tokens=1024,
+          stop='\n',
+      )
+      self.assertEqual(
+          r.text,
+          (
+              'This is a response to system\nhello with temperature=2.0, '
+              'top_p=1.0, top_k=20, max_tokens=1024, stop=\n.'
+          ),
+      )
 
 
 if __name__ == '__main__':

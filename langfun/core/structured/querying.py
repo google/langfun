@@ -109,6 +109,7 @@ def query(
     *,
     lm: lf.LanguageModel | list[lf.LanguageModel] | None = None,
     num_samples: int | list[int] = 1,
+    system_message: str | lf.Template | None = None,
     examples: list[mapping.MappingExample] | None = None,
     cache_seed: int | None = 0,
     response_postprocess: Callable[[str], str] | None = None,
@@ -244,6 +245,8 @@ def query(
       If `None`, the LM from `lf.context` will be used.
     num_samples: Number of samples to generate. If a list is provided, its
       length must match the number of models in `lm`.
+    system_message: System instructions to guide the model output. If None,
+      no system message will be used.
     examples: Few-shot examples to guide the model output. Defaults to `None`.
     cache_seed: Seed for caching the query. Queries with the same
       `(lm, prompt, cache_seed)` will use cached responses. If `None`,
@@ -282,6 +285,7 @@ def query(
           schema,
           default=default,
           lm=lm,
+          system_message=system_message,
           examples=examples,
           # Usually num_examples should not be large, so we multiple the user
           # provided cache seed by 100 to avoid collision.
@@ -325,6 +329,13 @@ def query(
   # inferred when it is None.
   if isinstance(prompt, pg.Symbolic) and prompt.sym_partial and schema is None:
     schema = prompt.__class__
+
+  # Attach system message as input template metadata, which will be passed
+  # through to the rendered message metadata under key `system_message`.
+  if system_message is not None:
+    kwargs['metadata_system_message'] = lf.Template.from_value(
+        system_message
+    ).render(message_cls=lf.SystemMessage)
 
   # Normalize query input.
   if isinstance(prompt, (lf.Message, str)):

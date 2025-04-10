@@ -582,9 +582,17 @@ class Gemini(rest.REST):
           raise lf.ModalityError(f'Unsupported modality: {chunk!r}') from e
       return chunk
 
-    request['contents'] = [
+    contents = []
+    if system_message := prompt.get('system_message'):
+      assert isinstance(system_message, lf.SystemMessage), type(system_message)
+      contents.append(
+          system_message.as_format(
+              'gemini', chunk_preprocessor=modality_conversion)
+      )
+    contents.append(
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
-    ]
+    )
+    request['contents'] = contents
     return request
 
   def _generation_config(

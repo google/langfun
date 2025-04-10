@@ -45,14 +45,16 @@ class QueryTest(unittest.TestCase):
       prompt,
       schema,
       examples: list[mapping.MappingExample] | None = None,
+      system_message: str | None = None,
       *,
       expected_snippet: str,
       exact_match: bool = False,
       expected_modalities: int = 0,
+      exepcted_system_message: str | None = None,
       **kwargs,
   ):
     m = querying.query(
-        prompt, schema=schema, examples=examples,
+        prompt, schema=schema, system_message=system_message, examples=examples,
         **kwargs, returns_message=True
     )
     self.assertIsNotNone(m.lm_input)
@@ -64,6 +66,11 @@ class QueryTest(unittest.TestCase):
         len([c for c in m.lm_input.chunk() if isinstance(c, lf.Modality)]),
         expected_modalities,
     )
+    if system_message is not None:
+      self.assertEqual(
+          m.lm_input.system_message.text,
+          exepcted_system_message,
+      )
 
   def test_call(self):
     lm = fake.StaticSequence(['1'])
@@ -112,6 +119,19 @@ class QueryTest(unittest.TestCase):
             lm=fake.StaticResponse('Activity(description="hello")'),
         ),
         Activity(description='hello'),
+    )
+
+  def test_render_with_system_message(self):
+    lm = fake.StaticResponse('1')
+    self.assert_render(
+        'What is {{x}} + {{y}}?',
+        schema=None,
+        system_message='You are a helpful assistant.',
+        x=1,
+        y=2,
+        lm=lm.clone(),
+        expected_snippet='What is 1 + 2?',
+        exepcted_system_message='You are a helpful assistant.',
     )
 
   def test_str_to_structure_render(self):

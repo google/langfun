@@ -35,7 +35,8 @@ def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
       'content': [{
           'type': 'text',
           'text': (
-              f'hello with temperature={json.get("temperature")}, '
+              '\n'.join(c['content'][0]['text'] for c in json['messages']) +
+              f' with temperature={json.get("temperature")}, '
               f'top_k={json.get("top_k")}, '
               f'top_p={json.get("top_p")}, '
               f'max_tokens={json.get("max_tokens")}, '
@@ -140,11 +141,11 @@ class AnthropicTest(unittest.TestCase):
       mock_request.side_effect = mock_requests_post
 
       lm = anthropic.Claude3Haiku(api_key='fake key')
-      self.assertRegex(lm('hi').text, 'hello.*')
+      self.assertRegex(lm('hello').text, 'hello.*')
 
       os.environ['ANTHROPIC_API_KEY'] = 'abc'
       lm = anthropic.Claude3Haiku()
-      self.assertRegex(lm('hi').text, 'hello.*')
+      self.assertRegex(lm('hello').text, 'hello.*')
       del os.environ['ANTHROPIC_API_KEY']
 
   def test_call(self):
@@ -164,6 +165,27 @@ class AnthropicTest(unittest.TestCase):
       self.assertIsNotNone(response.usage.completion_tokens, 1)
       self.assertIsNotNone(response.usage.total_tokens, 3)
       self.assertGreater(response.usage.estimated_cost, 0)
+
+  def test_call_with_system_message(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post
+      lm = anthropic.Claude3Haiku(api_key='fake_key')
+      response = lm(
+          lf.UserMessage(
+              'hello', system_message=lf.SystemMessage('system')
+          ),
+          temperature=0.0,
+          top_k=0.1,
+          top_p=0.2,
+          stop=['\n'],
+      )
+      self.assertEqual(
+          response.text,
+          (
+              'system\nhello with temperature=0.0, top_k=0.1, top_p=0.2, '
+              "max_tokens=4096, stop=['\\n']."
+          ),
+      )
 
   def test_mm_call(self):
     with mock.patch('requests.Session.post') as mock_mm_request:
