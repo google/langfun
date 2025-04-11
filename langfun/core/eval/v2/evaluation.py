@@ -724,18 +724,15 @@ class EvaluationState:
       filter: Callable[[example_lib.Example], bool] | None = None,  # pylint: disable=redefined-builtin
   ) -> None:
     """Loads the state from the example sequence file."""
-    with pg.io.sequence.open_sequence(state_file) as f:
-      for record in f:
-        example = pg.from_json_str(
-            record,
-            example_input_by_id=example_input_by_id,
-            load_example_metadata=load_example_metadata
-        )
-        assert isinstance(example, example_lib.Example), example
-        if filter is not None and not filter(example):
-          continue
-        example.newly_processed = False
-        self._ckpt_examples[example.id] = example
+    for example in example_lib.Example.iter_ckpts(
+        state_file,
+        example_input_by_id=example_input_by_id,
+        load_example_metadata=load_example_metadata,
+    ):
+      if filter is not None and not filter(example):
+        continue
+      example.newly_processed = False
+      self._ckpt_examples[example.id] = example
 
   @property
   def evaluation_status(self) -> dict[int, ExampleStatus]:

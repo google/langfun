@@ -15,7 +15,7 @@
 
 import dataclasses
 import inspect
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 import langfun.core as lf
 import pyglove as pg
 
@@ -144,6 +144,26 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       if load_example_metadata:
         example.metadata = pg.from_json(metadata_dict, **kwargs)
       return example
+
+  @classmethod
+  def iter_ckpts(
+      cls,
+      ckpt_file: str | list[str],
+      example_input_by_id: Callable[[int], Any] | None = None,
+      load_example_metadata: bool = True,
+  ) -> Iterator['Example']:
+    """Iterates Examples from the checkpoint files."""
+    ckpt_files = [ckpt_file] if isinstance(ckpt_file, str) else ckpt_file
+    for ckpt_file in ckpt_files:
+      with pg.io.open_sequence(ckpt_file) as f:
+        for record in f:
+          example = pg.from_json_str(
+              record,
+              example_input_by_id=example_input_by_id,
+              load_example_metadata=load_example_metadata
+          )
+          assert isinstance(example, cls), example
+          yield example
 
   #
   # HTML rendering.
