@@ -134,6 +134,10 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     self._tab_control = None
     self._time_badge = None
 
+  def reset(self) -> None:
+    """Resets the execution trace."""
+    self.rebind(items=[], skip_notification=True, raise_on_no_change=False)
+
   def start(self) -> None:
     assert self.start_time is None, 'Execution already started.'
     self.rebind(start_time=time.time(), skip_notification=True)
