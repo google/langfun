@@ -379,7 +379,7 @@ class SequentialRunner(RunnerBase):
   exceptions thrown from the background tasks, making it easier to debug.
   """
 
-  NAME = 'sequential'
+  ID = 'sequential'
 
   def background_run(
       self, func: Callable[..., Any], *args: Any, **kwargs: Any
@@ -403,7 +403,7 @@ class SequentialRunner(RunnerBase):
 class DebugRunner(SequentialRunner):
   """Debug runner."""
 
-  NAME = 'debug'
+  ID = 'debug'
 
   # Do not use the checkpointer for debug runner.
   plugins = []
@@ -421,7 +421,7 @@ class DebugRunner(SequentialRunner):
 class ParallelRunner(RunnerBase):
   """Parallel runner."""
 
-  NAME = 'parallel'
+  ID = 'parallel'
 
   timeout: Annotated[
       int | None,
