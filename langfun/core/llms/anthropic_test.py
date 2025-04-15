@@ -217,6 +217,17 @@ class AnthropicTest(unittest.TestCase):
         ):
           lm('hello', max_attempts=1)
 
+  def test_call_with_context_limit_error(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post_error(
+          413, 'bad_request', 'Prompt is too long.'
+      )
+      lm = anthropic.Claude3Haiku(api_key='fake_key')
+      with self.assertRaisesRegex(
+          lf.ContextLimitError, 'Prompt is too long.'
+      ):
+        lm('hello', max_attempts=1)
+
   def test_lm_get(self):
     self.assertIsInstance(
         lf.LanguageModel.get('claude-3-5-sonnet-latest'),

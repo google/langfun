@@ -573,6 +573,11 @@ class Anthropic(rest.REST):
         ),
     )
 
+  def _error(self, status_code: int, content: str) -> lf.LMError:
+    if status_code == 413 and b'Prompt is too long' in content:
+      return lf.ContextLimitError(f'{status_code}: {content}')
+    return super()._error(status_code, content)
+
 
 class Claude37(Anthropic):
   """Base class for Claude 3.7 models."""

@@ -505,6 +505,24 @@ class OpenAIComptibleTest(unittest.TestCase):
     ):
       lm(lf.UserMessage('hello', json_schema={}))
 
+  def test_call_with_context_limit_error(self):
+    def mock_context_limit_error(*args, **kwargs):
+      del args, kwargs
+      response = requests.Response()
+      response.status_code = 400
+      response._content = b'string_above_max_length'
+      return response
+
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_context_limit_error
+      lm = openai_compatible.OpenAICompatible(
+          api_endpoint='https://test-server', model='test-model'
+      )
+      with self.assertRaisesRegex(
+          lf.ContextLimitError, 'string_above_max_length'
+      ):
+        lm(lf.UserMessage('hello'))
+
 
 if __name__ == '__main__':
   unittest.main()

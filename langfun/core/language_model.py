@@ -40,6 +40,14 @@ class LMError(RuntimeError):
   """Base class for language model errors."""
 
 
+class LMInputError(LMError):
+  """Base class for errors with bad input."""
+
+
+class ContextLimitError(LMInputError):
+  """Error for context limit exceeded."""
+
+
 class RetryableLMError(LMError):
   """Base class for LLM errors that can be solved by retrying."""
 

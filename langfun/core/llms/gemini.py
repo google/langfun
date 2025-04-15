@@ -645,3 +645,9 @@ class Gemini(rest.REST):
             total_tokens=input_tokens + output_tokens,
         ),
     )
+
+  def _error(self, status_code: int, content: str) -> lf.LMError:
+    if (status_code == 400
+        and b'exceeds the maximum number of tokens' in content):
+      return lf.ContextLimitError(f'{status_code}: {content}')
+    return super()._error(status_code, content)

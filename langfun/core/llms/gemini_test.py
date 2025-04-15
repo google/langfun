@@ -178,6 +178,22 @@ class GeminiTest(unittest.TestCase):
       self.assertEqual(r.metadata.usage.prompt_tokens, 3)
       self.assertEqual(r.metadata.usage.completion_tokens, 4)
 
+  def test_call_model_with_context_limit_error(self):
+    def mock_requests_post_error(*args, **kwargs):
+      del args, kwargs
+      response = requests.Response()
+      response.status_code = 400
+      response._content = b'exceeds the maximum number of tokens.'
+      return response
+
+    with mock.patch('requests.Session.post') as mock_generate:
+      mock_generate.side_effect = mock_requests_post_error
+      lm = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+      with self.assertRaisesRegex(
+          lf.ContextLimitError, 'exceeds the maximum number of tokens.'
+      ):
+        lm('hello')
+
   def test_call_model_with_system_message(self):
     with mock.patch('requests.Session.post') as mock_generate:
       mock_generate.side_effect = mock_requests_post
