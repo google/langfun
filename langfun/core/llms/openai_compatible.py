@@ -60,6 +60,8 @@ class OpenAICompatible(rest.REST):
       args['stop'] = options.stop
     if options.random_seed is not None:
       args['seed'] = options.random_seed
+    if options.reasoning_effort is not None:
+      args['reasoning_effort'] = options.reasoning_effort
     return args
 
   def request(
@@ -156,7 +158,9 @@ class OpenAICompatible(rest.REST):
             prompt_tokens=usage['prompt_tokens'],
             completion_tokens=usage['completion_tokens'],
             total_tokens=usage['total_tokens'],
-
+            completion_tokens_details=usage.get(
+                'completion_tokens_details', None
+            ),
         ),
     )
 

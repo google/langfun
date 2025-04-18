@@ -77,11 +77,12 @@ class ScoringTest(unittest.TestCase):
     s = eval_set(lm=lm)
     self.assertEqual(s.avg_score, 0.0)
     s.run()
+    result_copy = s.result.copy()
+    del result_copy['experiment_setup']['id']
     self.assertEqual(
-        s.result,
+        result_copy,
         dict(
             experiment_setup=dict(
-                id='ConstraintFollowing@90671d5e',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example}}',
@@ -89,10 +90,7 @@ class ScoringTest(unittest.TestCase):
                 schema_fn='float_list()',
             ),
             cache_stats=dict(
-                use_cache=True,
-                num_queries=2,
-                num_hits=0,
-                num_updates=2,
+                use_cache=True, num_queries=2, num_hits=0, num_updates=2
             ),
             metrics=dict(
                 total=2,

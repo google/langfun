@@ -99,11 +99,12 @@ class MatchingTest(unittest.TestCase):
 
     s = eval_set('match_run_test', 'query', schema_fn=answer_schema(), lm=lm)
     s.run()
+    result_without_id = s.result.copy()
+    result_without_id['experiment_setup'].pop('id')
     self.assertEqual(
-        s.result,
+        result_without_id,
         dict(
             experiment_setup=dict(
-                id='MyTask@a98a284d',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example.question}}',

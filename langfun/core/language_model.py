@@ -408,6 +408,7 @@ class LMSamplingUsage(pg.Object):
       ),
   ] = None
   retry_stats: RetryStats = RetryStats()
+  completion_tokens_details: dict[str, Any] | None = None
 
   def __bool__(self) -> bool:
     return self.num_requests > 0
@@ -570,6 +571,15 @@ class LMSamplingOptions(component.Component):
 
   max_thinking_tokens: Annotated[
       int | None, 'Number of max thinking tokens.'
+  ] = None
+
+  reasoning_effort: Annotated[
+      Literal['low', 'medium', 'high'] | None,
+      (
+          'This parameter is used by OpenAI reasoning models (e.g. O3, O4 mini)'
+          ' to guides how many reasoning tokens to generate before creating a'
+          ' response to the prompt.'
+      ),
   ] = None
 
   def cache_key(self) -> tuple[Any, ...]:
