@@ -95,6 +95,8 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(len(list(root.logs)), 0)
     # 1 query from Bar, 2 from Foo and 3 from parallel executions.
     self.assertEqual(len(list(root.all_queries)), 6)
+    # 2 actions: Foo and Bar.
+    self.assertEqual(len(list(root.all_actions)), 2)
     # 1 log from Bar and 1 from Foo.
     self.assertEqual(len(list(root.all_logs)), 2)
     self.assertEqual(root.usage_summary.total.num_requests, 6)

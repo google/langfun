@@ -200,6 +200,11 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     return self._all_child_items(lf_structured.QueryInvocation)
 
   @property
+  def all_actions(self) -> list['ActionInvocation']:
+    """Returns all actions from current trace and its child execution items."""
+    return self._all_child_items(ActionInvocation)
+
+  @property
   def all_logs(self) -> list[lf.logging.LogEntry]:
     """Returns all logs from current trace and its child execution items."""
     return self._all_child_items(lf.logging.LogEntry)
@@ -221,7 +226,7 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     for item in self.items:
       if isinstance(item, item_cls):
         child_items.append(item)
-      elif isinstance(item, ActionInvocation):
+      if isinstance(item, ActionInvocation):
         child_items.extend(item.execution._all_child_items(item_cls))  # pylint: disable=protected-access
       elif isinstance(item, ExecutionTrace):
         child_items.extend(item._all_child_items(item_cls))  # pylint: disable=protected-access
@@ -581,6 +586,11 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def all_queries(self) -> list[lf_structured.QueryInvocation]:
     """Returns all queries made by the action and its child execution items."""
     return self.execution.all_queries
+
+  @property
+  def all_actions(self) -> list['ActionInvocation']:
+    """Returns all actions made by the action and its child execution items."""
+    return self.execution.all_actions
 
   @property
   def all_logs(self) -> list[lf.logging.LogEntry]:
