@@ -151,11 +151,34 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
-    # Gemini 2.5 Pro
+    # Gemini 2.5 Flash Preview
+    GeminiModelInfo(
+        model_id='gemini-2.5-flash-preview-04-17',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', ' VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 2.5 Flash.',
+        release_date=datetime.datetime(2025, 4, 17),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.15,
+            cost_per_1m_input_tokens=0.15,
+            cost_per_1m_output_tokens=0.6,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 2.5 Pro Preview
     GeminiModelInfo(
         model_id='gemini-2.5-pro-preview-03-25',
         in_service=True,
-        provider=pg.oneof(['Google GenAI']),
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
         description='Gemini 2.5 Pro.',
         release_date=datetime.datetime(2025, 3, 25),
@@ -170,8 +193,8 @@ SUPPORTED_MODELS = [
             cost_per_1m_output_tokens=10.0,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
-            max_requests_per_minute=20,
-            max_tokens_per_minute=1_000_000,
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
         ),
     ),
     GeminiModelInfo(
