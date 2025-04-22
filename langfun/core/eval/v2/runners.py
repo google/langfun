@@ -151,6 +151,11 @@ class RunnerBase(Runner):
     experiment.progress.start(total=1)
     experiment.progress.increment_skipped(1)
 
+    if experiment.is_leaf:
+      experiment.info(
+          f'Evaluation {experiment.id!r} is skipped.'
+      )
+
     # Notify the plugins of the experiment skip.
     for plugin in self._all_plugins(experiment):
       plugin.on_experiment_skipped(self, experiment)
@@ -232,6 +237,7 @@ class RunnerBase(Runner):
     """Called when an evaluation example is started."""
     for plugin in self._all_plugins(experiment):
       plugin.on_example_start(self, experiment, example)
+    experiment.info(f'Starting to evaluate example {example.id}.')
 
   def on_example_complete(
       self,
@@ -242,10 +248,24 @@ class RunnerBase(Runner):
     if example.newly_processed:
       if example.error is None:
         experiment.progress.increment_processed()
+        experiment.info(
+            f'Example {example.id} is successfully evaluated in '
+            f'{example.elapse:.2f} seconds.'    # pylint: disable=bad-whitespace
+        )
       else:
         experiment.progress.increment_failed()
+        experiment.error(
+            (
+                f'Failed to evaluate example {example.id} in'
+                f'{example.elapse:.2f} seconds.'  # pylint: disable=bad-whitespace
+            ),
+            error=example.error
+        )
     else:
       experiment.progress.increment_skipped()
+      experiment.info(
+          f'Skipped example {example.id} as it is loaded from checkpoint.'
+      )
 
     experiment.usage_summary.merge(example.usage_summary)
     experiment.progress.update_execution_summary(example.execution_status)

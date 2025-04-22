@@ -279,6 +279,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     assert path.startswith('/'), path
     return f'file://{path}'
 
+  # Placehold Google-internal methods.
+
   #
   # Hierarchy of an experiment tree.
   #

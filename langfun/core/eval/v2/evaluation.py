@@ -418,6 +418,7 @@ class Evaluation(experiment_lib.Experiment):
     """Renders the details view of the evaluation."""
 
     def _title():
+      additional_links = []
       return pg.Html.element(
           'div',
           [
@@ -434,7 +435,7 @@ class Evaluation(experiment_lib.Experiment):
                           link=self.output_link(run, ''),
                           css_classes=['dir-link'],
                       ),
-                  ],
+                  ] + additional_links,
                   css_classes=['experiment-links'],
               ),
               pg.views.html.controls.Label(
