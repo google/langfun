@@ -80,10 +80,10 @@ class BasicTest(unittest.TestCase):
 
   def test_custom_typing(self):
     class Foo(component.Component):
-      x: str | None
-      y: int | None
+      x: str | None = None
+      y: int | None = None
       z: str
-      p: component.Component | None
+      p: component.Component | None = None
 
     d = Foo(z='bar')
     # String template can be assigned to str.
