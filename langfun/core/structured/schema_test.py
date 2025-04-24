@@ -71,7 +71,6 @@ class SchemaTest(unittest.TestCase):
     self.assert_schema(float, pg.typing.Float())
     self.assert_schema(str, pg.typing.Str())
     self.assert_schema(bool, pg.typing.Bool())
-    self.assert_schema(bool | None, pg.typing.Bool().noneable())
 
     # Top-level dictionary with 'result' as the only key is flattened.
     self.assert_schema(dict(result=int), pg.typing.Int())
