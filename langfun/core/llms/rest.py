@@ -103,6 +103,8 @@ class REST(lf.LanguageModel):
       error_message = str(e)
       if 'REJECTED_CLIENT_THROTTLED' in error_message:
         raise lf.TemporaryLMError(error_message) from e
+      if 'UNREACHABLE_ERROR' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
@@ -113,6 +115,7 @@ class REST(lf.LanguageModel):
         502,  # Bad gateway (upstream issue, might retry).
         503,  # Servers currently under load, retry after a brief wait.
         529,  # Overloaded, retry after a brief wait.
+        499,  # Client Closed Request
     ):
       error_cls = lf.TemporaryLMError
     else:
