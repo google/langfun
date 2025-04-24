@@ -476,6 +476,15 @@ class MessageTest(unittest.TestCase):
         """
     )
 
+  def test_from_chunks_with_empty_str(self):
+    chunks = ['Hello', '', 'World']
+    msg = message.AIMessage.from_chunks(chunks)
+    self.assertEqual(msg.text, 'Hello World')
+
+    chunks = ['', 'hello']
+    msg = message.AIMessage.from_chunks(chunks)
+    self.assertEqual(msg.text, 'hello')
+
 
 class MessageConverterTest(unittest.TestCase):
 

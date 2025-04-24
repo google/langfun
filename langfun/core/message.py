@@ -443,11 +443,14 @@ class Message(
     metadata = dict()
     last_char = None
     for i, chunk in enumerate(chunks):
-      if i > 0 and last_char not in ('\t', ' ', '\n'):
+      if i > 0 and last_char not in ('\t', ' ', '\n', None):
         fused_text.write(separator)
       if isinstance(chunk, str):
         fused_text.write(chunk)
-        last_char = chunk[-1]
+        if chunk:
+          last_char = chunk[-1]
+        else:
+          last_char = None
       else:
         assert isinstance(chunk, modality.Modality), chunk
         var_name = f'obj{ref_index}'
