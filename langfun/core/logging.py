@@ -17,10 +17,10 @@ import contextlib
 import datetime
 import functools
 import typing
-from typing import Any, Iterator, Literal
+from typing import Any, Callable, Iterator, Literal
 
 from langfun.core import component
-from langfun.core import console
+from langfun.core import console as console_lib
 import pyglove as pg
 
 
@@ -41,6 +41,22 @@ def use_log_level(log_level: LogLevel = 'info') -> Iterator[None]:
 def get_log_level() -> LogLevel:
   """Gets the current minimum log level."""
   return component.context_value('__event_log_level__', 'info')
+
+
+def system_log_func(level: LogLevel) -> Callable[..., None]:
+  match level:
+    case 'debug':
+      return pg.logging.debug
+    case 'info':
+      return pg.logging.info
+    case 'warning':
+      return pg.logging.warning
+    case 'error':
+      return pg.logging.error
+    case 'fatal':
+      return pg.logging.error
+    case _:
+      raise ValueError(f'Unsupported log level: {level}')
 
 
 class LogEntry(pg.Object, pg.views.HtmlTreeView.Extension):
@@ -241,6 +257,7 @@ def log(level: LogLevel,
         message: str,
         *,
         indent: int = 0,
+        console: bool = False,
         **kwargs) -> LogEntry:
   """Logs a message."""
   entry = LogEntry(
@@ -250,35 +267,71 @@ def log(level: LogLevel,
       message=message,
       metadata=kwargs,
   )
+
   if entry.should_output(get_log_level()):
-    if console.under_notebook():
-      console.display(entry)
-    else:
+    if console_lib.under_notebook():
+      console_lib.display(entry)
+    elif console:
       # TODO(daiyip): Improve the console output formatting.
-      console.write(entry)
+      console_lib.write(entry)
+
+  if not console:
+    if kwargs:
+      message = f'{message} (metadata: {pg.format(kwargs)})'
+    system_log_func(level)(message)
   return entry
 
 
-def debug(message: str, *, indent: int = 0, **kwargs) -> LogEntry:
+def debug(
+    message: str,
+    *,
+    indent: int = 0,
+    console: bool = False,
+    **kwargs
+) -> LogEntry:
   """Logs a debug message to the session."""
-  return log('debug', message, indent=indent, **kwargs)
+  return log('debug', message, indent=indent, console=console, **kwargs)
 
 
-def info(message: str, *, indent: int = 0, **kwargs) -> LogEntry:
+def info(
+    message: str,
+    *,
+    indent: int = 0,
+    console: bool = False,
+    **kwargs
+) -> LogEntry:
   """Logs an info message to the session."""
-  return log('info', message, indent=indent, **kwargs)
+  return log('info', message, indent=indent, console=console, **kwargs)
 
 
-def warning(message: str, *, indent: int = 0, **kwargs) -> LogEntry:
+def warning(
+    message: str,
+    *,
+    indent: int = 0,
+    console: bool = False,
+    **kwargs
+) -> LogEntry:
   """Logs an info message to the session."""
-  return log('warning', message, indent=indent, **kwargs)
+  return log('warning', message, indent=indent, console=console, **kwargs)
 
 
-def error(message: str, *, indent: int = 0, **kwargs) -> LogEntry:
+def error(
+    message: str,
+    *,
+    indent: int = 0,
+    console: bool = False,
+    **kwargs
+) -> LogEntry:
   """Logs an error message to the session."""
-  return log('error', message, indent=indent, **kwargs)
+  return log('error', message, indent=indent, console=console, **kwargs)
 
 
-def fatal(message: str, *, indent: int = 0, **kwargs) -> LogEntry:
+def fatal(
+    message: str,
+    *,
+    indent: int = 0,
+    console: bool = False,
+    **kwargs
+) -> LogEntry:
   """Logs a fatal message to the session."""
-  return log('fatal', message, indent=indent, **kwargs)
+  return log('fatal', message, indent=indent, console=console, **kwargs)

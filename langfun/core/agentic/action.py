@@ -15,7 +15,6 @@
 
 import abc
 import contextlib
-import datetime
 import threading
 import time
 import typing
@@ -55,7 +54,9 @@ class Action(pg.Object):
       session: Optional['Session'] = None,
       *,
       show_progress: bool = True,
-      **kwargs) -> Any:
+      verbose: bool = False,
+      **kwargs
+  ) -> Any:
     """Executes the action."""
     new_session = session is None
     if new_session:
@@ -64,11 +65,17 @@ class Action(pg.Object):
         lf.console.display(pg.view(session, name='agent_session'))
 
     with session.track_action(self):
-      pg.logging.info('Example %s starts action %s', session.id, repr(self))
-      result = self.call(session=session, **kwargs)
-      pg.logging.info(
-          'Example %s ends action %s', session.id, self.__class__.__name__
-      )
+      if verbose:
+        session.info(f'Executing action {self!r}...', keep=False)
+
+      result = self.call(session=session, verbose=verbose, **kwargs)
+
+      if verbose:
+        session.info(
+            f'Action {self.__class__.__name__} completed successfully.',
+            keep=False,
+            result=result
+        )
 
       # For the top-level action, we store the session in the metadata.
       if new_session:
@@ -798,7 +805,10 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     self._current_action = self.root
     self._current_execution = self.root.execution
     if self.id is None:
-      self.rebind(id=uuid.uuid4().hex[-7:], skip_notification=True)
+      self.rebind(
+          id=f'session@{uuid.uuid4().hex[-7:]}',
+          skip_notification=True
+      )
 
   #
   # Context-manager for information tracking.
@@ -1051,35 +1061,39 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     with self.track_queries():
       return lf_structured.query_output(response, schema=schema, **kwargs)
 
-  def _log(self, level: lf.logging.LogLevel, message: str, **kwargs):
-    self._current_execution.append(
-        lf.logging.LogEntry(
-            level=level,
-            time=datetime.datetime.now(),
-            message=message,
-            metadata=kwargs,
-        )
+  def _log(
+      self,
+      level: lf.logging.LogLevel,
+      message: str,
+      keep: bool,
+      **kwargs
+  ) -> None:
+    """Logs a message to the session."""
+    log_entry = lf.logging.log(
+        level, f'[{self.id}]: {message}]', **kwargs
     )
+    if keep:
+      self._current_execution.append(log_entry)
 
-  def debug(self, message: str, **kwargs):
+  def debug(self, message: str, keep: bool = True, **kwargs):
     """Logs a debug message to the session."""
-    self._log('debug', message, **kwargs)
+    self._log('debug', message, keep=keep, **kwargs)
 
-  def info(self, message: str, **kwargs):
+  def info(self, message: str, keep: bool = True, **kwargs):
     """Logs an info message to the session."""
-    self._log('info', message, **kwargs)
+    self._log('info', message, keep=keep, **kwargs)
 
-  def warning(self, message: str, **kwargs):
+  def warning(self, message: str, keep: bool = True, **kwargs):
     """Logs a warning message to the session."""
-    self._log('warning', message, **kwargs)
+    self._log('warning', message, keep=keep, **kwargs)
 
-  def error(self, message: str, **kwargs):
+  def error(self, message: str, keep: bool = True, **kwargs):
     """Logs an error message to the session."""
-    self._log('error', message, **kwargs)
+    self._log('error', message, keep=keep, **kwargs)
 
   def fatal(self, message: str, **kwargs):
     """Logs a fatal message to the session."""
-    self._log('fatal', message, **kwargs)
+    self._log('fatal', message, keep=True, **kwargs)
 
   def as_message(self) -> lf.AIMessage:
     """Returns the session as a message."""

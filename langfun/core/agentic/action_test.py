@@ -65,10 +65,10 @@ class SessionTest(unittest.TestCase):
 
     lm = fake.StaticResponse('lm response')
     foo = Foo(1)
-    self.assertEqual(foo(lm=lm), 3)
+    self.assertEqual(foo(lm=lm, verbose=True), 3)
 
     session = foo.session
-    self.assertEqual(len(session.id), 7)
+    self.assertIn('session@', session.id)
     self.assertIsNotNone(session)
     self.assertIsInstance(session.root.action, action_lib.RootAction)
     self.assertIs(session.current_action, session.root)

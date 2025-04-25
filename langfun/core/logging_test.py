@@ -13,8 +13,10 @@
 # limitations under the License.
 """Tests for langfun.core.logging."""
 
+import contextlib
 import datetime
 import inspect
+import io
 import unittest
 
 from langfun.core import logging
@@ -43,6 +45,13 @@ class LoggingTest(unittest.TestCase):
     self.assertEqual(logging.warning('hi').level, 'warning')
     self.assertEqual(logging.error('hi').level, 'error')
     self.assertEqual(logging.fatal('hi').level, 'fatal')
+
+  def test_log_without_system_logging(self):
+    with contextlib.redirect_stdout(io.StringIO()) as stdout:
+      logging.log('info', 'hi', indent=1, x=1, y=2, console=True)
+    self.assertIn(
+        'hi (metadata: {x=1, y=2})', stdout.getvalue()
+    )
 
   def test_repr_html(self):
     def assert_color(entry, color):
