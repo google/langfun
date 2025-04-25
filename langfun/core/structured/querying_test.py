@@ -1076,8 +1076,9 @@ class QueryInvocationTest(unittest.TestCase):
         'Activity(description="hi"',
     ])
     with querying.track_queries() as queries:
-      querying.query('foo', Activity, default=None, lm=lm)
+      querying.query('foo', Activity, default=None, lm=lm, invocation_id='123')
 
+    self.assertEqual(queries[0].id, '123')
     self.assertTrue(queries[0].has_error)
     self.assertIsInstance(queries[0].output, mapping.MappingError)
 
@@ -1088,6 +1089,7 @@ class QueryInvocationTest(unittest.TestCase):
     with querying.track_queries() as queries:
       querying.query('foo', Activity, lm=lm)
 
+    self.assertIn('query@', queries[0].id)
     self.assertIn('schema', queries[0].to_html_str())
     self.assertEqual(queries[0].lm_response.score, 1.0)
     self.assertFalse(queries[0].lm_response.is_cached)

@@ -17,6 +17,7 @@ import contextlib
 import functools
 import time
 from typing import Annotated, Any, Callable, Iterator, Type, Union
+import uuid
 
 import langfun.core as lf
 from langfun.core.structured import mapping
@@ -118,6 +119,7 @@ def query(
     protocol: schema_lib.SchemaProtocol = 'python',
     returns_message: bool = False,
     skip_lm: bool = False,
+    invocation_id: str | None = None,
     **kwargs,
 ) -> Any:
   """Query one or more language models for structured or unstructured outputs.
@@ -263,6 +265,9 @@ def query(
       the final parsed result.
     skip_lm: If `True`, skips the LLM call and returns the rendered 
       prompt as a `UserMessage` object.
+    invocation_id: The ID of the query invocation, which will be passed to
+      `lf.QueryInvocation` when `lf.trackIf `None`, a unique ID will
+      be generated.
     **kwargs: Additional keyword arguments for:
       - Rendering templates (e.g., `template_str`, `preamble`),
       - Configuring `lf.structured.Mapping`.
@@ -275,11 +280,12 @@ def query(
   """
     # Internal usage logging.
 
+  invocation_id = invocation_id or f'query@{uuid.uuid4().hex[-7:]}'
   # Multiple quries will be issued when `lm` is a list or `num_samples` is
   # greater than 1.
   if isinstance(lm, list) or num_samples != 1:
     def _single_query(inputs):
-      lm, example_i = inputs
+      i, (lm, example_i) = inputs
       return query(
           prompt,
           schema,
@@ -298,6 +304,7 @@ def query(
           protocol=protocol,
           returns_message=returns_message,
           skip_lm=skip_lm,
+          invocation_id=f'{invocation_id}:{i}',
           **kwargs,
       )
     lm_list = lm if isinstance(lm, list) else [lm]
@@ -317,7 +324,8 @@ def query(
 
     samples = []
     for _, output, error in lf.concurrent_map(
-        _single_query, query_inputs, max_workers=max(64, total_queries),
+        _single_query, enumerate(query_inputs),
+        max_workers=max(64, total_queries),
         ordered=True,
     ):
       if error is None:
@@ -409,6 +417,7 @@ def query(
       metadata.pop('usage', None)
 
       invocation = QueryInvocation(
+          id=invocation_id,
           input=pg.Ref(query_input),
           schema=(
               schema_lib.Schema.from_value(schema)
@@ -564,6 +573,11 @@ def _reward_fn(cls) -> Callable[
 
 class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   """A class to represent the invocation of `lf.query`."""
+
+  id: Annotated[
+      str,
+      'The ID of the query invocation.'
+  ]
 
   input: Annotated[
       Union[lf.Template, pg.Symbolic],
