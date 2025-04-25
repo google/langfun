@@ -68,6 +68,7 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(foo(lm=lm), 3)
 
     session = foo.session
+    self.assertEqual(len(session.id), 7)
     self.assertIsNotNone(session)
     self.assertIsInstance(session.root.action, action_lib.RootAction)
     self.assertIs(session.current_action, session.root)
@@ -152,7 +153,8 @@ class SessionTest(unittest.TestCase):
     session.fatal('hi', x=1, y=2)
 
   def test_as_message(self):
-    session = action_lib.Session()
+    session = action_lib.Session(id='abc')
+    self.assertEqual(session.id, 'abc')
     self.assertIsInstance(session.as_message(), lf.AIMessage)
 
 

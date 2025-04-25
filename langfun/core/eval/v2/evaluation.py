@@ -169,9 +169,23 @@ class Evaluation(experiment_lib.Experiment):
     checkpointed = self._state.ckpt_example(example.id)
     with pg.timeit('evaluate') as timeit, lf.track_usages() as usage_summary:
       if checkpointed is None or checkpointed.has_error:
+        if checkpointed is None:
+          self.info(
+              f'Example {example.id} is being processed for the first time '
+              'as no prior run is found. '
+          )
+        else:
+          self.info(
+              f'Example {example.id} is being reprocessed as prior run '
+              f'contains error: {checkpointed.error}'
+          )
         example.start_time = time.time()
         self._process(example, raise_if_has_error=raise_if_has_error)
       else:
+        self.info(
+            f'Example {example.id} skipped processing as prior run '
+            'is available and error free.'
+        )
         example.start_time = checkpointed.start_time
 
         # Use the output and metadata obtained from the previous processing.
@@ -190,10 +204,12 @@ class Evaluation(experiment_lib.Experiment):
       # NOTE(daiyip): It's possible that metrics could use LLMs, so we need to
       # track the usage of the metrics separately.
       with pg.timeit('metric'):
+        self.info(f'Starting metric computation for example {example.id}.')
         metric_metadata = {}
         for metric in self.metrics:
           metric_metadata.update(metric.audit(example))
         example.metric_metadata = metric_metadata
+        self.info(f'Completed metric computation for example {example.id}.')
 
     # For previously processed examples, we keep the execution status for the
     # processing step.
@@ -314,6 +330,26 @@ class Evaluation(experiment_lib.Experiment):
     )
     with self._log_lock:
       self._log_entries.append(log_entry)
+
+    # Also add system log.
+    match level:
+      case 'debug':
+        sys_log_func = pg.logging.debug
+      case 'info':
+        sys_log_func = pg.logging.info
+      case 'warning':
+        sys_log_func = pg.logging.warning
+      case 'error':
+        sys_log_func = pg.logging.error
+      case 'fatal':
+        sys_log_func = pg.logging.error
+      case _:
+        raise ValueError(f'Unsupported log level: {level}')
+
+    sys_log_func(
+        '%s: %s\nMetadata: %s',
+        self.id, message, pg.format(kwargs)
+    )
 
   def debug(self, message: str, **kwargs):
     """Logs a debug message to the session."""

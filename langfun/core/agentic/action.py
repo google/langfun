@@ -20,6 +20,7 @@ import threading
 import time
 import typing
 from typing import Annotated, Any, Callable, Iterable, Iterator, Optional, Type, Union
+import uuid
 import langfun.core as lf
 from langfun.core import structured as lf_structured
 import pyglove as pg
@@ -63,7 +64,11 @@ class Action(pg.Object):
         lf.console.display(pg.view(session, name='agent_session'))
 
     with session.track_action(self):
+      pg.logging.info('Example %s starts action %s', session.id, repr(self))
       result = self.call(session=session, **kwargs)
+      pg.logging.info(
+          'Example %s ends action %s', session.id, self.__class__.__name__
+      )
 
       # For the top-level action, we store the session in the metadata.
       if new_session:
@@ -792,6 +797,8 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     self._tls = threading.local()
     self._current_action = self.root
     self._current_execution = self.root.execution
+    if self.id is None:
+      self.rebind(id=uuid.uuid4().hex[-7:], skip_notification=True)
 
   #
   # Context-manager for information tracking.

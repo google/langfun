@@ -249,22 +249,23 @@ class RunnerBase(Runner):
       if example.error is None:
         experiment.progress.increment_processed()
         experiment.info(
-            f'Example {example.id} is successfully evaluated in '
-            f'{example.elapse:.2f} seconds.'    # pylint: disable=bad-whitespace
+            f'Example {example.id} is successfully evaluated (with process) in '
+            f'{example.elapse:.2f} seconds.'
         )
       else:
         experiment.progress.increment_failed()
         experiment.error(
             (
                 f'Failed to evaluate example {example.id} in'
-                f'{example.elapse:.2f} seconds.'  # pylint: disable=bad-whitespace
+                f'{example.elapse:.2f} seconds.'
             ),
             error=example.error
         )
     else:
       experiment.progress.increment_skipped()
       experiment.info(
-          f'Skipped example {example.id} as it is loaded from checkpoint.'
+          f'Example {example.id} is successfully evaluated (without reprocess) '
+          f'in {example.elapse:.2f} seconds.'
       )
 
     experiment.usage_summary.merge(example.usage_summary)
