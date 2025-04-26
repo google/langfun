@@ -788,3 +788,13 @@ class EvaluationState:
             has_error=example.has_error,
         )
     )
+
+# Register the logging functions to skip the source of the logging functions.
+pg.logging.register_frame_to_skip([
+    Evaluation._log,    # pylint: disable=protected-access
+    Evaluation.debug,
+    Evaluation.info,
+    Evaluation.warning,
+    Evaluation.error,
+    Evaluation.fatal
+])
