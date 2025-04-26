@@ -316,7 +316,9 @@ class Evaluation(experiment_lib.Experiment):
 
   def _log(self, log_func, level: lf.logging.LogLevel, message: str, **kwargs):
     # Write to external logging system.
-    log_message = f'{self.id}: {message}'
+    log_message = message
+    if self.id not in log_message:
+      log_message = f'{self.id}: {log_message}'
     if kwargs:
       log_message = f'{log_message} (metadata: {kwargs!r})'
     log_func(log_message)
@@ -330,26 +332,6 @@ class Evaluation(experiment_lib.Experiment):
     )
     with self._log_lock:
       self._log_entries.append(log_entry)
-
-    # Also add system log.
-    match level:
-      case 'debug':
-        sys_log_func = pg.logging.debug
-      case 'info':
-        sys_log_func = pg.logging.info
-      case 'warning':
-        sys_log_func = pg.logging.warning
-      case 'error':
-        sys_log_func = pg.logging.error
-      case 'fatal':
-        sys_log_func = pg.logging.error
-      case _:
-        raise ValueError(f'Unsupported log level: {level}')
-
-    sys_log_func(
-        '%s: %s\nMetadata: %s',
-        self.id, message, pg.format(kwargs)
-    )
 
   def debug(self, message: str, **kwargs):
     """Logs a debug message to the session."""
