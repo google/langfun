@@ -335,3 +335,7 @@ def fatal(
 ) -> LogEntry:
   """Logs a fatal message to the session."""
   return log('fatal', message, indent=indent, console=console, **kwargs)
+
+
+# Register the logging functions to skip the source of the logging functions.
+pg.logging.register_frame_to_skip([log, debug, info, warning, error, fatal])

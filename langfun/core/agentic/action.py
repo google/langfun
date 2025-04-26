@@ -1132,3 +1132,14 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         enable_key_tooltip=False,
     )
     return config
+
+
+# Register the logging functions to skip the source of the logging functions.
+pg.logging.register_frame_to_skip([
+    Session._log,   # pylint: disable=protected-access
+    Session.debug,
+    Session.info,
+    Session.warning,
+    Session.error,
+    Session.fatal
+])
