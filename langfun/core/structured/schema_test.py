@@ -705,6 +705,30 @@ class ValuePythonReprTest(unittest.TestCase):
         "A(foo=[Foo(x=1), Foo(x=2)], y='bar')",
     )
     self.assertEqual(
+        schema_lib.ValuePythonRepr().repr(
+            A([Foo(1), Foo(2)], 'bar'),
+            schema_lib.Schema(A),
+            markdown=True,
+            compact=False,
+            assign_to_var='output',
+        ),
+        inspect.cleandoc("""
+            ```python
+            output = A(
+              foo=[
+                Foo(
+                  x=1
+                ),
+                Foo(
+                  x=2
+                )
+              ],
+              y='bar'
+            )
+            ```
+            """),
+    )
+    self.assertEqual(
         schema_lib.ValuePythonRepr().repr(A),
         inspect.cleandoc("""
             ```python

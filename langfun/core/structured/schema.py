@@ -671,6 +671,7 @@ class ValuePythonRepr(ValueRepr):
            compact: bool = True,
            verbose: bool = False,
            markdown: bool = True,
+           assign_to_var: str | None = None,
            **kwargs) -> str:
     del schema
     if inspect.isclass(value):
@@ -694,6 +695,8 @@ class ValuePythonRepr(ValueRepr):
       object_code = pg.format(
           value, compact=compact, verbose=verbose, python_format=True
       )
+      if assign_to_var is not None:
+        object_code = f'{assign_to_var} = {object_code}'
     if markdown:
       return f'```python\n{ object_code }\n```'
     return object_code
