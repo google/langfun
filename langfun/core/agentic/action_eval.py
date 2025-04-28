@@ -34,9 +34,11 @@ class ActionEval(lf.eval.v2.Evaluation):
   def process(self, example: lf.eval.v2.Example) -> tuple[str, dict[str, Any]]:
     example_input = example.input
     action = example_input.action
-    session = action_lib.Session(id=str(example.id))
+    session = action_lib.Session(id=f'{self.id}#example-{example.id}')
     with lf.logging.use_log_level('fatal'):
-      action(session=session, **self.action_args)
+      kwargs = self.action_args.copy()
+      kwargs.update(verbose=True)
+      action(session=session, **kwargs)
     return session.final_result, dict(session=session)
 
 
