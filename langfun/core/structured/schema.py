@@ -456,6 +456,11 @@ def class_definition(
         )
         continue
 
+      # Skip fields that are marked as excluded from the prompt sent to LLM
+      # for OOP.
+      if field.metadata.get('exclude_from_prompt', False):
+        continue
+
       # Write field doc string as comments before the field definition.
       if field.description:
         for line in field.description.split('\n'):

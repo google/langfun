@@ -538,6 +538,19 @@ class SchemaPythonReprTest(unittest.TestCase):
             """) + '\n'
     )
 
+    class E(pg.Object):
+      x: str
+      y: typing.Annotated[int, 'y', dict(exclude_from_prompt=True)]
+
+    self.assertEqual(
+        schema_lib.class_definition(E),
+        inspect.cleandoc(
+            """
+            class E(Object):
+              x: str
+            """) + '\n'
+    )
+
   def test_repr(self):
     class Foo(pg.Object):
       x: int
