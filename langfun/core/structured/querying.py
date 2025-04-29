@@ -15,8 +15,9 @@
 
 import contextlib
 import functools
+import inspect
 import time
-from typing import Annotated, Any, Callable, Iterator, Type, Union
+from typing import Annotated, Any, Callable, ClassVar, Iterator, Type, Union
 import uuid
 
 import langfun.core as lf
@@ -26,8 +27,35 @@ import pyglove as pg
 
 
 @lf.use_init_args(['schema', 'default', 'examples'])
-class _QueryStructure(mapping.Mapping):
-  """Query an object out from a natural language text."""
+class LfQuery(mapping.Mapping):
+  """Base class for different implementations of `lf.query`.
+
+  By subclassing this class, users could create variations of prompts for
+  `lf.query` and associated them with specific protocols and versions.
+
+  For example:
+
+  ```
+  class _MyLfQuery(LFQuery):
+    protocol = 'my_format'
+    version = '1.0'
+
+    template_str = inspect.cleandoc(
+      '''
+      ...
+      '''
+    )
+    mapping_template = lf.Template(
+      '''
+      ...
+      '''
+    )
+
+  lf.query(..., protocol='my_format:1.0')
+  ```
+
+  (THIS IS NOT A TEMPLATE)
+  """
 
   context_title = 'CONTEXT'
   input_title = 'INPUT_OBJECT'
@@ -37,8 +65,81 @@ class _QueryStructure(mapping.Mapping):
       schema_lib.schema_spec(), 'Required schema for parsing.'
   ]
 
+  # A map from (protocol, version) to the query structure class.
+  # This is used to map different protocols/versions to different templates.
+  # So users can use `lf.query(..., protocol='<protocol>:<version>')` to use
+  # a specific version of the prompt. We use this feature to support variations
+  # of prompts and maintain backward compatibility.
+  _OOP_PROMPT_MAP: ClassVar[
+      dict[
+          str,        # protocol.
+          dict[
+              str,    # version.
+              Type['LfQuery']
+          ]
+      ]
+  ] = {}
 
-class _QueryStructureJson(_QueryStructure):
+  # This the flag to update default protocol version.
+  _DEFAULT_PROTOCOL_VERSIONS: ClassVar[dict[str, str]] = {
+      'python': '1.0',
+      'json': '1.0',
+  }
+
+  def __init_subclass__(cls) -> Any:
+    super().__init_subclass__()
+    if not inspect.isabstract(cls):
+      protocol = cls.__schema__['protocol'].default_value
+      version_dict = cls._OOP_PROMPT_MAP.get(protocol)
+      if version_dict is None:
+        version_dict = {}
+        cls._OOP_PROMPT_MAP[protocol] = version_dict
+      dest_cls = version_dict.get(cls.version)
+      if dest_cls is not None and dest_cls.__type_name__ != cls.__type_name__:
+        raise ValueError(
+            f'Version {cls.version} is already registered for {dest_cls!r} '
+            f'under protocol {protocol!r}. Please use a different version.'
+        )
+      version_dict[cls.version] = cls
+
+  @classmethod
+  def from_protocol(cls, protocol: str) -> Type['LfQuery']:
+    """Returns a query structure from the given protocol and version."""
+    if ':' in protocol:
+      protocol, version = protocol.split(':')
+    else:
+      version = cls._DEFAULT_PROTOCOL_VERSIONS.get(protocol)
+      if version is None:
+        version_dict = cls._OOP_PROMPT_MAP.get(protocol)
+        if version_dict is None:
+          raise ValueError(
+              f'Protocol {protocol!r} is not supported. Available protocols: '
+              f'{sorted(cls._OOP_PROMPT_MAP.keys())}.'
+          )
+        elif len(version_dict) == 1:
+          version = list(version_dict.keys())[0]
+        else:
+          raise ValueError(
+              f'Multiple versions found for protocol {protocol!r}, please '
+              f'specify a version with "{protocol}:<version>".'
+          )
+
+    version_dict = cls._OOP_PROMPT_MAP.get(protocol)
+    if version_dict is None:
+      raise ValueError(
+          f'Protocol {protocol!r} is not supported. Available protocols: '
+          f'{sorted(cls._OOP_PROMPT_MAP.keys())}.'
+      )
+    dest_cls = version_dict.get(version)
+    if dest_cls is None:
+      raise ValueError(
+          f'Version {version!r} is not supported for protocol {protocol!r}. '
+          f'Available versions: {sorted(version_dict.keys())}.'
+      )
+    return dest_cls
+
+
+class _LfQueryJsonV1(LfQuery):
   """Query a structured value using JSON as the protocol."""
 
   preamble = """
@@ -58,12 +159,13 @@ class _QueryStructureJson(_QueryStructure):
         {"result": {"_type": "langfun.core.structured.query.Answer", "final_answer": 2}}
       """
 
+  version = '1.0'
   protocol = 'json'
   schema_title = 'SCHEMA'
   output_title = 'JSON'
 
 
-class _QueryStructurePython(_QueryStructure):
+class _LfQueryPythonV1(LfQuery):
   """Query a structured value using Python as the protocol."""
 
   preamble = """
@@ -87,20 +189,33 @@ class _QueryStructurePython(_QueryStructure):
         )
         ```
       """
+  version = '1.0'
   protocol = 'python'
   schema_title = 'OUTPUT_TYPE'
   output_title = 'OUTPUT_OBJECT'
+  mapping_template = lf.Template(
+      """
+      {%- if example.context -%}
+      {{ context_title}}:
+      {{ example.context | indent(2, True)}}
 
+      {% endif -%}
 
-def _query_structure_cls(
-    protocol: schema_lib.SchemaProtocol,
-) -> Type[_QueryStructure]:
-  if protocol == 'json':
-    return _QueryStructureJson
-  elif protocol == 'python':
-    return _QueryStructurePython
-  else:
-    raise ValueError(f'Unknown protocol: {protocol!r}.')
+      {{ input_title }}:
+      {{ example.input_repr(protocol, compact=False) | indent(2, True) }}
+
+      {% if example.schema -%}
+      {{ schema_title }}:
+      {{ example.schema_repr(protocol) | indent(2, True) }}
+
+      {% endif -%}
+
+      {{ output_title }}:
+      {%- if example.has_output %}
+      {{ example.output_repr(protocol, compact=False) | indent(2, True) }}
+      {% endif -%}
+      """
+  )
 
 
 def query(
@@ -116,7 +231,7 @@ def query(
     response_postprocess: Callable[[str], str] | None = None,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str | None = None,
     returns_message: bool = False,
     skip_lm: bool = False,
     invocation_id: str | None = None,
@@ -259,8 +374,14 @@ def query(
       disable auto-fixing. Not supported with the `'json'` protocol.
     autofix_lm: The LM to use for auto-fixing. Defaults to the `autofix_lm`
       from `lf.context` or the main `lm`.
-    protocol: Format for schema representation. Choices are `'json'` or
-      `'python'`. Default is `'python'`.
+    protocol: Format for schema representation. Builtin choices are `'json'` or
+      `'python'`, users could extend with their own protocols by subclassing
+      `lf.structured.LfQuery'. Also protocol could be specified with a version
+      in the format of 'protocol:version', e.g., 'python:1.0', so users could
+      use a specific version of the prompt based on the protocol. Please see the
+      documentation of `LfQuery` for more details. If None, the protocol from
+      context manager `lf.query_protocol` will be used, or 'python' if not
+      specified.
     returns_message:  If `True`, returns an `lf.Message` object instead of
       the final parsed result.
     skip_lm: If `True`, skips the LLM call and returns the rendered 
@@ -279,6 +400,9 @@ def query(
       `returns_message=True`), or a natural language string (default).
   """
     # Internal usage logging.
+
+  if protocol is None:
+    protocol = lf.context_value('__query_protocol__', 'python')
 
   invocation_id = invocation_id or f'query@{uuid.uuid4().hex[-7:]}'
   # Multiple quries will be issued when `lm` is a list or `num_samples` is
@@ -382,7 +506,7 @@ def query(
           output_message = lf.AIMessage(processed_text, source=output_message)
     else:
       # Query with structured output.
-      output_message = _query_structure_cls(protocol)(
+      output_message = LfQuery.from_protocol(protocol)(
           input=(
               query_input.render(lm=lm)
               if isinstance(query_input, lf.Template)
@@ -435,6 +559,15 @@ def query(
           tracker.append(invocation)
   return output_message if returns_message else _result(output_message)
 
+
+@contextlib.contextmanager
+def query_protocol(protocol: str) -> Iterator[None]:
+  """Context manager for setting the query protocol for the scope."""
+  with lf.context(__query_protocol__=protocol):
+    try:
+      yield
+    finally:
+      pass
 
 #
 # Helper function for map-reduce style querying.

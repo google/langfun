@@ -55,8 +55,11 @@ from langfun.core.structured.parsing import call
 
 from langfun.core.structured.querying import track_queries
 from langfun.core.structured.querying import QueryInvocation
+
+from langfun.core.structured.querying import LfQuery
 from langfun.core.structured.querying import query
 from langfun.core.structured.querying import query_and_reduce
+from langfun.core.structured.querying import query_protocol
 
 from langfun.core.structured.querying import query_prompt
 from langfun.core.structured.querying import query_output

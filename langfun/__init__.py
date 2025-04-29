@@ -37,6 +37,9 @@ generate_class = structured.generate_class
 
 track_queries = structured.track_queries
 
+# Context manager for setting the query protocol for the scope.
+query_protocol = structured.query_protocol
+
 # Helper function for map-reduce style querying.
 query_and_reduce = structured.query_and_reduce
 

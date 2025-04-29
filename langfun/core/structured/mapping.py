@@ -340,8 +340,11 @@ class Mapping(lf.LangFunc):
   schema_title: Annotated[str, 'The section title for schema.'] = 'SCHEMA'
 
   protocol: Annotated[
-      schema_lib.SchemaProtocol,
-      'The protocol for representing the schema and value.',
+      str,
+      (
+          'A string representing the protocol for formatting the prompt. '
+          'Built-in Langfun protocols are: `python` and `json`.'
+      ),
   ] = 'python'
 
   #

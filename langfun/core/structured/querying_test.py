@@ -410,9 +410,59 @@ class QueryTest(unittest.TestCase):
     self.assertEqual([r.text for r in results], ['1', 'abc'])
     self.assertEqual([r.result for r in results], [1, 0])
 
-  def test_bad_protocol(self):
-    with self.assertRaisesRegex(ValueError, 'Unknown protocol'):
-      querying.query('what is 1 + 1', int, protocol='text')
+  def test_from_protocol(self):
+    self.assertIs(
+        querying.LfQuery.from_protocol('python'),
+        querying._LfQueryPythonV1
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('python:1.0'),
+        querying._LfQueryPythonV1
+    )
+
+    class MyLfQuery(querying.LfQuery):
+      protocol = 'yaml'
+      version = '1.0'
+
+    self.assertIs(
+        querying.LfQuery.from_protocol('yaml:1.0'),
+        MyLfQuery
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('yaml'),
+        MyLfQuery
+    )
+
+    with self.assertRaisesRegex(
+        ValueError, 'Version .* is already registered'
+    ):
+      class MyLfQuery2(querying.LfQuery):  # pylint: disable=unused-variable
+        protocol = 'yaml'
+        version = '1.0'
+
+    with self.assertRaisesRegex(
+        ValueError, 'Version \'2.0\' is not supported for protocol \'yaml\''
+    ):
+      querying.LfQuery.from_protocol('yaml:2.0')
+
+    class MyLfQuery3(querying.LfQuery):  # pylint: disable=unused-variable
+      protocol = 'yaml'
+      version = '3.0'
+
+    with self.assertRaisesRegex(
+        ValueError, 'Multiple versions found for protocol \'yaml\''
+    ):
+      querying.LfQuery.from_protocol('yaml')
+
+    with self.assertRaisesRegex(
+        ValueError, 'Protocol \'text\' is not supported'
+    ):
+      querying.LfQuery.from_protocol('text')
+
+    with self.assertRaisesRegex(
+        ValueError, 'Protocol \'text\' is not supported'
+    ):
+      querying.LfQuery.from_protocol('text:1.0')
 
   def test_query_prompt(self):
     self.assertEqual(
@@ -632,10 +682,10 @@ class QueryTest(unittest.TestCase):
       )
 
 
-class QueryStructurePythonTest(unittest.TestCase):
+class LfQueryPythonV1Test(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = querying._QueryStructurePython(
+    l = querying.LfQuery.from_protocol('python:1.0')(
         input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
     )
     self.assertEqual(
@@ -672,7 +722,7 @@ class QueryStructurePythonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = querying._QueryStructurePython(
+    l = querying.LfQuery.from_protocol('python:1.0')(
         input=lf.AIMessage('Compute 12 / 6 + 2.'),
         schema=int,
         examples=[
@@ -782,7 +832,7 @@ class QueryStructurePythonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = querying._QueryStructurePython(
+      l = querying.LfQuery.from_protocol('python:1.0')(
           input=lm_input,
           schema=[Itinerary],
           examples=[
@@ -850,10 +900,10 @@ class QueryStructurePythonTest(unittest.TestCase):
       )
 
 
-class QueryStructureJsonTest(unittest.TestCase):
+class LfQueryJsonV1Test(unittest.TestCase):
 
   def test_render_no_examples(self):
-    l = querying._QueryStructureJson(
+    l = querying.LfQuery.from_protocol('json:1.0')(
         input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
     )
     self.assertEqual(
@@ -885,7 +935,7 @@ class QueryStructureJsonTest(unittest.TestCase):
     )
 
   def test_render(self):
-    l = querying._QueryStructureJson(
+    l = querying.LfQuery.from_protocol('json:1.0')(
         input=lf.AIMessage('Compute 12 / 6 + 2.'),
         schema=int,
         examples=[
@@ -1020,7 +1070,7 @@ class QueryStructureJsonTest(unittest.TestCase):
         ),
         override_attrs=True,
     ):
-      l = querying._QueryStructureJson(
+      l = querying.LfQuery.from_protocol('json:1.0')(
           input=lm_input,
           schema=[Itinerary],
           examples=[
@@ -1063,10 +1113,17 @@ class QueryStructureJsonTest(unittest.TestCase):
       self.assertEqual(len(cache), 0)
 
   def test_query(self):
-    lm = fake.StaticSequence(['{"result": 1}'])
+    lm = fake.StaticResponse('{"result": 1}')
     self.assertEqual(
         querying.query('what is 1 + 0', int, lm=lm, protocol='json'), 1
     )
+    self.assertEqual(
+        querying.query('what is 1 + 0', int, lm=lm, protocol='json:1.0'), 1
+    )
+    with querying.query_protocol('json'):
+      self.assertEqual(
+          querying.query('what is 1 + 0', int, lm=lm), 1
+      )
 
 
 class QueryInvocationTest(unittest.TestCase):
