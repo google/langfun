@@ -82,7 +82,7 @@ class LfQuery(mapping.Mapping):
 
   # This the flag to update default protocol version.
   _DEFAULT_PROTOCOL_VERSIONS: ClassVar[dict[str, str]] = {
-      'python': '1.0',
+      'python': '2.0',
       'json': '1.0',
   }
 
@@ -213,6 +213,60 @@ class _LfQueryPythonV1(LfQuery):
       {{ output_title }}:
       {%- if example.has_output %}
       {{ example.output_repr(protocol, compact=False) | indent(2, True) }}
+      {% endif -%}
+      """
+  )
+
+
+class _LfQueryPythonV2(LfQuery):
+  """Query a structured value using Python as the protocol."""
+
+  preamble = """
+      Please respond to the last {{ input_title }} with {{ output_title }} only according to {{ schema_title }}.
+
+      {{ input_title }}:
+        1 + 1 =
+
+      {{ schema_title }}:
+        Answer
+
+        ```python
+        class Answer:
+          final_answer: int
+        ```
+
+      {{ output_title }}:
+        ```python
+        output = Answer(
+          final_answer=2
+        )
+        ```
+      """
+  version = '2.0'
+  protocol = 'python'
+  input_title = 'REQUEST'
+  schema_title = 'OUTPUT PYTHON TYPE'
+  output_title = 'OUTPUT PYTHON OBJECT'
+  mapping_template = lf.Template(
+      """
+      {%- if example.context -%}
+      {{ context_title}}:
+      {{ example.context | indent(2, True)}}
+
+      {% endif -%}
+
+      {{ input_title }}:
+      {{ example.input_repr(protocol, compact=False) | indent(2, True) }}
+
+      {% if example.schema -%}
+      {{ schema_title }}:
+      {{ example.schema_repr(protocol) | indent(2, True) }}
+
+      {% endif -%}
+
+      {{ output_title }}:
+      {%- if example.has_output %}
+      {{ example.output_repr(protocol, compact=False, assign_to_var='output') | indent(2, True) }}
       {% endif -%}
       """
   )
