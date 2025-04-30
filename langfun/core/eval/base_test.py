@@ -195,7 +195,7 @@ class EvaluationTest(unittest.TestCase):
             score=1.0,
             logprobs=None,
             is_cached=False,
-            usage=lf.LMSamplingUsage(428, 24, 452),
+            usage=lf.LMSamplingUsage(387, 24, 411),
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )
@@ -234,12 +234,12 @@ class EvaluationTest(unittest.TestCase):
                 }
             ),
             usage=dict(
-                total_prompt_tokens=856,
+                total_prompt_tokens=774,
                 total_completion_tokens=25,
                 num_usages=2,
-                average_prompt_tokens=428,
+                average_prompt_tokens=387,
                 average_completion_tokens=12,
-                average_total_tokens=440,
+                average_total_tokens=399,
             ),
         ),
     )

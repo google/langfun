@@ -646,7 +646,7 @@ class CallTest(unittest.TestCase):
             score=1.0,
             logprobs=None,
             is_cached=False,
-            usage=lf.LMSamplingUsage(356, 1, 357),
+            usage=lf.LMSamplingUsage(315, 1, 316),
             tags=['lm-response', 'lm-output', 'transformed']
         ),
     )

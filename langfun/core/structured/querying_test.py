@@ -90,7 +90,7 @@ class QueryTest(unittest.TestCase):
             score=1.0,
             logprobs=None,
             is_cached=False,
-            usage=lf.LMSamplingUsage(364, 1, 365),
+            usage=lf.LMSamplingUsage(323, 1, 324),
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )
@@ -143,26 +143,26 @@ class QueryTest(unittest.TestCase):
         y=2,
         lm=lm.clone(),
         expected_snippet=(
-            'Please respond to the last REQUEST with OUTPUT PYTHON OBJECT '
-            'only according to OUTPUT PYTHON TYPE.\n\n'
-            'REQUEST:\n  1 + 1 =\n\n'
-            'OUTPUT PYTHON TYPE:\n'
+            'Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT '
+            'according to OUTPUT_TYPE.\n\n'
+            'INPUT_OBJECT:\n  1 + 1 =\n\n'
+            'OUTPUT_TYPE:\n'
             '  Answer\n\n'
             '  ```python\n'
             '  class Answer:\n'
             '    final_answer: int\n'
             '  ```\n\n'
-            'OUTPUT PYTHON OBJECT:\n'
+            'OUTPUT_OBJECT:\n'
             '  ```python\n'
-            '  output = Answer(\n'
+            '  Answer(\n'
             '    final_answer=2\n'
             '  )\n'
             '  ```\n\n'
-            'REQUEST:\n'
+            'INPUT_OBJECT:\n'
             '  What is 1 + 2?\n\n'
-            'OUTPUT PYTHON TYPE:\n'
+            'OUTPUT_TYPE:\n'
             '  int\n\n'
-            'OUTPUT PYTHON OBJECT:'
+            'OUTPUT_OBJECT:'
         ),
     )
 
@@ -176,26 +176,26 @@ class QueryTest(unittest.TestCase):
         lm=lm.clone(),
         template_str='!!{{ DEFAULT }}!!',
         expected_snippet=(
-            '!!Please respond to the last REQUEST with OUTPUT PYTHON OBJECT '
-            'only according to OUTPUT PYTHON TYPE.\n\n'
-            'REQUEST:\n  1 + 1 =\n\n'
-            'OUTPUT PYTHON TYPE:\n'
+            '!!Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT '
+            'according to OUTPUT_TYPE.\n\n'
+            'INPUT_OBJECT:\n  1 + 1 =\n\n'
+            'OUTPUT_TYPE:\n'
             '  Answer\n\n'
             '  ```python\n'
             '  class Answer:\n'
             '    final_answer: int\n'
             '  ```\n\n'
-            'OUTPUT PYTHON OBJECT:\n'
+            'OUTPUT_OBJECT:\n'
             '  ```python\n'
-            '  output = Answer(\n'
+            '  Answer(\n'
             '    final_answer=2\n'
             '  )\n'
             '  ```\n\n'
-            'REQUEST:\n'
+            'INPUT_OBJECT:\n'
             '  What is 1 + 2?\n\n'
-            'OUTPUT PYTHON TYPE:\n'
+            'OUTPUT_TYPE:\n'
             '  int\n\n'
-            'OUTPUT PYTHON OBJECT:!!'
+            'OUTPUT_OBJECT:!!'
         ),
     )
 
@@ -220,7 +220,7 @@ class QueryTest(unittest.TestCase):
         y=2,
         lm=lm.clone(),
         expected_snippet=(
-            '\n\nREQUEST:\n  ```python\n  [\n    1\n  ]\n  ```\n\n'
+            '\n\nINPUT_OBJECT:\n  ```python\n  [\n    1\n  ]\n  ```\n\n'
         ),
     )
 
@@ -236,7 +236,7 @@ class QueryTest(unittest.TestCase):
         modalities.Image.from_bytes(b'mock_image'),
         int,
         lm=lm,
-        expected_snippet='\n\nREQUEST:\n  <<[[input]]>>\n\n',
+        expected_snippet='\n\nINPUT_OBJECT:\n  <<[[input]]>>\n\n',
         expected_modalities=1,
     )
 
@@ -290,7 +290,7 @@ class QueryTest(unittest.TestCase):
         list[str],
         lm=lm,
         expected_snippet=inspect.cleandoc("""
-            REQUEST:
+            INPUT_OBJECT:
               ```python
               [
                 <<[[input[0]]]>>,
@@ -318,36 +318,31 @@ class QueryTest(unittest.TestCase):
         ],
         lm=lm,
         expected_snippet=inspect.cleandoc("""
-            REQUEST:
+            INPUT_OBJECT:
               ```python
               [
                 <<[[examples[0].input[0]]]>>
               ]
               ```
 
-            OUTPUT PYTHON TYPE:
+            OUTPUT_TYPE:
               list[str]
 
-            OUTPUT PYTHON OBJECT:
+            OUTPUT_OBJECT:
               ```python
-              output = [
+              [
                 'dog'
               ]
               ```
 
 
-            REQUEST:
+            INPUT_OBJECT:
               ```python
               [
                 <<[[input[0]]]>>,
                 <<[[input[1]]]>>
               ]
               ```
-
-            OUTPUT PYTHON TYPE:
-              list[str]
-
-            OUTPUT PYTHON OBJECT:
             """),
         expected_modalities=3,
     )
@@ -417,7 +412,8 @@ class QueryTest(unittest.TestCase):
 
   def test_from_protocol(self):
     self.assertIs(
-        querying.LfQuery.from_protocol('python'), querying._LfQueryPythonV2
+        querying.LfQuery.from_protocol('python'),
+        querying._LfQueryPythonV1
     )
     self.assertIs(
         querying.LfQuery.from_protocol('python:1.0'),
@@ -472,12 +468,12 @@ class QueryTest(unittest.TestCase):
     self.assertEqual(
         querying.query_prompt('what is this?', int),
         inspect.cleandoc("""
-            Please respond to the last REQUEST with OUTPUT PYTHON OBJECT only according to OUTPUT PYTHON TYPE.
+            Please respond to the last INPUT_OBJECT with OUTPUT_OBJECT according to OUTPUT_TYPE.
 
-            REQUEST:
+            INPUT_OBJECT:
               1 + 1 =
 
-            OUTPUT PYTHON TYPE:
+            OUTPUT_TYPE:
               Answer
 
               ```python
@@ -485,20 +481,20 @@ class QueryTest(unittest.TestCase):
                 final_answer: int
               ```
 
-            OUTPUT PYTHON OBJECT:
+            OUTPUT_OBJECT:
               ```python
-              output = Answer(
+              Answer(
                 final_answer=2
               )
               ```
 
-            REQUEST:
+            INPUT_OBJECT:
               what is this?
 
-            OUTPUT PYTHON TYPE:
+            OUTPUT_TYPE:
               int
 
-            OUTPUT PYTHON OBJECT:
+            OUTPUT_OBJECT:
             """),
     )
 
@@ -864,115 +860,6 @@ class LfQueryPythonV1Test(unittest.TestCase):
       self.assertEqual(len(r.result[0].activities), 3)
       self.assertIsNone(r.result[0].hotel)
 
-
-class LfQueryPythonV2Test(unittest.TestCase):
-
-  def test_render_no_examples(self):
-    l = querying.LfQuery.from_protocol('python:2.0')(
-        input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
-    )
-    self.assertEqual(
-        l.render().text,
-        inspect.cleandoc("""
-            Please respond to the last REQUEST with OUTPUT PYTHON OBJECT only according to OUTPUT PYTHON TYPE.
-
-            REQUEST:
-              1 + 1 =
-
-            OUTPUT PYTHON TYPE:
-              Answer
-
-              ```python
-              class Answer:
-                final_answer: int
-              ```
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = Answer(
-                final_answer=2
-              )
-              ```
-
-            REQUEST:
-              Compute 12 / 6 + 2.
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-            """),
-    )
-
-  def test_render_with_examples(self):
-    l = querying.LfQuery.from_protocol('python:2.0')(
-        input=lf.AIMessage('Compute 12 / 6 + 2.'),
-        schema=int,
-        examples=[
-            mapping.MappingExample(
-                input='What is the answer of 1 plus 1?', output=2
-            ),
-            mapping.MappingExample(
-                input='Compute the value of 3 + (2 * 6).', output=15
-            ),
-        ],
-    )
-    self.assertEqual(
-        l.render().text,
-        inspect.cleandoc("""
-            Please respond to the last REQUEST with OUTPUT PYTHON OBJECT only according to OUTPUT PYTHON TYPE.
-
-            REQUEST:
-              1 + 1 =
-
-            OUTPUT PYTHON TYPE:
-              Answer
-
-              ```python
-              class Answer:
-                final_answer: int
-              ```
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = Answer(
-                final_answer=2
-              )
-              ```
-
-            REQUEST:
-              What is the answer of 1 plus 1?
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = 2
-              ```
-
-            REQUEST:
-              Compute the value of 3 + (2 * 6).
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = 15
-              ```
-
-
-            REQUEST:
-              Compute 12 / 6 + 2.
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-            """),
-    )
-
   def test_bad_response(self):
     with lf.context(
         lm=fake.StaticSequence(['a2']),
@@ -1011,75 +898,6 @@ class LfQueryPythonV2Test(unittest.TestCase):
               response_postprocess=lambda x: x.split('\n')[1]),
           3
       )
-
-  def test_render(self):
-    l = querying.LfQuery.from_protocol('python:2.0')(
-        input=lf.AIMessage('Compute 12 / 6 + 2.'),
-        schema=int,
-        examples=[
-            mapping.MappingExample(
-                input='What is the answer of 1 plus 1?', output=2
-            ),
-            mapping.MappingExample(
-                input='Compute the value of 3 + (2 * 6).', output=15
-            ),
-        ],
-    )
-    self.assertEqual(
-        l.render().text,
-        inspect.cleandoc("""
-            Please respond to the last REQUEST with OUTPUT PYTHON OBJECT only according to OUTPUT PYTHON TYPE.
-
-            REQUEST:
-              1 + 1 =
-
-            OUTPUT PYTHON TYPE:
-              Answer
-
-              ```python
-              class Answer:
-                final_answer: int
-              ```
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = Answer(
-                final_answer=2
-              )
-              ```
-
-            REQUEST:
-              What is the answer of 1 plus 1?
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = 2
-              ```
-
-            REQUEST:
-              Compute the value of 3 + (2 * 6).
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = 15
-              ```
-
-
-            REQUEST:
-              Compute 12 / 6 + 2.
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-            """),
-    )
 
 
 class LfQueryJsonV1Test(unittest.TestCase):
