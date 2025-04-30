@@ -35,12 +35,17 @@ class ActionEval(lf.eval.v2.Evaluation):
     example_input = example.input
     action = example_input.action
     session = action_lib.Session(id=f'{self.id}#example-{example.id}')
+
+    # NOTE(daiyip): Setting session as metadata before action execution, so we
+    # could use `Evaluation.state.in_progress_examples` to access the session
+    # for status reporting from other threads.
+    example.metadata['session'] = session
+
     with lf.logging.use_log_level('fatal'):
       kwargs = self.action_args.copy()
       kwargs.update(verbose=True)
       action(session=session, **kwargs)
     return session.final_result, dict(session=session)
-
 
 #
 # TODO(daiyip): Remove V1 once V2 is fully launched.

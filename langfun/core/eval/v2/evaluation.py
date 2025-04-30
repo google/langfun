@@ -167,6 +167,8 @@ class Evaluation(experiment_lib.Experiment):
       example.input = self.example_input_by_id(example.id)
 
     checkpointed = self._state.ckpt_example(example.id)
+    self._state.update(example, in_progress=True)
+
     with pg.timeit('evaluate') as timeit, lf.track_usages() as usage_summary:
       if checkpointed is None or checkpointed.has_error:
         if checkpointed is None:
@@ -221,7 +223,7 @@ class Evaluation(experiment_lib.Experiment):
     if example.newly_processed:
       example.end_time = time.time()
 
-    self._state.update(example)
+    self._state.update(example, in_progress=False)
     return example
 
   def _process(
@@ -501,6 +503,21 @@ class Evaluation(experiment_lib.Experiment):
           )
       )
 
+    def _in_progress_tab() -> pg.views.html.controls.Tab | None:
+      """Renders a tab for the in progress examples."""
+      if not self.state.in_progress_examples:
+        return None
+      return pg.views.html.controls.Tab(
+          label='In Progress',
+          content=pg.Html.element(
+              'div', [
+                  self._in_progress_view(
+                      list(self.state.in_progress_examples.values())
+                  )
+              ]
+          )
+      )
+
     def _metric_tab(metric: metrics_lib.Metric) -> pg.views.html.controls.Tab:
       """Renders a tab for a metric (group)."""
       return pg.views.html.controls.Tab(
@@ -571,10 +588,9 @@ class Evaluation(experiment_lib.Experiment):
               pg.views.html.controls.TabControl(
                   [
                       _definition_tab(),
-                  ] + [
-                      _metric_tab(m) for m in self.metrics
-                  ] + [
-                      _logs_tab()
+                      [_metric_tab(m) for m in self.metrics],
+                      _in_progress_tab(),
+                      _logs_tab(),
                   ],
                   selected=1,
               )
@@ -596,6 +612,27 @@ class Evaluation(experiment_lib.Experiment):
             ),
         ],
         css_classes=['eval-details'],
+    )
+
+  def _in_progress_view(
+      self, in_progress_examples: list[example_lib.Example]
+  ) -> pg.Html:
+    """Renders a HTML view for the in-progress examples."""
+    current_time = time.time()
+    logs = [f'(Total {len(in_progress_examples)} examples in progress)']
+    for example in in_progress_examples:
+      if example.newly_processed:
+        logs.append(
+            f'Example {example.id}: In progress for '
+            f'{current_time - example.start_time:.2f} seconds.'
+        )
+      else:
+        logs.append(f'Example {example.id}: Recomputing metrics...')
+    return pg.Html.element(
+        'textarea',
+        [pg.Html.escape('\n'.join(logs))],
+        readonly=True,
+        css_classes=['logs-textarea'],
     )
 
   def _html_tree_view_config(self) -> dict[str, Any]:
@@ -716,14 +753,27 @@ class EvaluationState:
         'Whether the example is evaluated.'
     ] = False
 
+    in_progress: Annotated[
+        bool,
+        (
+            'Whether the example is in progress. '
+        )
+    ] = False
+
     newly_processed: Annotated[
         bool,
-        'Whether the example is newly processed.'
+        (
+            'Whether the example is newly processed. '
+            'Applicable only when evaluated is True.'
+        )
     ] = False
 
     has_error: Annotated[
         bool,
-        'Whether the example has error.'
+        (
+            'Whether the example has error. '
+            'Applicable only when evaluated is True.'
+        )
     ] = False
 
   def __init__(self):
@@ -732,6 +782,7 @@ class EvaluationState:
     self._evaluation_status: dict[
         int, EvaluationState.ExampleStatus
     ] = {}
+    self._in_progress_examples: dict[int, example_lib.Example] = {}
 
   def load(
       self,
@@ -759,6 +810,11 @@ class EvaluationState:
     return self._evaluation_status
 
   @property
+  def in_progress_examples(self) -> dict[int, example_lib.Example]:
+    """Returns the in-progress examples."""
+    return self._in_progress_examples
+
+  @property
   def ckpt_examples(self) -> dict[int, example_lib.Example]:
     """Returns the unevaluated examples from checkpoints."""
     return self._ckpt_examples
@@ -773,17 +829,27 @@ class EvaluationState:
         example_id, EvaluationState.ExampleStatus()
     )
 
-  def update(self, example: example_lib.Example) -> None:
+  def update(self, example: example_lib.Example, in_progress: bool) -> None:
     """Updates the state with the given example."""
-    self._update_status(example)
-    # Processed examples will be removed once it's done.
-    self._ckpt_examples.pop(example.id, None)
+    self._update_status(example, in_progress)
 
-  def _update_status(self, example: example_lib.Example) -> None:
+    if in_progress:
+      self._in_progress_examples[example.id] = example
+    else:
+      self._in_progress_examples.pop(example.id, None)
+      # Processed examples will be removed once it's done.
+      self._ckpt_examples.pop(example.id, None)
+
+  def _update_status(
+      self,
+      example: example_lib.Example,
+      in_progress: bool
+  ) -> None:
     """Updates the evaluation status of the example."""
     self._evaluation_status[example.id] = (
         EvaluationState.ExampleStatus(
             evaluated=example.output != pg.MISSING_VALUE,
+            in_progress=in_progress,
             newly_processed=example.newly_processed,
             has_error=example.has_error,
         )
