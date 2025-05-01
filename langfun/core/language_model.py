@@ -707,8 +707,8 @@ class LanguageModel(component.Component):
   ] = None
 
   timeout: Annotated[
-      float | None, 'Timeout in seconds. If None, there is no timeout.'
-  ] = 120.0
+      int | None, 'Timeout in seconds. If None, there is no timeout.'
+  ] = 120
 
   max_attempts: Annotated[
       int,
