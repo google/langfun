@@ -98,7 +98,7 @@ class ExecutionTraceTest(unittest.TestCase):
     self.assertEqual(action_invocation.execution.id, '/a1')
 
     root.execution.reset()
-    self.assertEqual(len(root.execution), 0)
+    self.assertFalse(root.execution)
 
 
 class SessionTest(unittest.TestCase):
@@ -112,12 +112,18 @@ class SessionTest(unittest.TestCase):
 
     session = action_lib.Session(id='agent@1')
     self.assertEqual(session.id, 'agent@1')
+    self.assertFalse(session.has_started)
+    self.assertFalse(session.has_stopped)
 
     # Render HTML view to trigger dynamic update during execution.
     _ = session.to_html()
 
-    self.assertEqual(foo(session, lm=lm, verbose=True), 3)
+    with session:
+      result = foo(session, lm=lm, verbose=True)
 
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertEqual(result, 3)
     self.assertIsNone(foo.session)
     self.assertEqual(foo.result, 3)
     self.assertEqual(
@@ -135,8 +141,8 @@ class SessionTest(unittest.TestCase):
     self.assertIsNone(root.parent_action)
     self.assertEqual(root.id, 'agent@1:')
     self.assertEqual(root.execution.id, 'agent@1:')
-    self.assertEqual(len(root.execution.items), 1)
-    self.assertIs(root.execution.items[0].action, foo)
+    self.assertEqual(len(root.execution), 1)
+    self.assertIs(root.execution[0].action, foo)
 
     self.assertTrue(root.execution.has_started)
     self.assertTrue(root.execution.has_stopped)
@@ -160,14 +166,14 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(root.usage_summary.total.num_requests, 6)
 
     # Inspecting the top-level action (Foo)
-    foo_invocation = root.execution.items[0]
+    foo_invocation = root.execution[0]
     self.assertIs(foo_invocation.parent_action, root)
     self.assertEqual(foo_invocation.id, 'agent@1:/a1')
     self.assertEqual(foo_invocation.execution.id, 'agent@1:/a1')
     self.assertEqual(len(foo_invocation.execution.items), 4)
 
     # Prepare phase.
-    prepare_phase = foo_invocation.execution.items[0]
+    prepare_phase = foo_invocation.execution[0]
     self.assertIsInstance(prepare_phase, action_lib.ExecutionTrace)
     self.assertEqual(prepare_phase.id, 'agent@1:/a1/prepare')
     self.assertEqual(len(prepare_phase.items), 2)
@@ -179,7 +185,7 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(prepare_phase.items[1].id, 'agent@1:/a1/prepare/q1')
 
     # Tracked queries.
-    query_invocation = foo_invocation.execution.items[1]
+    query_invocation = foo_invocation.execution[1]
     self.assertIsInstance(query_invocation, lf_structured.QueryInvocation)
     self.assertEqual(query_invocation.id, 'agent@1:/a1/q2')
     self.assertIs(query_invocation.lm, lm)
@@ -197,7 +203,7 @@ class SessionTest(unittest.TestCase):
     )
 
     # Tracked parallel executions.
-    parallel_executions = foo_invocation.execution.items[2]
+    parallel_executions = foo_invocation.execution[2]
     self.assertEqual(parallel_executions.id, 'agent@1:/a1/p1')
     self.assertIsInstance(parallel_executions, action_lib.ParallelExecutions)
     self.assertEqual(len(parallel_executions), 3)
@@ -209,7 +215,7 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(len(parallel_executions[2].queries), 1)
 
     # Invocation to Bar.
-    bar_invocation = foo_invocation.execution.items[3]
+    bar_invocation = foo_invocation.execution[3]
     self.assertIs(bar_invocation.parent_action, foo_invocation)
     self.assertEqual(bar_invocation.id, 'agent@1:/a1/a1')
     self.assertIsInstance(bar_invocation, action_lib.ActionInvocation)
@@ -240,10 +246,10 @@ class SessionTest(unittest.TestCase):
     root = session.root
     self.assertRegex(root.id, 'agent@.*:')
     self.assertTrue(root.has_error)
-    foo_invocation = root.execution.items[0]
+    foo_invocation = root.execution[0]
     self.assertIsInstance(foo_invocation, action_lib.ActionInvocation)
     self.assertTrue(foo_invocation.has_error)
-    bar_invocation = foo_invocation.execution.items[3]
+    bar_invocation = foo_invocation.execution[3]
     self.assertIsInstance(bar_invocation, action_lib.ActionInvocation)
     self.assertTrue(bar_invocation.has_error)
 
@@ -265,10 +271,145 @@ class SessionTest(unittest.TestCase):
     root = session.root
     self.assertRegex(root.id, 'agent@.*:')
     self.assertTrue(root.has_error)
-    foo_invocation = root.execution.items[0]
+    foo_invocation = root.execution[0]
     self.assertIsInstance(foo_invocation, action_lib.ActionInvocation)
     self.assertTrue(foo_invocation.has_error)
     self.assertEqual(len(foo_invocation.execution.items), 2)
+
+  def test_succeeded_with_implicit_session(self):
+    lm = fake.StaticResponse('lm response')
+    foo = Foo(1)
+    foo(lm=lm, verbose=True)
+    session = foo.session
+    self.assertIsNotNone(session)
+    self.assertIsInstance(session.root.action, action_lib.RootAction)
+    self.assertIs(session.current_action, session.root)
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertEqual(session.final_result, 3)
+    self.assertFalse(session.root.has_error)
+    self.assertEqual(session.root.metadata, {})
+
+  def test_failed_with_implicit_session(self):
+    lm = fake.StaticResponse('lm response')
+    foo = Foo(1, simulate_action_error=True)
+    with self.assertRaisesRegex(ValueError, 'Bar error'):
+      foo(lm=lm)
+    session = foo.session
+    self.assertIsNotNone(session)
+    self.assertIsInstance(session.root.action, action_lib.RootAction)
+    self.assertIs(session.current_action, session.root)
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertTrue(session.has_error)
+    self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
+    self.assertIn('Bar error', str(session.root.error))
+
+  def test_succeeded_with_explicit_session(self):
+    lm = fake.StaticResponse('lm response')
+    foo = Foo(1)
+    self.assertIsNone(foo.session)
+    self.assertIsNone(foo.result)
+    self.assertIsNone(foo.metadata)
+
+    session = action_lib.Session(id='agent@1')
+    self.assertEqual(session.id, 'agent@1')
+    self.assertFalse(session.has_started)
+    self.assertFalse(session.has_stopped)
+
+    with session:
+      result = foo(session, lm=lm, verbose=True)
+
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertEqual(result, 3)
+    self.assertIsNone(foo.session)
+    self.assertEqual(foo.result, 3)
+    self.assertEqual(
+        foo.metadata, dict(note='foo', subtask_0=0, subtask_1=1, subtask_2=2)
+    )
+    self.assertIs(session.final_result, foo.result)
+    self.assertFalse(session.has_error)
+
+  def test_succeeded_with_explicit_session_start_end(self):
+    lm = fake.StaticResponse('lm response')
+    foo = Foo(1)
+    self.assertIsNone(foo.session)
+    self.assertIsNone(foo.result)
+    self.assertIsNone(foo.metadata)
+
+    session = action_lib.Session(id='agent@1')
+    self.assertEqual(session.id, 'agent@1')
+    self.assertFalse(session.has_started)
+    self.assertFalse(session.has_stopped)
+
+    session.start()
+    result = foo(session, lm=lm, verbose=True)
+    session.end(result)
+
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertEqual(result, 3)
+    self.assertIsNone(foo.session)
+    self.assertEqual(foo.result, 3)
+    self.assertEqual(
+        foo.metadata, dict(note='foo', subtask_0=0, subtask_1=1, subtask_2=2)
+    )
+    self.assertIs(session.final_result, foo.result)
+    self.assertFalse(session.has_error)
+
+  def test_failed_with_explicit_session(self):
+    lm = fake.StaticResponse('lm response')
+    foo = Foo(1, simulate_action_error=True)
+    session = action_lib.Session(id='agent@1')
+    with self.assertRaisesRegex(ValueError, 'Bar error'):
+      with session:
+        foo(session, lm=lm, verbose=True)
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertTrue(session.has_error)
+    self.assertIsNone(session.final_result)
+    self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
+    self.assertIn('Bar error', str(session.root.error))
+
+  def test_failed_with_explicit_session_without_start(self):
+    lm = fake.StaticResponse('lm response')
+    foo = Foo(1, simulate_action_error=True)
+    session = action_lib.Session(id='agent@1')
+    with self.assertRaisesRegex(ValueError, 'Please call `Session.start'):
+      foo(session, lm=lm, verbose=True)
+
+  def test_succeed_with_multiple_actions(self):
+    lm = fake.StaticResponse('lm response')
+    with action_lib.Session() as session:
+      x = Bar()(session, lm=lm)
+      y = Bar()(session, lm=lm)
+      self.assertTrue(session.has_started)
+      self.assertFalse(session.has_stopped)
+      session.add_metadata(note='root metadata')
+      session.end(x + y)
+
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertEqual(session.final_result, 2 + 2)
+    self.assertEqual(len(session.root.execution), 2)
+    self.assertEqual(session.root.metadata, dict(note='root metadata'))
+
+  def test_failed_with_multiple_actions(self):
+    lm = fake.StaticResponse('lm response')
+    with self.assertRaisesRegex(ValueError, 'Bar error'):
+      with action_lib.Session() as session:
+        x = Bar()(session, lm=lm)
+        y = Bar(simulate_action_error=True)(session, lm=lm)
+        session.end(x + y)
+
+    self.assertTrue(session.has_started)
+    self.assertTrue(session.has_stopped)
+    self.assertTrue(session.has_error)
+    self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
+    self.assertEqual(len(session.root.execution), 2)
+    self.assertFalse(session.root.execution[0].has_error)
+    self.assertTrue(session.root.execution[1].has_error)
 
   def test_log(self):
     session = action_lib.Session()

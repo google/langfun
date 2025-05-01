@@ -68,7 +68,6 @@ class ActionEvalV1Test(unittest.TestCase):
 
     s = FooEval()
     result = s.run(summary=False)
-    pg.print(result)
     self.assertEqual(
         result,
         dict(
