@@ -458,7 +458,9 @@ def query(
   if protocol is None:
     protocol = lf.context_value('__query_protocol__', 'python')
 
-  invocation_id = invocation_id or f'query@{uuid.uuid4().hex[-7:]}'
+  def _invocation_id():
+    return invocation_id or f'query@{uuid.uuid4().hex[-7:]}'
+
   # Multiple quries will be issued when `lm` is a list or `num_samples` is
   # greater than 1.
   if isinstance(lm, list) or num_samples != 1:
@@ -482,7 +484,7 @@ def query(
           protocol=protocol,
           returns_message=returns_message,
           skip_lm=skip_lm,
-          invocation_id=f'{invocation_id}:{i}',
+          invocation_id=f'{_invocation_id()}:{i}',
           **kwargs,
       )
     lm_list = lm if isinstance(lm, list) else [lm]
@@ -595,7 +597,7 @@ def query(
       metadata.pop('usage', None)
 
       invocation = QueryInvocation(
-          id=invocation_id,
+          id=_invocation_id(),
           input=pg.Ref(query_input),
           schema=(
               schema_lib.Schema.from_value(schema)
