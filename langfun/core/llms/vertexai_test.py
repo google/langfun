@@ -19,6 +19,7 @@ from unittest import mock
 
 from google.auth import exceptions
 import langfun.core as lf
+from langfun.core.llms import rest
 from langfun.core.llms import vertexai
 import pyglove as pg
 
@@ -50,6 +51,22 @@ class VertexAITest(unittest.TestCase):
     self.assertIsNotNone(model.session())
     del os.environ['VERTEXAI_PROJECT']
     del os.environ['VERTEXAI_LOCATION']
+
+  def test_auth_refresh_error(self):
+    def _auth_refresh_error(*args, **kwargs):
+      del args, kwargs
+      raise exceptions.RefreshError('Cannot refresh token')
+
+    with self.assertRaisesRegex(
+        lf.concurrent.RetryError,
+        'Failed to refresh Google authentication credentials'
+    ):
+      with mock.patch.object(rest.REST, '_sample_single') as mock_sample_single:
+        mock_sample_single.side_effect = _auth_refresh_error
+        model = vertexai.VertexAIGemini15Pro(
+            project='abc', location='us-central1', max_attempts=1
+        )
+        model('hi')
 
 
 class VertexAIAnthropicTest(unittest.TestCase):

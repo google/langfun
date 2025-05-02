@@ -28,6 +28,7 @@ import pyglove as pg
 try:
   # pylint: disable=g-import-not-at-top
   from google import auth as google_auth
+  from google.auth import exceptions as auth_exceptions
   from google.auth import credentials as credentials_lib
   from google.auth.transport import requests as auth_requests
   # pylint: enable=g-import-not-at-top
@@ -35,6 +36,7 @@ try:
   Credentials = credentials_lib.Credentials
 except ImportError:
   google_auth = None
+  auth_exceptions = None
   credentials_lib = None
   auth_requests = None
   Credentials = Any
@@ -134,6 +136,16 @@ class VertexAI(rest.REST):
     assert auth_requests is not None
     return auth_requests.AuthorizedSession(self._credentials)
 
+  def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
+    assert auth_exceptions is not None
+    try:
+      return super()._sample_single(prompt)
+    except (
+        auth_exceptions.RefreshError,
+    ) as e:
+      raise lf.TemporaryLMError(
+          f'Failed to refresh Google authentication credentials: {e}'
+      ) from e
 
 #
 # Gemini models served by Vertex AI.
