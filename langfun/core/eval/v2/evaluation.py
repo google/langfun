@@ -167,7 +167,6 @@ class Evaluation(experiment_lib.Experiment):
       example.input = self.example_input_by_id(example.id)
 
     checkpointed = self._state.ckpt_example(example.id)
-    self._state.update(example, in_progress=True)
 
     with pg.timeit('evaluate') as timeit, lf.track_usages() as usage_summary:
       if checkpointed is None or checkpointed.has_error:
@@ -182,6 +181,7 @@ class Evaluation(experiment_lib.Experiment):
               f'contains error: {checkpointed.error}'
           )
         example.start_time = time.time()
+        self._state.update(example, in_progress=True)
         self._process(example, raise_if_has_error=raise_if_has_error)
       else:
         self.info(
@@ -189,6 +189,7 @@ class Evaluation(experiment_lib.Experiment):
             'is available and error free.'
         )
         example.start_time = checkpointed.start_time
+        self._state.update(example, in_progress=True)
 
         # Use the output and metadata obtained from the previous processing.
         example.output = checkpointed.output
