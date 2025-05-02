@@ -38,14 +38,21 @@ example_image = (
 def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
   del url, kwargs
   c = pg.Dict(json['generationConfig'])
-  content = '\n'.join(c['parts'][0]['text'] for c in json['contents'])
+  parts = []
+  if system_instruction := json.get('systemInstruction'):
+    parts.extend([p['text'] for p in system_instruction.get('parts', [])])
+
+  # Add text from the main contents.
+  for c_item in json.get('contents', []):
+    for p in c_item.get('parts', []):
+      parts.append(p['text'])
+  content = '\n'.join(parts)
   response = requests.Response()
   response.status_code = 200
   response._content = pg.to_json_str({
       'candidates': [
           {
               'content': {
-                  'role': 'model',
                   'parts': [
                       {
                           'text': (
@@ -146,6 +153,30 @@ class GeminiTest(unittest.TestCase):
             }
         ),
     )
+
+    # Add test for thinkingConfig.
+    actual = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(
+            max_thinking_tokens=100,
+        ),
+    )
+    self.assertEqual(
+        actual,
+        dict(
+            candidateCount=1,
+            temperature=None,
+            topP=None,
+            topK=40,
+            maxOutputTokens=None,
+            stopSequences=None,
+            responseLogprobs=False,
+            logprobs=None,
+            seed=None,
+            thinkingConfig={'thinkingBudget': 100},
+        ),
+    )
+
     with self.assertRaisesRegex(
         ValueError, '`json_schema` must be a dict, got'
     ):

@@ -605,13 +605,13 @@ class Gemini(rest.REST):
           raise lf.ModalityError(f'Unsupported modality: {chunk!r}') from e
       return chunk
 
-    contents = []
     if system_message := prompt.get('system_message'):
       assert isinstance(system_message, lf.SystemMessage), type(system_message)
-      contents.append(
-          system_message.as_format(
-              'gemini', chunk_preprocessor=modality_conversion)
+      request['systemInstruction'] = system_message.as_format(
+          'gemini', chunk_preprocessor=modality_conversion
       )
+
+    contents = []
     contents.append(
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
@@ -647,6 +647,11 @@ class Gemini(rest.REST):
           + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
           + pg.to_json_str(json_schema, json_indent=2)
       )
+    if options.max_thinking_tokens is not None:
+      config['thinkingConfig'] = {
+          'thinkingBudget': options.max_thinking_tokens
+      }
+
     return config
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
@@ -659,18 +664,25 @@ class Gemini(rest.REST):
     # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.
     # Therefore, we use 0 as the default value.
     output_tokens = usage.get('candidatesTokenCount', 0)
+    thinking_tokens = usage.get('thoughtsTokenCount', 0)
+    total_tokens = usage.get('totalTokenCount', 0)
 
     return lf.LMSamplingResult(
         [lf.LMSample(message) for message in messages],
         usage=lf.LMSamplingUsage(
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
+            total_tokens=total_tokens,
+            completion_tokens_details={
+                'thinking_tokens': thinking_tokens,
+            },
         ),
     )
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
-    if (status_code == 400
-        and b'exceeds the maximum number of tokens' in content):
+    if (
+        status_code == 400
+        and b'exceeds the maximum number of tokens' in content
+    ):
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
