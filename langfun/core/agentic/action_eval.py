@@ -34,17 +34,20 @@ class ActionEval(lf.eval.v2.Evaluation):
   def process(self, example: lf.eval.v2.Example) -> tuple[str, dict[str, Any]]:
     example_input = example.input
     action = example_input.action
-    session = action_lib.Session(id=f'{self.id}#example-{example.id}')
 
-    # NOTE(daiyip): Setting session as metadata before action execution, so we
-    # could use `Evaluation.state.in_progress_examples` to access the session
-    # for status reporting from other threads.
-    example.metadata['session'] = session
+    # We explicitly create a session here to use a custom session ID.
+    with action_lib.Session(id=f'{self.id}#example-{example.id}') as session:
 
-    with lf.logging.use_log_level('fatal'):
-      kwargs = self.action_args.copy()
-      kwargs.update(verbose=True)
-      action(session=session, **kwargs)
+      # NOTE(daiyip): Setting session as metadata before action execution, so we
+      # could use `Evaluation.state.in_progress_examples` to access the session
+      # for status reporting from other threads.
+      example.metadata['session'] = session
+
+      with lf.logging.use_log_level('fatal'):
+        kwargs = self.action_args.copy()
+        kwargs.update(verbose=True)
+        action(session=session, **kwargs)
+
     return session.final_result, dict(session=session)
 
 #
@@ -76,8 +79,9 @@ class ActionEvalV1(lf_eval.Matching):
 
   def process(self, example: pg.Dict, **kwargs):
     action = example.action
-    session = action_lib.Session(id=str(getattr(example, 'id', '<empty>')))
-    action(session=session, lm=self.lm, **kwargs)
+    with action_lib.Session(
+        id=str(getattr(example, 'id', '<empty>'))) as session:
+      action(session=session, lm=self.lm, **kwargs)
     return session.as_message()
 
   def answer(self, output: Any, example: pg.Dict) -> Any:

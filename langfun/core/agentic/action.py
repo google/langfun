@@ -27,7 +27,152 @@ import pyglove as pg
 
 
 class Action(pg.Object):
-  """Base class for agent actions."""
+  """Base class for Langfun's agentic actions.
+
+  # Developing Actions
+
+  In Langfun, an `Action` is a class representing a task an agent can execute.
+  To define custom actions, subclass `lf.agentic.Action` and implement the
+  `call` method, which contains the logic for the action's execution.
+
+  ```python
+  class Calculate(lf.agentic.Action):
+    expression: str
+
+    def call(self, session: Session, *, lm: lf.LanguageModel, **kwargs):
+      return session.query(expression, float, lm=lm)
+  ```
+
+  Key aspects of the `call` method:
+
+  - `session` (First Argument): An `lf.Session` object required to make queries,
+    perform logging, and add metadata to the action. It also tracks the
+    execution of the action and its sub-actions.
+
+    - Use `session.query(...)` to make calls to a Language Model.
+    - Use `session.debug(...)`, `session.info(...)`, `session.warning(...)`,
+      and `session.error(...)` for adding logs associated with the
+      current action.
+    - Use `session.add_metadata(...)` to associate custom metadata with
+      the current action.
+
+  - Keyword Arguments (e.g., lm): Arguments required for the action's execution
+    (like a language model) should be defined as keyword arguments.
+
+  - **kwargs: Include **kwargs to allow:
+
+    - Users to pass additional arguments to child actions.
+    - The action to gracefully handle extra arguments passed by parent actions.
+
+  # Using Actions
+
+  ## Creating Action objects
+  Action objects can be instantiated in two primary ways:
+
+  - Direct instantiation by Users:
+
+    ```
+    calculate_action = Calculate(expression='1 + 1')
+    ```
+
+  - Generation by Language Models (LLMs): LLMs can generate Action objects when
+    provided with an "action space" (a schema defining possible actions). The
+    LLM populates the action's attributes. User code can then invoke the
+    generated action.
+
+  ```python
+  import pyglove as pg
+  import langfun as lf
+
+  # Define possible actions for the LLM
+  class Search(lf.agentic.Action):
+    query: str
+    def call(self, session: lf.Session, *, lm: lf.LanguageModel, **kwargs):
+      # Placeholder for actual search logic
+      return f"Results for: {self.query}"
+
+  class DirectAnswer(lf.agentic.Action):
+    answer: str
+    def call(self, session: lf.Session, *, lm: lf.LanguageModel, **kwargs):
+      return self.answer
+
+  # Define the schema for the LLM's output
+  class NextStep(pg.Object):
+    step_by_step_thoughts: list[str]
+    next_action: Calculate | Search | DirectAnswer
+
+  # Query the LLM to determine the next step
+  next_step = lf.query(
+      'What is the next step for {{question}}?',
+      NextStep,
+      question='why is the sky blue?'
+  )
+  # Execute the action chosen by the LLM
+  result = next_step.next_action()
+  print(result)
+  ```
+
+  ## Invoking Actions and Managing Sessions:
+
+  When an action is called, the session argument (the first argument to call)
+  is handled as follows:
+
+  - Implicit Session Management: If no session is explicitly provided when
+    calling an action, Langfun automatically creates and passes one.
+
+    ```python
+    calc = Calculate(expression='1 + 1')
+
+    # A session is implicitly created and passed here.
+    result = calc()
+    print(result)
+
+    # Access the implicitly created session.
+    # print(calc.session)
+    ```
+
+  - Explicit Session Management: You can create and manage `lf.Session` objects
+    explicitly. This is useful for customizing session identifiers or managing
+    a shared context for multiple actions.
+
+  ```python
+  calc = Calculate(expression='1 + 1')
+
+  # Explicitly create and pass a session.
+  with lf.Session(id='my_agent_session') as session:
+    result = calc(session=session) # Pass the session explicitly
+    print(result)
+  ```
+
+  ## Accessing Execution Trajectory:
+
+  After an action is executed, the Session object holds a record of its
+  execution, known as the trajectory. This includes queries made and any
+  sub-actions performed.
+
+  - To access all queries issued directly by the root action:
+
+    ```python
+    print(session.root.execution.queries)
+    ```
+  - To access all actions issued by the root action and any of its
+    sub-actions (recursively):
+
+    ```python
+    print(session.root.execution.all_queries)
+    ```
+  - To access all child actions issued by the root action:
+
+    ```python
+    print(session.root.execution.actions)
+    ```
+
+  - To access all the actions in the sub-tree issued by the root action:
+
+    ```python
+    print(session.root.execution.all_actions)
+    ```
+  """
 
   def _on_bound(self):
     super()._on_bound()
@@ -60,6 +205,8 @@ class Action(pg.Object):
     """Executes the action."""
     if session is None:
       session = Session()
+      session.start()
+
       if show_progress:
         lf.console.display(pg.view(session, name='agent_session'))
 
@@ -107,8 +254,14 @@ class Action(pg.Object):
               action=self,
               error=error
           )
+        if self._session is not None:
+          self._session.end(result=None, error=error)
         raise
-      return result
+
+    if self._session is not None:
+      # Session is created by current action. Stop the session.
+      self._session.end(result)
+    return result
 
   @abc.abstractmethod
   def call(self, session: 'Session', **kwargs) -> Any:
@@ -229,9 +382,6 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           remove_class=['running'],
       )
 
-  def __len__(self) -> int:
-    return len(self.items)
-
   @property
   def has_started(self) -> bool:
     return self.start_time is not None
@@ -305,6 +455,22 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
         for branch in item.branches:
           for x in branch._iter_subtree(item_cls):  # pylint: disable=protected-access
             yield x
+
+  #
+  # Shortcut methods to operate on the execution trace.
+  #
+
+  def __len__(self) -> int:
+    return len(self.items)
+
+  def __iter__(self) -> Iterator[TracedItem]:
+    return iter(self.items)
+
+  def __bool__(self) -> bool:
+    return bool(self.items)
+
+  def __getitem__(self, index: int) -> TracedItem:
+    return self.items[index]
 
   def append(self, item: TracedItem) -> None:
     """Appends an item to the sequence."""
@@ -935,6 +1101,44 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           skip_notification=True
       )
 
+  def start(self) -> None:
+    """Starts the session."""
+    self.root.execution.start()
+
+  def end(
+      self,
+      result: Any,
+      error: pg.utils.ErrorInfo | None = None,
+      metadata: dict[str, Any] | None = None,
+  ) -> None:
+    """Ends the session."""
+    self.root.end(result, error, metadata)
+
+  def __enter__(self):
+    """Enters the session."""
+    self.start()
+    return self
+
+  def __exit__(self, exc_type, exc_val, exc_tb):
+    """Exits the session."""
+    # We allow users to explicitly end the session with specified result
+    # and metadata.
+    if self.root.execution.has_stopped:
+      return
+
+    if exc_val is not None:
+      result, metadata = None, None
+      error = pg.utils.ErrorInfo.from_exception(exc_val)
+    else:
+      actions = self.root.actions
+      if actions:
+        result = actions[-1].result
+        error = actions[-1].error
+        metadata = actions[-1].metadata
+      else:
+        result, error, metadata = None, None, None
+    self.end(result, error, metadata)
+
   #
   # Context-manager for information tracking.
   #
@@ -942,8 +1146,12 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   @contextlib.contextmanager
   def track_action(self, action: Action) -> Iterator[ActionInvocation]:
     """Track the execution of an action."""
-    if not self._current_execution.has_started:
-      self._current_execution.start()
+    if not self.root.execution.has_started:
+      raise ValueError(
+          'Please call `Session.start() / Session.end()` explicitly, '
+          'or use `with Session(...) as session: ...` context manager to '
+          'signal the start and end of the session.'
+      )
 
     invocation = ActionInvocation(pg.maybe_ref(action))
     action._invocation = invocation  # pylint: disable=protected-access
@@ -960,12 +1168,6 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     finally:
       self._current_execution = parent_execution
       self._current_action = parent_action
-      if parent_action is self.root:
-        parent_action.end(
-            result=invocation.result,
-            metadata=invocation.metadata,
-            error=invocation.error
-        )
 
   @contextlib.contextmanager
   def track_phase(self, name: str | None) -> Iterator[ExecutionTrace]:
@@ -1254,6 +1456,21 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def final_result(self) -> Any:
     """Returns the final result of the session."""
     return self.root.result
+
+  @property
+  def has_started(self) -> bool:
+    """Returns whether the session has started."""
+    return self.root.execution.has_started
+
+  @property
+  def has_stopped(self) -> bool:
+    """Returns whether the session has stopped."""
+    return self.root.execution.has_stopped
+
+  @property
+  def has_error(self) -> bool:
+    """Returns whether the session has an error."""
+    return self.root.has_error
 
   @property
   def current_action(self) -> ActionInvocation:
