@@ -213,7 +213,8 @@ class ModelInfo(pg.Object):
         return None
       return (
           self.cost_per_1m_input_tokens * usage.prompt_tokens
-          + self.cost_per_1m_output_tokens * usage.completion_tokens
+          + self.cost_per_1m_output_tokens
+          * (usage.total_tokens - usage.prompt_tokens)
       ) / 1000_000
 
   pricing: Annotated[

@@ -133,7 +133,7 @@ class GeminiModelInfo(lf.ModelInfo):
           self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
           * usage.prompt_tokens
           + self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
-          * usage.completion_tokens
+          * (usage.total_tokens - usage.prompt_tokens)
       ) / 1000_000
 
   experimental: Annotated[
