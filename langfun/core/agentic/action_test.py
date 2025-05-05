@@ -107,6 +107,7 @@ class SessionTest(unittest.TestCase):
     lm = fake.StaticResponse('lm response')
     foo = Foo(1)
     self.assertIsNone(foo.session)
+    self.assertIsNone(foo.invocation)
     self.assertIsNone(foo.result)
     self.assertIsNone(foo.metadata)
 
@@ -167,6 +168,7 @@ class SessionTest(unittest.TestCase):
 
     # Inspecting the top-level action (Foo)
     foo_invocation = root.execution[0]
+    self.assertIs(foo.invocation, foo_invocation)
     self.assertIs(foo_invocation.parent_action, root)
     self.assertEqual(foo_invocation.id, 'agent@1:/a1')
     self.assertEqual(foo_invocation.execution.id, 'agent@1:/a1')
@@ -414,8 +416,8 @@ class SessionTest(unittest.TestCase):
   def test_log(self):
     session = action_lib.Session()
     session.debug('hi', x=1, y=2)
-    session.info('hi', x=1, y=2)
-    session.warning('hi', x=1, y=2)
+    session.info('hi', x=1, y=2, for_action=session.root)
+    session.warning('hi', x=1, y=2, for_action=session.root.action)
     session.error('hi', x=1, y=2)
     session.fatal('hi', x=1, y=2)
 

@@ -194,6 +194,11 @@ class Action(pg.Object):
     """Returns the metadata associated with the result from previous call."""
     return self._invocation.metadata if self._invocation else None
 
+  @property
+  def invocation(self) -> Optional['ActionInvocation']:
+    """Returns last invocation. None if the action is not executed."""
+    return self._invocation
+
   def __call__(
       self,
       session: Optional['Session'] = None,
@@ -825,6 +830,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def _on_bound(self):
     super()._on_bound()
     self._tab_control = None
+    self.action._invocation = self    # pylint: disable=protected-access
 
   def _on_parent_change(self, *args, **kwargs):
     super()._on_parent_change(*args, **kwargs)
@@ -1154,7 +1160,6 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
 
     invocation = ActionInvocation(pg.maybe_ref(action))
-    action._invocation = invocation  # pylint: disable=protected-access
     parent_action = self._current_action
     parent_execution = self._current_execution
     parent_execution.append(invocation)
@@ -1412,38 +1417,103 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       level: lf.logging.LogLevel,
       message: str,
       keep: bool,
+      *,
+      for_action: Action | ActionInvocation | None = None,
       **kwargs
   ) -> None:
-    """Logs a message to the session."""
-    action_name = self._current_action.action.__class__.__name__
+    """Logs a message to the session.
+
+    Args:
+      level: The logging level.
+      message: The message to log.
+      keep: Whether to keep the log entry in the execution trace.
+      for_action: The action to log the message for. If not provided, the
+        current action will be used.
+      **kwargs: Additional keyword arguments to pass to `lf.logging.log` as
+        metadata to show.
+    """
     execution = self._current_execution
+    if for_action is None:
+      for_action = self._current_action
+    elif isinstance(for_action, Action):
+      for_action = for_action.invocation
+      assert for_action is not None
+
     log_entry = lf.logging.log(
         level,
-        f'[{execution.id} ({action_name})]: {message}',
+        (
+            f'[{for_action.id} ({for_action.action.__class__.__name__})]: '
+            f'{message}'
+        ),
         **kwargs
     )
     if keep:
       execution.append(log_entry)
 
-  def debug(self, message: str, keep: bool = True, **kwargs):
+  def debug(
+      self,
+      message: str,
+      keep: bool = True,
+      *,
+      for_action: Action | ActionInvocation | None = None,
+      **kwargs
+  ) -> None:
     """Logs a debug message to the session."""
-    self._log('debug', message, keep=keep, **kwargs)
+    self._log(
+        'debug', message, keep=keep, for_action=for_action, **kwargs
+    )
 
-  def info(self, message: str, keep: bool = True, **kwargs):
+  def info(
+      self,
+      message: str,
+      keep: bool = True,
+      *,
+      for_action: Action | ActionInvocation | None = None,
+      **kwargs
+  ) -> None:
     """Logs an info message to the session."""
-    self._log('info', message, keep=keep, **kwargs)
+    self._log(
+        'info', message, keep=keep, for_action=for_action, **kwargs
+    )
 
-  def warning(self, message: str, keep: bool = True, **kwargs):
+  def warning(
+      self,
+      message: str,
+      keep: bool = True,
+      *,
+      for_action: Action | ActionInvocation | None = None,
+      **kwargs
+  ) -> None:
     """Logs a warning message to the session."""
-    self._log('warning', message, keep=keep, **kwargs)
+    self._log(
+        'warning', message, keep=keep, for_action=for_action, **kwargs
+    )
 
-  def error(self, message: str, keep: bool = True, **kwargs):
+  def error(
+      self,
+      message: str,
+      keep: bool = True,
+      *,
+      for_action: Action | ActionInvocation | None = None,
+      **kwargs
+  ):
     """Logs an error message to the session."""
-    self._log('error', message, keep=keep, **kwargs)
+    self._log(
+        'error', message, keep=keep, for_action=for_action, **kwargs
+    )
 
-  def fatal(self, message: str, **kwargs):
+  def fatal(
+      self,
+      message: str,
+      keep: bool = True,
+      *,
+      for_action: Action | ActionInvocation | None = None,
+      **kwargs
+  ):
     """Logs a fatal message to the session."""
-    self._log('fatal', message, keep=True, **kwargs)
+    self._log(
+        'fatal', message, keep=keep, for_action=for_action, **kwargs
+    )
 
   def as_message(self) -> lf.AIMessage:
     """Returns the session as a message."""
