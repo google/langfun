@@ -151,6 +151,29 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
+    # Gemini 2.5 Pro Preview
+    GeminiModelInfo(
+        model_id='gemini-2.5-pro-preview-05-06',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', ' VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 2.5 Pro.',
+        release_date=datetime.datetime(2025, 5, 6),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=10.0,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        )
+    ),
     # Gemini 2.5 Flash Preview
     GeminiModelInfo(
         model_id='gemini-2.5-flash-preview-04-17',
