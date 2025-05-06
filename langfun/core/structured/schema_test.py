@@ -144,6 +144,14 @@ class SchemaTest(unittest.TestCase):
       foo2: Foo | X
 
     schema = schema_lib.Schema([B])
+    v = schema_lib.structure_from_python(
+        """
+        class C(B):
+          pass
+        """,
+        global_vars=dict(B=B)
+    )
+    self.assertEqual(v.__module__, 'builtins')
     self.assertEqual(schema.class_dependencies(), [Foo, A, Bar, X, B])
 
   def test_class_dependencies_non_pyglove(self):
@@ -162,6 +170,14 @@ class SchemaTest(unittest.TestCase):
     class BB(AA):
       foo2: Baz | XX
 
+    v = schema_lib.structure_from_python(
+        """
+        class CC(BB):
+          pass
+        """,
+        global_vars=dict(BB=BB)
+    )
+    self.assertEqual(v.__module__, 'builtins')
     schema = schema_lib.Schema([AA])
     self.assertEqual(schema.class_dependencies(), [Baz, AA, XX, BB])
 

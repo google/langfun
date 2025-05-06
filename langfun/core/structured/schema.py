@@ -185,10 +185,14 @@ class Schema(
   def class_dependencies(
       self,
       include_base_classes: bool = True,
-      include_subclasses: bool = True) -> list[Type[Any]]:
+      include_subclasses: bool = True,
+      include_generated_subclasses: bool = False) -> list[Type[Any]]:
     """Returns a list of class dependencies for current schema."""
     return class_dependencies(
-        self.spec, include_base_classes, include_subclasses
+        self.spec,
+        include_base_classes,
+        include_subclasses,
+        include_generated_subclasses
     )
 
   @classmethod
@@ -247,6 +251,7 @@ def class_dependencies(
     ],
     include_base_classes: bool = True,
     include_subclasses: bool = True,
+    include_generated_subclasses: bool = False,
 ) -> list[Type[Any]]:
   """Returns a list of class dependencies from a value or specs."""
   if isinstance(value_or_spec, Schema):
@@ -301,7 +306,12 @@ def class_dependencies(
       # Check subclasses if available.
       if include_subclasses:
         for cls in vs.cls.__subclasses__():
-          if cls not in dependencies:
+          # NOTE(daiyip): To prevent LLM-generated "hallucinated" classes from
+          # polluting the generation space, classes dynamically created by
+          # 'eval' (which have __module__ == 'builtins') are excluded from
+          # dependencies by default.
+          if ((include_generated_subclasses or cls.__module__ != 'builtins')
+              and cls not in dependencies):
             _fill_dependencies(pg.typing.Object(cls), include_subclasses=True)
 
     if isinstance(vs, pg.typing.List):
