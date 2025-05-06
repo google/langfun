@@ -49,6 +49,30 @@ class OpenAIModelInfo(lf.ModelInfo):
 #
 
 SUPPORTED_MODELS = [
+    # GPT-4.1 models
+    OpenAIModelInfo(
+        model_id='gpt-4.1',
+        alias_for='gpt-4.1-2025-04-14',
+        in_service=True,
+        model_type='instruction-tuned',
+        description='GPT 4.1 model (latest stable).',
+        url='https://platform.openai.com/docs/models/gpt-4.1',
+        input_modalities=OpenAIModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_047_576,
+            max_output_tokens=32_768,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.50,
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=8.0,
+        ),
+        # Tier 5 rate limits.
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=10_000,
+            max_tokens_per_minute=30_000_000,
+        ),
+    ),
     # o3 models.
     OpenAIModelInfo(
         model_id='o3',
@@ -1043,6 +1067,11 @@ class OpenAI(openai_compatible.OpenAICompatible):
     if options.logprobs and self.model.startswith(('o1-', 'o3-')):
       raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
     return super()._request_args(options)
+
+
+class Gpt41(OpenAI):
+  """GPT-4.1."""
+  model = 'gpt-4.1'
 
 
 class GptO4Mini(OpenAI):
