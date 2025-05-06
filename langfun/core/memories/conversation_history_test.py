@@ -13,58 +13,62 @@
 # limitations under the License.
 """Base memory test."""
 
-import inspect
 import unittest
 import langfun.core as lf
 from langfun.core.memories.conversation_history import ConversationHistory
+import pyglove as pg
 
 
 class ConversationHistoryTest(unittest.TestCase):
 
   def test_history_with_no_round_limit(self):
     m = ConversationHistory()
-    m.remember('hi', 'hello')
+    m.remember(('hi', 'hello'))
     m.remember(
-        'how are you',
-        'Fine, thank you. Anything I can help with?',
+        ('how are you', 'Fine, thank you. Anything I can help with?'),
     )
     m.remember(
-        'Not for now, bye.',
-        'Okay, bye!',
+        ('Not for now, bye.', 'Okay, bye!'),
     )
     self.assertEqual(len(m.turns), 3)
     self.assertEqual(len(m.messages), 6)
-    self.assertEqual(
-        m.recollect(),
-        lf.MemoryRecord(inspect.cleandoc("""
-            User: hi
-            AI: hello
-            User: how are you
-            AI: Fine, thank you. Anything I can help with?
-            User: Not for now, bye.
-            AI: Okay, bye!
-            """)),
+    self.assertTrue(
+        pg.eq(
+            m.recollect(),
+            lf.Template(
+                """
+                User: hi
+                AI: hello
+                User: how are you
+                AI: Fine, thank you. Anything I can help with?
+                User: Not for now, bye.
+                AI: Okay, bye!
+                """
+            )
+        )
     )
 
   def test_history_with_round_limit(self):
     m = ConversationHistory(max_turns=1)
-    m.remember('hi', 'hello')
+    m.remember(('hi', 'hello'))
     m.remember(
-        'how are you',
-        'Fine, thank you. Anything I can help with?',
+        ('how are you', 'Fine, thank you. Anything I can help with?'),
     )
     m.remember(
-        'Not for now, bye.',
-        'Okay, bye!',
+        ('Not for now, bye.', 'Okay, bye!'),
     )
     self.assertEqual(len(m.turns), 1)
     self.assertEqual(len(m.messages), 2)
-    self.assertEqual(
-        m.recollect(),
-        lf.MemoryRecord(inspect.cleandoc("""
-            User: Not for now, bye.
-            AI: Okay, bye!
-            """)),
+    self.assertTrue(
+        pg.eq(
+            m.recollect(),
+            lf.Template(
+                """
+                User: Not for now, bye.
+                AI: Okay, bye!
+                """
+            )
+        )
     )
 
 

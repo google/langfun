@@ -90,7 +90,7 @@ class Conversation(Completion):
       self, input_message: lf.Message | str, lm_response: lf.Message | str
   ) -> None:
     """Adds a turn."""
-    self.memory.remember(input_message, lm_response)
+    self.memory.remember((input_message, lm_response))
 
   def reset(self) -> None:
     """Resets current conversation."""

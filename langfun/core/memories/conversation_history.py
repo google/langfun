@@ -43,19 +43,19 @@ class ConversationHistory(lf.Memory):
       messages.append(r[1])
     return messages
 
-  def _recollect(self, **kwargs) -> lf.MemoryRecord:
-    return lf.MemoryRecord(
-        '\n'.join([f'{m.sender}: {m.text}' for m in self.messages]))
+  def _recollect(self, **kwargs) -> str:
+    return '\n'.join([f'{m.sender}: {m.text}' for m in self.messages])
 
   def _remember(
       self,
-      input_message: lf.Message,
-      output_message: lf.Message | None = None,
+      value: tuple[str | lf.Message, str | lf.Message],
       **kwargs
   ) -> None:
     if self.max_turns and self.max_turns == len(self._turns):
       self._turns.pop(0)
-    self._turns.append((input_message, output_message))
+    self._turns.append(
+        (lf.UserMessage.from_value(value[0]), lf.AIMessage.from_value(value[1]))
+    )
 
   def _reset(self, **kwargs) -> None:
     self._turns = []

@@ -14,7 +14,9 @@
 """Interface for memories."""
 
 import abc
-from langfun.core import message as message_lib
+from typing import Any
+
+from langfun.core import template as template_lib
 from langfun.core.component import Component
 from langfun.core.natural_language import NaturalLanguageFormattable
 
@@ -30,40 +32,29 @@ class Memory(NaturalLanguageFormattable, Component):
   """
 
   def natural_language_format(self) -> str:
-    return self.recollect().text
+    return self.recollect().render().text
 
-  def recollect(self, **kwargs) -> message_lib.MemoryRecord:
+  def recollect(self, **kwargs) -> template_lib.Template:
     """Recollects a message from the memory."""
-    return self._recollect(**kwargs)
+    return template_lib.Template.from_value(self._recollect(**kwargs))
 
   def remember(
       self,
-      input_message: str | message_lib.Message,
-      output_message: str | message_lib.Message,
+      value: Any,
       **kwargs
-  ) -> str:
-    if isinstance(input_message, str):
-      input_message = message_lib.UserMessage(input_message)
-    if isinstance(output_message, str):
-      output_message = message_lib.AIMessage(output_message)
-    self._remember(input_message, output_message, **kwargs)
-    return output_message.text
+  ) -> None:
+    self._remember(value, **kwargs)
 
   def reset(self, **kwargs) -> None:
     """Resets the memory."""
-    self._reset()
+    self._reset(**kwargs)
 
   @abc.abstractmethod
-  def _recollect(self, **kwargs) -> message_lib.MemoryRecord:
+  def _recollect(self, **kwargs) -> str | template_lib.Template:
     """Recollects a message from the memory."""
 
   @abc.abstractmethod
-  def _remember(
-      self,
-      input_message: message_lib.Message,
-      output_message: message_lib.Message,
-      **kwargs
-  ) -> None:
+  def _remember(self, value: Any, **kwargs) -> None:
     """Remembers the input message and the output message."""
 
   @abc.abstractmethod
