@@ -657,7 +657,7 @@ class Gemini(rest.REST):
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
     messages = [
         lf.Message.from_value(candidate['content'], format='gemini')
-        for candidate in json['candidates']
+        for candidate in json.get('candidates', [])
     ]
     usage = json['usageMetadata']
     input_tokens = usage['promptTokenCount']
