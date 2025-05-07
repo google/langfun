@@ -356,6 +356,9 @@ class RunnerBase(Runner):
                   input=evaluation.example_input_by_id(example_id)
               ) for example_id in self.current_run.example_ids
           )
+        if self.current_run.shuffle_inputs:
+          items = list(items)
+          random.shuffle(items)
         self._evaluate_items(evaluation, items)
 
       if cache:

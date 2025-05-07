@@ -163,6 +163,15 @@ class RunnerTest(unittest.TestCase):
     self.assertEqual(plugin.started_example_ids, [5, 7, 9] * 6)
     self.assertEqual(plugin.completed_example_ids, [5, 7, 9] * 6)
 
+  def test_shuffle_inputs(self):
+    root_dir = os.path.join(tempfile.gettempdir(), 'test_shuffle_inputs')
+    exp = eval_test_helper.test_experiment()
+    plugin = TestPlugin()
+    run = exp.run(
+        root_dir, runner='sequential', plugins=[plugin], shuffle_inputs=True
+    )
+    self.assertTrue(run.shuffle_inputs)
+
   def test_filter(self):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()

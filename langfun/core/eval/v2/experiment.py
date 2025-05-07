@@ -382,6 +382,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       warm_start_from: str | None = None,
       filter: Callable[['Experiment'], bool] | None = None,   # pylint: disable=redefined-builtin
       example_ids: list[int] | None = None,
+      shuffle_inputs: bool = False,
       raise_if_has_error: bool = False,
       reprocess: bool | list[int] = False,
       generate_example_html: Literal['new', 'all', 'no'] | list[int] = 'new',
@@ -431,6 +432,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       filter: A filter function to decide whether an experiment should be run
         or not.
       example_ids: The example IDs to run. If None, it will run all examples.
+      shuffle_inputs: If True, the order of evaluatin examples will be shuffled.
+        Neverthless, the example ID remains unchanged for each example.
       raise_if_has_error: If True, it will raise an error if any example fails.
         Otherwise, it will continue and report the error in the output.
       reprocess: A boolean or a list of example IDs. If boolean, it indicates
@@ -470,6 +473,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
             warm_start_from=warm_start_from,
             filter=filter,
             example_ids=example_ids,
+            shuffle_inputs=shuffle_inputs,
             raise_if_has_error=raise_if_has_error,
             reprocess=reprocess,
             generate_example_html=generate_example_html,
@@ -815,6 +819,14 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
           'Though '
       )
   ] = None
+
+  shuffle_inputs: Annotated[
+      bool,
+      (
+          'If True, the order of evaluating examples will be shuffled.'
+          'Otherwise an increasing order will be used.'
+      )
+  ] = False
 
   raise_if_has_error: Annotated[
       bool,
