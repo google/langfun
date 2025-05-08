@@ -1321,6 +1321,26 @@ class QueryInvocationTest(unittest.TestCase):
     self.assertTrue(queries[0].has_error)
     self.assertIsInstance(queries[0].output, mapping.MappingError)
 
+  def test_kwargs(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi")',
+    ])
+    with querying.track_queries() as queries:
+      querying.query(
+          'foo {{x}}',
+          Activity,
+          lm=lm,
+          system_message='system message',
+          x=1,
+      )
+    self.assertTrue(queries[0].protocol.startswith('python:'))
+    self.assertEqual(
+        list(queries[0].kwargs.keys()),
+        ['x', 'metadata_system_message']
+    )
+    self.assertIn('foo 1', queries[0].lm_request.text)
+    self.assertEqual(queries[0].lm_request.system_message, 'system message')
+
   def test_to_html(self):
     lm = fake.StaticSequence([
         'Activity(description="hi")',

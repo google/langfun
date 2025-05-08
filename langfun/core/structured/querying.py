@@ -325,7 +325,7 @@ def query(
 
     ```
     lf.query('1 + 1 = ?', int, lm=lf.llms.Gpt4Turbo())
-    
+
     # Output: 2
     ```
 
@@ -349,7 +349,7 @@ def query(
 
     class Dog(Animal):
       pass
-    
+
     class Entity(pg.Object):
       name: str
 
@@ -562,7 +562,10 @@ def query(
           output_message = lf.AIMessage(processed_text, source=output_message)
     else:
       # Query with structured output.
-      output_message = LfQuery.from_protocol(protocol)(
+      query_cls = LfQuery.from_protocol(protocol)
+      if ':' not in protocol:
+        protocol = f'{protocol}:{query_cls.version}'
+      output_message = query_cls(
           input=(
               query_input.render(lm=lm)
               if isinstance(query_input, lf.Template)
@@ -572,7 +575,7 @@ def query(
           default=default,
           examples=examples,
           response_postprocess=response_postprocess,
-          autofix=autofix if protocol == 'python' else 0,
+          autofix=autofix if protocol.startswith('python:') else 0,
           **kwargs,
       )(
           lm=lm,
@@ -605,6 +608,8 @@ def query(
           ),
           lm=pg.Ref(lm),
           examples=pg.Ref(examples) if examples else [],
+          protocol=protocol,
+          kwargs={k: pg.Ref(v) for k, v in kwargs.items()},
           lm_response=lf.AIMessage(output_message.text, metadata=metadata),
           usage_summary=usage_summary,
           start_time=start_time,
@@ -788,6 +793,14 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       list[mapping.MappingExample],
       'Fewshot exemplars for `lf.query`.'
   ]
+  protocol: Annotated[
+      str,
+      'Protocol of `lf.query`.'
+  ] = 'python'
+  kwargs: Annotated[
+      dict[str, Any],
+      'Kwargs of `lf.query`.'
+  ] = {}
   usage_summary: Annotated[
       lf.UsageSummary,
       'Usage summary for `lf.query`.'
@@ -803,13 +816,17 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
 
   @functools.cached_property
   def lm_request(self) -> lf.Message:
-    return query_prompt(self.input, self.schema, examples=self.examples or None)
+    return query_prompt(
+        self.input, self.schema, examples=self.examples or None,
+        protocol=self.protocol,
+        **self.kwargs
+    )
 
   @functools.cached_property
   def output(self) -> Any:
     """The output of `lf.query`. If it failed, returns the `MappingError`."""
     try:
-      return query_output(self.lm_response, self.schema)
+      return query_output(self.lm_response, self.schema, protocol=self.protocol)
     except mapping.MappingError as e:
       return e
 
