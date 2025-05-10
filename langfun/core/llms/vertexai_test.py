@@ -17,6 +17,7 @@ import os
 import unittest
 from unittest import mock
 
+from google import auth
 from google.auth import exceptions
 import langfun.core as lf
 from langfun.core.llms import rest
@@ -61,7 +62,11 @@ class VertexAITest(unittest.TestCase):
         lf.concurrent.RetryError,
         'Failed to refresh Google authentication credentials'
     ):
-      with mock.patch.object(rest.REST, '_sample_single') as mock_sample_single:
+      with (
+          mock.patch.object(auth, 'default') as mock_auth,
+          mock.patch.object(rest.REST, '_sample_single') as mock_sample_single
+      ):
+        mock_auth.return_value = mock.MagicMock(), None
         mock_sample_single.side_effect = _auth_refresh_error
         model = vertexai.VertexAIGemini15Pro(
             project='abc', location='us-central1', max_attempts=1
