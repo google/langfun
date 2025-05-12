@@ -1019,11 +1019,21 @@ class LanguageModel(component.Component):
       ] = RetryableLMError,
   ) -> list[Any]:
     """Helper method for subclasses for implementing _sample."""
+    if self.max_concurrency is None:
+      execute = action
+      executor = None
+      max_workers = len(inputs)
+    else:
+      execute = lambda x: _ConcurrencyControl.get(
+          self.resource_id, self.max_concurrency)(action, x)
+      executor = self.resource_id if len(inputs) > 1 else None
+      max_workers = self.max_concurrency
+
     executed_jobs = concurrent.concurrent_execute(
-        action,
+        execute,
         inputs,
-        executor=self.resource_id if self.max_concurrency else None,
-        max_workers=self.max_concurrency or len(inputs),
+        executor=executor,
+        max_workers=max_workers,
         retry_on_errors=retry_on_errors,
         max_attempts=self.max_attempts,
         retry_interval=self.retry_interval,
@@ -1321,6 +1331,46 @@ class LanguageModel(component.Component):
     elif max_requests_per_minute is not None:
       return max(int(max_requests_per_minute / 60), 1)
     return None
+
+
+class _ConcurrencyControl:
+  """Controls the max concurrent LLM calls for a given model."""
+
+  _MODEL_CONCURRENCY: ClassVar[dict[str, '_ConcurrencyControl']] = {}
+
+  def __init__(self, max_concurrency: int):
+    self.max_concurrency = max_concurrency
+    self._concurrency = 0
+
+  @property
+  def concurrency(self) -> int:
+    """Returns the current concurrency."""
+    return self._concurrency
+
+  def __call__(self, fn: Callable[..., Any], *args, **kwargs):
+    """Calls the function with concurrency control."""
+    while self._concurrency >= self.max_concurrency:
+      time.sleep(0.01)
+
+    try:
+      # Increment/decrement is atomic in Python, so we don't need to protect it
+      # with a lock.
+      self._concurrency += 1
+      return fn(*args, **kwargs)
+    finally:
+      self._concurrency -= 1
+
+  @classmethod
+  def get(
+      cls, model_id: str, max_concurrency: int | None = None
+  ) -> '_ConcurrencyControl':
+    """Returns the concurrency control for the given model ID."""
+    control = cls._MODEL_CONCURRENCY.get(model_id, None)
+    if control is None:
+      assert max_concurrency is not None
+      control = cls(max_concurrency)
+      cls._MODEL_CONCURRENCY[model_id] = control
+    return control
 
 
 class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
