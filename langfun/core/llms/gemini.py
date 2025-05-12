@@ -678,9 +678,15 @@ class Gemini(rest.REST):
     return config
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    candidates = json.get('candidates')
+    if candidates is None:
+      raise lf.TemporaryLMError(
+          'No candidates found in response. This is a Gemini API issue that '
+          'happens occasionally, and retrying should fix it. '
+      )
     messages = [
         lf.Message.from_value(candidate['content'], format='gemini')
-        for candidate in json.get('candidates', [])
+        for candidate in candidates
     ]
     usage = json['usageMetadata']
     input_tokens = usage['promptTokenCount']
