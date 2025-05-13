@@ -14,6 +14,7 @@
 """Query LLM for structured output."""
 
 import contextlib
+import dataclasses
 import functools
 import inspect
 import time
@@ -549,76 +550,120 @@ def query(
   else:
     query_input = schema_lib.mark_missing(prompt)
 
-  with lf.track_usages() as usage_summary:
-    start_time = time.time()
-    if schema in (None, str):
-      # Query with natural language output.
-      output_message = lf.LangFunc.from_value(query_input, **kwargs)(
-          lm=lm, cache_seed=cache_seed, skip_lm=skip_lm
-      )
-      if response_postprocess:
-        processed_text = response_postprocess(output_message.text)
-        if processed_text != output_message.text:
-          output_message = lf.AIMessage(processed_text, source=output_message)
-    else:
-      # Query with structured output.
-      query_cls = LfQuery.from_protocol(protocol)
-      if ':' not in protocol:
-        protocol = f'{protocol}:{query_cls.version}'
-      output_message = query_cls(
-          input=(
-              query_input.render(lm=lm)
-              if isinstance(query_input, lf.Template)
-              else query_input
-          ),
-          schema=schema,
-          default=default,
-          examples=examples,
-          response_postprocess=response_postprocess,
-          autofix=autofix if protocol.startswith('python:') else 0,
-          **kwargs,
-      )(
-          lm=lm,
-          autofix_lm=autofix_lm or lm,
-          cache_seed=cache_seed,
-          skip_lm=skip_lm,
-      )
-    end_time = time.time()
+  # Determine query class.
+  if schema in (None, str):
+    # Non-structured query.
+    query_cls = None
+  else:
+    # Query with structured output.
+    query_cls = LfQuery.from_protocol(protocol)
+    if ':' not in protocol:
+      protocol = f'{protocol}:{query_cls.version}'
 
-  def _result(message: lf.Message):
-    return message.text if schema in (None, str) else message.result
-
-  # Track the query invocations.
-  if pg.MISSING_VALUE != prompt and not skip_lm:
+  # `skip_lm`` is True when `lf.query_prompt` is called.
+  # and `prompt` is `pg.MISSING_VALUE` when `lf.query_output` is called.
+  # In these cases, we do not track the query invocation.
+  if skip_lm or pg.MISSING_VALUE == prompt:
+    trackers = []
+  else:
     trackers = lf.context_value('__query_trackers__', [])
-    if trackers:
+
+  # Mark query start with trackers.
+  # NOTE: prompt is MISSING_VALUE when `lf.query_output` is called.
+  # We do not track the query invocation in this case.
+  if trackers:
+    invocation = QueryInvocation(
+        id=_invocation_id(),
+        input=pg.Ref(query_input),
+        schema=(
+            schema_lib.Schema.from_value(schema)
+            if schema not in (None, str) else None
+        ),
+        default=default,
+        lm=pg.Ref(lm),
+        examples=pg.Ref(examples) if examples else [],
+        protocol=protocol,
+        kwargs={k: pg.Ref(v) for k, v in kwargs.items()},
+        start_time=time.time(),
+    )
+    for i, tracker in enumerate(trackers):
+      if i == 0 or tracker.include_child_scopes:
+        tracker.track(invocation)
+  else:
+    invocation = None
+
+  def _mark_query_completed(output_message, error, usage_summary):
+    # Mark query completion with trackers.
+    if not trackers:
+      return
+
+    if output_message is not None:
       # To minimize payload for serialization, we remove the result and usage
       # fields from the metadata. They will be computed on the fly when the
       # invocation is rendered.
       metadata = dict(output_message.metadata)
       metadata.pop('result', None)
       metadata.pop('usage', None)
+      lm_response = lf.AIMessage(output_message.text, metadata=metadata)
+    else:
+      lm_response = None
 
-      invocation = QueryInvocation(
-          id=_invocation_id(),
-          input=pg.Ref(query_input),
-          schema=(
-              schema_lib.Schema.from_value(schema)
-              if schema not in (None, str) else None
-          ),
-          lm=pg.Ref(lm),
-          examples=pg.Ref(examples) if examples else [],
-          protocol=protocol,
-          kwargs={k: pg.Ref(v) for k, v in kwargs.items()},
-          lm_response=lf.AIMessage(output_message.text, metadata=metadata),
-          usage_summary=usage_summary,
-          start_time=start_time,
-          end_time=end_time,
+    assert invocation is not None
+    invocation.mark_completed(
+        lm_response=lm_response, error=error, usage_summary=usage_summary,
+    )
+    for i, tracker in enumerate(trackers):
+      if i == 0 or tracker.include_child_scopes:
+        tracker.mark_completed(invocation)
+
+  with lf.track_usages() as usage_summary:
+    try:
+      if query_cls is None:
+        # Query with natural language output.
+        output_message = lf.LangFunc.from_value(query_input, **kwargs)(
+            lm=lm, cache_seed=cache_seed, skip_lm=skip_lm
+        )
+        if response_postprocess:
+          processed_text = response_postprocess(output_message.text)
+          if processed_text != output_message.text:
+            output_message = lf.AIMessage(processed_text, source=output_message)
+      else:
+        # Query with structured output.
+        output_message = query_cls(
+            input=(
+                query_input.render(lm=lm)
+                if isinstance(query_input, lf.Template)
+                else query_input
+            ),
+            schema=schema,
+            examples=examples,
+            response_postprocess=response_postprocess,
+            autofix=autofix if protocol.startswith('python:') else 0,
+            **kwargs,
+        )(
+            lm=lm,
+            autofix_lm=autofix_lm or lm,
+            cache_seed=cache_seed,
+            skip_lm=skip_lm,
+        )
+      _mark_query_completed(output_message, None, usage_summary)
+    except mapping.MappingError as e:
+      _mark_query_completed(
+          e.lm_response, pg.utils.ErrorInfo.from_exception(e), usage_summary
       )
-      for i, (tracker, include_child_scopes) in enumerate(trackers):
-        if i == 0 or include_child_scopes:
-          tracker.append(invocation)
-  return output_message if returns_message else _result(output_message)
+      if lf.RAISE_IF_HAS_ERROR == default:
+        raise e
+      output_message = e.lm_response
+      output_message.result = default
+    except BaseException as e:
+      _mark_query_completed(
+          None, pg.utils.ErrorInfo.from_exception(e), usage_summary
+      )
+      raise e
+
+  if returns_message:
+    return output_message
+  return output_message.text if schema in (None, str) else output_message.result
 
 
 @contextlib.contextmanager
@@ -768,6 +813,10 @@ def _reward_fn(cls) -> Callable[
 class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   """A class to represent the invocation of `lf.query`."""
 
+  #
+  # Query input.
+  #
+
   id: Annotated[
       str,
       'The ID of the query invocation.'
@@ -777,42 +826,69 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       Union[lf.Template, pg.Symbolic],
       'Mapping input of `lf.query`.'
   ]
+
   schema: pg.typing.Annotated[
       schema_lib.schema_spec(noneable=True),
       'Schema of `lf.query`.'
   ]
-  lm_response: Annotated[
-      lf.Message,
-      'Raw LM response.'
-  ]
+
+  default: Annotated[
+      Any,
+      'Default value of `lf.query`.'
+  ] = lf.RAISE_IF_HAS_ERROR
+
   lm: Annotated[
       lf.LanguageModel,
       'Language model used for `lf.query`.'
   ]
+
   examples: Annotated[
       list[mapping.MappingExample],
       'Fewshot exemplars for `lf.query`.'
   ]
+
   protocol: Annotated[
       str,
       'Protocol of `lf.query`.'
   ] = 'python'
+
   kwargs: Annotated[
       dict[str, Any],
       'Kwargs of `lf.query`.'
   ] = {}
-  usage_summary: Annotated[
-      lf.UsageSummary,
-      'Usage summary for `lf.query`.'
-  ]
+
+  #
+  # Query output.
+  #
+
+  lm_response: Annotated[
+      lf.Message | None,
+      'Raw LM response. If None, query is not completed yet or failed.'
+  ] = None
+
+  error: Annotated[
+      pg.utils.ErrorInfo | None,
+      'Error info if the query failed.'
+  ] = None
+
+  #
+  # Execution details.
+  #
+
   start_time: Annotated[
       float,
       'Start time of query.'
   ]
+
   end_time: Annotated[
-      float,
-      'End time of query.'
-  ]
+      float | None,
+      'End time of query. If None, query is not completed yet.'
+  ] = None
+
+  usage_summary: Annotated[
+      lf.UsageSummary | None,
+      'Usage summary of the query. If None, query is not completed yet.'
+  ] = None
 
   @functools.cached_property
   def lm_request(self) -> lf.Message:
@@ -824,20 +900,28 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
 
   @functools.cached_property
   def output(self) -> Any:
-    """The output of `lf.query`. If it failed, returns the `MappingError`."""
-    try:
-      return query_output(self.lm_response, self.schema, protocol=self.protocol)
-    except mapping.MappingError as e:
-      return e
+    """The output of `lf.query`. If it failed, returns None."""
+    if self.lm_response is None:
+      return None
+    if self.has_oop_error:
+      return self.default if lf.RAISE_IF_HAS_ERROR != self.default else None
+    return query_output(self.lm_response, self.schema, protocol=self.protocol)
 
   @property
   def has_error(self) -> bool:
     """Returns True if the query failed to generate a valid output."""
-    return isinstance(self.output, BaseException)
+    return not self.is_completed or self.error is not None
+
+  @property
+  def has_oop_error(self) -> bool:
+    """Returns True if the query failed due to out of memory error."""
+    return self.error is not None and self.error.tag.startswith('MappingError')
 
   @property
   def elapse(self) -> float:
     """Returns query elapse in seconds."""
+    if self.end_time is None:
+      return time.time() - self.start_time
     return self.end_time - self.start_time
 
   def as_mapping_example(
@@ -848,13 +932,34 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
     return mapping.MappingExample(
         input=self.input,
         schema=self.schema,
-        output=self.output,
+        output=self.lm_response.text if self.has_oop_error else self.output,
         metadata=metadata or {},
     )
 
   def _on_bound(self):
     super()._on_bound()
     self.__dict__.pop('lm_request', None)
+    self.__dict__.pop('output', None)
+
+  @property
+  def is_completed(self) -> bool:
+    """Returns True if the query is completed."""
+    return self.end_time is not None
+
+  def mark_completed(
+      self,
+      lm_response: lf.Message | None,
+      error: pg.utils.ErrorInfo | None = None,
+      usage_summary: lf.UsageSummary | None = None) -> None:
+    """Marks the query as completed."""
+    assert self.end_time is None, 'Query is already completed.'
+    self.rebind(
+        lm_response=lm_response,
+        error=error,
+        usage_summary=usage_summary,
+        end_time=time.time(),
+        skip_notification=True,
+    )
     self.__dict__.pop('output', None)
 
   def _html_tree_view_summary(
@@ -907,10 +1012,14 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
             'input',
             pg.view(self.input, collapse_level=None),
         ),
-        pg.views.html.controls.Tab(
+        pg.views.html.controls.Tab(   # pylint: disable=g-long-ternary
             'output',
             pg.view(self.output, collapse_level=None),
-        ),
+        ) if self.output is not None else None,
+        pg.views.html.controls.Tab(   # pylint: disable=g-long-ternary
+            'error',
+            pg.view(self.error, collapse_level=None),
+        ) if self.error is not None else None,
         pg.views.html.controls.Tab(
             'schema',
             pg.view(self.schema),
@@ -962,9 +1071,57 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
     ]
 
 
+@dataclasses.dataclass
+class _QueryTracker:
+  """Query tracker for `track_queries`."""
+
+  include_child_scopes: Annotated[
+      bool,
+      (
+          'If True, the queries made in nested `track_queries` contexts will '
+          'be tracked by this tracker. Otherwise, only the queries made in the '
+          'current scope will be included.'
+      )
+  ] = True
+
+  start_callabck: Annotated[
+      Callable[[QueryInvocation], None] | None,
+      (
+          'A callback function to be called when a query is started.'
+      )
+  ] = None
+
+  end_callabck: Annotated[
+      Callable[[QueryInvocation], None] | None,
+      (
+          'A callback function to be called when a query is completed.'
+      )
+  ] = None
+
+  tracked_queries: Annotated[
+      list[QueryInvocation],
+      (
+          'The list of queries tracked by this tracker.'
+      )
+  ] = dataclasses.field(default_factory=list)
+
+  def track(self, invocation: QueryInvocation) -> None:
+    self.tracked_queries.append(invocation)
+    if self.start_callabck is not None:
+      self.start_callabck(invocation)
+
+  def mark_completed(self, invocation: QueryInvocation) -> None:
+    assert invocation in self.tracked_queries, invocation
+    if self.end_callabck is not None:
+      self.end_callabck(invocation)
+
+
 @contextlib.contextmanager
 def track_queries(
-    include_child_scopes: bool = True
+    include_child_scopes: bool = True,
+    *,
+    start_callabck: Callable[[QueryInvocation], None] | None = None,
+    end_callabck: Callable[[QueryInvocation], None] | None = None,
 ) -> Iterator[list[QueryInvocation]]:
   """Track all queries made during the context.
 
@@ -982,18 +1139,24 @@ def track_queries(
     include_child_scopes: If True, the queries made in child scopes will be
       included in the returned list. Otherwise, only the queries made in the
       current scope will be included.
+    start_callabck: A callback function to be called when a query is started.
+    end_callabck: A callback function to be called when a query is completed.
 
   Yields:
     A list of `QueryInvocation` objects representing the queries made during
     the context.
   """
   trackers = lf.context_value('__query_trackers__', [])
-  tracker = []
+  tracker = _QueryTracker(
+      include_child_scopes=include_child_scopes,
+      start_callabck=start_callabck,
+      end_callabck=end_callabck
+  )
 
   with lf.context(
-      __query_trackers__=[(tracker, include_child_scopes)] + trackers
+      __query_trackers__=[tracker] + trackers
   ):
     try:
-      yield tracker
+      yield tracker.tracked_queries
     finally:
       pass

@@ -149,7 +149,8 @@ class SchemaTest(unittest.TestCase):
         class C(B):
           pass
         """,
-        global_vars=dict(B=B)
+        global_vars=dict(B=B),
+        permission=pg.coding.CodePermission.ALL,
     )
     self.assertEqual(v.__module__, 'builtins')
     self.assertEqual(schema.class_dependencies(), [Foo, A, Bar, X, B])
@@ -175,7 +176,8 @@ class SchemaTest(unittest.TestCase):
         class CC(BB):
           pass
         """,
-        global_vars=dict(BB=BB)
+        global_vars=dict(BB=BB),
+        permission=pg.coding.CodePermission.ALL,
     )
     self.assertEqual(v.__module__, 'builtins')
     schema = schema_lib.Schema([AA])
@@ -818,7 +820,8 @@ class ValuePythonReprTest(unittest.TestCase):
                   x: Dict[str, Any]
                   y: Optional[Sequence[str]]
                   z: Union[int, List[int], Tuple[int]]
-                """
+                """,
+                permission=pg.coding.CodePermission.ALL,
             )
         )
     )

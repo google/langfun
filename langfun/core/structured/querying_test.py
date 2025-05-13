@@ -15,6 +15,7 @@
 
 import inspect
 import math
+import time
 from typing import Any
 import unittest
 
@@ -984,6 +985,19 @@ class LfQueryPythonV2Test(unittest.TestCase):
       ):
         querying.query('Compute 1 + 2', int)
 
+  def test_not_allowed_code(self):
+    lm = fake.StaticResponse(
+        """
+        class Foo:
+          pass
+        """
+    )
+    with self.assertRaisesRegex(
+        mapping.MappingError,
+        'Class definition is not allowed',
+    ):
+      querying.query('Compute 1 + 2', int, lm=lm)
+
   def test_autofix(self):
     lm = fake.StaticSequence([
         '=1',
@@ -1319,7 +1333,9 @@ class QueryInvocationTest(unittest.TestCase):
 
     self.assertEqual(queries[0].id, '123')
     self.assertTrue(queries[0].has_error)
-    self.assertIsInstance(queries[0].output, mapping.MappingError)
+    self.assertIsInstance(queries[0].error, pg.utils.ErrorInfo)
+    self.assertIn('MappingError', queries[0].error.tag)
+    self.assertIsNone(queries[0].output)
 
   def test_kwargs(self):
     lm = fake.StaticSequence([
@@ -1374,10 +1390,146 @@ class QueryInvocationTest(unittest.TestCase):
     mapping_example = queries[0].as_mapping_example()
     self.assertTrue(pg.eq(mapping_example.input, lf.Template('foo {{x}}', x=1)))
     self.assertEqual(mapping_example.schema.spec.cls, Activity)
-    self.assertIsInstance(mapping_example.output, mapping.MappingError)
+    self.assertEqual(mapping_example.output, 'Activity(description="hi"')
 
 
 class TrackQueriesTest(unittest.TestCase):
+
+  def test_query_without_schema(self):
+    lm = fake.StaticSequence([
+        'bar',
+    ])
+    with querying.track_queries() as queries:
+      querying.query('foo', lm=lm)
+    self.assertEqual(len(queries), 1)
+    self.assertEqual(queries[0].lm_response, 'bar')
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertEqual(queries[0].lm_request, 'foo')
+    self.assertIsNone(queries[0].schema)
+    self.assertEqual(queries[0].protocol, 'python')
+    self.assertEqual(queries[0].default, lf.RAISE_IF_HAS_ERROR)
+
+    self.assertEqual(queries[0].output, 'bar')
+    self.assertFalse(queries[0].has_error)
+    self.assertIsNone(queries[0].error)
+    self.assertIsNotNone(queries[0].end_time)
+    self.assertIsNotNone(queries[0].usage_summary)
+
+  def test_query_with_schema(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi")',
+    ])
+    with querying.track_queries() as queries:
+      querying.query('foo', Activity, lm=lm)
+    self.assertEqual(len(queries), 1)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIn('foo', queries[0].lm_request.text)
+    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertEqual(queries[0].schema.spec.cls, Activity)
+    self.assertEqual(queries[0].default, lf.RAISE_IF_HAS_ERROR)
+    self.assertTrue(queries[0].protocol.startswith('python:'))
+
+    self.assertTrue(pg.eq(queries[0].output, Activity(description='hi')))
+    self.assertFalse(queries[0].has_error)
+    self.assertIsNone(queries[0].error)
+    self.assertIsNotNone(queries[0].end_time)
+    self.assertIsNotNone(queries[0].usage_summary)
+
+  def test_query_with_schema_and_default(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi")',
+    ])
+    with querying.track_queries() as queries:
+      querying.query('foo', Activity, default=None, lm=lm)
+    self.assertEqual(len(queries), 1)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIn('foo', queries[0].lm_request.text)
+    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertEqual(queries[0].schema.spec.cls, Activity)
+    self.assertIsNone(queries[0].default)
+    self.assertTrue(queries[0].protocol.startswith('python:'))
+
+    self.assertTrue(pg.eq(queries[0].output, Activity(description='hi')))
+    self.assertFalse(queries[0].has_error)
+    self.assertIsNone(queries[0].error)
+    self.assertIsNotNone(queries[0].end_time)
+    self.assertIsNotNone(queries[0].usage_summary)
+
+  def test_oop_error_for_query_with_schema(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi"',
+    ])
+    with (
+        self.assertRaises(mapping.MappingError),
+        querying.track_queries() as queries
+    ):
+      querying.query('foo', Activity, lm=lm)
+    self.assertEqual(len(queries), 1)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIn('foo', queries[0].lm_request.text)
+    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertEqual(queries[0].schema.spec.cls, Activity)
+    self.assertEqual(queries[0].default, lf.RAISE_IF_HAS_ERROR)
+    self.assertTrue(queries[0].protocol.startswith('python:'))
+
+    self.assertIsNone(queries[0].output)
+    self.assertTrue(queries[0].has_error)
+    self.assertTrue(queries[0].has_oop_error)
+    self.assertIsNotNone(queries[0].error)
+    self.assertIn('MappingError', queries[0].error.tag)
+    self.assertIsNotNone(queries[0].end_time)
+    self.assertIsNotNone(queries[0].usage_summary)
+
+  def test_oop_error_for_query_with_schema_and_default(self):
+    lm = fake.StaticSequence([
+        'Activity(description="hi"',
+    ])
+    with querying.track_queries() as queries:
+      querying.query('foo', Activity, default=1, lm=lm)
+
+    self.assertEqual(len(queries), 1)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIn('foo', queries[0].lm_request.text)
+    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertEqual(queries[0].schema.spec.cls, Activity)
+    self.assertEqual(queries[0].default, 1)
+    self.assertTrue(queries[0].protocol.startswith('python:'))
+
+    self.assertEqual(queries[0].output, 1)
+    self.assertTrue(queries[0].has_error)
+    self.assertTrue(queries[0].has_oop_error)
+    self.assertIsNotNone(queries[0].error)
+    self.assertIn('MappingError', queries[0].error.tag)
+    self.assertIsNotNone(queries[0].end_time)
+    self.assertIsNotNone(queries[0].usage_summary)
+
+  def test_lm_error_for_query_with_schema(self):
+    class BadLLM(fake.StaticResponse):
+      response = 'bad call'
+
+      def _sample(self, *args, **kwargs):
+        raise ValueError('bad LLM')
+
+    with (
+        self.assertRaises(ValueError),
+        querying.track_queries() as queries
+    ):
+      querying.query('foo', Activity, default=1, lm=BadLLM())
+
+    self.assertEqual(len(queries), 1)
+    self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
+    self.assertIn('foo', queries[0].lm_request.text)
+    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertEqual(queries[0].schema.spec.cls, Activity)
+    self.assertEqual(queries[0].default, 1)
+    self.assertTrue(queries[0].protocol.startswith('python:'))
+
+    self.assertIsNone(queries[0].output)
+    self.assertTrue(queries[0].has_error)
+    self.assertIsNotNone(queries[0].error)
+    self.assertIn('ValueError', queries[0].error.tag)
+    self.assertIsNotNone(queries[0].end_time)
+    self.assertIsNotNone(queries[0].usage_summary)
 
   def test_include_child_scopes(self):
     lm = fake.StaticSequence([
@@ -1412,6 +1564,71 @@ class TrackQueriesTest(unittest.TestCase):
 
     self.assertEqual(len(child_queries), 1)
     self.assertIs(child_queries[0], queries[1])
+
+  def test_callbacks(self):
+    lm = fake.StaticSequence([
+        'bar',
+    ])
+    state = {}
+    def start_callabck(query):
+      self.assertFalse(query.is_completed)
+      self.assertIsNone(query.end_time)
+      elapse1 = query.elapse
+      self.assertGreater(elapse1, 0)
+      time.sleep(0.1)
+      self.assertGreater(query.elapse, elapse1)
+      self.assertIsNone(query.usage_summary)
+      self.assertIsNone(query.lm_response)
+      self.assertIsNone(query.output)
+      self.assertIsNone(query.error)
+      state['start'] = query
+
+    def end_callback(query):
+      self.assertTrue(query.is_completed)
+      self.assertIsNotNone(query.end_time)
+      self.assertIsNotNone(query.usage_summary)
+      self.assertIsNotNone(query.lm_response)
+      self.assertIsNotNone(query.output)
+      self.assertIsNone(query.error)
+      state['end'] = query
+
+    with querying.track_queries(
+        start_callabck=start_callabck, end_callabck=end_callback
+    ) as queries:
+      querying.query('foo', lm=lm)
+    self.assertIs(state['start'], queries[0])
+    self.assertIs(state['end'], queries[0])
+
+  def test_callbacks_with_error(self):
+    lm = fake.StaticSequence([
+        'bar',
+    ])
+    state = {}
+    def start_callabck(query):
+      self.assertFalse(query.is_completed)
+      self.assertIsNone(query.end_time)
+      self.assertIsNone(query.usage_summary)
+      self.assertIsNone(query.lm_response)
+      self.assertIsNone(query.output)
+      self.assertIsNone(query.error)
+      state['start'] = query
+
+    def end_callback(query):
+      self.assertTrue(query.is_completed)
+      self.assertIsNotNone(query.end_time)
+      self.assertIsNotNone(query.usage_summary)
+      self.assertIsNotNone(query.lm_response)
+      self.assertIsNone(query.output)
+      self.assertIsNotNone(query.error)
+      state['end'] = query
+
+    with self.assertRaises(mapping.MappingError):
+      with querying.track_queries(
+          start_callabck=start_callabck, end_callabck=end_callback
+      ) as queries:
+        querying.query('foo', int, lm=lm)
+    self.assertIs(state['start'], queries[0])
+    self.assertIs(state['end'], queries[0])
 
   def test_exclude_child_scopes(self):
     lm = fake.StaticSequence([

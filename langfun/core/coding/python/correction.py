@@ -37,6 +37,7 @@ def run_with_correction(
     lm: lf.LanguageModel | None = None,
     max_attempts: int = 5,
     sandbox: bool | None = None,
+    permission: pg.coding.CodePermission = pg.coding.CodePermission.ALL,
     timeout: int | None = 5,
     returns_code: bool = False,
     returns_stdout: bool = False,
@@ -58,6 +59,7 @@ def run_with_correction(
       process. If None, run in sandbox first, if the output could not be
       serialized and pass to current process, run the code again in current
       process.
+    permission: The permission to run the code.
     timeout: The timeout for running the corrected code. If None, there is no
       timeout. Applicable only when sandbox is set to True.
     returns_code: If True, the return value is a tuple of (result, final code).
@@ -88,6 +90,7 @@ def run_with_correction(
             global_vars=global_vars,
             sandbox=sandbox,
             timeout=timeout,
+            permission=permission,
             returns_stdout=returns_stdout,
             outputs_intermediate=outputs_intermediate,
         )
@@ -102,6 +105,7 @@ def run_with_correction(
               global_vars=global_vars,
               sandbox=sandbox,
               timeout=timeout,
+              permission=permission,
               outputs_intermediate=outputs_intermediate,
           )
       )

@@ -27,6 +27,7 @@ class GenerateClass(mapping.Mapping):
   input_title = 'GENERATION_CONTEXT'
   context_title = 'CLASS_NAME'
   output_title = 'OUTPUT_CLASS'
+  permission = pg.coding.CodePermission.ALL
 
   preamble: lf.Template = lf.Template("""
       Help generate a class based on the last {{ context_title }} and {{ input_title }}.

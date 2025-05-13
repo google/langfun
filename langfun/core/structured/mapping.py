@@ -278,6 +278,11 @@ class Mapping(lf.LangFunc):
       'A `lf.structured.Schema` object that constrains mapping output ',
   ] = None
 
+  permission: Annotated[
+      pg.coding.CodePermission,
+      'The permission to run the LLM generated code.'
+  ] = pg.coding.CodePermission.ASSIGN | pg.coding.CodePermission.CALL
+
   @property
   def mapping_request(self) -> MappingExample:
     """Returns a MappingExample as the mapping request."""
@@ -434,6 +439,7 @@ class Mapping(lf.LangFunc):
         additional_context=self.globals(),
         autofix=self.autofix,
         autofix_lm=self.autofix_lm or self.lm,
+        permission=self.permission,
     )
 
   def postprocess_response(self, response: lf.Message) -> lf.Message:

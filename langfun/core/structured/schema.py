@@ -722,6 +722,9 @@ class ValuePythonRepr(ValueRepr):
       schema: Schema | None = None,
       *,
       additional_context: dict[str, Type[Any]] | None = None,
+      permission: pg.coding.CodePermission = (
+          pg.coding.CodePermission.ASSIGN | pg.coding.CodePermission.CALL
+      ),
       autofix=0,
       autofix_lm: lf.LanguageModel = lf.contextual(),
       **kwargs,
@@ -737,6 +740,7 @@ class ValuePythonRepr(ValueRepr):
         global_vars=global_vars,
         autofix=autofix,
         autofix_lm=autofix_lm,
+        permission=permission,
     )
 
 
@@ -744,6 +748,9 @@ def structure_from_python(
     code: str,
     *,
     global_vars: dict[str, Any] | None = None,
+    permission: pg.coding.CodePermission = (
+        pg.coding.CodePermission.ASSIGN | pg.coding.CodePermission.CALL
+    ),
     autofix=0,
     autofix_lm: lf.LanguageModel = lf.contextual(),
 ) -> Any:
@@ -769,6 +776,7 @@ def structure_from_python(
       sandbox=False,
       max_attempts=autofix,
       lm=autofix_lm,
+      permission=permission,
   )
 
 
