@@ -155,15 +155,19 @@ class SessionTest(unittest.TestCase):
     )
 
     # The root space should have one action (foo), no queries, and no logs.
-    self.assertEqual(len(list(root.actions)), 1)
-    self.assertEqual(len(list(root.queries)), 0)
-    self.assertEqual(len(list(root.logs)), 0)
+    self.assertEqual(len(root.actions), 1)
+    self.assertEqual(len(root.queries), 0)
+    self.assertEqual(len(root.logs), 0)
     # 1 query from Bar, 2 from Foo and 3 from parallel executions.
-    self.assertEqual(len(list(root.all_queries)), 6)
+    self.assertEqual(len(session.all_queries), 6)
+    self.assertEqual(len(root.all_queries), 6)
     # 2 actions: Foo and Bar.
-    self.assertEqual(len(list(root.all_actions)), 2)
+    self.assertEqual(len(session.all_actions), 2)
+    self.assertEqual(len(root.all_actions), 2)
     # 1 log from Bar and 1 from Foo.
-    self.assertEqual(len(list(root.all_logs)), 2)
+    self.assertEqual(len(session.all_logs), 2)
+    self.assertEqual(len(root.all_logs), 2)
+    self.assertIs(session.usage_summary, root.usage_summary)
     self.assertEqual(root.usage_summary.total.num_requests, 6)
 
     # Inspecting the top-level action (Foo)
@@ -276,7 +280,7 @@ class SessionTest(unittest.TestCase):
     foo_invocation = root.execution[0]
     self.assertIsInstance(foo_invocation, action_lib.ActionInvocation)
     self.assertTrue(foo_invocation.has_error)
-    self.assertEqual(len(foo_invocation.execution.items), 2)
+    self.assertEqual(len(foo_invocation.execution.items), 3)
 
   def test_succeeded_with_implicit_session(self):
     lm = fake.StaticResponse('lm response')
@@ -304,7 +308,7 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(session.has_started)
     self.assertTrue(session.has_stopped)
     self.assertTrue(session.has_error)
-    self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
+    self.assertIsInstance(session.final_error, pg.utils.ErrorInfo)
     self.assertIn('Bar error', str(session.root.error))
 
   def test_succeeded_with_explicit_session(self):
@@ -409,7 +413,9 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(session.has_stopped)
     self.assertTrue(session.has_error)
     self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
-    self.assertEqual(len(session.root.execution), 2)
+    self.assertEqual(len(session.root.execution), 3)
+    self.assertEqual(len(session.root.actions), 2)
+    self.assertEqual(len(session.root.logs), 1)
     self.assertFalse(session.root.execution[0].has_error)
     self.assertTrue(session.root.execution[1].has_error)
 

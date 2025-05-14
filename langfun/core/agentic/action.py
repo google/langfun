@@ -898,6 +898,11 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
     """Returns the usage summary of the action."""
     return self.execution.usage_summary
 
+  @property
+  def elapse(self) -> float:
+    """Returns the elapsed time of the action."""
+    return self.execution.elapse
+
   def start(self) -> None:
     """Starts the execution of the action."""
     self.execution.start()
@@ -1088,6 +1093,60 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
   ] = False
 
+  #
+  # Shortcut methods for accessing the root action invocation.
+  #
+
+  @property
+  def all_queries(self) -> list[lf_structured.QueryInvocation]:
+    """Returns all queries made by the session."""
+    return self.root.all_queries
+
+  @property
+  def all_actions(self) -> list[ActionInvocation]:
+    """Returns all actions made by the session."""
+    return self.root.all_actions
+
+  @property
+  def all_logs(self) -> list[lf.logging.LogEntry]:
+    """Returns all logs made by the session."""
+    return self.root.all_logs
+
+  @property
+  def usage_summary(self) -> lf.UsageSummary:
+    """Returns the usage summary of the session."""
+    return self.root.usage_summary
+
+  @property
+  def has_started(self) -> bool:
+    """Returns True if the session has started."""
+    return self.root.execution.has_started
+
+  @property
+  def has_stopped(self) -> bool:
+    """Returns True if the session has stopped."""
+    return self.root.execution.has_stopped
+
+  @property
+  def has_error(self) -> bool:
+    """Returns True if the session has an error."""
+    return self.root.has_error
+
+  @property
+  def final_result(self) -> Any:
+    """Returns the final result of the session."""
+    return self.root.result
+
+  @property
+  def final_error(self) -> pg.utils.ErrorInfo | None:
+    """Returns the error of the session."""
+    return self.root.error
+
+  @property
+  def elapse(self) -> float:
+    """Returns the elapsed time of the session."""
+    return self.root.elapse
+
   # NOTE(daiyip): Action execution may involve multi-threading, hence current
   # action and execution are thread-local.
 
@@ -1131,6 +1190,20 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       metadata: dict[str, Any] | None = None,
   ) -> None:
     """Ends the session."""
+    if error is not None:
+      self.error(
+          f'Trajectory failed in {self.elapse:.2f} seconds.',
+          error=error,
+          metadata=metadata,
+          keep=True,
+      )
+    elif self.verbose:
+      self.info(
+          f'Trajectory succeeded in {self.elapse:.2f} seconds.',
+          result=result,
+          metadata=metadata,
+          keep=False,
+      )
     self.root.end(result, error, metadata)
 
   def __enter__(self):
@@ -1191,26 +1264,15 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       yield invocation
     finally:
       if invocation.has_error:
-        if invocation.parent_action is self.root:
-          self.error(
-              (
-                  f'Top-level action execution failed in '
-                  f'{invocation.execution.elapse:.2f} seconds.'
-              ),
-              action=invocation.action,
-              error=invocation.error,
-              keep=True,
-          )
-        else:
-          self.warning(
-              (
-                  f'Action execution failed in '
-                  f'{invocation.execution.elapse:.2f} seconds.'
-              ),
-              action=invocation.action,
-              error=invocation.error,
-              keep=True,
-          )
+        self.warning(
+            (
+                f'Action execution failed in '
+                f'{invocation.execution.elapse:.2f} seconds.'
+            ),
+            action=invocation.action,
+            error=invocation.error,
+            keep=True,
+        )
       elif self.verbose:
         self.info(
             (
@@ -1522,7 +1584,9 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       for_action = self._current_action
     elif isinstance(for_action, Action):
       for_action = for_action.invocation
-      assert for_action is not None
+      assert for_action is not None, (
+          f'Action must be called before it can be logged: {for_action}'
+      )
 
     log_entry = lf.logging.log(
         level,
@@ -1606,26 +1670,6 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         'Agentic task session.',
         result=self.root
     )
-
-  @property
-  def final_result(self) -> Any:
-    """Returns the final result of the session."""
-    return self.root.result
-
-  @property
-  def has_started(self) -> bool:
-    """Returns whether the session has started."""
-    return self.root.execution.has_started
-
-  @property
-  def has_stopped(self) -> bool:
-    """Returns whether the session has stopped."""
-    return self.root.execution.has_stopped
-
-  @property
-  def has_error(self) -> bool:
-    """Returns whether the session has an error."""
-    return self.root.has_error
 
   @property
   def current_action(self) -> ActionInvocation:
