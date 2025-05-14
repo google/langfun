@@ -155,7 +155,7 @@ SUPPORTED_MODELS = [
     GeminiModelInfo(
         model_id='gemini-2.5-pro-preview-05-06',
         in_service=True,
-        provider=pg.oneof(['Google GenAI', ' VertexAI']),
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
         description='Gemini 2.5 Pro.',
         release_date=datetime.datetime(2025, 5, 6),
@@ -178,7 +178,7 @@ SUPPORTED_MODELS = [
     GeminiModelInfo(
         model_id='gemini-2.5-flash-preview-04-17',
         in_service=True,
-        provider=pg.oneof(['Google GenAI', ' VertexAI']),
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
         model_type='instruction-tuned',
         description='Gemini 2.5 Flash.',
         release_date=datetime.datetime(2025, 4, 17),
