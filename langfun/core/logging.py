@@ -268,14 +268,13 @@ def log(level: LogLevel,
       metadata=kwargs,
   )
 
-  if entry.should_output(get_log_level()):
+  if console and entry.should_output(get_log_level()):
     if console_lib.under_notebook():
       console_lib.display(entry)
-    elif console:
+    else:
       # TODO(daiyip): Improve the console output formatting.
       console_lib.write(entry)
-
-  if not console:
+  elif not console:
     if kwargs:
       message = f'{message} (metadata: {pg.format(kwargs)})'
     system_log_func(level)(message)

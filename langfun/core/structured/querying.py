@@ -886,9 +886,9 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   ] = None
 
   usage_summary: Annotated[
-      lf.UsageSummary | None,
-      'Usage summary of the query. If None, query is not completed yet.'
-  ] = None
+      lf.UsageSummary,
+      'Usage summary of the query.'
+  ] = lf.UsageSummary()
 
   @functools.cached_property
   def lm_request(self) -> lf.Message:
@@ -898,19 +898,15 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
         **self.kwargs
     )
 
-  @functools.cached_property
+  @property
   def output(self) -> Any:
     """The output of `lf.query`. If it failed, returns None."""
-    if self.lm_response is None:
-      return None
-    if self.has_oop_error:
-      return self.default if lf.RAISE_IF_HAS_ERROR != self.default else None
-    return query_output(self.lm_response, self.schema, protocol=self.protocol)
+    return self._output
 
   @property
   def has_error(self) -> bool:
     """Returns True if the query failed to generate a valid output."""
-    return not self.is_completed or self.error is not None
+    return self.error is not None
 
   @property
   def has_oop_error(self) -> bool:
@@ -938,8 +934,9 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
 
   def _on_bound(self):
     super()._on_bound()
+    self._tab_control = None
+    self._output = None
     self.__dict__.pop('lm_request', None)
-    self.__dict__.pop('output', None)
 
   @property
   def is_completed(self) -> bool:
@@ -953,14 +950,72 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       usage_summary: lf.UsageSummary | None = None) -> None:
     """Marks the query as completed."""
     assert self.end_time is None, 'Query is already completed.'
+
+    if error is None:
+      # Autofix could lead to a successful `lf.query`, however, the initial
+      # lm_response may not be valid. When Error is None, we always try to parse
+      # the lm_response into the output. If the output is not valid, the error
+      # will be updated accordingly. This logic could be optimized in future by
+      # returning attempt information when autofix is enabled.
+      if self.schema is not None:
+        try:
+          output = query_output(
+              lm_response, self.schema,
+              default=self.default, protocol=self.protocol
+          )
+        except mapping.MappingError as e:
+          output = None
+          error = pg.utils.ErrorInfo.from_exception(e)
+        self._output = output
+      else:
+        assert lm_response is not None
+        self._output = lm_response.text
+    elif (error.tag.startswith('MappingError')
+          and self.default != lf.RAISE_IF_HAS_ERROR):
+      self._output = self.default
+
     self.rebind(
         lm_response=lm_response,
         error=error,
-        usage_summary=usage_summary,
         end_time=time.time(),
         skip_notification=True,
     )
-    self.__dict__.pop('output', None)
+    if usage_summary is not None:
+      self.usage_summary.merge(usage_summary)
+
+    # Refresh the tab control.
+    if self._tab_control is None:
+      return
+
+    self._tab_control.insert(
+        'schema',
+        pg.views.html.controls.Tab(   # pylint: disable=g-long-ternary
+            'output',
+            pg.view(self.output, collapse_level=None),
+            name='output',
+        ),
+    )
+    if self.error is not None:
+      self._tab_control.insert(
+          'schema',
+          pg.views.html.controls.Tab(
+              'error',
+              pg.view(self.error, collapse_level=None),
+              name='error',
+          )
+      )
+    if self.lm_response is not None:
+      self._tab_control.append(
+          pg.views.html.controls.Tab(
+              'lm_response',
+              pg.view(
+                  self.lm_response,
+                  extra_flags=dict(include_message_metadata=True)
+              ),
+              name='lm_response',
+          )
+      )
+    self._tab_control.select(['error', 'output', 'lm_response'])
 
   def _html_tree_view_summary(
       self,
@@ -977,6 +1032,7 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
             [
                 pg.views.html.controls.Label(
                     'lf.query',
+                    tooltip=f'[{self.id}] Query invocation',
                     css_classes=['query-invocation-type-name']
                 ),
                 pg.views.html.controls.Badge(
@@ -993,7 +1049,9 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
                     f'{int(self.elapse)} seconds',
                     css_classes=['query-invocation-time']
                 ),
-                self.usage_summary.to_html(extra_flags=dict(as_badge=True))
+                self.usage_summary.to_html(
+                    extra_flags=dict(as_badge=True)
+                ),
             ],
             css_classes=['query-invocation-title']
         ),
@@ -1005,24 +1063,31 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       self,
       *,
       view: pg.views.HtmlTreeView,
+      extra_flags: dict[str, Any] | None = None,
       **kwargs: Any
   ) -> pg.Html:
-    return pg.views.html.controls.TabControl([
+    extra_flags = extra_flags or {}
+    interactive = extra_flags.get('interactive', True)
+    tab_control = pg.views.html.controls.TabControl([
         pg.views.html.controls.Tab(
             'input',
             pg.view(self.input, collapse_level=None),
+            name='input',
         ),
         pg.views.html.controls.Tab(   # pylint: disable=g-long-ternary
             'output',
             pg.view(self.output, collapse_level=None),
-        ) if self.output is not None else None,
+            name='output',
+        ) if self.is_completed else None,
         pg.views.html.controls.Tab(   # pylint: disable=g-long-ternary
             'error',
             pg.view(self.error, collapse_level=None),
-        ) if self.error is not None else None,
+            name='error',
+        ) if self.has_error else None,
         pg.views.html.controls.Tab(
             'schema',
             pg.view(self.schema),
+            name='schema',
         ),
         pg.views.html.controls.Tab(
             'lm_request',
@@ -1030,15 +1095,20 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
                 self.lm_request,
                 extra_flags=dict(include_message_metadata=False),
             ),
+            name='lm_request',
         ),
-        pg.views.html.controls.Tab(
+        pg.views.html.controls.Tab(  # pylint: disable=g-long-ternary
             'lm_response',
             pg.view(
                 self.lm_response,
                 extra_flags=dict(include_message_metadata=True)
             ),
-        ),
-    ], tab_position='top', selected=1).to_html()
+            name='lm_response',
+        ) if self.is_completed else None,
+    ], tab_position='top', selected=1)
+    if interactive:
+      self._tab_control = tab_control
+    return tab_control.to_html(extra_flags=extra_flags)
 
   @classmethod
   def _html_tree_view_css_styles(cls) -> list[str]:

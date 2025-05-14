@@ -52,10 +52,13 @@ def write(
   )
 
 
+_notebook = None
 try:
-  _notebook = sys.modules['IPython'].display
-except Exception:  # pylint: disable=broad-except
-  _notebook = None
+  ipython_module = sys.modules['IPython']
+  if 'IPKernelApp' in ipython_module.get_ipython().config:
+    _notebook = ipython_module.display
+except (KeyError, AttributeError):  # pylint: disable=broad-except
+  pass
 
 
 def under_notebook() -> bool:

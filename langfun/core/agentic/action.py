@@ -209,7 +209,7 @@ class Action(pg.Object):
   ) -> Any:
     """Executes the action."""
     if session is None:
-      session = Session()
+      session = Session(verbose=verbose)
       session.start()
 
       if show_progress:
@@ -220,45 +220,13 @@ class Action(pg.Object):
     else:
       self._session = None
 
-    with session.track_action(self) as invocation:
-      if verbose:
-        session.info('Action execution started.', keep=False, action=self)
-
+    with session.track_action(self):
       try:
-        result = self.call(session=session, verbose=verbose, **kwargs)
+        result = self.call(session=session, **kwargs)
         self._invocation.end(result)
-        if verbose:
-          session.info(
-              (
-                  f'Action execution succeeded in '
-                  f'{self._invocation.execution.elapse:.2f} seconds.'
-              ),
-              keep=False,
-              result=result
-          )
       except BaseException as e:
         error = pg.utils.ErrorInfo.from_exception(e)
         self._invocation.end(result=None, error=error)
-        if invocation.parent_action is session.root:
-          session.error(
-              (
-                  f'Top-level action execution failed in '
-                  f'{self._invocation.execution.elapse:.2f} seconds.'
-              ),
-              keep=True,
-              action=self,
-              error=error
-          )
-        else:
-          session.warning(
-              (
-                  f'Action execution failed in '
-                  f'{self._invocation.execution.elapse:.2f} seconds.'
-              ),
-              keep=False,
-              action=self,
-              error=error
-          )
         if self._session is not None:
           self._session.end(result=None, error=error)
         raise
@@ -477,21 +445,26 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def __getitem__(self, index: int) -> TracedItem:
     return self.items[index]
 
+  def merge_usage_summary(self, usage_summary: lf.UsageSummary) -> None:
+    if usage_summary.total.num_requests == 0:
+      return
+    current_invocation = self
+    while current_invocation is not None:
+      current_invocation.usage_summary.merge(usage_summary)
+      current_invocation = typing.cast(
+          ExecutionTrace,
+          current_invocation.sym_ancestor(
+              lambda x: isinstance(x, ExecutionTrace)
+          )
+      )
+
   def append(self, item: TracedItem) -> None:
     """Appends an item to the sequence."""
     with pg.notify_on_change(False):
       self.items.append(item)
 
     if isinstance(item, lf_structured.QueryInvocation):
-      current_invocation = self
-      while current_invocation is not None:
-        current_invocation.usage_summary.merge(item.usage_summary)
-        current_invocation = typing.cast(
-            ExecutionTrace,
-            current_invocation.sym_ancestor(
-                lambda x: isinstance(x, ExecutionTrace)
-            )
-        )
+      self.merge_usage_summary(item.usage_summary)
 
     if self._tab_control is not None:
       self._tab_control.append(self._execution_item_tab(item))
@@ -519,15 +492,46 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def execution_summary(self) -> dict[str, Any]:
     """Execution summary string."""
     return pg.Dict(
-        num_queries=len(self.queries),
-        execution_breakdown=[
-            dict(
-                action=action.action.__class__.__name__,
-                usage=action.usage_summary.total,
-                execution_time=action.execution.elapse,
-            )
-            for action in self.actions
-        ]
+        subtree=dict(
+            num_actions=len(self.all_actions),
+            num_action_failures=len([
+                a for a in self.all_actions if a.has_error
+            ]),
+            num_queries=len(self.all_queries),
+            num_oop_failures=len([
+                q for q in self.all_queries if q.has_oop_error
+            ]),
+            num_non_oop_failures=len([
+                q for q in self.all_queries
+                if q.has_error and not q.has_oop_error
+            ]),
+            total_query_time=sum(q.elapse for q in self.all_queries),
+        ),
+        current_level=dict(
+            num_actions=len(self.actions),
+            num_action_failures=len([
+                a for a in self.actions if a.has_error
+            ]),
+            num_queries=len(self.queries),
+            num_oop_failures=len([
+                q for q in self.queries if q.has_oop_error
+            ]),
+            num_non_oop_failures=len([
+                q for q in self.queries
+                if q.has_error and not q.has_oop_error
+            ]),
+            execution_breakdown=[
+                dict(
+                    action=action.action.__class__.__name__,
+                    usage=dict(
+                        total_tokens=action.usage_summary.total.total_tokens,
+                        estimated_cost=action.usage_summary.total.estimated_cost,
+                    ),
+                    execution_time=action.execution.elapse,
+                )
+                for action in self.actions
+            ]
+        )
     )
 
   #
@@ -1025,9 +1029,6 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
                         self.usage_summary.to_html(  # pylint: disable=g-long-ternary
                             extra_flags=dict(as_badge=True)
                         )
-                        if (interactive
-                            or self.usage_summary.total.num_requests > 0)
-                        else None
                     ),
                 ],
                 css_classes=['execution-tab-title']
@@ -1069,11 +1070,23 @@ class RootAction(Action):
 class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   """Session for performing an agentic task."""
 
-  root: ActionInvocation = ActionInvocation(RootAction())
+  root: Annotated[
+      ActionInvocation,
+      'The root action invocation of the session.'
+  ] = ActionInvocation(RootAction())
+
   id: Annotated[
       str | None,
       'An optional identifier for the sessin, which will be used for logging.'
   ] = None
+
+  verbose: Annotated[
+      bool,
+      (
+          'If True, the session will be logged with verbose action and query '
+          'activities.'
+      )
+  ] = False
 
   # NOTE(daiyip): Action execution may involve multi-threading, hence current
   # action and execution are thread-local.
@@ -1169,8 +1182,45 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       self._current_execution = invocation.execution
       # Start the execution of the current action.
       self._current_action.start()
+      if self.verbose:
+        self.info(
+            'Action execution started.',
+            action=invocation.action,
+            keep=False,
+        )
       yield invocation
     finally:
+      if invocation.has_error:
+        if invocation.parent_action is self.root:
+          self.error(
+              (
+                  f'Top-level action execution failed in '
+                  f'{invocation.execution.elapse:.2f} seconds.'
+              ),
+              action=invocation.action,
+              error=invocation.error,
+              keep=True,
+          )
+        else:
+          self.warning(
+              (
+                  f'Action execution failed in '
+                  f'{invocation.execution.elapse:.2f} seconds.'
+              ),
+              action=invocation.action,
+              error=invocation.error,
+              keep=True,
+          )
+      elif self.verbose:
+        self.info(
+            (
+                f'Action execution succeeded in '
+                f'{invocation.execution.elapse:.2f} seconds.'
+            ),
+            action=invocation.action,
+            result=invocation.result,
+            keep=False,
+        )
       self._current_execution = parent_execution
       self._current_action = parent_action
 
@@ -1208,18 +1258,63 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       A list of `lf.QueryInvocation` objects, each for a single `lf.query`
       call.
     """
-    with self.track_phase(phase) as execution:
-      with lf_structured.track_queries(include_child_scopes=False) as queries:
-        try:
-          yield queries
-        finally:
-          for i, query in enumerate(queries):
-            query.rebind(
-                id=f'{execution.id}/q{len(execution.queries) + i + 1}',
-                skip_notification=False,
-                raise_on_no_change=False
-            )
-          execution.extend(queries)
+    def _query_start(invocation: lf_structured.QueryInvocation):
+      execution = self._current_execution
+      invocation.rebind(
+          id=f'{execution.id}/q{len(execution.queries) + 1}',
+          skip_notification=False, raise_on_no_change=False
+      )
+      execution.append(invocation)
+      if self.verbose:
+        self.info(
+            'Querying LLM started.',
+            lm=invocation.lm.model_id,
+            output_type=(
+                lf_structured.annotation(invocation.schema.spec)
+                if invocation.schema is not None else None
+            ),
+            keep=False,
+        )
+
+    def _query_end(invocation: lf_structured.QueryInvocation):
+      self._current_execution.merge_usage_summary(invocation.usage_summary)
+      if invocation.has_error:
+        self.warning(
+            (
+                f'Querying LLM failed in '
+                f'{time.time() - invocation.start_time:.2f} seconds.'
+            ),
+            lm=invocation.lm.model_id,
+            output_type=(
+                lf_structured.annotation(invocation.schema.spec)
+                if invocation.schema is not None else None
+            ),
+            error=invocation.error,
+            keep=True,
+        )
+      elif self.verbose:
+        self.info(
+            (
+                f'Querying LLM succeeded in '
+                f'{time.time() - invocation.start_time:.2f} seconds.'
+            ),
+            lm=invocation.lm.model_id,
+            output_type=(
+                lf_structured.annotation(invocation.schema.spec)
+                if invocation.schema is not None else None
+            ),
+            keep=False,
+        )
+
+    with self.track_phase(phase), lf_structured.track_queries(
+        include_child_scopes=False,
+        start_callabck=_query_start,
+        end_callabck=_query_end,
+    ) as queries:
+      try:
+        yield queries
+      finally:
+        pass
 
   #
   # Operations with activity tracking.
@@ -1272,24 +1367,14 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       The result of the query.
     """
     with self.track_queries():
-      start_time = time.time()
-      try:
-        return lf_structured.query(
-            prompt,
-            schema=schema,
-            default=default,
-            lm=lm,
-            examples=examples,
-            **kwargs
-        )
-      except BaseException as e:
-        elapse = time.time() - start_time
-        self.warning(
-            f'Failed to query LLM ({lm.model_id}) in {elapse:.2f} seconds.',
-            error=pg.utils.ErrorInfo.from_exception(e),
-            keep=False,
-        )
-        raise
+      return lf_structured.query(
+          prompt,
+          schema=schema,
+          default=default,
+          lm=lm,
+          examples=examples,
+          **kwargs
+      )
 
   def concurrent_map(
       self,

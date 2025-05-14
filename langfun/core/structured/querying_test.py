@@ -1577,7 +1577,8 @@ class TrackQueriesTest(unittest.TestCase):
       self.assertGreater(elapse1, 0)
       time.sleep(0.1)
       self.assertGreater(query.elapse, elapse1)
-      self.assertIsNone(query.usage_summary)
+      self.assertIsNotNone(query.usage_summary)
+      self.assertEqual(query.usage_summary.total.num_requests, 0)
       self.assertIsNone(query.lm_response)
       self.assertIsNone(query.output)
       self.assertIsNone(query.error)
@@ -1587,6 +1588,7 @@ class TrackQueriesTest(unittest.TestCase):
       self.assertTrue(query.is_completed)
       self.assertIsNotNone(query.end_time)
       self.assertIsNotNone(query.usage_summary)
+      self.assertEqual(query.usage_summary.total.num_requests, 1)
       self.assertIsNotNone(query.lm_response)
       self.assertIsNotNone(query.output)
       self.assertIsNone(query.error)
@@ -1607,7 +1609,8 @@ class TrackQueriesTest(unittest.TestCase):
     def start_callabck(query):
       self.assertFalse(query.is_completed)
       self.assertIsNone(query.end_time)
-      self.assertIsNone(query.usage_summary)
+      self.assertIsNotNone(query.usage_summary)
+      self.assertEqual(query.usage_summary.total.num_requests, 0)
       self.assertIsNone(query.lm_response)
       self.assertIsNone(query.output)
       self.assertIsNone(query.error)
@@ -1617,6 +1620,7 @@ class TrackQueriesTest(unittest.TestCase):
       self.assertTrue(query.is_completed)
       self.assertIsNotNone(query.end_time)
       self.assertIsNotNone(query.usage_summary)
+      self.assertEqual(query.usage_summary.total.num_requests, 1)
       self.assertIsNotNone(query.lm_response)
       self.assertIsNone(query.output)
       self.assertIsNotNone(query.error)
@@ -1629,6 +1633,25 @@ class TrackQueriesTest(unittest.TestCase):
         querying.query('foo', int, lm=lm)
     self.assertIs(state['start'], queries[0])
     self.assertIs(state['end'], queries[0])
+
+  def test_track_with_autofix(self):
+    lm = fake.StaticSequence([
+        '=1',
+        inspect.cleandoc("""
+            CorrectedCode(
+                corrected_code='1',
+            )
+            """),
+    ])
+    with querying.track_queries() as queries:
+      querying.query('foo', int, lm=lm, autofix=1)
+    self.assertEqual(len(queries), 2)
+    self.assertTrue(queries[0].has_error)
+    self.assertTrue(queries[0].has_oop_error)
+    self.assertIsNone(queries[0].output)
+    self.assertFalse(queries[1].has_error)
+    self.assertEqual(queries[1].output.__class__.__name__, 'CorrectedCode')
+    self.assertEqual(queries[1].output.corrected_code, '1')
 
   def test_exclude_child_scopes(self):
     lm = fake.StaticSequence([

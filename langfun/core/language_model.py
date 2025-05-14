@@ -1453,7 +1453,8 @@ class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
       self._usage_badge.update(
           self._badge_text(),
           tooltip=pg.format(
-              self, verbose=False, custom_format=self._tooltip_format
+              self, verbose=False, custom_format=self._tooltip_format,
+              hide_default_values=True,
           ),
           styles=dict(color=self._badge_color()),
       )
@@ -1500,7 +1501,8 @@ class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
         usage_badge = pg.views.html.controls.Badge(
             self._badge_text(),
             tooltip=pg.format(
-                self, custom_format=self._tooltip_format, verbose=False
+                self, custom_format=self._tooltip_format, verbose=False,
+                hide_default_values=True,
             ),
             css_classes=['usage-summary'],
             styles=dict(color=self._badge_color()),
