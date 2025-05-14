@@ -31,21 +31,46 @@ def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
 
   response = requests.Response()
   response.status_code = 200
+
+  # Construct base text from user/assistant messages payload
+  messages_payload_text = '\n'.join(
+      c['content'][0]['text']
+      for c in json.get('messages', [])
+      if c.get('content')
+      and isinstance(c['content'], list)
+      and c['content']
+      and c['content'][0].get('type') == 'text'
+      and 'text' in c['content'][0]
+  )
+
+  # Check for a system prompt in the request payload
+  system_prompt_text = json.get('system')
+
+  processed_text_parts = []
+  if system_prompt_text:
+    processed_text_parts.append(system_prompt_text)
+  if messages_payload_text:
+    processed_text_parts.append(messages_payload_text)
+
+  processed_text = '\n'.join(processed_text_parts)
+
+  response_content_text = (
+      f'{processed_text} with temperature={json.get("temperature")}, '
+      f'top_k={json.get("top_k")}, '
+      f'top_p={json.get("top_p")}, '
+      f'max_tokens={json.get("max_tokens")}, '
+      f'stop={json.get("stop_sequences")}.'
+  )
+
   response._content = pg.to_json_str({
-      'content': [{
-          'type': 'text',
-          'text': (
-              '\n'.join(c['content'][0]['text'] for c in json['messages']) +
-              f' with temperature={json.get("temperature")}, '
-              f'top_k={json.get("top_k")}, '
-              f'top_p={json.get("top_p")}, '
-              f'max_tokens={json.get("max_tokens")}, '
-              f'stop={json.get("stop_sequences")}.'
-          ),
-      }],
+      'content': [{'type': 'text', 'text': response_content_text}],
       'usage': {
-          'input_tokens': 2,
-          'output_tokens': 1,
+          'input_tokens': (
+              2
+          ),  # Placeholder: adjust if tests need accurate token counts
+          'output_tokens': (
+              1
+          ),  # Placeholder: adjust if tests need accurate token counts
       },
   }).encode()
   return response

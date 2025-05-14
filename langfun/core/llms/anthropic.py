@@ -509,17 +509,13 @@ class Anthropic(rest.REST):
           raise ValueError(f'Unsupported modality: {chunk!r}.')
       return chunk
 
-    messages = []
     if system_message := prompt.get('system_message'):
       assert isinstance(system_message, lf.SystemMessage), type(system_message)
-      messages.append(
-          system_message.as_format(
-              'anthropic', chunk_preprocessor=modality_check
-          )
-      )
-    messages.append(
+      request['system'] = system_message.text
+
+    messages = [
         prompt.as_format('anthropic', chunk_preprocessor=modality_check)
-    )
+    ]
     request.update(messages=messages)
     return request
 
