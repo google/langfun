@@ -276,7 +276,7 @@ def log(level: LogLevel,
       console_lib.write(entry)
   elif not console:
     if kwargs:
-      message = f'{message} (metadata: {pg.format(kwargs)})'
+      message = f'{message} (metadata: {pg.format(kwargs, verbose=False)})'
     system_log_func(level)(message)
   return entry
 
