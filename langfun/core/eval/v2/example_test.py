@@ -22,13 +22,13 @@ Example = example_lib.Example
 class ExampleTest(unittest.TestCase):
 
   def test_basic(self):
-    error = pg.object_utils.ErrorInfo(
+    error = pg.ErrorInfo(
         tag='ValueError',
         description='Bad input',
         stacktrace='...',
     )
     ex = Example(id=1, execution_status={
-        'evaluate': pg.object_utils.TimeIt.Status(
+        'evaluate': pg.utils.TimeIt.Status(
             name='evaluation', elapse=1.0, error=error
         )
     })

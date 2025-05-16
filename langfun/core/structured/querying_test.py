@@ -1333,7 +1333,7 @@ class QueryInvocationTest(unittest.TestCase):
 
     self.assertEqual(queries[0].id, '123')
     self.assertTrue(queries[0].has_error)
-    self.assertIsInstance(queries[0].error, pg.utils.ErrorInfo)
+    self.assertIsInstance(queries[0].error, pg.ErrorInfo)
     self.assertIn('MappingError', queries[0].error.tag)
     self.assertIsNone(queries[0].output)
 

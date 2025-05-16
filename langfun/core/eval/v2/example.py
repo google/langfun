@@ -39,7 +39,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
   id: int
   input: Any = pg.MISSING_VALUE
   output: Any = pg.MISSING_VALUE
-  error: pg.object_utils.ErrorInfo | None = None
+  error: pg.ErrorInfo | None = None
   metadata: dict[str, Any] = dataclasses.field(default_factory=dict)
   metric_metadata: dict[str, Any] | None = None
   # Execution information.
@@ -47,12 +47,13 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
   start_time: float | None = None
   end_time: float | None = None
   usage_summary: lf.UsageSummary | None = None
-  execution_status: dict[str, pg.object_utils.TimeIt.Status] | None = None
+  execution_status: dict[str, pg.utils.TimeIt.Status] | None = None
 
   def __post_init__(self):
     if self.execution_status is not None:
       for status in self.execution_status.values():
         if status.has_error:
+          assert isinstance(status.error, pg.ErrorInfo)
           self.error = status.error
           break
 
@@ -188,7 +189,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
         text = f'{key}:{value}'
       return pg.views.html.controls.Badge(
           text,
-          css_classes=[pg.object_utils.camel_to_snake(key, '-')],
+          css_classes=[pg.utils.camel_to_snake(key, '-')],
       )
 
     def _render_header():

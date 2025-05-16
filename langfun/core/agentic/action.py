@@ -225,7 +225,7 @@ class Action(pg.Object):
         result = self.call(session=session, **kwargs)
         self._invocation.end(result)
       except BaseException as e:
-        error = pg.utils.ErrorInfo.from_exception(e)
+        error = pg.ErrorInfo.from_exception(e)
         self._invocation.end(result=None, error=error)
         if self._session is not None:
           self._session.end(result=None, error=error)
@@ -819,7 +819,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   ] = {}
 
   error: Annotated[
-      pg.utils.ErrorInfo | None,
+      pg.ErrorInfo | None,
       'Error from the action if failed.'
   ] = None
 
@@ -910,7 +910,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def end(
       self,
       result: Any,
-      error: pg.utils.ErrorInfo | None = None,
+      error: pg.ErrorInfo | None = None,
       metadata: dict[str, Any] | None = None,
   ) -> None:
     """Ends the execution of the action with result and metadata."""
@@ -1138,7 +1138,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     return self.root.result
 
   @property
-  def final_error(self) -> pg.utils.ErrorInfo | None:
+  def final_error(self) -> pg.ErrorInfo | None:
     """Returns the error of the session."""
     return self.root.error
 
@@ -1186,7 +1186,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def end(
       self,
       result: Any,
-      error: pg.utils.ErrorInfo | None = None,
+      error: pg.ErrorInfo | None = None,
       metadata: dict[str, Any] | None = None,
   ) -> None:
     """Ends the session."""
@@ -1220,7 +1220,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
     if exc_val is not None:
       result, metadata = None, None
-      error = pg.utils.ErrorInfo.from_exception(exc_val)
+      error = pg.ErrorInfo.from_exception(exc_val)
     else:
       actions = self.root.actions
       if actions:

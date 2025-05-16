@@ -649,7 +649,7 @@ def query(
       _mark_query_completed(output_message, None, usage_summary)
     except mapping.MappingError as e:
       _mark_query_completed(
-          e.lm_response, pg.utils.ErrorInfo.from_exception(e), usage_summary
+          e.lm_response, pg.ErrorInfo.from_exception(e), usage_summary
       )
       if lf.RAISE_IF_HAS_ERROR == default:
         raise e
@@ -657,7 +657,7 @@ def query(
       output_message.result = default
     except BaseException as e:
       _mark_query_completed(
-          None, pg.utils.ErrorInfo.from_exception(e), usage_summary
+          None, pg.ErrorInfo.from_exception(e), usage_summary
       )
       raise e
 
@@ -867,7 +867,7 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   ] = None
 
   error: Annotated[
-      pg.utils.ErrorInfo | None,
+      pg.ErrorInfo | None,
       'Error info if the query failed.'
   ] = None
 
@@ -946,7 +946,7 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
   def mark_completed(
       self,
       lm_response: lf.Message | None,
-      error: pg.utils.ErrorInfo | None = None,
+      error: pg.ErrorInfo | None = None,
       usage_summary: lf.UsageSummary | None = None) -> None:
     """Marks the query as completed."""
     assert self.end_time is None, 'Query is already completed.'
@@ -965,7 +965,7 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
           )
         except mapping.MappingError as e:
           output = None
-          error = pg.utils.ErrorInfo.from_exception(e)
+          error = pg.ErrorInfo.from_exception(e)
         self._output = output
       else:
         assert lm_response is not None

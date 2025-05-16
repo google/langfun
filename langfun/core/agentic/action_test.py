@@ -308,7 +308,7 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(session.has_started)
     self.assertTrue(session.has_stopped)
     self.assertTrue(session.has_error)
-    self.assertIsInstance(session.final_error, pg.utils.ErrorInfo)
+    self.assertIsInstance(session.final_error, pg.ErrorInfo)
     self.assertIn('Bar error', str(session.root.error))
 
   def test_succeeded_with_explicit_session(self):
@@ -375,7 +375,7 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(session.has_stopped)
     self.assertTrue(session.has_error)
     self.assertIsNone(session.final_result)
-    self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
+    self.assertIsInstance(session.root.error, pg.ErrorInfo)
     self.assertIn('Bar error', str(session.root.error))
 
   def test_failed_with_explicit_session_without_start(self):
@@ -412,7 +412,7 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(session.has_started)
     self.assertTrue(session.has_stopped)
     self.assertTrue(session.has_error)
-    self.assertIsInstance(session.root.error, pg.utils.ErrorInfo)
+    self.assertIsInstance(session.root.error, pg.ErrorInfo)
     self.assertEqual(len(session.root.execution), 3)
     self.assertEqual(len(session.root.actions), 2)
     self.assertEqual(len(session.root.logs), 1)

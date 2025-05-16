@@ -255,7 +255,7 @@ class Evaluation(experiment_lib.Experiment):
       except BaseException as e:  # pylint: disable=broad-except
         if raise_if_has_error:
           raise
-        example.error = pg.object_utils.ErrorInfo.from_exception(e)
+        example.error = pg.ErrorInfo.from_exception(e)
 
   #
   # Handling evaluation scheduling.
