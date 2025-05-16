@@ -37,7 +37,7 @@ class MatchTest(unittest.TestCase):
             Example(
                 id=3,
                 input=pg.Dict(groundtruth=1),
-                error=pg.object_utils.ErrorInfo(
+                error=pg.symbolic.ErrorInfo(
                     tag='ValueError',
                     description='Bad input.',
                     stacktrace='...',
@@ -51,7 +51,7 @@ class MatchTest(unittest.TestCase):
             Example(
                 id=3,
                 input=pg.Dict(groundtruth=1),
-                error=pg.object_utils.ErrorInfo(
+                error=pg.symbolic.ErrorInfo(
                     tag='MappingError.CodeError',
                     description='Bad input.',
                     stacktrace='...',
@@ -130,7 +130,7 @@ class ScoreTest(unittest.TestCase):
             Example(
                 id=3,
                 input=pg.Dict(x=1),
-                error=pg.object_utils.ErrorInfo(
+                error=pg.symbolic.ErrorInfo(
                     tag='ValueError',
                     description='Bad input.',
                     stacktrace='...',
@@ -144,7 +144,7 @@ class ScoreTest(unittest.TestCase):
             Example(
                 id=3,
                 input=pg.Dict(x=1),
-                error=pg.object_utils.ErrorInfo(
+                error=pg.symbolic.ErrorInfo(
                     tag='MappingError.CodeError',
                     description='Bad input.',
                     stacktrace='...',
