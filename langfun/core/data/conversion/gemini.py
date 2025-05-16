@@ -73,15 +73,6 @@ class GeminiMessageConverter(lf.MessageConverter):
       }
     if chunk.is_text:
       return {'text': chunk.to_text()}
-    if chunk.uri and chunk.uri.lower().startswith(
-        ('http:', 'https:', 'ftp:')
-    ):
-      return {
-          'fileData': {
-              'mimeType': chunk.mime_type,
-              'fileUri': chunk.uri,
-          }
-      }
     return {
         'inlineData': {
             'data': base64.b64encode(chunk.to_bytes()).decode(),
