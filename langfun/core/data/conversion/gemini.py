@@ -31,10 +31,12 @@ class GeminiMessageConverter(lf.MessageConverter):
           'Chunk preprocessor for Langfun chunk to Gemini chunk conversion. '
           'It will be applied before each Langfun chunk is converted. '
           'If returns None, the chunk will be skipped.'
-      )
+      ),
   ] = None
 
-  def to_value(self, message: lf.Message) -> dict[str, Any]:
+  def to_value(
+      self, message: lf.Message, always_send_content: bool = True
+  ) -> dict[str, Any]:
     """Converts a Langfun message to Gemini API."""
     parts = []
     for chunk in message.chunk():
@@ -44,7 +46,7 @@ class GeminiMessageConverter(lf.MessageConverter):
           continue
 
       if isinstance(chunk, str):
-        parts.append(self._convert_chunk(chunk))
+        parts.append(self._convert_chunk(chunk, always_send_content))
       else:
         if isinstance(chunk, lf_modalities.Mime):
           modalities = [chunk]
@@ -54,10 +56,14 @@ class GeminiMessageConverter(lf.MessageConverter):
           modalities = chunk
         else:
           raise ValueError(f'Unsupported content type: {chunk!r}.')
-        parts.extend(self._convert_chunk(c) for c in modalities)
+        parts.extend(
+            self._convert_chunk(c, always_send_content) for c in modalities
+        )
     return dict(role=self.get_role(message), parts=parts)
 
-  def _convert_chunk(self, chunk: str | lf.Modality) -> Any:
+  def _convert_chunk(
+      self, chunk: str | lf.Modality, always_send_content: bool = True
+  ) -> Any:
     """Converts a Langfun chunk to Gemini chunk."""
     if isinstance(chunk, str):
       return {'text': chunk}
@@ -73,8 +79,10 @@ class GeminiMessageConverter(lf.MessageConverter):
       }
     if chunk.is_text:
       return {'text': chunk.to_text()}
-    if chunk.uri and chunk.uri.lower().startswith(
-        ('http:', 'https:', 'ftp:')
+    if (
+        not always_send_content
+        and chunk.uri
+        and chunk.uri.lower().startswith(('http:', 'https:', 'ftp:'))
     ):
       return {
           'fileData': {

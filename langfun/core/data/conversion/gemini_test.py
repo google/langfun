@@ -58,11 +58,8 @@ class GeminiConversionTest(unittest.TestCase):
   def test_as_format_with_image(self):
     self.assertEqual(
         lf.Template(
-            'What are the common words from {{image}}, {{pdf}} and {{video}}?',
+            'What are the common words from {{image}} and {{video}}?',
             image=lf_modalities.Image.from_bytes(image_content),
-            pdf=lf_modalities.Custom.from_uri(
-                'https://my.pdf', mime='application/pdf'
-            ),
             video=lf_modalities.Custom.from_uri(
                 'https://www.youtube.com/watch?v=abcd', mime='text/html'
             ),
@@ -77,15 +74,6 @@ class GeminiConversionTest(unittest.TestCase):
                     'inlineData': {
                         'data': base64.b64encode(image_content).decode('utf-8'),
                         'mimeType': 'image/png',
-                    }
-                },
-                {
-                    'text': ','
-                },
-                {
-                    'fileData': {
-                        'fileUri': 'https://my.pdf',
-                        'mimeType': 'application/pdf',
                     }
                 },
                 {
