@@ -177,6 +177,11 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 #
 # Production models.
 #
+class VertexAIGemini25FlashPreview_20250520(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 2.5 Flash model launched on 05/20/2025."""
+  model = 'gemini-2.5-flash-preview-05-20'
+
+
 class VertexAIGemini25ProPreview_20250506(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 2.5 Pro model launched on 05/06/2025."""
   model = 'gemini-2.5-pro-preview-05-06'
