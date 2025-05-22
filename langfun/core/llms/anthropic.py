@@ -59,6 +59,58 @@ class AnthropicModelInfo(lf.ModelInfo):
 
 
 SUPPORTED_MODELS = [
+    AnthropicModelInfo(
+        model_id='claude-4-opus-20250514',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4 Opus model (5/14/2025).',
+        release_date=datetime.datetime(2025, 5, 14),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.5,
+            cost_per_1m_input_tokens=15,
+            cost_per_1m_output_tokens=75,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=100_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-4-sonnet-20250514',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4 Sonnet model (5/14/2025).',
+        release_date=datetime.datetime(2025, 5, 14),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=100_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
     # 3.5 Sonnet models.
     AnthropicModelInfo(
         model_id='claude-3-5-sonnet-latest',
@@ -135,6 +187,58 @@ SUPPORTED_MODELS = [
             # Tier 4 rate limits
             max_requests_per_minute=4000,
             max_input_tokens_per_minute=400_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-opus-4@20250514',
+        alias_for='claude-opus-4-20250514',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 4 Opus model served on VertexAI (5/14/2025).',
+        release_date=datetime.datetime(2025, 5, 14),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.5,
+            cost_per_1m_input_tokens=15.0,
+            cost_per_1m_output_tokens=75.0,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-sonnet-4@20250514',
+        alias_for='claude-sonnet-4@20250514',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 4 Sonnet model served on VertexAI (5/14/2025).',
+        release_date=datetime.datetime(2025, 5, 14),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=8_192,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3.0,
+            cost_per_1m_output_tokens=15.0,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
             max_output_tokens_per_minute=80_000,
         ),
     ),
@@ -573,6 +677,24 @@ class Anthropic(rest.REST):
     if status_code == 413 and b'Prompt is too long' in content:
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
+
+
+class Claude4(Anthropic):
+  """Base class for Claude 4 models."""
+
+
+# pylint: disable=invalid-name
+class Claude4Opus_20250514(Claude4):
+  """Claude 4 Opus model 20250514."""
+
+  model = 'claude-4-opus-20250514'
+
+
+# pylint: disable=invalid-name
+class Claude4Sonnet_20250514(Claude4):
+  """Claude 4 Sonnet model 20250514."""
+
+  model = 'claude-4-sonnet-20250514'
 
 
 class Claude37(Anthropic):
