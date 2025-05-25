@@ -114,6 +114,9 @@ class GeminiMessageConverter(lf.MessageConverter):
           thought_chunks.append(text)
         else:
           chunks.append(text)
+      elif 'thought' in part:
+        # We occasionally encounter 'thought' without text.
+        pass
       elif 'inlineData' in part:
         data = self._safe_read(part, 'inlineData')
         chunks.append(
