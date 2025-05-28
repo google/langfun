@@ -16,7 +16,7 @@
 import abc
 import os
 import tempfile
-from typing import Annotated
+from typing import Annotated, Protocol, Self
 
 from langfun.core.coding.python import parsing
 import pyglove as pg
@@ -35,9 +35,41 @@ class SandboxOutput(pg.Object):
       'The stderr of the sandbox execution.'
   ] = ''
 
+  output_files: Annotated[
+      dict[str, bytes],
+      'The output files of the sandbox execution.'
+  ] = {}
 
-class Sandbox(pg.Object):
+
+class Sandbox(Protocol):
   """Interface for Python sandbox."""
+
+  def run(
+      self,
+      code: str,
+      **kwargs,
+  ) -> SandboxOutput:
+    """Runs code in the sandbox."""
+
+  def upload(
+      self,
+      path: str,
+      **kwargs,
+  ) -> str:
+    """Uploads a file to the sandbox."""
+
+  def clone(self) -> 'Sandbox':
+    """Clones the sandbox."""
+
+  def __enter__(self) -> Self:
+    """Sandboxes should be used as a context manager."""
+
+  def __exit__(self, exc_type, exc_value, traceback) -> None:
+    """Sandboxes should be used as a context manager."""
+
+
+class BaseSandbox(pg.Object):
+  """Interface and partial implementation for Python sandbox."""
 
   def _on_bound(self):
     super()._on_bound()
@@ -105,7 +137,7 @@ class Sandbox(pg.Object):
     self.cleanup()
 
 
-class MultiProcessingSandbox(Sandbox):
+class MultiProcessingSandbox(BaseSandbox):
   """Sandbox using multiprocessing."""
 
   def _on_bound(self):
