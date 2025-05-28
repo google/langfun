@@ -103,6 +103,8 @@ class REST(lf.LanguageModel):
       error_message = str(e)
       if 'REJECTED_CLIENT_THROTTLED' in error_message:
         raise lf.TemporaryLMError(error_message) from e
+      if 'UNREACHABLE_NO_RESPONSE' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
       if 'UNREACHABLE_ERROR' in error_message:
         raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
