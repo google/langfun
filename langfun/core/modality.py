@@ -50,7 +50,7 @@ class Modality(component.Component, pg.views.HtmlTreeView.Extension):
     return Modality.text_marker(self.referred_name)
 
   def __str_kwargs__(self) -> dict[str, Any]:
-    # For modality objects, we don't want to use markdown format when they
+    # For modality objects, we don't want to use Markdown format when they
     # are rendered as parts of the prompt.
     kwargs = super().__str_kwargs__()
     kwargs.pop('markdown', None)
