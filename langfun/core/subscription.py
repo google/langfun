@@ -51,7 +51,7 @@ class EventHandler(Generic[EventType], metaclass=abc.ABCMeta):
 
   @classmethod
   def accepts(cls, event: Event[Any]) -> bool:
-    """Returns True if current event handler class can accepts an event."""
+    """Returns True if current event handler class can accept an event."""
     return isinstance(event, cls.event_type())
 
   @abc.abstractmethod
