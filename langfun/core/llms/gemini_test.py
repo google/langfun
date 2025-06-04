@@ -173,7 +173,7 @@ class GeminiTest(unittest.TestCase):
             responseLogprobs=False,
             logprobs=None,
             seed=None,
-            thinkingConfig={'thinkingBudget': 100},
+            thinkingConfig={'includeThoughts': True, 'thinkingBudget': 100},
         ),
     )
 
