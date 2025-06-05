@@ -101,6 +101,8 @@ class Mime(lf.Modality):
     return self._is_compatible(mime_types)
 
   def _is_compatible(self, mime_types: Iterable[str]):
+    if not mime_types:
+      return False
     return self.mime_type in mime_types
 
   def make_compatible(
