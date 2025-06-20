@@ -764,7 +764,7 @@ class Gemini(rest.REST):
       )
     if options.max_thinking_tokens is not None:
       config['thinkingConfig'] = {
-          'includeThoughts': True,
+          'includeThoughts': options.max_thinking_tokens > 0,
           'thinkingBudget': options.max_thinking_tokens,
       }
 
