@@ -86,6 +86,18 @@ class GenAI(gemini.Gemini):
 #
 
 
+class Gemini25Pro(GenAI):
+  """Gemini 2.5 Pro GA model."""
+
+  model = 'gemini-2.5-pro'
+
+
+class Gemini25Flash(GenAI):
+  """Gemini 2.5 Flash GA model."""
+
+  model = 'gemini-2.5-flash'
+
+
 class Gemini2ProExp_20250205(GenAI):
   """Gemini 2.0 Pro experimental model launched on 02/05/2025."""
   model = 'gemini-2.0-pro-exp-02-05'
