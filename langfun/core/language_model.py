@@ -769,8 +769,25 @@ class LanguageModel(component.Component):
     cls._MODEL_FACTORY[model_id_or_prefix] = factory
 
   @classmethod
-  def get(cls, model_id: str, *args, **kwargs):
-    """Creates a language model instance from a model ID."""
+  def get(cls, model_str: str, *args, **kwargs) -> 'LanguageModel':
+    """Creates a language model instance from a model str.
+
+    Args:
+      model_str: A string that identifies the model. It can be a model ID or a
+        model ID with kwargs.
+        For example, "gpt-o3?temperature=0.1&n=2" will create a GPT-o3 model
+        with temperature set to 0.1 and n set to 2.
+      *args: Additional arguments to pass to the model factory.
+      **kwargs: Additional keyword arguments to pass to the model factory.
+        kwargs provided here will take precedence over kwargs parsed from
+        model_str.
+
+    Returns:
+      A language model instance.
+    """
+    model_id, model_kwargs = cls._parse_model_str(model_str)
+    model_kwargs.update(kwargs)
+
     factory = cls._MODEL_FACTORY.get(model_id)
     if factory is None:
       factories = []
@@ -786,11 +803,45 @@ class LanguageModel(component.Component):
             'Please specify a more specific model ID.'
         )
       factory = factories[0][1]
-    return factory(model_id, *args, **kwargs)
+    return factory(model_id, *args, **model_kwargs)
 
   @classmethod
-  def dir(cls):
-    return sorted(list(LanguageModel._MODEL_FACTORY.keys()))
+  def _parse_model_str(cls, model_str: str) -> tuple[str, dict[str, Any]]:
+    """Parses a model string into model ID and kwargs."""
+    parts = model_str.split('?')
+    if len(parts) == 1:
+      return model_str, {}
+    elif len(parts) == 2:
+      model_id, kwargs_str = parts
+      kwargs = {}
+      for kv in kwargs_str.split('&'):
+        kv_parts = kv.split('=')
+        if len(kv_parts) != 2:
+          raise ValueError(f'Invalid kwargs in model string: {model_str!r}.')
+        k, v = kv_parts
+        if v.isnumeric():
+          v = int(v)
+        elif v.lower() in ('true', 'false'):
+          v = v.lower() == 'true'
+        else:
+          v = v.strip()
+          try:
+            v = float(v)
+          except ValueError:
+            pass
+        kwargs[k] = v
+      return model_id, kwargs
+    else:
+      raise ValueError(f'Invalid model string: {model_str!r}.')
+
+  @classmethod
+  def dir(cls, regex: str | None = None):
+    """Returns a list of model IDs that match the given regex."""
+    if regex is None:
+      return sorted(list(LanguageModel._MODEL_FACTORY.keys()))
+    return sorted(
+        [k for k in LanguageModel._MODEL_FACTORY.keys() if re.match(regex, k)]
+    )
 
   @pg.explicit_method_override
   def __init__(self, *args, **kwargs) -> None:

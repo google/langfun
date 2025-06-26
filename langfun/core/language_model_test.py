@@ -196,6 +196,8 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(lm.failures_before_attempt, 1)
     self.assertEqual(lm.sampling_options.temperature, 0.2)
     self.assertIn('MockModel', lm_lib.LanguageModel.dir())
+    self.assertIn('MockModel', lm_lib.LanguageModel.dir('Mock.*'))
+    self.assertEqual(lm_lib.LanguageModel.dir('NotMock.*'), [])
 
     lm_lib.LanguageModel.register('mock://.*', mock_model)
     lm_lib.LanguageModel.register('mock.*', mock_model)
@@ -205,6 +207,26 @@ class LanguageModelTest(unittest.TestCase):
 
     with self.assertRaisesRegex(ValueError, 'Model not found'):
       lm_lib.LanguageModel.get('non-existent://test2')
+
+    lm = lm_lib.LanguageModel.get('MockModel?temperature=0.1')
+    self.assertEqual(lm.sampling_options.temperature, 0.1)
+
+    lm = lm_lib.LanguageModel.get(
+        'MockModel?temperature=0.1&name=my_model&logprobs=true&n=2'
+    )
+    self.assertEqual(lm.sampling_options.temperature, 0.1)
+    self.assertEqual(lm.sampling_options.n, 2)
+    self.assertTrue(lm.sampling_options.logprobs)
+    self.assertEqual(lm.name, 'my_model')
+
+    lm = lm_lib.LanguageModel.get('MockModel?temperature=0.1', temperature=0.2)
+    self.assertEqual(lm.sampling_options.temperature, 0.2)
+
+    with self.assertRaisesRegex(ValueError, 'Invalid model string'):
+      lm_lib.LanguageModel.get('MockModel??')
+
+    with self.assertRaisesRegex(ValueError, 'Invalid kwargs in model string'):
+      lm_lib.LanguageModel.get('MockModel?temperature=0.1&')
 
   def test_basics(self):
     lm = MockModel(1, temperature=0.5, top_k=2, max_attempts=2)
