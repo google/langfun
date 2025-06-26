@@ -32,7 +32,6 @@ from langfun.core.coding.python.correction import correct
 from langfun.core.coding.python.correction import run_with_correction
 from langfun.core.coding.python.correction import CodeWithError
 
-from langfun.core.coding.python.sandboxing import Sandbox
 from langfun.core.coding.python.sandboxing import SandboxOutput
 from langfun.core.coding.python.sandboxing import MultiProcessingSandbox
 

@@ -16,7 +16,7 @@
 import abc
 import os
 import tempfile
-from typing import Annotated, Protocol, Self
+from typing import Annotated
 
 from langfun.core.coding.python import parsing
 import pyglove as pg
@@ -39,33 +39,6 @@ class SandboxOutput(pg.Object):
       dict[str, bytes],
       'The output files of the sandbox execution.'
   ] = {}
-
-
-class Sandbox(Protocol):
-  """Interface for Python sandbox."""
-
-  def run(
-      self,
-      code: str,
-      **kwargs,
-  ) -> SandboxOutput:
-    """Runs code in the sandbox."""
-
-  def upload(
-      self,
-      path: str,
-      **kwargs,
-  ) -> str:
-    """Uploads a file to the sandbox."""
-
-  def clone(self) -> 'Sandbox':
-    """Clones the sandbox."""
-
-  def __enter__(self) -> Self:
-    """Sandboxes should be used as a context manager."""
-
-  def __exit__(self, exc_type, exc_value, traceback) -> None:
-    """Sandboxes should be used as a context manager."""
 
 
 class BaseSandbox(pg.Object):
