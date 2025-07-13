@@ -17,6 +17,7 @@ import collections
 from concurrent import futures
 import contextlib
 import io
+import sys
 import time
 import unittest
 from langfun.core import component
@@ -330,6 +331,8 @@ class ProgressBarTest(unittest.TestCase):
       with self.assertRaisesRegex(ValueError, 'Unsupported status'):
         concurrent.ProgressBar.update(bar_id, 0, status=1)
       concurrent.ProgressBar.uninstall(bar_id)
+      sys.stderr.flush()
+      time.sleep(1)
     self.assertIn('1/4', string_io.getvalue())
     self.assertIn('2/4', string_io.getvalue())
     self.assertIn('hello', string_io.getvalue())

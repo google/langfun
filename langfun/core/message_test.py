@@ -521,12 +521,12 @@ class MessageConverterTest(unittest.TestCase):
       def from_value(self, value: tuple[int, ...]) -> message.Message:
         return message.UserMessage(','.join(str(x) for x in value))
 
-    self.assertIn('test_format1', message.Message.convertible_formats)
-    self.assertIn('test_format2', message.Message.convertible_formats)
-    self.assertIn('test_format3', message.Message.convertible_formats)
+    self.assertIn('test_format1', message.Message.convertible_formats())
+    self.assertIn('test_format2', message.Message.convertible_formats())
+    self.assertIn('test_format3', message.Message.convertible_formats())
 
-    self.assertIn(int, message.Message.convertible_types)
-    self.assertIn(tuple, message.Message.convertible_types)
+    self.assertIn(int, message.Message.convertible_types())
+    self.assertIn(tuple, message.Message.convertible_types())
     self.assertEqual(
         message.Message.from_value(1, format='test_format1'),
         message.UserMessage('1')

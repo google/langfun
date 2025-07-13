@@ -225,13 +225,11 @@ class Message(
     return MessageConverter.get(format_or_type, **kwargs).to_value(self)
 
   @classmethod
-  @property
   def convertible_formats(cls) -> list[str]:
     """Returns supported format for message conversion."""
     return MessageConverter.convertible_formats()
 
   @classmethod
-  @property
   def convertible_types(cls) -> list[str]:
     """Returns supported types for message conversion."""
     return MessageConverter.convertible_types()

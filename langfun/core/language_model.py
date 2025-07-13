@@ -667,10 +667,7 @@ class LMDebugMode(enum.IntFlag):
   PROMPT = enum.auto()
   RESPONSE = enum.auto()
 
-  @classmethod
-  @property
-  def ALL(cls) -> 'LMDebugMode':  # pylint: disable=invalid-name
-    return LMDebugMode.INFO | LMDebugMode.PROMPT | LMDebugMode.RESPONSE
+  ALL = INFO | PROMPT | RESPONSE
 
 
 class LanguageModel(component.Component):

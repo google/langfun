@@ -17,6 +17,7 @@ import abc
 import inspect
 import io
 import re
+import sys
 import textwrap
 import typing
 from typing import Any, Literal, Sequence, Type, Union
@@ -451,6 +452,15 @@ def class_definition(
       out.write(f'  """{cls.__doc__}"""\n')
     else:
       out.write('  """')
+
+      # Since Python 3.13, the indentation of docstring lines is removed.
+      # Therefore, we add two spaces to each non-empty line to keep the
+      # indentation consistent with the class definition.
+      if sys.version_info >= (3, 13):
+        for i in range(1, len(doc_lines)):
+          if doc_lines[i]:
+            doc_lines[i] = ' ' * 2 + doc_lines[i]
+
       for line in doc_lines:
         out.write(line)
         out.write('\n')
