@@ -114,6 +114,21 @@ class QueryTest(unittest.TestCase):
         ),
         'The answer is one.',
     )
+    # Testing tool calls in the response.
+    self.assertEqual(
+        querying.query(
+            'abc',
+            Activity,
+            lm=fake.StaticResponse(
+                lf.AIMessage(
+                    'Here is the answer.',
+                    tool_calls=[lf.AIMessage('Activity(description="hello")')],
+                    ),
+            ),
+        ),
+        Activity(description='hello'),
+    )
+    # Test completing a partial object.
     self.assertEqual(
         querying.query(
             Activity.partial(),

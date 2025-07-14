@@ -433,8 +433,18 @@ class Mapping(lf.LangFunc):
     schema = self.mapping_request.schema
     if schema is None:
       return None
+    response_text = lm_output.text
+
+    # For Gemini, we might have tool calls in the metadata, use tool call codes
+    # to construct the response text if it's present.
+    # NOTE(daiyip): This logic is subject to change.
+    if 'tool_calls' in lm_output.metadata:
+      assert lm_output.metadata['tool_calls'], lm_output.metadata
+      response_text = '\n'.join(
+          tc.text for tc in lm_output.metadata['tool_calls']
+      )
     return schema.parse(
-        lm_output.text,
+        response_text,
         protocol=self.protocol,
         additional_context=self.globals(),
         autofix=self.autofix,
