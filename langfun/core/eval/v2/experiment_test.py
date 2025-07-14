@@ -145,7 +145,7 @@ class RunIdTest(unittest.TestCase):
     )
 
   def test_get_latest(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_eval')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_eval')
     pg.io.mkdirs(os.path.join(root_dir, 'run_20241102_0'))
     pg.io.mkdirs(os.path.join(root_dir, 'run_20241101_0'))
     self.assertEqual(
@@ -153,15 +153,15 @@ class RunIdTest(unittest.TestCase):
         RunId.from_id('20241102_0')
     )
     self.assertIsNone(RunId.get_latest('/notexist'))
-    self.assertIsNone(RunId.get_latest(tempfile.gettempdir()))
+    self.assertIsNone(RunId.get_latest(tempfile.mkdtemp()))
 
   def test_new(self):
     rid = RunId(date=datetime.date.today(), number=1)
     self.assertEqual(
-        RunId.new(root_dir=os.path.join(tempfile.gettempdir(), 'test_new')),
+        RunId.new(root_dir=os.path.join(tempfile.mkdtemp(), 'test_new')),
         rid
     )
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_eval2')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_eval2')
     pg.io.mkdirs(rid.dirname(root_dir))
     self.assertEqual(RunId.new(root_dir), rid.next())
 
@@ -185,13 +185,13 @@ class RunIdTest(unittest.TestCase):
     with self.assertRaisesRegex(
         ValueError, '.* no previous runs'
     ):
-      RunId.from_id('latest', root_dir=tempfile.gettempdir())
+      RunId.from_id('latest', root_dir=tempfile.mkdtemp())
 
     self.assertEqual(
         RunId.from_id('20241102_1'),
         RunId(date=datetime.date(2024, 11, 2), number=1)
     )
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_eval3')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_eval3')
     rid = RunId.from_id('20241102_1')
     pg.io.mkdirs(rid.dirname(root_dir))
     self.assertEqual(
@@ -413,7 +413,7 @@ class RunnerTest(unittest.TestCase):
         ),
         TestRunner
     )
-    root_dir = os.path.join(tempfile.gettempdir(), 'my_eval')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'my_eval')
 
     # Test standard run.
     MyEvaluation(replica_id=0).run(

@@ -28,7 +28,7 @@ Example = example_lib.Example
 class SequenceWriterTest(unittest.TestCase):
 
   def test_basic(self):
-    file = os.path.join(tempfile.gettempdir(), 'test.jsonl')
+    file = os.path.join(tempfile.mkdtemp(), 'test.jsonl')
     writer = checkpointing.SequenceWriter(file)
     example = Example(id=1, input=pg.Dict(x=1), output=2)
     writer.add(example)
@@ -36,7 +36,7 @@ class SequenceWriterTest(unittest.TestCase):
     self.assertTrue(pg.io.path_exists(file))
 
   def test_error_handling(self):
-    file = os.path.join(tempfile.gettempdir(), 'test_error_handling.jsonl')
+    file = os.path.join(tempfile.mkdtemp(), 'test_error_handling.jsonl')
     writer = checkpointing.SequenceWriter(file)
     writer.add(Example(id=1, input=pg.Dict(x=1), output=2))
 
@@ -87,7 +87,7 @@ class CheckpointerTest(unittest.TestCase):
 class PerExampleCheckpointerTest(CheckpointerTest):
 
   def test_checkpointing(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'per_example_checkpointer')
     experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
     checkpointer = checkpointing.PerExampleCheckpointer(checkpoint_filename)
@@ -119,7 +119,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
       self.assertEqual(leaf.progress.num_skipped, num_processed[leaf.id])
 
     # Test warm start without reprocess.
-    root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer2')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'per_example_checkpointer2')
     experiment = eval_test_helper.test_experiment()
     _ = experiment.run(
         root_dir, 'new', runner='sequential', plugins=[checkpointer],
@@ -129,7 +129,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
       self.assertEqual(leaf.progress.num_skipped, num_processed[leaf.id])
 
     # Test warm start with reprocess.
-    root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer3')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'per_example_checkpointer3')
     experiment = eval_test_helper.test_experiment()
     _ = experiment.run(
         root_dir, 'new', runner='sequential', plugins=[checkpointer],
@@ -139,7 +139,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
     for leaf in experiment.leaf_nodes:
       self.assertEqual(leaf.progress.num_skipped, 0)
 
-    root_dir = os.path.join(tempfile.gettempdir(), 'per_example_checkpointer4')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'per_example_checkpointer4')
     experiment = eval_test_helper.test_experiment()
     _ = experiment.run(
         root_dir, 'new', runner='sequential', plugins=[checkpointer],
@@ -151,7 +151,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
 
   def test_loading_corrupted_checkpoint(self):
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'per_example_checkpointer_with_corrupted_checkpoint'
     )
     experiment = eval_test_helper.TestEvaluation()
@@ -178,7 +178,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
         num_processed[example.id] = i + 1
 
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'per_example_checkpointer_with_corrupted_checkpoint_warm_start'
     )
     experiment = eval_test_helper.TestEvaluation()
@@ -192,7 +192,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
 
   def test_checkpointing_error(self):
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'per_example_checkpointer_with_checkpointing_error'
     )
     experiment = (eval_test_helper
@@ -207,7 +207,7 @@ class PerExampleCheckpointerTest(CheckpointerTest):
 class BulkCheckpointerTest(CheckpointerTest):
 
   def test_checkpointing(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_bulk_checkpointer')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_bulk_checkpointer')
     experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
     checkpointer = checkpointing.BulkCheckpointer(checkpoint_filename)
@@ -238,7 +238,7 @@ class BulkCheckpointerTest(CheckpointerTest):
 
   def test_checkpointing_error(self):
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'bulk_checkpointer_with_checkpointing_error'
     )
     experiment = (eval_test_helper

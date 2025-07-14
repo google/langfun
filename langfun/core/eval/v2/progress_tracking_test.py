@@ -34,7 +34,7 @@ class HtmlProgressTrackerTest(unittest.TestCase):
     lf_console._notebook = pg.Dict(
         display=display
     )
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_html_progress_tracker')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_html_progress_tracker')
     experiment = eval_test_helper.test_experiment()
     _ = experiment.run(root_dir, 'new', plugins=[])
     self.assertIsInstance(result['view'], pg.Html)
@@ -44,7 +44,7 @@ class HtmlProgressTrackerTest(unittest.TestCase):
 class TqdmProgressTrackerTest(unittest.TestCase):
 
   def test_basic(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_tqdm_progress_tracker')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_tqdm_progress_tracker')
     experiment = eval_test_helper.test_experiment()
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
@@ -53,7 +53,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
 
   def test_with_example_ids(self):
     root_dir = os.path.join(
-        tempfile.gettempdir(), 'test_tqdm_progress_tracker_with_example_ids'
+        tempfile.mkdtemp(), 'test_tqdm_progress_tracker_with_example_ids'
     )
     experiment = eval_test_helper.test_experiment()
     string_io = io.StringIO()

@@ -116,7 +116,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.metric_metadata, dict(error='ValueError'))
 
   def test_evaluate_withstate(self):
-    eval_dir = os.path.join(tempfile.gettempdir(), 'test_eval')
+    eval_dir = os.path.join(tempfile.mkdtemp(), 'test_eval')
     pg.io.mkdirs(eval_dir, exist_ok=True)
     state_file = os.path.join(eval_dir, 'state.jsonl')
     with pg.io.open_sequence(state_file, 'w') as f:

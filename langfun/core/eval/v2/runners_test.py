@@ -103,7 +103,7 @@ class RunnerTest(unittest.TestCase):
   def test_basic(self):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_sequential_runner')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_sequential_runner')
     run = exp.run(root_dir, runner='sequential', plugins=[plugin])
 
     self.assertIsNotNone(plugin.start_time)
@@ -143,7 +143,7 @@ class RunnerTest(unittest.TestCase):
         self.assertEqual(node.progress.num_processed, node.progress.num_total)
 
   def test_raise_if_has_error(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_raise_if_has_error')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_raise_if_has_error')
     exp = eval_test_helper.TestEvaluation()
     with self.assertRaisesRegex(ValueError, 'x should not be 5'):
       exp.run(
@@ -154,7 +154,7 @@ class RunnerTest(unittest.TestCase):
       exp.run(root_dir, runner='parallel', plugins=[], raise_if_has_error=True)
 
   def test_example_ids(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_example_ids')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_example_ids')
     exp = eval_test_helper.test_experiment()
     plugin = TestPlugin()
     _ = exp.run(
@@ -164,7 +164,7 @@ class RunnerTest(unittest.TestCase):
     self.assertEqual(plugin.completed_example_ids, [5, 7, 9] * 6)
 
   def test_shuffle_inputs(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_shuffle_inputs')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_shuffle_inputs')
     exp = eval_test_helper.test_experiment()
     plugin = TestPlugin()
     run = exp.run(
@@ -175,7 +175,7 @@ class RunnerTest(unittest.TestCase):
   def test_filter(self):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_filter')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_filter')
 
     _ = exp.run(
         root_dir, runner='sequential', plugins=[plugin],
@@ -207,7 +207,7 @@ class RunnerTest(unittest.TestCase):
         inputs=test_inputs(num_examples=pg.oneof([2, 4]))
     )
     # Global cache.
-    root_dir = os.path.join(tempfile.gettempdir(), 'global_cache')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'global_cache')
     run = exp.run(
         root_dir, 'new', runner='sequential', use_cache='global', plugins=[]
     )
@@ -216,7 +216,7 @@ class RunnerTest(unittest.TestCase):
     self.assertEqual(exp.usage_summary.uncached.total.num_requests, 2)
 
     # Per-dataset cache.
-    root_dir = os.path.join(tempfile.gettempdir(), 'per_dataset')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'per_dataset')
     run = exp.run(
         root_dir, 'new', runner='sequential',
         use_cache='per_dataset', plugins=[]
@@ -229,7 +229,7 @@ class RunnerTest(unittest.TestCase):
     self.assertEqual(exp.usage_summary.uncached.total.num_requests, 3)
 
     # No cache.
-    root_dir = os.path.join(tempfile.gettempdir(), 'no')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'no')
     run = exp.run(root_dir, runner='sequential', use_cache='no', plugins=[])
     self.assertFalse(pg.io.path_exists(run.output_path_for(exp, 'cache.json')))
     for leaf in exp.leaf_nodes:
@@ -245,7 +245,7 @@ class ParallelRunnerTest(RunnerTest):
   def test_parallel_runner(self):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_parallel_runner')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_parallel_runner')
     run = exp.run(root_dir, runner='parallel', plugins=[plugin])
 
     self.assertIsNotNone(plugin.start_time)
@@ -286,7 +286,7 @@ class ParallelRunnerTest(RunnerTest):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(
-        tempfile.gettempdir(), 'test_concurrent_startup_delay'
+        tempfile.mkdtemp(), 'test_concurrent_startup_delay'
     )
     _ = exp.run(
         root_dir,
@@ -301,7 +301,7 @@ class DebugRunnerTest(RunnerTest):
   def test_debug_runner(self):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_debug_runner')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_debug_runner')
     run = exp.run(root_dir, runner='debug', plugins=[plugin])
 
     self.assertIsNotNone(plugin.start_time)

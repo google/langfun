@@ -683,16 +683,14 @@ class LanguageModelTest(unittest.TestCase):
 
       debug_info = string_io.getvalue()
       expected_included = [
-          debug_prints[f]
-          for f in lm_lib.LMDebugMode
-          if f != lm_lib.LMDebugMode.NONE and f in debug_mode
+          debug_prints[f] for f in (info_flag, prompt_flag, response_flag)
+          if f in debug_mode
       ]
       expected_excluded = [
           debug_prints[f]
-          for f in lm_lib.LMDebugMode
-          if f != lm_lib.LMDebugMode.NONE and f not in debug_mode
+          for f in (info_flag, prompt_flag, response_flag)
+          if f not in debug_mode
       ]
-
       for expected_include in expected_included:
         self.assertIn('[0] ' + expected_include, debug_info)
       for expected_exclude in expected_excluded:

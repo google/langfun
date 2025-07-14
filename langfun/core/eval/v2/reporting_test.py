@@ -25,7 +25,7 @@ import pyglove as pg
 class ReportingTest(unittest.TestCase):
 
   def test_reporting(self):
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_reporting')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_reporting')
     experiment = eval_test_helper.test_experiment()
     checkpointer = checkpointing.BulkCheckpointer('checkpoint.jsonl')
     reporter = reporting.HtmlReporter()
@@ -49,7 +49,7 @@ class ReportingTest(unittest.TestCase):
       self.assertTrue(found_generation_log)
 
     # Test warm start.
-    root_dir = os.path.join(tempfile.gettempdir(), 'test_reporting2')
+    root_dir = os.path.join(tempfile.mkdtemp(), 'test_reporting2')
     experiment = eval_test_helper.test_experiment()
     run = experiment.run(
         root_dir, 'new', plugins=[checkpointer, reporter],
@@ -75,7 +75,7 @@ class ReportingTest(unittest.TestCase):
 
   def test_index_html_generation_error(self):
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'test_reporting_with_index_html_generation_error'
     )
     experiment = (eval_test_helper
@@ -98,7 +98,7 @@ class ReportingTest(unittest.TestCase):
 
   def test_example_html_generation_error(self):
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'test_reporting_with_example_html_generation_error'
     )
     experiment = (eval_test_helper
@@ -126,7 +126,7 @@ class ReportingTest(unittest.TestCase):
 
     # Test warm start.
     root_dir = os.path.join(
-        tempfile.gettempdir(),
+        tempfile.mkdtemp(),
         'test_reporting_with_example_html_generation_error2'
     )
     experiment = (eval_test_helper
