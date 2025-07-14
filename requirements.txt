@@ -1,15 +1,14 @@
-pyglove>=0.4.5.dev202409110000
 jinja2>=3.1.2
+puremagic>=1.20
+pyglove>=0.4.5.dev202507140812
 requests>=2.31.0
-
-# extras:ui
-termcolor==1.1.0
-tqdm>=4.64.1
 
 # extras:vertexai
 google-auth>=2.16.0
 
-# extras:mime-auto
-python-magic>=0.4.27
 # extras:mime-pil
 pillow>=10.0.0
+
+# extras:ui
+termcolor==1.1.0
+tqdm>=4.64.1
