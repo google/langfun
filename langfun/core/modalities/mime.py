@@ -18,18 +18,21 @@ import functools
 from typing import Annotated, Any, Iterable, Type, Union
 import langfun.core as lf
 # Placeholder for Google-internal internet access import.
+import puremagic as pm
 import pyglove as pg
 import requests   # pylint: disable=unused-import
 
 
-try:
-  import magic    # pylint: disable=g-import-not-at-top
-  from_buffer = magic.from_buffer
-except ImportError:
-  def from_buffer(*unused_args, **unused_kwargs):
-    raise RuntimeError(
-        'Please install "langfun[mime-auto]" to enable automatic MIME support.'
-    )
+def _detect_mime_type(content: bytes) -> str:
+  """Returns the MIME type from the given content."""
+  try:
+    return pm.from_string(content, mime=True).lower()
+  except pm.PureError:
+    try:
+      content.decode('utf-8')
+      return 'text/plain'
+    except UnicodeDecodeError:
+      return 'application/octet-stream'
 
 
 class Mime(lf.Modality):
@@ -48,7 +51,7 @@ class Mime(lf.Modality):
   @functools.cached_property
   def mime_type(self) -> str:
     """Returns the MIME type."""
-    mime = from_buffer((self.to_bytes()), mime=True)
+    mime = _detect_mime_type(self.to_bytes())
     if (
         self.MIME_PREFIX
         and not mime.lower().startswith(self.MIME_PREFIX)
@@ -160,7 +163,7 @@ class Mime(lf.Modality):
 
     if cls is Mime:
       content = cls.download(uri)
-      mime = from_buffer(content, mime=True).lower()
+      mime = _detect_mime_type(content)
       return cls.class_from_mime_type(mime)(uri=uri, content=content, **kwargs)
     return cls(uri=uri, content=None, **kwargs)
 
@@ -184,8 +187,9 @@ class Mime(lf.Modality):
   @classmethod
   def from_bytes(cls, content: bytes | str, **kwargs) -> 'Mime':
     if cls is Mime:
-      mime = from_buffer(content, mime=True).lower()
-      return cls.class_from_mime_type(mime)(content=content, **kwargs)
+      return cls.class_from_mime_type(
+          _detect_mime_type(content)
+      )(content=content, **kwargs)
     return cls(content=content, **kwargs)
 
   @classmethod

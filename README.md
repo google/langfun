@@ -142,37 +142,14 @@ a tag from the list below:
 | all                 | All Langfun features.                    |
 | vertexai            | VertexAI access.                         |
 | mime                | All MIME supports.                       |
-| mime-auto           | Automatic MIME type detection.           |
 | mime-pil            | Image support for PIL.                   |
 | ui                  | UI enhancements                          |
 
 For example, to install a nightly build that includes VertexAI access, full
 modality support, and UI enhancements, use:
+
 ```
 pip install langfun[vertexai,mime,ui] --pre
-```
-
-### Solving import issue with `libmagic`
-
-Langfun utilizes `libmagic` for automatic MIME type detection to support
-multi-modal functionalities. However, `pip install libmagic` may not work
-out-of-the-box on all operation systems, sometimes leading to an
-`'ImportError: failed to find libmagic.'` error after Langfun installation.
-
-If you encounter this error, you will need to follow the recommendations below
-to fix the installation of `libmagic` library.
-
-#### OSX
-
-```
-conda install conda-forge::libmagic
-```
-
-#### Windows:
-```
-pip install python-magic
-pip uninstall python-magic-bin
-pip install python-magic-bin
 ```
 
 *Disclaimer: this is not an officially supported Google product.*

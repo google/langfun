@@ -34,8 +34,8 @@ class AudioTest(unittest.TestCase):
 
   def test_audio_content(self):
     audio = audio_lib.Audio.from_bytes(content_bytes)
-    self.assertEqual(audio.mime_type, 'audio/x-wav')
-    self.assertEqual(audio.audio_format, 'x-wav')
+    self.assertIn(audio.mime_type, ('audio/wave', 'audio/x-wav'))
+    self.assertIn(audio.audio_format, ('wave', 'x-wav'))
     self.assertEqual(audio.to_bytes(), content_bytes)
 
   def test_bad_audio(self):
@@ -50,8 +50,8 @@ class AudioFileTest(unittest.TestCase):
     audio = audio_lib.Audio.from_uri('http://mock/web/a.wav')
     with mock.patch('requests.get') as mock_requests_get:
       mock_requests_get.side_effect = mock_request
-      self.assertEqual(audio.audio_format, 'x-wav')
-      self.assertEqual(audio.mime_type, 'audio/x-wav')
+      self.assertIn(audio.audio_format, ('wave', 'x-wav'))
+      self.assertIn(audio.mime_type, ('audio/wave', 'audio/x-wav'))
       self.assertEqual(
           audio._raw_html(),
           '<audio controls> <source src="http://mock/web/a.wav"> </audio>',
