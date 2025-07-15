@@ -78,7 +78,7 @@ class RandomChoice(lf.LanguageModel):
     )
 
   def __call__(
-      self, prompt: lf.Message, *, cache_seed: int = 0, **kwargs
+      self, prompt: str | lf.Message, *, cache_seed: int = 0, **kwargs
   ) -> lf.Message:
     return self._select_lm()(prompt, cache_seed=cache_seed, **kwargs)
 

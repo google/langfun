@@ -1098,7 +1098,10 @@ class LanguageModel(component.Component):
     return [job.result for job in executed_jobs]
 
   def __call__(
-      self, prompt: message_lib.Message, *, cache_seed: int = 0, **kwargs
+      self,
+      prompt: str | message_lib.Message,
+      *,
+      cache_seed: int = 0, **kwargs
   ) -> message_lib.Message:
     """Returns the first candidate."""
     prompt = message_lib.UserMessage.from_value(prompt)
