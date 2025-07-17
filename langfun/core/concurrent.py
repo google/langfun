@@ -203,7 +203,7 @@ def concurrent_execute(
       list of outputs.
 
   Returns:
-    A list of ouputs. Each is the return value of `func` based on the input
+    A list of outputs. Each is the return value of `func` based on the input
       value. Order is preserved.
   """
   jobs = []
@@ -647,7 +647,7 @@ def concurrent_map(
     exponential_backoff: bool = True,
     return_jobs: bool = False,
 ) -> Iterator[Any]:
-  """Maps inputs to outptus via func concurrently under current context.
+  """Maps inputs to outputs via func concurrently under current context.
 
   Args:
     func: A user function.
