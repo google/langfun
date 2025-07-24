@@ -131,10 +131,13 @@ class VertexAI(rest.REST):
       )
     self._credentials = credentials
 
-  def _session(self):
+  def session(self):
+    assert self._api_initialized
     assert self._credentials is not None
     assert auth_requests is not None
-    return auth_requests.AuthorizedSession(self._credentials)
+    s = auth_requests.AuthorizedSession(self._credentials)
+    s.headers.update(self.headers or {})
+    return s
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
     assert auth_exceptions is not None
