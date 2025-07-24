@@ -61,6 +61,12 @@ class GenAI(gemini.Gemini):
         override=dict(provider='Google GenAI')
     )
 
+  def session(self):
+    assert self._api_initialized
+    s = self._session()
+    s.headers.update(self.headers or {})
+    return s
+
   @property
   def api_endpoint(self) -> str:
     api_key = self.api_key or os.environ.get('GOOGLE_API_KEY', None)
