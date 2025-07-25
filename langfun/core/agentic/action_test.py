@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for base action."""
 
+import asyncio
 import unittest
 
 import langfun.core as lf
@@ -32,7 +33,7 @@ class Bar(action_lib.Action):
     session.add_metadata(note='bar')
     if self.simulate_action_error:
       raise ValueError('Bar error')
-    return 2
+    return 2 + pg.contextual_value('baz', 0)
 
 
 class Foo(action_lib.Action):
@@ -236,6 +237,12 @@ class SessionTest(unittest.TestCase):
     # Save session to JSON
     json_str = session.to_json_str(save_ref_value=True)
     self.assertIsInstance(pg.from_json_str(json_str), action_lib.Session)
+
+  def test_acall(self):
+    bar = Bar()
+    with lf.context(baz=1):
+      r = bar.acall(lm=fake.StaticResponse('lm response'))
+      self.assertEqual(asyncio.run(r), 3)
 
   def test_failed_action(self):
     lm = fake.StaticResponse('lm response')

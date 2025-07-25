@@ -666,6 +666,48 @@ def query(
   return output_message.text if schema in (None, str) else output_message.result
 
 
+async def aquery(
+    prompt: Union[str, lf.Template, Any],
+    schema: schema_lib.SchemaType |  None = None,
+    default: Any = lf.RAISE_IF_HAS_ERROR,
+    *,
+    lm: lf.LanguageModel | list[lf.LanguageModel] | None = None,
+    num_samples: int | list[int] = 1,
+    system_message: str | lf.Template | None = None,
+    examples: list[mapping.MappingExample] | None = None,
+    cache_seed: int | None = 0,
+    response_postprocess: Callable[[str], str] | None = None,
+    autofix: int = 0,
+    autofix_lm: lf.LanguageModel | None = None,
+    protocol: str | None = None,
+    returns_message: bool = False,
+    skip_lm: bool = False,
+    invocation_id: str | None = None,
+    **kwargs,
+) -> Any:
+  """Async version of `lf.query`."""
+  # TODO(daiyip): implement native async querying.
+  return await lf.invoke_async(
+      query,
+      prompt,
+      schema,
+      default,
+      lm=lm,
+      num_samples=num_samples,
+      system_message=system_message,
+      examples=examples,
+      cache_seed=cache_seed,
+      response_postprocess=response_postprocess,
+      autofix=autofix,
+      autofix_lm=autofix_lm,
+      protocol=protocol,
+      returns_message=returns_message,
+      skip_lm=skip_lm,
+      invocation_id=invocation_id,
+      **kwargs
+  )
+
+
 @contextlib.contextmanager
 def query_protocol(protocol: str) -> Iterator[None]:
   """Context manager for setting the query protocol for the scope."""

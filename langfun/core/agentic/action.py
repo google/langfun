@@ -199,6 +199,24 @@ class Action(pg.Object):
     """Returns last invocation. None if the action is not executed."""
     return self._invocation
 
+  async def acall(
+      self,
+      session: Optional['Session'] = None,
+      *,
+      show_progress: bool = True,
+      verbose: bool = False,
+      **kwargs
+  ) -> Any:
+    """Async version of `__call__`."""
+    # TODO(daiyip): implement native async calling.
+    return await lf.invoke_async(
+        self.__call__,
+        session,
+        show_progress=show_progress,
+        verbose=verbose,
+        **kwargs
+    )
+
   def __call__(
       self,
       session: Optional['Session'] = None,

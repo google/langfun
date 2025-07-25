@@ -40,6 +40,9 @@ from langfun.core.component import context
 as_context = context
 use_context = context
 
+# Invoke a callable object asynchronously.
+from langfun.core.async_support import invoke_async
+
 # Shortcut function for overriding components attributes, usually for
 # override settings.
 from langfun.core.component import use_settings

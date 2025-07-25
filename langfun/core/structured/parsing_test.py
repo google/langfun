@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for structured parsing."""
 
+import asyncio
 import inspect
 import unittest
 
@@ -290,6 +291,10 @@ class ParseStructurePythonTest(unittest.TestCase):
             tags=['lm-response', 'lm-output', 'transformed']
         ),
     )
+
+  def test_aparse(self):
+    with lf.context(lm=fake.StaticResponse('1')):
+      self.assertEqual(asyncio.run(parsing.aparse('the answer is 1', int)), 1)
 
 
 class ParseStructureJsonTest(unittest.TestCase):
@@ -582,6 +587,16 @@ class CallTest(unittest.TestCase):
         })
     ):
       self.assertEqual(parsing.call('Compute 1 + 2'), 'three')
+
+  def test_acall(self):
+    with lf.context(
+        lm=fake.StaticMapping({
+            'Compute 1 + 2': 'three',
+        })
+    ):
+      self.assertEqual(
+          asyncio.run(parsing.acall('Compute 1 + 2')), 'three'
+      )
 
   def test_call_with_template_str(self):
     with lf.context(

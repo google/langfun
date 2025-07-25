@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for structured query."""
 
+import asyncio
 import inspect
 import math
 import time
@@ -1334,6 +1335,15 @@ class LfQueryJsonV1Test(unittest.TestCase):
     with querying.query_protocol('json'):
       self.assertEqual(
           querying.query('what is 1 + 0', int, lm=lm), 1
+      )
+
+  def test_aquery(self):
+    with lf.context(lm=fake.StaticResponse('{"result": 1}')):
+      self.assertEqual(
+          asyncio.run(
+              querying.aquery('what is 1 + 0', int, protocol='json')
+          ),
+          1
       )
 
 

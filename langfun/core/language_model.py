@@ -24,6 +24,7 @@ import re
 import threading
 import time
 from typing import Annotated, Any, Callable, ClassVar, Iterator, Literal, Optional, Sequence, Tuple, Type, Union, final
+from langfun.core import async_support
 from langfun.core import component
 from langfun.core import concurrent
 from langfun.core import console
@@ -921,6 +922,59 @@ class LanguageModel(component.Component):
   #
   # Language model operations.
   #
+
+  async def asample(
+      self,
+      prompts: list[str | message_lib.Message],
+      *,
+      cache_seed: int = 0,
+      **kwargs,
+  ) -> message_lib.Message:
+    """Async version of sample."""
+    # TODO(daiyip): implement native async sampling.
+    return await async_support.invoke_async(
+        self.sample, prompts, cache_seed=cache_seed, **kwargs
+    )
+
+  async def acall(
+      self,
+      prompt: str | message_lib.Message,
+      *,
+      cache_seed: int = 0,
+      **kwargs
+  ) -> message_lib.Message:
+    """Async version of __call__."""
+    # TODO(daiyip): implement native async calling.
+    return await async_support.invoke_async(
+        self.__call__,
+        prompt,
+        cache_seed=cache_seed,
+        **kwargs
+    )
+
+  async def ascore(
+      self,
+      prompt: str | message_lib.Message | list[message_lib.Message],
+      completions: list[str | message_lib.Message],
+      **kwargs,
+  ) -> float:
+    """Async version of score."""
+    # TODO(daiyip): implement native async scoring.
+    return await async_support.invoke_async(
+        self.score,
+        prompt,
+        completions=completions,
+        **kwargs
+    )
+
+  async def atokenize(
+      self,
+      prompt: str | message_lib.Message,
+      **kwargs
+  ) -> list[int]:
+    """Async version of tokenize."""
+    # TODO(daiyip): implement native async tokenization.
+    return await async_support.invoke_async(self.tokenize, prompt, **kwargs)
 
   def sample(
       self,

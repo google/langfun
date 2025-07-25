@@ -51,13 +51,16 @@ from langfun.core.structured.mapping import MappingError
 from langfun.core.structured.mapping import MappingExample
 
 from langfun.core.structured.parsing import parse
+from langfun.core.structured.parsing import aparse
 from langfun.core.structured.parsing import call
+from langfun.core.structured.parsing import acall
 
 from langfun.core.structured.querying import track_queries
 from langfun.core.structured.querying import QueryInvocation
 
 from langfun.core.structured.querying import LfQuery
 from langfun.core.structured.querying import query
+from langfun.core.structured.querying import aquery
 from langfun.core.structured.querying import query_and_reduce
 from langfun.core.structured.querying import query_protocol
 
@@ -67,10 +70,14 @@ from langfun.core.structured.querying import query_reward
 
 from langfun.core.structured.description import describe
 from langfun.core.structured.completion import complete
+from langfun.core.structured.completion import acomplete
 
 from langfun.core.structured.scoring import score
+from langfun.core.structured.scoring import ascore
 
 from langfun.core.structured.tokenization import tokenize
+from langfun.core.structured.tokenization import atokenize
+
 
 # Expose default examples for structured operations so users could refer to
 # them.

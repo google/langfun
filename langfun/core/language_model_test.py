@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for language model."""
 
+import asyncio
 import contextlib
 import io
 import unittest
@@ -436,6 +437,14 @@ class LanguageModelTest(unittest.TestCase):
         ]
     )
 
+  def test_sample_async(self):
+    lm = MockModel(top_k=1)
+    response = asyncio.run(lm.asample(['foo', 'bar']))
+    self.assertIsInstance(response, list)
+    self.assertEqual(len(response), 2)
+    self.assertIsInstance(response[0], lm_lib.LMSamplingResult)
+    self.assertIsInstance(response[1], lm_lib.LMSamplingResult)
+
   def test_call(self):
     lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
     response = lm(prompt='foo')
@@ -452,6 +461,11 @@ class LanguageModelTest(unittest.TestCase):
     )
     # Test override individual flags within sampling_options.
     self.assertEqual(lm('foo', top_k=2), 'foo' * 2)
+
+  def test_acall(self):
+    lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
+    response = asyncio.run(lm.acall(prompt='foo'))
+    self.assertEqual(response.text, 'foo')
 
   def test_using_cache(self):
     cache = in_memory.InMemory()
@@ -765,6 +779,21 @@ class LanguageModelTest(unittest.TestCase):
       if debug_mode & lm_lib.LMDebugMode.PROMPT:
         self.assertIn('[0] MODALITY OBJECTS SENT TO LM', debug_info)
 
+  def test_ascore(self):
+    lm = MockScoringModel()
+    self.assertEqual(
+        asyncio.run(
+            lm.ascore(
+                message_lib.UserMessage('hi'),
+                ['1', '2']
+            )
+        ),
+        [
+            lm_lib.LMScoringResult(score=-0.0),
+            lm_lib.LMScoringResult(score=-1.0),
+        ],
+    )
+
   def test_score_with_unmatched_prompt_and_completions(self):
     with self.assertRaises(ValueError):
       MockScoringModel().score(['hi',], ['1', '2', '3'])
@@ -827,6 +856,17 @@ class LanguageModelTest(unittest.TestCase):
 
       if debug_mode & lm_lib.LMDebugMode.PROMPT:
         self.assertIn('[0] MODALITY OBJECTS SENT TO LM', debug_info)
+
+  def test_atokenize(self):
+    lm = MockTokenizeModel()
+    self.assertEqual(
+        asyncio.run(
+            lm.atokenize(
+                message_lib.UserMessage('hi')
+            )
+        ),
+        [('hi', 0)],
+    )
 
   def test_tokenize_with_unsupported_model(self):
     with self.assertRaises(NotImplementedError):

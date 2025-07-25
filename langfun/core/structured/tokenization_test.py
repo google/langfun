@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import unittest
 import langfun.core as lf
 from langfun.core.llms import fake
@@ -35,6 +36,13 @@ class TokenizationTest(unittest.TestCase):
         tokenization.tokenize('hi', lm=fake.Echo()),
         [('hi', 0)]
     )
+
+  def test_atokenize(self):
+    with lf.context(lm=fake.Echo()):
+      self.assertEqual(
+          asyncio.run(tokenization.atokenize('hi')),
+          [('hi', 0)]
+      )
 
   def test_tokenize_with_lm_from_the_context(self):
     with lf.context(lm=fake.Echo()):

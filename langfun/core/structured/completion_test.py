@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for langfun.core.structured.completion."""
 
+import asyncio
 import inspect
 import unittest
 
@@ -619,6 +620,41 @@ class CompleteStructureTest(unittest.TestCase):
         override_attrs=True,
     ):
       self.assertIsNone(completion.complete(Activity.partial(), None))
+
+  def test_acomplete(self):
+    response = """
+    ```python
+        TripPlan(
+          place='San Francisco',
+          itineraries=[
+            Itinerary(
+                day=1,
+                type='daytime',
+                activities=[
+                    Activity(description='Arrive in San Francisco and check into your hotel.'),
+                    Activity(description='Take a walk around Fisherman\\'s Wharf and have dinner at one of the many seafood restaurants.'),
+                    Activity(description='Visit Pier 39 and see the sea lions.'),
+                ], 
+            ),
+          ]
+        )
+    ```
+    """
+    with lf.context(
+        lm=fake.StaticSequence(
+            [response],
+        ),
+        override_attrs=True,
+    ):
+      r = completion.acomplete(
+          TripPlan.partial(
+              place='San Francisco',
+              itineraries=[
+                  Itinerary.partial(day=1),
+              ],
+          )
+      )
+      self.assertIsInstance(asyncio.run(r), TripPlan)
 
 
 if __name__ == '__main__':

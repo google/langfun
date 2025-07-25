@@ -179,3 +179,31 @@ def _get_first_oneof(value: Any) -> pg.hyper.OneOf:
   pg.traverse(value, select_oneofs)
   assert oneofs
   return oneofs[0]
+
+
+async def ascore(
+    prompt: Union[str, pg.Symbolic] | list[str | pg.Symbolic],
+    completions: list[str | pg.Symbolic],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
+    ] = None,
+    *,
+    lm: lf.LanguageModel | None = None,
+    examples: list[mapping.MappingExample] | None = None,
+    protocol: schema_lib.SchemaProtocol = 'python',
+    return_scoring_results: bool = False,
+    **kwargs,
+) -> list[float] | list[lf.LMScoringResult]:
+  """Async version of `lf.score`."""
+  # TODO(daiyip): implement native async scoring.
+  return await lf.invoke_async(
+      score,
+      prompt,
+      completions,
+      schema=schema,
+      lm=lm,
+      examples=examples,
+      protocol=protocol,
+      return_scoring_results=return_scoring_results,
+      **kwargs,
+  )

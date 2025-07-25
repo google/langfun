@@ -251,3 +251,31 @@ def complete(
 
   output = t(lm=lm, cache_seed=cache_seed, autofix_lm=autofix_lm or lm)
   return output if returns_message else output.result
+
+
+async def acomplete(
+    input_value: pg.Symbolic,
+    default: Any = lf.RAISE_IF_HAS_ERROR,
+    *,
+    lm: lf.LanguageModel | None = None,
+    examples: list[mapping.MappingExample] | None = None,
+    cache_seed: int | None = 0,
+    autofix: int = 0,
+    autofix_lm: lf.LanguageModel | None = None,
+    returns_message: bool = False,
+    **kwargs,
+) -> Any:
+  """Async version of `lf.complete`."""
+  # TODO(daiyip): implement native async completion.
+  return await lf.invoke_async(
+      complete,
+      input_value,
+      default,
+      lm=lm,
+      examples=examples,
+      cache_seed=cache_seed,
+      autofix=autofix,
+      autofix_lm=autofix_lm,
+      returns_message=returns_message,
+      **kwargs
+  )

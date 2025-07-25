@@ -62,3 +62,27 @@ def tokenize(
     lm = lm_override.value
 
   return lm.tokenize(input_message)
+
+
+async def atokenize(
+    prompt: Union[str, pg.Symbolic] | list[str | pg.Symbolic],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
+    ] = None,
+    *,
+    lm: lf.LanguageModel | None = None,
+    examples: list[mapping.MappingExample] | None = None,
+    protocol: schema_lib.SchemaProtocol = 'python',
+    **kwargs,
+) -> list[tuple[str | bytes, int]]:
+  """Async version of `lf.tokenize`."""
+  # TODO(daiyip): implement native async tokenization.
+  return await lf.invoke_async(
+      tokenize,
+      prompt,
+      schema,
+      lm=lm,
+      examples=examples,
+      protocol=protocol,
+      **kwargs,
+  )

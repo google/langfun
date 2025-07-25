@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import unittest
 import langfun.core as lf
 from langfun.core.llms import fake
@@ -49,6 +50,13 @@ class ScoringTest(unittest.TestCase):
 
   def test_score(self):
     self.assertEqual(scoring.score('hi', [1, 2], lm=fake.Echo()), [0.0, -1.0])
+
+  def test_ascore(self):
+    with lf.context(lm=fake.Echo()):
+      self.assertEqual(
+          asyncio.run(scoring.ascore('hi', [1, 2], lm=fake.Echo())),
+          [0.0, -1.0]
+      )
 
   def test_score_on_field_values(self):
     self.assertEqual(

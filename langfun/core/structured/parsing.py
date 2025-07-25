@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Symbolic parsing."""
+
 from typing import Any, Callable, Type, Union
 
 import langfun.core as lf
@@ -183,6 +184,44 @@ def parse(
   return output if returns_message else output.result
 
 
+async def aparse(
+    message: Union[lf.Message, str],
+    schema: Union[
+        schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
+    ],
+    default: Any = lf.RAISE_IF_HAS_ERROR,
+    *,
+    user_prompt: str | None = None,
+    lm: lf.LanguageModel | None = None,
+    examples: list[mapping.MappingExample] | None = None,
+    include_context: bool = False,
+    cache_seed: int | None = 0,
+    autofix: int = 0,
+    autofix_lm: lf.LanguageModel | None = None,
+    protocol: schema_lib.SchemaProtocol = 'python',
+    returns_message: bool = False,
+    **kwargs,
+) -> Any:
+  """Async version of `lf.parse`."""
+  # TODO(daiyip): implement native async parsing.
+  return await lf.invoke_async(
+      parse,
+      message,
+      schema,
+      default,
+      user_prompt=user_prompt,
+      lm=lm,
+      examples=examples,
+      include_context=include_context,
+      cache_seed=cache_seed,
+      autofix=autofix,
+      autofix_lm=autofix_lm,
+      protocol=protocol,
+      returns_message=returns_message,
+      **kwargs
+  )
+
+
 def call(
     prompt: str | lf.Template,
     schema: Union[
@@ -296,6 +335,44 @@ def call(
     _chain_nl_output_message(e.lm_response)
     raise e
   return parsing_message if returns_message else parsing_message.result
+
+
+async def acall(
+    prompt: str | lf.Template,
+    schema: Union[
+        None, schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
+    ] = None,
+    *,
+    lm: lf.LanguageModel | None = None,
+    parsing_lm: lf.LanguageModel | None = None,
+    parsing_examples: list[mapping.MappingExample] | None = None,
+    parsing_include_context: bool = False,
+    cache_seed: int | None = 0,
+    autofix: int = 0,
+    autofix_lm: lf.LanguageModel | None = None,
+    response_postprocess: Callable[[str], str] | None = None,
+    protocol: schema_lib.SchemaProtocol = 'python',
+    returns_message: bool = False,
+    **kwargs,
+) -> Any:
+  """Async version of `lf.call`."""
+  # TODO(daiyip): implement native async calling.
+  return await lf.invoke_async(
+      call,
+      prompt,
+      schema,
+      lm=lm,
+      parsing_lm=parsing_lm,
+      parsing_examples=parsing_examples,
+      parsing_include_context=parsing_include_context,
+      cache_seed=cache_seed,
+      autofix=autofix,
+      autofix_lm=autofix_lm,
+      response_postprocess=response_postprocess,
+      protocol=protocol,
+      returns_message=returns_message,
+      **kwargs
+  )
 
 
 def _parse_structure_cls(
