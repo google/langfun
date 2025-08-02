@@ -307,7 +307,7 @@ class Template(
                 else:
                   raise ValueError(
                       f'The value for template variable {var_name!r} is not '
-                      'provided.'
+                      f'provided. Template: {self.template_str!r}'
                   )
               inputs[var_name] = var_value
 
