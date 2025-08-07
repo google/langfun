@@ -128,10 +128,17 @@ class EvaluationTest(unittest.TestCase):
       self.assertEqual(len(exp.state.evaluation_status), 1)
       f.add(pg.to_json_str(example))
 
+      example2 = exp.evaluate(6)
+      self.assertTrue(example2.newly_processed)
+      self.assertEqual(example2.input, pg.Dict(x=5, y=25, groundtruth=30))
+      self.assertTrue(example2.has_error)
+      self.assertEqual(len(exp.state.evaluation_status), 2)
+      f.add(pg.to_json_str(example2))
+
     exp.reset()
     self.assertEqual(len(exp.state.ckpt_examples), 0)
     exp.load_state(state_file)
-    self.assertEqual(len(exp.state.ckpt_examples), 1)
+    self.assertEqual(len(exp.state.ckpt_examples), 2)
     self.assertEqual(len(exp.state.evaluation_status), 0)
     example = exp.evaluate(3)
     self.assertFalse(example.newly_processed)
@@ -142,6 +149,19 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.usage_summary.cached.total.num_requests, 1)
     self.assertEqual(example.usage_summary.uncached.total.total_tokens, 0)
     self.assertEqual(example.usage_summary.uncached.total.num_requests, 0)
+    self.assertIsNotNone(example.start_time)
+    self.assertIsNotNone(example.end_time)
+    self.assertIn('evaluate.process', example.execution_status)
+    self.assertIn('evaluate.metric', example.execution_status)
+
+    example2 = exp.evaluate(6, reevaluate_upon_previous_errors=False)
+    self.assertFalse(example2.newly_processed)
+    self.assertEqual(example2.input, pg.Dict(x=5, y=25, groundtruth=30))
+    self.assertTrue(example2.has_error)
+    self.assertIsNotNone(example2.start_time)
+    self.assertIsNotNone(example2.end_time)
+    self.assertIn('evaluate.process', example2.execution_status)
+    self.assertIn('evaluate.metric', example2.execution_status)
 
     # Test load_state with filter.
     exp.reset()

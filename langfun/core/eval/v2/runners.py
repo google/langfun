@@ -384,6 +384,7 @@ class RunnerBase(Runner):
     item = evaluation.evaluate(
         item,
         raise_if_has_error=self.current_run.raise_if_has_error,
+        reevaluate_upon_previous_errors=self.current_run.reevaluate_upon_previous_errors,
     )
     self.on_example_complete(evaluation, item)
     return item

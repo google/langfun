@@ -82,11 +82,7 @@ class Checkpointer(experiment_lib.Plugin):
       example: Example,
   ) -> None:
     """Saves the example to the checkpoint file."""
-    if example.has_error:
-      experiment.warning(
-          f'Example {example.id} has error. Skipping checkpointing.'
-      )
-    elif example.newly_processed:
+    if example.newly_processed:
       self._save_example(runner, experiment, example)
 
   def _load_experiment(

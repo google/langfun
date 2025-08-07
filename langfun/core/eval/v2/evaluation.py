@@ -149,12 +149,15 @@ class Evaluation(experiment_lib.Experiment):
       self,
       example: example_lib.Example | int,
       raise_if_has_error: bool = False,
+      reevaluate_upon_previous_errors: bool = True,
   ) -> example_lib.Example:
     """Evaluates a single example input.
 
     Args:
       example: An example ID or an example object with ID.
       raise_if_has_error: Whether to raise an error if the example has error.
+      reevaluate_upon_previous_errors: Whether to reevaluate the example if
+        the previous checkpointed run has error.
 
     Returns:
       The evaluated example with the output and metric metadata populated.
@@ -169,7 +172,9 @@ class Evaluation(experiment_lib.Experiment):
     checkpointed = self._state.ckpt_example(example.id)
 
     with pg.timeit('evaluate') as timeit, lf.track_usages() as usage_summary:
-      if checkpointed is None or checkpointed.has_error:
+      if checkpointed is None or (
+          reevaluate_upon_previous_errors and checkpointed.has_error
+      ):
         if checkpointed is None:
           self.info(
               f'Example {example.id} is being processed for the first time '
@@ -184,17 +189,27 @@ class Evaluation(experiment_lib.Experiment):
         self._state.update(example, in_progress=True)
         self._process(example, raise_if_has_error=raise_if_has_error)
       else:
-        self.info(
-            f'Example {example.id} skipped processing as prior run '
-            'is available and error free.'
-        )
+        if checkpointed.has_error:
+          self.warning(
+              f'Example {example.id} skipped processing despite its checkpoint '
+              f'has error: {checkpointed.error}, as '
+              '`reevaluate_upon_previous_errors` is set to False.'
+          )
+        else:
+          self.info(
+              f'Example {example.id} skipped processing as prior run '
+              'is available and error free.'
+          )
         example.start_time = checkpointed.start_time
         self._state.update(example, in_progress=True)
 
         # Use the output and metadata obtained from the previous processing.
         example.output = checkpointed.output
         example.metadata = checkpointed.metadata
+        example.error = checkpointed.error
         example.newly_processed = False
+        example.execution_status = checkpointed.execution_status
+        example.end_time = checkpointed.end_time
 
         # For previously processed examples, we merge previous usages as
         # cached, so the usage summary will account previous usages, but as

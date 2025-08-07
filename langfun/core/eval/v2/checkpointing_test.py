@@ -101,12 +101,15 @@ class PerExampleCheckpointerTest(CheckpointerTest):
         self.assertIn(i + 1, collector.examples)
         example = collector.examples[i + 1]
         ckpt = run.output_path_for(leaf, f'checkpoint_{example.id}.jsonl')
-        if example.has_error:
-          self.assertFalse(pg.io.path_exists(ckpt))
-        else:
-          self.assertTrue(pg.io.path_exists(ckpt))
-          with pg.io.open_sequence(ckpt) as f:
-            self.assertEqual(len(list(iter(f))), 1)
+        self.assertTrue(pg.io.path_exists(ckpt))
+        with pg.io.open_sequence(ckpt) as f:
+          examples_from_ckpt = list(iter(f))
+          # `eval_test_helper.test_experiment` has two TestEvaluation with
+          # llm offset 0, which makes that evaluation run twice.
+          if example.has_error and leaf.lm.offset == 0:
+            self.assertEqual(len(examples_from_ckpt), 2)
+          else:
+            self.assertEqual(len(examples_from_ckpt), 1)
       if leaf.id not in num_processed:
         self.assertEqual(leaf.progress.num_skipped, 0)
         num_processed[leaf.id] = leaf.progress.num_processed
@@ -222,7 +225,10 @@ class BulkCheckpointerTest(CheckpointerTest):
       with pg.io.open_sequence(ckpt) as f:
         self.assertEqual(
             len(list(iter(f))),
-            leaf.progress.num_completed - leaf.progress.num_failed
+            # `eval_test_helper.test_experiment` has two TestEvaluation with
+            # llm offset 0, which makes that evaluation run twice.
+            leaf.progress.num_completed
+            + (leaf.progress.num_failed if leaf.lm.offset == 0 else 0)
         )
       if leaf.id not in num_processed:
         self.assertEqual(leaf.progress.num_skipped, 0)

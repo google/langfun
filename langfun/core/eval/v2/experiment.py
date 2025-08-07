@@ -384,6 +384,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       example_ids: list[int] | None = None,
       shuffle_inputs: bool = False,
       raise_if_has_error: bool = False,
+      reevaluate_upon_previous_errors: bool = True,
       reprocess: bool | list[int] = False,
       generate_example_html: Literal['new', 'all', 'no'] | list[int] = 'new',
       process_timeout: int | None = None,
@@ -436,6 +437,9 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         Neverthless, the example ID remains unchanged for each example.
       raise_if_has_error: If True, it will raise an error if any example fails.
         Otherwise, it will continue and report the error in the output.
+      reevaluate_upon_previous_errors: If True, it will reevaluate the example
+        if the previous checkpointed run has error when experiment runs with
+        existing checkpoints.
       reprocess: A boolean or a list of example IDs. If boolean, it indicates
         that whether all the examples to be evaluated will be reprocessed,
         meaning that existing checkpoints will be ignored. If a list of
@@ -475,6 +479,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
             example_ids=example_ids,
             shuffle_inputs=shuffle_inputs,
             raise_if_has_error=raise_if_has_error,
+            reevaluate_upon_previous_errors=reevaluate_upon_previous_errors,
             reprocess=reprocess,
             generate_example_html=generate_example_html,
             use_cache=use_cache,
@@ -834,6 +839,14 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
           'If True, it will raise an error if any example fails.'
       )
   ] = False
+
+  reevaluate_upon_previous_errors: Annotated[
+      bool,
+      (
+          'If True, it will reevaluate the example if the previously '
+          'checkpointed run has error. Otherwise, it will skip the example.'
+      )
+  ] = True
 
   note: Annotated[
       str | None,
