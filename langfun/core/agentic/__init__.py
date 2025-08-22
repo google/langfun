@@ -17,6 +17,9 @@
 # pylint: disable=g-importing-member
 # pylint: disable=g-import-not-at-top
 
+from langfun.core.agentic.action import ActionError
+from langfun.core.agentic.action import ActionTimeoutError
+
 from langfun.core.agentic.action import Action
 from langfun.core.agentic.action import ActionInvocation
 from langfun.core.agentic.action import ExecutionTrace

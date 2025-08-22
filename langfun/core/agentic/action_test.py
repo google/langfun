@@ -14,6 +14,7 @@
 """Tests for base action."""
 
 import asyncio
+import time
 import unittest
 
 import langfun.core as lf
@@ -25,10 +26,12 @@ import pyglove as pg
 
 class Bar(action_lib.Action):
   simulate_action_error: bool = False
+  simulate_execution_time: float = 0
 
   def call(self, session, *, lm, **kwargs):
     assert session.current_action.action is self
     session.info('Begin Bar')
+    time.sleep(self.simulate_execution_time)
     session.query('bar', lm=lm)
     session.add_metadata(note='bar')
     if self.simulate_action_error:
@@ -40,22 +43,27 @@ class Foo(action_lib.Action):
   x: int
   simulate_action_error: bool = False
   simulate_query_error: bool = False
+  simulate_execution_time: list[float] = [0, 0, 0, 0]
+  max_bar_execution_time: float | None = None
 
   def call(self, session, *, lm, **kwargs):
     assert session.current_action.action is self
     with session.track_phase('prepare'):
       session.info('Begin Foo', x=1)
+      time.sleep(self.simulate_execution_time[0])
       session.query(
           'foo',
           schema=int if self.simulate_query_error else None,
           lm=lm
       )
     with session.track_queries():
+      time.sleep(self.simulate_execution_time[1])
       self.make_additional_query(lm)
     session.add_metadata(note='foo')
 
     def _sub_task(i):
       session.add_metadata(**{f'subtask_{i}': i})
+      time.sleep(self.simulate_execution_time[2])
       return lf_structured.query(f'subtask_{i}', lm=lm)
 
     for i, output, error in session.concurrent_map(
@@ -65,8 +73,9 @@ class Foo(action_lib.Action):
       assert isinstance(output, str), output
       assert error is None, error
     return self.x + Bar(
-        simulate_action_error=self.simulate_action_error
-    )(session, lm=lm)
+        simulate_action_error=self.simulate_action_error,
+        simulate_execution_time=self.simulate_execution_time[3]
+    )(session, lm=lm, max_execution_time=self.max_bar_execution_time)
 
   def make_additional_query(self, lm):
     lf_structured.query('additional query', lm=lm)
@@ -425,6 +434,51 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(len(session.root.logs), 1)
     self.assertFalse(session.root.execution[0].has_error)
     self.assertTrue(session.root.execution[1].has_error)
+
+  def test_max_execution_time(self):
+    lm = fake.StaticResponse('lm response')
+    bar = Bar(simulate_execution_time=1)
+    with self.assertRaisesRegex(
+        action_lib.ActionTimeoutError,
+        'Action .*Bar.*has exceeded .* 0.5 seconds'
+    ):
+      bar(lm=lm, max_execution_time=0.5)
+
+    foo = Foo(1, simulate_execution_time=[0, 0, 0, 1])
+    with self.assertRaisesRegex(
+        action_lib.ActionTimeoutError,
+        'Action .*Foo.* has exceeded .* 0.5 seconds'
+    ):
+      foo(lm=lm, max_execution_time=0.5)
+
+    # Timeout within concurrent_map.
+    foo = Foo(1, simulate_execution_time=[0, 0, 1, 0])
+    with self.assertRaisesRegex(
+        action_lib.ActionTimeoutError,
+        'Action .*Foo.* has exceeded .* 0.5 seconds'
+    ):
+      foo(lm=lm, max_execution_time=0.5)
+
+    # Timeout within bar.
+    foo = Foo(
+        1, simulate_execution_time=[0, 0, 0, 1], max_bar_execution_time=0.5
+    )
+    with self.assertRaisesRegex(
+        action_lib.ActionTimeoutError,
+        'Action .*Bar.* has exceeded .* 0.5 seconds'
+    ):
+      foo(lm=lm)
+
+    # Timeout within bar, however the effective max_execution_time of bar is the
+    # remaining time of the parent action as it's smaller (0.5 < 1).
+    foo = Foo(
+        1, simulate_execution_time=[0, 0.5, 0, 1.0], max_bar_execution_time=1.0
+    )
+    with self.assertRaisesRegex(
+        action_lib.ActionTimeoutError,
+        'Action .*Foo.* has exceeded .*1.0 seconds'
+    ):
+      foo(lm=lm, max_execution_time=1.0)
 
   def test_log(self):
     session = action_lib.Session()

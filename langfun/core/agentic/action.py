@@ -26,6 +26,14 @@ from langfun.core import structured as lf_structured
 import pyglove as pg
 
 
+class ActionError(Exception):   # pylint: disable=g-bad-exception-name
+  """Base class for common action errors."""
+
+
+class ActionTimeoutError(ActionError):
+  """Raised when an action exceeds the max execution time."""
+
+
 class Action(pg.Object):
   """Base class for Langfun's agentic actions.
 
@@ -203,6 +211,7 @@ class Action(pg.Object):
       self,
       session: Optional['Session'] = None,
       *,
+      max_execution_time: float | None = None,
       show_progress: bool = True,
       verbose: bool = False,
       **kwargs
@@ -212,6 +221,7 @@ class Action(pg.Object):
     return await lf.invoke_async(
         self.__call__,
         session,
+        max_execution_time=max_execution_time,
         show_progress=show_progress,
         verbose=verbose,
         **kwargs
@@ -221,11 +231,29 @@ class Action(pg.Object):
       self,
       session: Optional['Session'] = None,
       *,
+      max_execution_time: float | None = None,
       show_progress: bool = True,
       verbose: bool = False,
       **kwargs
   ) -> Any:
-    """Executes the action."""
+    """Executes the action.
+
+    Args:
+      session: The session to use for the action.
+      max_execution_time: The max allowed execution time in seconds for the
+        action. The effective `max_execution_time` is the smaller of the
+        remaining time of the parent invocation and the `max_execution_time`
+        for the current invocation. Since we are running action within the
+        current thread, there is no guarantee that the action will be executed
+        within this time limit, but we will try to stop the action as soon as
+        the next operation on the session is called.
+      show_progress: Whether to show the progress of the action.
+      verbose: Whether to log the action execution.
+      **kwargs: Additional keyword arguments to pass to the action.
+
+    Returns:
+      The result of the action.
+    """
     if session is None:
       session = Session(verbose=verbose)
       session.start()
@@ -238,7 +266,7 @@ class Action(pg.Object):
     else:
       self._session = None
 
-    with session.track_action(self):
+    with session.track_action(self, max_execution_time=max_execution_time):
       try:
         result = self.call(session=session, **kwargs)
         self._invocation.end(result)
@@ -841,6 +869,21 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
       'Error from the action if failed.'
   ] = None
 
+  max_execution_time: Annotated[
+      float | None,
+      (
+          'The maximum allowed execution time for the action. '
+          'It is set when the action or any of its parent actions has been '
+          'called with a `max_execution_time` argument. '
+          'The value is the remaining time of the parent invocation or '
+          'the `max_execution_time` for the current invocation, '
+          'whichever is smaller. Since we are running action within the '
+          'current thread, there is no guarantee that the action will be '
+          'executed within this time limit, but we will try to stop the action '
+          'as soon as the next operation on the session is called.'
+      )
+  ] = None
+
   execution: Annotated[
       ExecutionTrace,
       'The execution sequence of the action.'
@@ -862,6 +905,13 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def parent_action(self) -> Optional['ActionInvocation']:
     """Returns the parent action invocation."""
     return self.sym_ancestor(lambda x: isinstance(x, ActionInvocation))
+
+  @property
+  def max_remaining_execution_time(self) -> float | None:
+    """Returns the remaining execution time for the action."""
+    if self.max_execution_time is None:
+      return None
+    return max(0, self.max_execution_time - self.execution.elapse)
 
   @functools.cached_property
   def id(self) -> str:
@@ -1224,6 +1274,23 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
     self.root.end(result, error, metadata)
 
+  def check_execution_time(self) -> None:
+    """Checks the execution time of the current action."""
+    action = self._current_action
+    if action is not None and 0 == action.max_remaining_execution_time:
+      # We raise error on the top-most action which has a time limit.
+      current_action = action
+      parent_action = current_action.parent_action
+      while parent_action is not None and parent_action.max_execution_time:
+        current_action = parent_action
+        parent_action = current_action.parent_action
+      raise ActionTimeoutError(
+          f'Action {current_action.id} '
+          f'({current_action.action.__class__.__name__}) has exceeded its '
+          f'maximum execution time of {current_action.max_execution_time} '
+          'seconds.'
+      )
+
   def __enter__(self):
     """Enters the session."""
     self.start()
@@ -1254,7 +1321,11 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   #
 
   @contextlib.contextmanager
-  def track_action(self, action: Action) -> Iterator[ActionInvocation]:
+  def track_action(
+      self,
+      action: Action,
+      max_execution_time: float | None = None
+  ) -> Iterator[ActionInvocation]:
     """Track the execution of an action."""
     if not self.root.execution.has_started:
       raise ValueError(
@@ -1263,7 +1334,13 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           'signal the start and end of the session.'
       )
 
-    invocation = ActionInvocation(pg.maybe_ref(action))
+    # Early terminate the action if the execution time is exceeded.
+    self.check_execution_time()
+
+    invocation = ActionInvocation(
+        pg.maybe_ref(action),
+        max_execution_time=self._child_max_execution_time(max_execution_time)
+    )
     parent_action = self._current_action
     parent_execution = self._current_execution
     parent_execution.append(invocation)
@@ -1339,6 +1416,9 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       call.
     """
     def _query_start(invocation: lf_structured.QueryInvocation):
+      # Early terminate the action if the execution time is exceeded.
+      self.check_execution_time()
+
       execution = self._current_execution
       invocation.rebind(
           id=f'{execution.id}/q{len(execution.queries) + 1}',
@@ -1469,6 +1549,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       ] = Exception
   ) -> Iterator[Any]:
     """Starts and tracks parallel execution with `lf.concurrent_map`."""
+    self.check_execution_time()
     parallel_inputs = list(parallel_inputs)
     parallel_execution = ParallelExecutions(name=phase)
     self._current_execution.append(parallel_execution)
@@ -1492,90 +1573,23 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         _map_single,
         parallel_inputs,
         max_workers=max_workers,
-        timeout=timeout,
+        timeout=self._child_max_execution_time(timeout),
         silence_on_errors=silence_on_errors
     ):
       yield input_value, result, error
 
-  # NOTE(daiyip): Clean up `query_prompt` and `query_output` once TS
-  # code migration is done.
-  def query_prompt(
-      self,
-      prompt: Union[str, lf.Template, Any],
-      schema: Union[
-          lf_structured.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
-      ] = None,
-      **kwargs,
-  ) -> Any:
-    """Calls `lf.query_prompt` and associates it with the current invocation.
-
-    The following code are equivalent:
-
-      Code 1:
-      ```
-      session.query_prompt(...)
-      ```
-
-      Code 2:
-      ```
-      with session.track_queries() as queries:
-        output = lf.query_prompt(...)
-      ```
-    The former is preferred when `lf.query_prompt` is directly called by the
-    action.
-    If `lf.query_prompt` is called by a function that does not have access to
-    the
-    session, the latter should be used.
-
-    Args:
-      prompt: The prompt to query.
-      schema: The schema to use for the query.
-      **kwargs: Additional keyword arguments to pass to `lf.query_prompt`.
-
-    Returns:
-      The result of the query.
-    """
-    with self.track_queries():
-      return lf_structured.query_prompt(prompt, schema=schema, **kwargs)
-
-  def query_output(
-      self,
-      response: Union[str, lf.Template, Any],
-      schema: Union[
-          lf_structured.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
-      ] = None,
-      **kwargs,
-  ) -> Any:
-    """Calls `lf.query_output` and associates it with the current invocation.
-
-    The following code are equivalent:
-
-      Code 1:
-      ```
-      session.query_output(...)
-      ```
-
-      Code 2:
-      ```
-      with session.track_queries() as queries:
-        output = lf.query_output(...)
-      ```
-    The former is preferred when `lf.query_output` is directly called by the
-    action.
-    If `lf.query_output` is called by a function that does not have access to
-    the
-    session, the latter should be used.
-
-    Args:
-      response: The response to query.
-      schema: The schema to use for the query.
-      **kwargs: Additional keyword arguments to pass to `lf.query_prompt`.
-
-    Returns:
-      The result of the query.
-    """
-    with self.track_queries():
-      return lf_structured.query_output(response, schema=schema, **kwargs)
+  def _child_max_execution_time(
+      self, max_execution_time: float | None
+  ) -> float | None:
+    """Returns the max execution time for the child action."""
+    max_remaining = None
+    if self._current_action is not None:
+      max_remaining = self._current_action.max_remaining_execution_time
+    if max_remaining is None:
+      return max_execution_time
+    if max_execution_time is None:
+      return max_remaining
+    return min(max_remaining, max_execution_time)
 
   def _log(
       self,
@@ -1597,6 +1611,9 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       **kwargs: Additional keyword arguments to pass to `lf.logging.log` as
         metadata to show.
     """
+    # Early terminate the action if the execution time is exceeded.
+    self.check_execution_time()
+
     execution = self._current_execution
     if for_action is None:
       for_action = self._current_action
