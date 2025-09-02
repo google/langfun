@@ -284,6 +284,14 @@ class VertexAIGemini15Flash8B_001(VertexAIGemini):  # pylint: disable=invalid-na
 #
 
 
+class VertexAIGemini25FlashImagePreview(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 2.5 Flash Image Preview model."""
+
+  model = 'gemini-2.5-flash-image-preview'
+  location = 'global'
+  response_modalities = ['TEXT', 'IMAGE']
+
+
 class VertexAIGemini2ProExp_20250205(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini Flash 2.0 Pro model launched on 02/05/2025."""
   model = 'gemini-2.0-pro-exp-02-05'

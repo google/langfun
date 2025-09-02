@@ -195,7 +195,7 @@ SUPPORTED_MODELS = [
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
             max_tokens_per_minute=4_000_000,
-        )
+        ),
     ),
     # Gemini 2.5 Pro 0605
     GeminiModelInfo(
@@ -218,7 +218,7 @@ SUPPORTED_MODELS = [
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
             max_tokens_per_minute=4_000_000,
-        )
+        ),
     ),
     # Gemini 2.5 Flash Preview 0520
     GeminiModelInfo(
@@ -264,7 +264,7 @@ SUPPORTED_MODELS = [
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
             max_tokens_per_minute=4_000_000,
-        )
+        ),
     ),
     # Gemini 2.5 Flash Preview
     GeminiModelInfo(
@@ -615,6 +615,21 @@ SUPPORTED_MODELS = [
     # Experimental models.
     #
     GeminiModelInfo(
+        model_id='gemini-2.5-flash-image-preview',
+        in_service=True,
+        experimental=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 2.5 Flash Image Preview model.',
+        release_date=datetime.datetime(2025, 8, 17),
+        input_modalities=GeminiModelInfo.INPUT_IMAGE_TYPES
+        + GeminiModelInfo.INPUT_DOC_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=32_768,
+            max_output_tokens=32_768,
+        ),
+    ),
+    GeminiModelInfo(
         model_id='gemini-2.0-pro-exp-02-05',
         in_service=True,
         experimental=True,
@@ -689,6 +704,12 @@ class Gemini(rest.REST):
       ),
       'The name of the model to use.',
   ]
+
+  response_modalities: pg.typing.Annotated[
+      list[str] | None,
+      'Response modalities. It is needed for models whose response modalities '
+      + 'are more than plain text.',
+  ] = None
 
   @functools.cached_property
   def model_info(self) -> GeminiModelInfo:
@@ -768,6 +789,11 @@ class Gemini(rest.REST):
           'thinkingBudget': options.max_thinking_tokens,
       }
 
+    if self.response_modalities:
+      config['responseModalities'] = self.response_modalities
+      if 'IMAGE' in self.response_modalities:
+        config.pop('responseLogprobs', None)
+        config.pop('logprobs', None)
     return config
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:

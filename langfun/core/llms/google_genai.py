@@ -92,6 +92,11 @@ class GenAI(gemini.Gemini):
 #
 
 
+class Gemini25FlashImagePreview(GenAI):
+  """Gemini 2.5 Flash Image Preview model."""
+  model = 'gemini-2.5-flash-image-preview'
+
+
 class Gemini25Pro(GenAI):
   """Gemini 2.5 Pro GA model."""
 
