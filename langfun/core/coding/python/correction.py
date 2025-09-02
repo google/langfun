@@ -15,12 +15,14 @@
 from typing import Any
 import langfun.core as lf
 from langfun.core.coding.python import execution
+from langfun.core.structured import schema as schema_lib
 import pyglove as pg
 
 
 class CodeWithError(pg.Object):
   """Python code with error."""
 
+  schema_definition: str | None
   code: str
   error: str
 
@@ -42,6 +44,7 @@ def run_with_correction(
     returns_code: bool = False,
     returns_stdout: bool = False,
     outputs_intermediate: bool = False,
+    schema: schema_lib.Schema | None = None,
 ) -> Any | tuple[Any, str]:
   """Correct code with a language model via self-play.
 
@@ -68,6 +71,7 @@ def run_with_correction(
     outputs_intermediate: If True, intermediate output will be outputted as a
       dict, with the last line's value accessible by key '__result__'. Otherwise
       the value of the last line will be returned.
+    schema: Optional schema for the expected output.
 
   Returns:
     Run result if `returns_code` is set to False (default), otherwise a tuple
@@ -82,6 +86,13 @@ def run_with_correction(
   from langfun.core.structured import querying
   # pytype: enable=import-error
   # pylint: enable=g-import-not-at-top
+
+  if schema is not None:
+    if isinstance(schema, type):
+      schema = schema_lib.Schema.from_value(schema)
+    schema_definition = schema.schema_str(protocol="python")
+  else:
+    schema_definition = None
 
   if max_attempts == 0:
     result = _maybe_custom_validate(
@@ -126,7 +137,14 @@ def run_with_correction(
     try:
       # Disable autofix for code correction to avoid recursion.
       correction = querying.query(
-          CodeWithError(code=code, error=error), CorrectedCode, lm=lm, autofix=0
+          CodeWithError(
+              schema_definition=schema_definition,
+              code=code,
+              error=error,
+          ),
+          CorrectedCode,
+          lm=lm,
+          autofix=0,
       )
     except pg.coding.CodeError:
       break
@@ -148,6 +166,7 @@ def run_with_correction(
 def correct(
     code: str,
     error: str | None = None,
+    schema: schema_lib.Schema | None = None,
     *,
     global_vars: dict[str, Any] | None = None,
     lm: lf.LanguageModel = lf.contextual(),
@@ -162,6 +181,7 @@ def correct(
     error: An optional initial error for `code` when it's problematic, usually
       caught from elsewhere when it ran. If None, code will be executed once to
       verify if its good and obtain a feedback error message.
+    schema: Optional schema for the expected output.
     global_vars: A dict of str to value as the global variables that could be
       accessed within the corrected code.
     lm: Language model to be used. If not specified, it will try to use the `lm`
@@ -183,6 +203,7 @@ def correct(
   return run_with_correction(
       code,
       error=error,
+      schema=schema,
       global_vars=global_vars,
       lm=lm,
       max_attempts=max_attempts,
