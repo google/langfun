@@ -22,7 +22,6 @@ import textwrap
 import typing
 from typing import Any, Literal, Sequence, Type, Union
 import langfun.core as lf
-from langfun.core.coding.python import correction
 import pyglove as pg
 
 
@@ -747,6 +746,7 @@ class ValuePythonRepr(ValueRepr):
       global_vars.update({d.__name__: d for d in dependencies})
     return structure_from_python(
         text,
+        schema=schema,
         global_vars=global_vars,
         autofix=autofix,
         autofix_lm=autofix_lm,
@@ -757,6 +757,7 @@ class ValuePythonRepr(ValueRepr):
 def structure_from_python(
     code: str,
     *,
+    schema: Schema | None = None,
     global_vars: dict[str, Any] | None = None,
     permission: pg.coding.CodePermission = (
         pg.coding.CodePermission.ASSIGN | pg.coding.CodePermission.CALL
@@ -765,6 +766,8 @@ def structure_from_python(
     autofix_lm: lf.LanguageModel = lf.contextual(),
 ) -> Any:
   """Evaluates structure from Python code with access to symbols."""
+  from langfun.core.coding.python import correction  # pylint: disable=g-import-not-at-top # pytype: disable=import-error
+
   global_vars = global_vars or {}
   global_vars.update({
       'pg': pg,
@@ -787,6 +790,7 @@ def structure_from_python(
       max_attempts=autofix,
       lm=autofix_lm,
       permission=permission,
+      schema=schema,
   )
 
 
