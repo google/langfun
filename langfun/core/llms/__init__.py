@@ -20,6 +20,7 @@
 # LMs for testing.
 from langfun.core.llms.fake import Fake
 from langfun.core.llms.fake import Echo
+from langfun.core.llms.fake import Pseudo
 from langfun.core.llms.fake import StaticMapping
 from langfun.core.llms.fake import StaticResponse
 from langfun.core.llms.fake import StaticSequence

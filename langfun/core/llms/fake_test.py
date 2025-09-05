@@ -20,6 +20,15 @@ import langfun.core as lf
 from langfun.core.llms import fake as fakelm
 
 
+class PseudoTest(unittest.TestCase):
+
+  def test_sample(self):
+    lm = fakelm.Pseudo()
+    self.assertEqual(lm.model_id, 'Pseudo')
+    with self.assertRaises(ValueError):
+      _ = lm.sample(['hi'])
+
+
 class EchoTest(unittest.TestCase):
 
   def test_sample(self):

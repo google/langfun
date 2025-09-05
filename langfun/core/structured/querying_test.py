@@ -991,15 +991,11 @@ class LfQueryPythonV2Test(unittest.TestCase):
     )
 
   def test_bad_response(self):
-    with lf.context(
-        lm=fake.StaticSequence(['a2']),
-        override_attrs=True,
+    with self.assertRaisesRegex(
+        mapping.MappingError,
+        'name .* is not defined',
     ):
-      with self.assertRaisesRegex(
-          mapping.MappingError,
-          'name .* is not defined',
-      ):
-        querying.query('Compute 1 + 2', int)
+      querying.query('Compute 1 + 2', int, lm=fake.StaticSequence(['a2']))
 
   def test_not_allowed_code(self):
     lm = fake.StaticResponse(
@@ -1026,21 +1022,20 @@ class LfQueryPythonV2Test(unittest.TestCase):
     self.assertEqual(querying.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
 
   def test_response_postprocess(self):
-    with lf.context(
-        lm=fake.StaticResponse('<!-- some comment-->\n3'),
-        override_attrs=True,
-    ):
-      self.assertEqual(
-          querying.query(
-              'Compute 1 + 2', response_postprocess=lambda x: x.split('\n')[1]),
-          '3'
-      )
-      self.assertEqual(
-          querying.query(
-              'Compute 1 + 2', int,
-              response_postprocess=lambda x: x.split('\n')[1]),
-          3
-      )
+    self.assertEqual(
+        querying.query(
+            'Compute 1 + 2',
+            lm=fake.StaticResponse('<!-- some comment-->\n3'),
+            response_postprocess=lambda x: x.split('\n')[1]),
+        '3'
+    )
+    self.assertEqual(
+        querying.query(
+            'Compute 1 + 2', int,
+            lm=fake.StaticResponse('<!-- some comment-->\n3'),
+            response_postprocess=lambda x: x.split('\n')[1]),
+        3
+    )
 
   def test_render(self):
     l = querying.LfQuery.from_protocol('python:2.0')(
@@ -1312,15 +1307,15 @@ class LfQueryJsonV1Test(unittest.TestCase):
 
   def test_bad_transform(self):
     with in_memory.lm_cache() as cache:
-      with lf.context(
-          lm=fake.StaticSequence(['3']),
-          override_attrs=True,
+      with self.assertRaisesRegex(
+          mapping.MappingError,
+          'No JSON dict in the output',
       ):
-        with self.assertRaisesRegex(
-            mapping.MappingError,
-            'No JSON dict in the output',
-        ):
-          querying.query('Compute 1 + 2', int, protocol='json', cache_seed=1)
+        querying.query(
+            'Compute 1 + 2', int, 
+            lm=fake.StaticSequence(['3']),
+            protocol='json', cache_seed=1
+        )
       # Make sure bad mapping does not impact cache.
       self.assertEqual(len(cache), 0)
 

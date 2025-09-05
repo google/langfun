@@ -278,7 +278,7 @@ def query(
     schema: schema_lib.SchemaType |  None = None,
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
-    lm: lf.LanguageModel | list[lf.LanguageModel] | None = None,
+    lm: lf.LanguageModel | list[lf.LanguageModel],
     num_samples: int | list[int] = 1,
     system_message: str | lf.Template | None = None,
     examples: list[mapping.MappingExample] | None = None,
@@ -414,7 +414,6 @@ def query(
     lm: The language model(s) to query. Can be:
       - A single `LanguageModel`,
       - A list of `LanguageModel`s for multi-model fan-out.
-      If `None`, the LM from `lf.context` will be used.
     num_samples: Number of samples to generate. If a list is provided, its
       length must match the number of models in `lm`.
     system_message: System instructions to guide the model output. If None,
@@ -766,9 +765,20 @@ def query_prompt(
     **kwargs,
 ) -> lf.Message:
   """Returns the final prompt sent to LLM for `lf.query`."""
+  # Delay import to avoid circular dependency in Colab.
+  # llms > data/conversion > structured > querying
+  from langfun.core.llms import fake  # pylint: disable=g-import-not-at-top
+
   kwargs.pop('returns_message', None)
   kwargs.pop('skip_lm', None)
-  return query(prompt, schema, skip_lm=True, returns_message=True, **kwargs)
+  return query(
+      prompt, schema,
+      # The LLM will never be used, it's just a placeholder.
+      lm=fake.Pseudo(),
+      skip_lm=True,
+      returns_message=True,
+      **kwargs
+  )
 
 
 def query_output(

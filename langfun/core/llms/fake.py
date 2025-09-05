@@ -62,6 +62,13 @@ class Echo(Fake):
     return lf.AIMessage(prompt.text)
 
 
+class Pseudo(Fake):
+  """A pseudo language model that should never be called."""
+
+  def _response_from(self, prompt: lf.Message) -> lf.Message:
+    raise ValueError('Pseudo language model should never be called.')
+
+
 @lf.use_init_args(['response'])
 class StaticResponse(Fake):
   """Language model that always gives the same canned response."""
