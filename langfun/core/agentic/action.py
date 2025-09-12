@@ -1546,7 +1546,9 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       timeout: int | None = None,
       silence_on_errors: Union[
           Type[BaseException], tuple[Type[BaseException], ...], None
-      ] = Exception
+      ] = Exception,
+      ordered: bool = False,
+      show_progress: bool | int = False,
   ) -> Iterator[Any]:
     """Starts and tracks parallel execution with `lf.concurrent_map`."""
     self.check_execution_time()
@@ -1574,7 +1576,9 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         parallel_inputs,
         max_workers=max_workers,
         timeout=self._child_max_execution_time(timeout),
-        silence_on_errors=silence_on_errors
+        silence_on_errors=silence_on_errors,
+        ordered=ordered,
+        show_progress=show_progress,
     ):
       yield input_value, result, error
 
