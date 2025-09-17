@@ -105,8 +105,9 @@ class BaseFeature(interface.Feature):
     self.__dict__.pop('name', None)
 
   @property
-  def sandbox(self) -> interface.Sandbox | None:
+  def sandbox(self) -> interface.Sandbox:
     """Returns the sandbox that the feature is running in."""
+    assert self._sandbox is not None, 'Feature has not been set up yet.'
     return self._sandbox
 
   #
@@ -123,6 +124,12 @@ class BaseFeature(interface.Feature):
 
   def teardown(self) -> None:
     """Tears down the feature."""
+    # If a sandbox is down during setting up, feature.shutdown might be called
+    # before the feature is setup. In this case, we don't need to teardown the
+    # feature.
+    if self._sandbox is None:
+      return
+
     interface.call_with_event(
         action=self._teardown,
         event_handler=self.on_teardown,

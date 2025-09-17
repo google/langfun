@@ -91,14 +91,24 @@ class BaseSandbox(interface.Sandbox):
   def _start_session(self, session_id: str) -> None:
     """Starts a user session."""
     self._session_id = session_id
+    self._session_start_time = time.time()
+
     for feature in self._features.values():
       feature.setup_session(session_id)
 
   def _end_session(self) -> None:
-    """Ends the user session with the sandbox."""
-    for feature in self._features.values():
-      feature.teardown_session(self._session_id)
-    self._session_id = None
+    try:
+      for feature in self._features.values():
+        feature.teardown_session(self._session_id)
+    finally:
+      pg.logging.info(
+          '[%s]: User session %s ended. (lifetime: %.2f seconds).',
+          self.id,
+          self._session_id,
+          time.time() - self._session_start_time
+      )
+      self._session_id = None
+      self._session_start_time = None
 
   def _ping(self) -> None:
     """Implementation of ping for health checking."""
@@ -115,6 +125,7 @@ class BaseSandbox(interface.Sandbox):
         for name, feature in self.environment.features.items()
     })
     self._session_id = None
+    self._session_start_time = None
     self._alive = False
     self._start_time = None
 
@@ -197,6 +208,7 @@ class BaseSandbox(interface.Sandbox):
       return
 
     self._alive = False
+    shutdown_start_time = time.time()
     def shutdown_impl():
       self._teardown_features()
       self._shutdown()
@@ -205,8 +217,10 @@ class BaseSandbox(interface.Sandbox):
         self._housekeep_thread.join()
         self._housekeep_thread = None
       pg.logging.info(
-          '[%s]: Sandbox shutdown in %.2f seconds.',
-          self.id, time.time() - self._start_time
+          '[%s]: Sandbox shutdown in %.2f seconds. (lifetime: %.2f seconds)',
+          self.id,
+          time.time() - shutdown_start_time,
+          time.time() - self._start_time if self._start_time else 0
       )
 
     interface.call_with_event(
