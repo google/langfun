@@ -16,9 +16,9 @@
 import abc
 import contextlib
 import dataclasses
+import enum
 import os
-from typing import Annotated, Any, Callable, ContextManager, ClassVar, Iterator, Optional
-import uuid
+from typing import Annotated, Any, ContextManager, ClassVar, Iterator, Optional
 
 import pyglove as pg
 
@@ -165,107 +165,193 @@ class SandboxStateError(SandboxError):
     super().__init__(message or default_message, *args, **kwargs)
 
 
+class FeatureTeardownError(SandboxError):
+  """Base class for feature errors."""
+
+  def __init__(
+      self,
+      message: str | None = None,
+      *args,
+      errors: dict[str, BaseException],
+      **kwargs
+  ):
+    self.errors = errors
+    super().__init__(
+        (message or
+         f'Feature teardown failed with user-defined errors: {errors}.'),
+        *args,
+        **kwargs
+    )
+
+  @property
+  def has_non_sandbox_state_error(self) -> bool:
+    """Returns True if the feature teardown error has non-sandbox state error."""
+    return any(
+        not isinstance(e, SandboxStateError) for e in self.errors.values()
+    )
+
+
+class SessionTeardownError(SandboxError):
+  """Base class for session errors."""
+
+  def __init__(
+      self,
+      message: str | None = None,
+      *args,
+      errors: dict[str, BaseException],
+      **kwargs
+  ):
+    self.errors = errors
+    super().__init__(
+        (message or
+         f'Session teardown failed with user-defined errors: {errors}.'),
+        *args,
+        **kwargs
+    )
+
+  @property
+  def has_non_sandbox_state_error(self) -> bool:
+    """Returns True if the feature teardown error has non-sandbox state error."""
+    return any(
+        not isinstance(e, SandboxStateError) for e in self.errors.values()
+    )
+
+
 #
 # Event handler.
 #
 
 
-class EnvironmentEventHandler:
+class SessionEventHandler:
+  """Base class for session event handlers."""
+
+  def on_session_start(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      session_id: str,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session starts."""
+
+  def on_session_activity(
+      self,
+      session_id: str,
+      name: str,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: Optional['Feature'],
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed."""
+
+  def on_session_end(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      session_id: str,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session ends."""
+
+
+class FeatureEventHandler:
+  """Base class for feature event handlers."""
+
+  def on_feature_setup(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: 'Feature',
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is setup."""
+
+  def on_feature_teardown(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: 'Feature',
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is teardown."""
+
+  def on_feature_teardown_session(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: 'Feature',
+      session_id: str,
+      error: BaseException | None
+  ) -> None:
+    """Called when a feature is teardown with a session."""
+
+  def on_feature_setup_session(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: 'Feature',
+      session_id: str | None,
+      error: BaseException | None
+  ) -> None:
+    """Called when a feature is setup with a session."""
+
+  def on_feature_housekeep(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: 'Feature',
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is housekeeping."""
+
+
+class SandboxEventHandler(FeatureEventHandler, SessionEventHandler):
+  """Base class for sandbox event handlers."""
+
+  def on_sandbox_start(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox is started."""
+
+  def on_sandbox_status_change(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      old_status: 'Sandbox.Status',
+      new_status: 'Sandbox.Status',
+  ) -> None:
+    """Called when a sandbox status changes."""
+
+  def on_sandbox_shutdown(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox is shutdown."""
+
+
+class EnvironmentEventHandler(SandboxEventHandler):
   """Base class for environment event handlers."""
 
   def on_environment_start(
       self,
       environment: 'Environment',
-      error: Exception | None
+      error: BaseException | None
   ) -> None:
     """Called when the environment is started."""
 
   def on_environment_shutdown(
       self,
       environment: 'Environment',
-      error: Exception | None
+      error: BaseException | None
   ) -> None:
     """Called when the environment is shutdown."""
-
-  def on_sandbox_start(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox is started."""
-
-  def on_sandbox_shutdown(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox is shutdown."""
-
-  def on_sandbox_feature_setup(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-
-  def on_sandbox_feature_teardown(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-
-  def on_sandbox_feature_housekeep(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox feature is housekeeping."""
-
-  def on_sandbox_session_start(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      session_id: str,
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox session starts."""
-
-  def on_sandbox_session_activity(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      session_id: str,
-      feature: Optional['Feature'],
-      error: Exception | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
-
-  def on_sandbox_session_end(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      session_id: str,
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox session ends."""
-
-  def on_sandbox_ping(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      error: Exception | None
-  ) -> None:
-    """Called when a sandbox is pinged."""
 
 
 #
@@ -276,17 +362,34 @@ class EnvironmentEventHandler:
 class Environment(pg.Object):
   """Base class for an environment."""
 
+  class Status(enum.Enum):
+    """Environment state.
+
+    State transitions:
+
+    +---------------+               +-----------+
+    |  <CREATED>    | --(start)---> |  ONLINE   | -(shutdown or outage detected)
+    +---------------+      |        +-----------+              |
+                           |        +-----------+              |
+                           +------> | <OFFLINE> | <------------+
+                                    +-----------+
+    """
+    CREATED = 'created'
+    ONLINE = 'online'
+    SHUTTING_DOWN = 'shutting_down'
+    OFFLINE = 'offline'
+
   features: Annotated[
       dict[str, 'Feature'],
       'Features to be exposed by the environment.'
   ] = {}
 
-  event_handler: Annotated[
-      EnvironmentEventHandler | None,
+  event_handlers: Annotated[
+      list[EnvironmentEventHandler],
       (
           'User handler for the environment events.'
       )
-  ] = None
+  ] = []
 
   _ENV_STACK: Annotated[
       ClassVar[list['Environment']],
@@ -302,14 +405,14 @@ class Environment(pg.Object):
   def id(self) -> EnvironmentId:
     """Returns the identifier for the environment."""
 
+  @property
+  @abc.abstractmethod
+  def status(self) -> Status:
+    """Returns the status of the environment."""
+
   @abc.abstractmethod
   def stats(self) -> dict[str, Any]:
     """Returns the stats of the environment."""
-
-  @property
-  @abc.abstractmethod
-  def is_alive(self) -> bool:
-    """Returns True if the environment is alive."""
 
   @abc.abstractmethod
   def start(self) -> None:
@@ -323,8 +426,7 @@ class Environment(pg.Object):
   def shutdown(self) -> None:
     """Shuts down the environment.
 
-    Raises:
-      EnvironmentError: If the environment is not available.
+    IMPORTANT: This method shall not raise any exceptions.
     """
 
   @abc.abstractmethod
@@ -339,9 +441,18 @@ class Environment(pg.Object):
       EnvironmentOverloadError: If the environment is overloaded.
     """
 
+  @abc.abstractmethod
+  def new_session_id(self) -> str:
+    """Generates a new session ID."""
+
   #
   # Environment lifecycle.
   #
+
+  @property
+  def is_online(self) -> bool:
+    """Returns True if the environment is alive."""
+    return self.status == self.Status.ONLINE
 
   def __enter__(self) -> 'Environment':
     """Enters the environment and sets it as the current environment."""
@@ -394,122 +505,82 @@ class Environment(pg.Object):
       return self.acquire().features[name]
     raise AttributeError(name)
 
-  #
-  # Event handlers subclasses can override.
-  #
-
-  def on_start(self, error: Exception | None = None) -> None:
-    """Called when the environment is started."""
-    if self.event_handler:
-      self.event_handler.on_environment_start(self, error)
-
-  def on_shutdown(self, error: Exception | None = None) -> None:
-    """Called when the environment is shutdown."""
-    if self.event_handler:
-      self.event_handler.on_environment_shutdown(self, error)
-
-  def on_sandbox_start(
-      self,
-      sandbox: 'Sandbox',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox is started."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_start(self, sandbox, error)
-
-  def on_sandbox_shutdown(
-      self,
-      sandbox: 'Sandbox',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox is shutdown."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_shutdown(self, sandbox, error)
-
-  def on_sandbox_feature_setup(
-      self,
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_feature_setup(self, sandbox, feature, error)
-
-  def on_sandbox_feature_teardown(
-      self,
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_feature_teardown(
-          self, sandbox, feature, error
-      )
-
-  def on_sandbox_feature_housekeep(
-      self,
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox feature is housekeeping."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_feature_housekeep(
-          self, sandbox, feature, error
-      )
-
-  def on_sandbox_session_start(
-      self,
-      sandbox: 'Sandbox',
-      session_id: str,
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox session starts."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_session_start(
-          self, sandbox, session_id, error
-      )
-
-  def on_sandbox_session_activity(
-      self,
-      sandbox: 'Sandbox',
-      session_id: str,
-      feature: Optional['Feature'] = None,
-      error: Exception | None = None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_session_activity(
-          self, sandbox, feature, session_id, error, **kwargs
-      )
-
-  def on_sandbox_session_end(
-      self,
-      sandbox: 'Sandbox',
-      session_id: str,
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox session ends."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_session_end(
-          self, sandbox, session_id, error
-      )
-
-  def on_sandbox_ping(
-      self,
-      sandbox: 'Sandbox',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a sandbox is pinged."""
-    if self.event_handler:
-      self.event_handler.on_sandbox_ping(self, sandbox, error)
-
 
 class Sandbox(pg.Object):
   """Interface for sandboxes."""
+
+  class Status(enum.Enum):
+    """Sandbox state.
+
+    State transitions:
+
+            +---------------+          +---------------+
+            |  <OFFLINE>    | <------  | SHUTTING_DOWN |
+            +---------------+          +---------------+
+                                           ^    ^
+                                           |    |
+                                 (shutdown)|    +------------------------+
+                                           |                             |
+    +-----------+    (call start) +------------+                         |
+    | <CREATED> | ------------->  | SETTING_UP | <----------------+      |
+    +-----------+                 +------------+                  |      |
+                                       |                          |      |
+                                       | (start succeeded)        |      |
+                                       | OR (_setup_session)      |      |
+                                       v                          |      |
+                                   +---------+                    |      |
+                                   |  READY  |                    |      |
+                                   +---------+                    |      |
+                                       |                          |      |
+                                       | (set_acquired)           |      |
+                                       v                          |      |
+                                    +----------+                  |      |
+                                    | ACQUIRED |                  |      |
+                                    +----------+                  |      |
+                                       |                          |      |
+                                       | (call start_session)     |      |
+                                    +------------+                |      |
+                                    | SETTING_UP | --(failed) -----------+
+                                    +------------+                |      |
+                                       |                          |      |
+                                       v (start_session succeeded)|      |
+                                 +--------------+                 |      |
+                                 |  IN_SESSION  |--(end_session)--+      |
+                                 +--------------+                        |
+                                         |                               |
+                                         +------(shutdown)---------------+
+    """
+
+    # The sandbox is created, but not yet started.
+    CREATED = 'created'
+
+    # The sandbox is being setting up to serve user sessions.
+    SETTING_UP = 'setting_up'
+
+    # The sandbox is set up and free to be acquired by the user.
+    READY = 'ready'
+
+    # The sandbox is acquired by a thread, but not yet in a user session.
+    ACQUIRED = 'acquired'
+
+    # The sandbox is in a user session.
+    IN_SESSION = 'in_session'
+
+    # The sandbox is being shut down.
+    SHUTTING_DOWN = 'shutting_down'
+
+    # The sandbox is offline.
+    OFFLINE = 'offline'
+
+    @property
+    def is_online(self) -> bool:
+      """Returns True if the sandbox is online."""
+      return self in (
+          Sandbox.Status.SETTING_UP,
+          Sandbox.Status.READY,
+          Sandbox.Status.ACQUIRED,
+          Sandbox.Status.IN_SESSION,
+      )
 
   @property
   @abc.abstractmethod
@@ -528,62 +599,179 @@ class Sandbox(pg.Object):
 
   @property
   @abc.abstractmethod
-  def is_alive(self) -> bool:
-    """Returns True if the sandbox is alive."""
+  def status(self) -> Status:
+    """Returns the status of the sandbox."""
+
+  @property
+  def is_online(self) -> bool:
+    """Returns True if the sandbox is online."""
+    return self.status.is_online
+
+  @abc.abstractmethod
+  def set_acquired(self) -> None:
+    """Marks the sandbox as acquired."""
+
+  @abc.abstractmethod
+  def add_event_handler(
+      self,
+      event_handler: EnvironmentEventHandler
+  ) -> None:
+    """Sets the status of the sandbox."""
+
+  @abc.abstractmethod
+  def remove_event_handler(
+      self,
+      event_handler: EnvironmentEventHandler
+  ) -> None:
+    """Removes the status of the sandbox."""
 
   @property
   @abc.abstractmethod
-  def is_busy(self) -> bool:
-    """Returns whether the sandbox is busy."""
-
-  @abc.abstractmethod
-  def set_pending(self) -> None:
-    """Marks the sandbox pending after acquisition but before ready for use."""
-
-  @property
-  @abc.abstractmethod
-  def is_pending(self) -> bool:
-    """Returns whether the sandbox is pending."""
+  def state_errors(self) -> list[SandboxStateError]:
+    """Returns state errors encountered during sandbox's lifecycle."""
 
   @abc.abstractmethod
   def start(self) -> None:
     """Starts the sandbox.
 
+    State transitions:
+      CREATED -> SETTING_UP -> READY: When all sandbox and feature setup
+        succeeds.
+      CREATED -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When sandbox or feature
+        setup fails.
+
+    `start` and `shutdown` should be called in pairs, even when the sandbox
+    fails to start. This ensures proper cleanup.
+
+    Start may fail with two sources of errors:
+
+    1. SandboxStateError: If sandbox or feature setup fail due to enviroment
+       outage or sandbox state errors.
+    2. BaseException: If feature setup failed with user-defined errors, this
+       could happen when there is bug in the user code or non-environment code
+       failure.
+
+    In both cases, the sandbox will be shutdown automatically, and the error
+    will be add to `errors`. The sandbox is considered dead and will not be
+    further used.
+
     Raises:
       SandboxStateError: If the sandbox is in a bad state.
+      BaseException: If feature setup failed with user-defined errors.
     """
 
   @abc.abstractmethod
   def shutdown(self) -> None:
     """Shuts down the sandbox.
 
+    State transitions:
+      SHUTTING_DOWN -> SHUTTING_DOWN: No operation.
+      OFFLINE -> OFFLINE: No operation.
+      SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When sandbox and feature
+        setup fails.
+      IN_SESSION -> SHUTTING_DOWN -> OFFLINE: When user session exits while
+        sandbox is set not to reuse, or session teardown fails.
+      FREE -> SHUTTING_DOWN -> OFFLINE: When sandbox is shutdown when the
+        environment is shutting down, or housekeeping loop shuts down the
+        sandbox due to housekeeping failures.
+
+
+    Please be aware that `shutdown` will be called whenever an operation on the
+    sandbox encounters a critical error. This means, `shutdown` should not make
+    the assumption that the sandbox is in a healthy state, even `start` could
+    fail. As a result, `shutdown` must allow re-entry and be thread-safe with
+    other sandbox operations.
+
+    Shutdown may fail with two sources of errors:
+
+    1. SandboxStateError: If the sandbox is in a bad state, and feature teardown
+       logic depending on a healthy sandbox may fail. In such case, we do not
+       raise error to the user as the user session is considered completed. The
+       sandbox is abandoned and new user sessions will be served on other
+       sandboxes.
+
+    2. BaseException: The sandbox is in good state, but user code raises error
+       due to bug or non-environment code failure. In such case, errors will be
+       raised to the user so the error could be surfaced and handled properly.
+       The sandbox is treated as shutdown and will not be further used.
+
     Raises:
-      SandboxStateError: If the sandbox is in a bad state.
+      BaseException: If feature teardown failed with user-defined errors.
     """
 
   @abc.abstractmethod
-  def ping(self) -> None:
-    """Ping the sandbox to check if it is alive.
-
-    Raises:
-      SandboxStateError: If the sandbox is in a bad state.
-    """
-
-  @abc.abstractmethod
-  def start_session(self, session_id: str) -> None:
+  def start_session(
+      self,
+      session_id: str,
+  ) -> None:
     """Begins a user session with the sandbox.
+
+    State transitions:
+      ACQUIRED -> SETTING_UP -> IN_SESSION: When session setup succeeds.
+      ACQUIRED -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When session setup
+        fails.
+
+    A session is a sequence of stateful interactions with the sandbox.
+    Across different sessions the sandbox are considered stateless.
+    `start_session` and `end_session` should always be called in pairs, even
+    when the session fails to start. `Sandbox.new_session` context manager is
+    the recommended way to use `start_session` and `end_session` in pairs.
+
+    Starting a session may fail with two sources of errors:
+
+    1. SandboxStateError: If the sandbox is in a bad state or session setup
+       failed.
+
+    2. BaseException: If session setup failed with user-defined errors.
+
+    In both cases, the sandbox will be shutdown automatically and the
+    session will be considered ended. The error will be added to `errors`.
+    Future session will be served on other sandboxes.
 
     Args:
       session_id: The identifier for the user session.
 
     Raises:
-      SandboxError: If the sandbox already has a user session
-        or the session cannot be started.
+      SandboxStateError: If the sandbox is already in a bad state or session
+        setup failed.
+      BaseException: If session setup failed with user-defined errors.
     """
 
   @abc.abstractmethod
   def end_session(self) -> None:
-    """Ends the user session with the sandbox."""
+    """Ends the user session with the sandbox.
+
+    State transitions:
+      IN_SESSION -> READY: When user session exits normally, and sandbox is set
+        to reuse.
+      IN_SESSION -> SHUTTING_DOWN -> OFFLINE: When user session exits while
+        sandbox is set not to reuse, or session teardown fails.
+      IN_SESSION -> SETTING_UP -> READY: When user session exits normally, and
+        sandbox is set to reuse, and proactive session setup is enabled.
+      IN_SESSION -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When user session
+        exits normally, and proactive session setup is enabled but fails.
+      not IN_SESSION -> same state: No operation
+
+    `end_session` should always be called for each `start_session` call, even
+    when the session fails to start, to ensure proper cleanup.
+
+    `end_session` may fail with two sources of errors:
+
+    1. SandboxStateError: If the sandbox is in a bad state or session teardown
+       failed.
+
+    2. BaseException: If session teardown failed with user-defined errors.
+
+    In both cases, the sandbox will be shutdown automatically and the
+    session will be considered ended. The error will be added to `errors`.
+    Future session will be served on other sandboxes.
+
+    However, SandboxStateError encountered during `end_session` will NOT be
+    raised to the user as the user session is considered completed.
+
+    Raises:
+      BaseException: If session teardown failed with user-defined errors.
+    """
 
   @property
   @abc.abstractmethod
@@ -598,10 +786,30 @@ class Sandbox(pg.Object):
   #
 
   @contextlib.contextmanager
-  def new_session(self, session_id: str | None = None) -> Iterator['Sandbox']:
-    """Context manager for obtaining a sandbox for a user session."""
+  def new_session(
+      self,
+      session_id: str | None = None,
+  ) -> Iterator['Sandbox']:
+    """Context manager for obtaining a sandbox for a user session.
+
+    State transitions:
+      ACQUIRED -> IN_SESSION -> READY: When session setup and teardown succeed.
+      ACQUIRED -> IN_SESSINO -> OFFLINE: When session setup or teardown fails.
+
+    Args:
+      session_id: The identifier for the user session. If not provided, a random
+        ID will be generated.
+
+    Yields:
+      The sandbox for the user session.
+
+    Raises:
+      SandboxStateError: If a session cannot be started on the sandbox.
+      BaseException: If session setup or teardown failed with user-defined
+        errors.
+    """
     if session_id is None:
-      session_id = f'session-{uuid.uuid4().hex[:7]}'
+      session_id = self.environment.new_session_id()
     self.start_session(session_id)
     try:
       yield self
@@ -630,84 +838,6 @@ class Sandbox(pg.Object):
       return self.features[name]
     raise AttributeError(name)
 
-  #
-  # Event handlers subclasses can override.
-  #
-
-  def on_start(self, error: Exception | None = None) -> None:
-    """Called when the sandbox is started."""
-    self.environment.on_sandbox_start(self, error)
-
-  def on_shutdown(self, error: Exception | None = None) -> None:
-    """Called when the sandbox is shutdown."""
-    self.environment.on_sandbox_shutdown(self, error)
-
-  def on_ping(self, error: Exception | None = None) -> None:
-    """Called when the sandbox is pinged."""
-    self.environment.on_sandbox_ping(self, error)
-
-  def on_feature_setup(
-      self,
-      feature: 'Feature',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a feature is setup."""
-    self.environment.on_sandbox_feature_setup(
-        self, feature, error
-    )
-
-  def on_feature_teardown(
-      self,
-      feature: 'Feature',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a feature is teardown."""
-    self.environment.on_sandbox_feature_teardown(
-        self, feature, error
-    )
-
-  def on_feature_housekeep(
-      self,
-      feature: 'Feature',
-      error: Exception | None = None
-  ) -> None:
-    """Called when a feature is housekeeping."""
-    self.environment.on_sandbox_feature_housekeep(
-        self, feature, error
-    )
-
-  def on_session_start(
-      self,
-      session_id: str,
-      error: Exception | None = None
-  ) -> None:
-    """Called when the user session starts."""
-    self.environment.on_sandbox_session_start(self, session_id, error)
-
-  def on_session_activity(
-      self,
-      session_id: str,
-      feature: Optional['Feature'] = None,
-      error: Exception | None = None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
-    self.environment.on_sandbox_session_activity(
-        sandbox=self,
-        feature=feature,
-        session_id=session_id,
-        error=error,
-        **kwargs
-    )
-
-  def on_session_end(
-      self,
-      session_id: str,
-      error: Exception | None = None
-  ) -> None:
-    """Called when the user session ends."""
-    self.environment.on_sandbox_session_end(self, session_id, error)
-
 
 class Feature(pg.Object):
   """Interface for sandbox features."""
@@ -719,39 +849,106 @@ class Feature(pg.Object):
 
   @property
   @abc.abstractmethod
-  def sandbox(self) -> Sandbox | None:
-    """Returns the sandbox that the feature is running in."""
+  def sandbox(self) -> Sandbox:
+    """Returns the sandbox that the feature is running in.
+
+    Returns:
+      The sandbox that the feature is running in.
+
+    Raises:
+      AssertError: If the feature is not set up with a sandbox yet.
+    """
 
   @abc.abstractmethod
   def setup(self, sandbox: Sandbox) -> None:
     """Sets up the feature, which is called once when the sandbox is up.
 
+    State transitions:
+      SETTING_UP -> READY: When setup succeeds.
+      SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When setup fails.
+
+    `setup` is called when a sandbox is started for the first time. When a
+    feature's `setup` is called, its `teardown` is guaranteed to be called.
+
     Args:
       sandbox: The sandbox that the feature is running in.
 
     Raises:
-      SandboxStateError: If the sandbox is in a bad state.
+      SandboxStateError: If setup failed due to sandbox state errors.
+      BaseException: If setup failed with user-defined errors.
     """
 
   @abc.abstractmethod
   def teardown(self) -> None:
     """Teardowns the feature, which is called once when the sandbox is down.
 
+    State transitions:
+      SHUTTING_DOWN -> OFFLINE: When teardown succeeds or fails.
+
     Raises:
       SandboxStateError: If the sandbox is in a bad state.
     """
 
   @abc.abstractmethod
-  def setup_session(self, session_id: str) -> None:
-    """Sets up the feature for a user session."""
+  def setup_session(self) -> None:
+    """Sets up the feature for the upcoming user session.
+
+    State transitions:
+      SETTING_UP -> READY: When session setup succeeds.
+      SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When sessino setup fails.
+
+    `setup_session` is called when a new user session starts for per-session
+    setup. `setup_session` and `teardown_session` will be called in pairs, even
+    `setup_session` fails.
+
+    `setup_session` may fail with two sources of errors:
+
+    1. SandboxStateError: If the sandbox is in a bad state or session setup
+       failed.
+    2. BaseException: If session setup failed with user-defined errors.
+
+    In both cases, the error will be raised to the user and the session will be
+    ended. The sandbox will shutdown automatically and will not be further used.
+
+    Raises:
+      SandboxStateError: If the sandbox is in a bad state or session setup
+        failed.
+      BaseException: If session setup failed with user-defined errors.
+    """
 
   @abc.abstractmethod
-  def teardown_session(self, session_id: str) -> None:
-    """Teardowns the feature for a user session."""
+  def teardown_session(self) -> None:
+    """Teardowns the feature for an ending user session.
+
+    State transitions:
+      SHUTTING_DOWN -> OFFLINE: When session teardown succeeds or fails.
+
+    `teardown_session` is called when a user session ends for per-
+    session teardown. `teardown_session` will always be called upon a feature
+    whose `setup_session` is called.
+
+    `teardown_session` may fail with two sources of errors:
+
+    1. SandboxStateError: If the sandbox is in a bad state or session teardown
+       failed.
+    2. BaseException: If session teardown failed with user-defined errors.
+
+    In both cases, the session will be closed and the sandbox will be shutdown.
+    However, SandboxStateError encountered during `teardown_session` will NOT be
+    raised to the user as the user session is considered completed. Other errors
+    will be raised to the user for proper error handling.
+
+    Raises:
+      BaseException: If session teardown failed with user-defined errors.
+    """
 
   @abc.abstractmethod
   def housekeep(self) -> None:
     """Performs housekeeping for the feature.
+
+    State transitions:
+      (no state change): When housekeeping succeeds.
+      original state -> SHUTTING_DOWN -> OFFLINE: When housekeeping fails.
 
     Raises:
       SandboxStateError: If the sandbox is in a bad state.
@@ -772,72 +969,3 @@ class Feature(pg.Object):
     """Returns the current user session identifier."""
     assert self.sandbox is not None
     return self.sandbox.session_id
-
-  #
-  # Event handlers subclasses can override.
-  #
-
-  def on_setup(
-      self,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when the feature is setup."""
-    self.sandbox.on_feature_setup(self, error)
-
-  def on_teardown(
-      self,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when the feature is teardown."""
-    self.sandbox.on_feature_teardown(self, error)
-
-  def on_housekeep(
-      self,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when the feature has done housekeeping."""
-    self.sandbox.on_feature_housekeep(self, error)
-
-  def on_session_setup(
-      self,
-      session_id: str,
-      error: BaseException | None = None,
-  ) -> None:
-    """Called when the feature is setup for a user session."""
-
-  def on_session_activity(
-      self,
-      session_id: str,
-      error: Exception | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
-    self.sandbox.on_session_activity(
-        feature=self, session_id=session_id, error=error, **kwargs
-    )
-
-  def on_session_teardown(
-      self,
-      session_id: str,
-      error: BaseException | None = None,
-  ) -> None:
-    """Called when the feature is teardown for a user session."""
-
-
-def call_with_event(
-    action: Callable[[], None],
-    event_handler: Callable[..., None],
-    action_kwargs: dict[str, Any] | None = None,
-    event_handler_kwargs: dict[str, Any] | None = None,
-) -> None:
-  """Triggers an event handler."""
-  action_kwargs = action_kwargs or {}
-  event_handler_kwargs = event_handler_kwargs or {}
-  error = None
-  try:
-    action(**action_kwargs)
-  except BaseException as e:  # pylint: disable=broad-except
-    error = e
-    raise
-  finally:
-    event_handler(error=error, **event_handler_kwargs)

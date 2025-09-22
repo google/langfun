@@ -21,9 +21,7 @@ from langfun.env import load_balancers
 
 class TestingSandbox(interface.Sandbox):
   sandbox_id: str
-  is_alive: bool = True
-  is_pending: bool = False
-  is_busy: bool = False
+  status: interface.Sandbox.Status = interface.Sandbox.Status.READY
 
   def _on_bound(self) -> None:
     super()._on_bound()
@@ -44,29 +42,33 @@ class TestingSandbox(interface.Sandbox):
   def features(self) -> dict[str, interface.Feature]:
     raise NotImplementedError()
 
-  def set_pending(self, pending: bool = True) -> None:
-    self.rebind(
-        is_pending=pending, skip_notification=True, raise_on_no_change=False
-    )
+  @property
+  def state_errors(self) -> list[interface.SandboxStateError]:
+    return []
 
-  def set_busy(self, busy: bool = True) -> None:
-    self.rebind(
-        is_busy=busy, skip_notification=True, raise_on_no_change=False
-    )
+  def set_status(self, status: interface.Sandbox.Status) -> None:
+    self.rebind(status=status, skip_notification=True)
 
-  def set_alive(self, alive: bool = True) -> None:
-    self.rebind(
-        is_alive=alive, skip_notification=True, raise_on_no_change=False
-    )
+  def set_acquired(self) -> None:
+    self.set_status(self.Status.ACQUIRED)
+
+  def add_event_handler(
+      self,
+      event_handler: interface.EnvironmentEventHandler
+  ) -> None:
+    pass
+
+  def remove_event_handler(
+      self,
+      event_handler: interface.EnvironmentEventHandler
+  ) -> None:
+    pass
 
   def start(self) -> None:
     self.set_alive()
 
   def shutdown(self) -> None:
     self.set_alive(False)
-
-  def ping(self) -> None:
-    pass
 
   def start_session(self, session_id: str) -> None:
     self._session_id = session_id
@@ -83,50 +85,25 @@ class RoundRobinTest(unittest.TestCase):
 
   def test_basic(self):
     sandbox_pool = [
-        TestingSandbox(
-            '0',
-            is_alive=False,
-            is_pending=False,
-            is_busy=False,
-        ),
-        TestingSandbox(
-            '1',
-            is_alive=True,
-            is_pending=True,
-            is_busy=False,
-        ),
-        TestingSandbox(
-            '2',
-            is_alive=True,
-            is_pending=False,
-            is_busy=True,
-        ),
-        TestingSandbox(
-            '3',
-            is_alive=True,
-            is_pending=False,
-            is_busy=False,
-        ),
-        TestingSandbox(
-            '4',
-            is_alive=True,
-            is_pending=False,
-            is_busy=False,
-        ),
+        TestingSandbox('0', interface.Sandbox.Status.OFFLINE),
+        TestingSandbox('1', interface.Sandbox.Status.SETTING_UP),
+        TestingSandbox('2', interface.Sandbox.Status.IN_SESSION),
+        TestingSandbox('3', status=interface.Sandbox.Status.READY),
+        TestingSandbox('4', status=interface.Sandbox.Status.READY),
     ]
     lb = load_balancers.RoundRobin()
     sandbox = lb.acquire(sandbox_pool)
     self.assertIs(sandbox, sandbox_pool[3])
-    self.assertTrue(sandbox.is_pending)
+    self.assertEqual(sandbox.status, interface.Sandbox.Status.ACQUIRED)
 
     sandbox = lb.acquire(sandbox_pool)
     self.assertIs(sandbox, sandbox_pool[4])
-    self.assertTrue(sandbox.is_pending)
+    self.assertEqual(sandbox.status, interface.Sandbox.Status.ACQUIRED)
 
-    sandbox_pool[0].set_alive()
+    sandbox_pool[0].set_status(interface.Sandbox.Status.READY)
     sandbox = lb.acquire(sandbox_pool)
     self.assertIs(sandbox, sandbox_pool[0])
-    self.assertTrue(sandbox.is_pending)
+    self.assertEqual(sandbox.status, interface.Sandbox.Status.ACQUIRED)
 
     with self.assertRaisesRegex(IndexError, 'No free sandbox in the pool.'):
       lb.acquire(sandbox_pool)
@@ -139,13 +116,11 @@ class RoundRobinTest(unittest.TestCase):
     def _thread_func(i):
       sandbox = lb.acquire(sandbox_pool)
       time.sleep(0.1)
-      sandbox.set_busy()
-      sandbox.set_pending(False)
+      sandbox.set_status(interface.Sandbox.Status.IN_SESSION)
       time.sleep(0.1)
-      sandbox.set_busy(False)
-      sandbox.set_alive(False)
+      sandbox.set_status(interface.Sandbox.Status.OFFLINE)
       time.sleep(0.1)
-      sandbox.set_alive()
+      sandbox.set_status(interface.Sandbox.Status.READY)
       return i
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:

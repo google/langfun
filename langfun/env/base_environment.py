@@ -19,16 +19,19 @@ environments that handles pooling, load balancing, and maintenance.
 Note that:
 - Environments do not have to inherit from this class, especially if features
   like pooling or load balancing are not needed.
-- `BaseEnvironment` is not required to work with `BaseSandbox`.
+- `BaseEnvironment` is coupled with `BaseSandbox`.
 """
 
 import abc
 import functools
+import random
 import threading
 import time
 from typing import Annotated, Any
+import uuid
 
 import langfun.core as lf
+from langfun.env import base_sandbox
 from langfun.env import interface
 from langfun.env import load_balancers
 import pyglove as pg
@@ -66,6 +69,16 @@ class BaseEnvironment(interface.Environment):
       )
   ] = load_balancers.RoundRobin()
 
+  proactive_session_setup: Annotated[
+      bool,
+      (
+          'If True, all sandboxes will perform setup work before a user '
+          'session is started. This is useful for features that need to '
+          'perform heavy setup work, which could block the user thread for a '
+          'long time.'
+      )
+  ] = True
+
   outage_grace_period: Annotated[
       float,
       (
@@ -100,13 +113,24 @@ class BaseEnvironment(interface.Environment):
       )
   ] = 256
 
+  random_seed: Annotated[
+      int | None,
+      (
+          'The random seed for generating session IDs with reproducibility. '
+          'If None, no seed will be used.'
+      )
+  ] = None
+
   def _on_bound(self) -> None:
     super()._on_bound()
 
-    self._alive = False
+    self._status = self.Status.CREATED
     self._start_time = None
     self._sandbox_pool = []
     self._next_pooled_sandbox_id = 0
+    self._random = (
+        random if self.random_seed is None else random.Random(self.random_seed)
+    )
 
     self._maintenance_thread = None
     self._offline_start_time = None
@@ -119,13 +143,16 @@ class BaseEnvironment(interface.Environment):
   def _create_sandbox(
       self,
       sandbox_id: str,
-      reusable: bool
-  ) -> interface.Sandbox:
+      reusable: bool,
+      proactive_session_setup: bool,
+  ) -> base_sandbox.BaseSandbox:
     """Creates a sandbox with the given identifier.
 
     Args:
       sandbox_id: The identifier for the sandbox.
       reusable: Whether the sandbox is reusable across user sessions.
+      proactive_session_setup: Whether the sandbox performs session setup work
+        before a user session is started.
 
     Returns:
       The created sandbox.
@@ -135,32 +162,28 @@ class BaseEnvironment(interface.Environment):
       interface.SandboxStateError: If sandbox cannot be started.
     """
 
+  def new_session_id(self) -> str:
+    """Generates a random session ID."""
+    suffix = uuid.UUID(
+        bytes=bytes(bytes(self._random.getrandbits(8) for _ in range(16))),
+        version=4
+    ).hex[:7]
+    return f'session-{suffix}'
+
   #
   # Subclasses can override:
   #
 
   def stats(self) -> dict[str, Any]:
     """Returns the stats of the environment."""
-    num_busy = 0
-    num_free = 0
-    num_dead = 0
-
+    stats_dict = {
+        status.value: 0
+        for status in interface.Sandbox.Status
+    }
     for sandbox in self._sandbox_pool:
-      if sandbox.is_alive:
-        if sandbox.is_busy:
-          num_busy += 1
-        else:
-          num_free += 1
-      else:
-        num_dead += 1
-
+      stats_dict[sandbox.status.value] += 1
     return {
-        'sandbox': {
-            'num_total': len(self._sandbox_pool),
-            'num_busy': num_busy,
-            'num_free': num_free,
-            'num_dead': num_dead,
-        },
+        'sandbox': stats_dict,
     }
 
   def _start(self) -> None:
@@ -169,7 +192,9 @@ class BaseEnvironment(interface.Environment):
       self._sandbox_pool = [
           sandbox
           for _, sandbox, _ in lf.concurrent_map(
-              lambda i: self._bring_up_sandbox_with_retry(sandbox_id=str(i)),
+              lambda i: self._bring_up_sandbox_with_retry(
+                  sandbox_id=str(i), shutdown_env_upon_outage=False
+              ),
               range(self.min_pool_size),
               silence_on_errors=None,
               max_workers=min(
@@ -179,7 +204,6 @@ class BaseEnvironment(interface.Environment):
           )
       ]
     self._next_sandbox_id = len(self._sandbox_pool)
-    self._alive = True
     self._maintenance_thread = threading.Thread(
         target=self._maintenance_loop, daemon=True
     )
@@ -193,7 +217,7 @@ class BaseEnvironment(interface.Environment):
       self._maintenance_thread.join()
       self._maintenance_thread = None
 
-    def _shutdown_sandbox(sandbox: interface.Sandbox) -> None:
+    def _shutdown_sandbox(sandbox: base_sandbox.BaseSandbox) -> None:
       sandbox.shutdown()
 
     if self._sandbox_pool:
@@ -215,7 +239,7 @@ class BaseEnvironment(interface.Environment):
   #
 
   @property
-  def sandbox_pool(self) -> list[interface.Sandbox]:
+  def sandbox_pool(self) -> list[base_sandbox.BaseSandbox]:
     """Returns the sandbox pool."""
     return self._sandbox_pool
 
@@ -230,9 +254,13 @@ class BaseEnvironment(interface.Environment):
     return self.min_pool_size > 0
 
   @property
-  def is_alive(self) -> bool:
-    """Returns whether the environment is alive."""
-    return self._alive
+  def status(self) -> interface.Environment.Status:
+    """Returns whether the environment is online."""
+    return self._status
+
+  def _set_status(self, status: interface.Environment.Status) -> None:
+    """Sets the status of the environment."""
+    self._status = status
 
   @property
   def min_pool_size(self) -> int:
@@ -270,48 +298,56 @@ class BaseEnvironment(interface.Environment):
     Raises:
       interface.EnvironmentOutageError: If the environment is out of service.
     """
-    assert not self._alive
-    def _start_impl():
+    assert self._status == self.Status.CREATED, (
+        f'Environment {self.id} cannot be started because '
+        f'it is in {self._status.value!r} status.'
+    )
+
+    try:
       with pg.timeit('env.start') as t:
         self._start()
-      self._start_time = time.time()
+        self._start_time = time.time()
       pg.logging.info(
           '[%s]: %s started in %.2f seconds.',
           self.id, self.__class__.__name__, t.elapse
       )
-    interface.call_with_event(
-        _start_impl, self.on_start,
-    )
+      self._set_status(self.Status.ONLINE)
+      self.on_start()
+    except BaseException as e:
+      self.on_start(error=e)
+      self.shutdown()
+      raise e
 
   def shutdown(self) -> None:
     """Shuts down the environment.
 
     This method should not raise any exceptions.
     """
-    if not self._alive:
+    if self._status in (
+        self.Status.SHUTTING_DOWN,
+        self.Status.OFFLINE,
+    ):
       return
 
-    self._alive = False
-    def _shutdown_impl():
-      pg.logging.info(
-          '[%s]: Shutting down %s...', self.id, self.__class__.__name__
-      )
+    self._set_status(self.Status.SHUTTING_DOWN)
+
+    try:
       with pg.timeit('env.shutdown') as t:
         self._shutdown()
+      self.on_shutdown()
       pg.logging.info(
           '[%s]: %s shutdown in %.2f seconds.',
           self.id, self.__class__.__name__, t.elapse
       )
-
-    interface.call_with_event(
-        _shutdown_impl, self.on_shutdown,
-    )
+    except BaseException as e:  # pylint: disable=broad-except
+      self.on_shutdown(error=e)
+      raise e
 
   #
   # Environment operations.
   #
 
-  def acquire(self) -> interface.Sandbox:
+  def acquire(self) -> base_sandbox.BaseSandbox:
     """Acquires a sandbox from the environment.
 
     Returns:
@@ -324,7 +360,7 @@ class BaseEnvironment(interface.Environment):
         the grace period has passed.
     """
 
-    if not self._alive:
+    if not self.is_online:
       raise interface.EnvironmentOutageError(
           f'Environment {self.id} is not alive.',
           environment=self,
@@ -334,7 +370,7 @@ class BaseEnvironment(interface.Environment):
     if not self.enable_pooling:
       return self._bring_up_sandbox_with_retry(
           sandbox_id=str(self._increment_sandbox_id()),
-          set_pending=True,
+          set_acquired=True,
       )
 
     allocation_start_time = time.time()
@@ -352,13 +388,9 @@ class BaseEnvironment(interface.Environment):
           time.sleep(1)
         else:
           try:
-            sandbox = self._create_sandbox(
-                sandbox_id=str(self._increment_sandbox_id()),
-                reusable=self.enable_pooling,
+            sandbox = self._bring_up_sandbox(
+                sandbox_id=str(self._increment_sandbox_id()), set_acquired=True,
             )
-            sandbox.start()
-            sandbox.set_pending()
-
             # Append is atomic and does not require locking.
             self._sandbox_pool.append(sandbox)
             self._offline_start_time = None
@@ -368,17 +400,35 @@ class BaseEnvironment(interface.Environment):
           ) as ex:
             self._report_outage_or_wait(ex)
 
+  def _bring_up_sandbox(
+      self,
+      sandbox_id: str,
+      set_acquired: bool = False,
+  ) -> base_sandbox.BaseSandbox:
+    """Brings up a new sandbox."""
+    sandbox = self._create_sandbox(
+        sandbox_id=sandbox_id,
+        reusable=self.enable_pooling,
+        proactive_session_setup=self.proactive_session_setup,
+    )
+    for handler in self.event_handlers:
+      sandbox.add_event_handler(handler)
+    sandbox.start()
+    if set_acquired:
+      sandbox.set_acquired()
+    return sandbox
+
   def _bring_up_sandbox_with_retry(
       self,
       sandbox_id: str,
-      set_pending: bool = False,
+      set_acquired: bool = False,
       shutdown_env_upon_outage: bool = True,
-  ) -> interface.Sandbox:
+  ) -> base_sandbox.BaseSandbox:
     """Brings up a new sandbox with retry until grace period is passed.
 
     Args:
       sandbox_id: The ID of the sandbox to bring up.
-      set_pending: Whether to mark the sandbox as pending.
+      set_acquired: If True, the sandbox will be marked as acquired.
       shutdown_env_upon_outage: Whether to shutdown the environment when the
         outage grace period is passed.
 
@@ -391,14 +441,9 @@ class BaseEnvironment(interface.Environment):
     """
     while True:
       try:
-        sandbox = self._create_sandbox(
-            sandbox_id=sandbox_id,
-            reusable=self.enable_pooling
+        return self._bring_up_sandbox(
+            sandbox_id=sandbox_id, set_acquired=set_acquired
         )
-        sandbox.start()
-        if set_pending:
-          sandbox.set_pending()
-        return sandbox
       except (interface.EnvironmentError, interface.SandboxStateError) as e:
         self._report_outage_or_wait(e, shutdown_env_upon_outage)
 
@@ -435,7 +480,7 @@ class BaseEnvironment(interface.Environment):
         '[%s]: %s maintenance thread started.', self.id, self.__class__.__name__
     )
     stats_report_time = time.time()
-    while self._alive:
+    while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       if time.time() - stats_report_time > self.stats_report_interval:
         pg.logging.info(
             '[%s] %s stats: %s.',
@@ -444,7 +489,8 @@ class BaseEnvironment(interface.Environment):
         stats_report_time = time.time()
 
       dead_pool_indices = [
-          i for i, s in enumerate(self._sandbox_pool) if not s.is_alive
+          i for i, s in enumerate(self._sandbox_pool)
+          if s.status == interface.Sandbox.Status.OFFLINE
       ]
       if dead_pool_indices and not self._replace_dead_sandboxes(
           dead_pool_indices
@@ -489,3 +535,17 @@ class BaseEnvironment(interface.Environment):
             ),
         )
     ])
+
+  #
+  # Event handlers subclasses can override.
+  #
+
+  def on_start(self, error: BaseException | None = None) -> None:
+    """Called when the environment is started."""
+    for handler in self.event_handlers:
+      handler.on_environment_start(self, error)
+
+  def on_shutdown(self, error: BaseException | None = None) -> None:
+    """Called when the environment is shutdown."""
+    for handler in self.event_handlers:
+      handler.on_environment_shutdown(self, error)

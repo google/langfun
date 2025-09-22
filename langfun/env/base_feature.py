@@ -23,7 +23,7 @@ the `Environment` and `Sandbox` interfaces directly.
 """
 
 import functools
-from typing import Annotated
+from typing import Annotated, Callable
 
 from langfun.env import interface
 import pyglove as pg
@@ -53,21 +53,15 @@ class BaseFeature(interface.Feature):
     NOTE: always call super()._teardown() at the end of the implementation.
     """
 
-  def _setup_session(self, session_id: str) -> None:
+  def _setup_session(self) -> None:
     """Subclasses can override this for custom setup session.
-
-    Args:
-      session_id: The session ID.
 
     NOTE: always call super()._setup_session() at the beginning of the
     implementation.
     """
 
-  def _teardown_session(self, session_id: str) -> None:
+  def _teardown_session(self) -> None:
     """Subclasses can override this for custom teardown session.
-
-    Args:
-      session_id: The session ID.
 
     NOTE: always call super()._teardown_session() at the end of the
     implementation.
@@ -114,44 +108,37 @@ class BaseFeature(interface.Feature):
   # Setup and teardown of the feature.
   #
 
+  def _do(
+      self,
+      action: Callable[[], None],
+      event_handler: Callable[..., None],
+  ) -> None:
+    """Triggers an event handler."""
+    error = None
+    try:
+      action()
+    except BaseException as e:  # pylint: disable=broad-except
+      error = e
+      raise
+    finally:
+      event_handler(error=error)
+
   def setup(self, sandbox: interface.Sandbox) -> None:
     """Sets up the feature."""
     self._sandbox = sandbox
-    interface.call_with_event(
-        action=self._setup,
-        event_handler=self.on_setup,
-    )
+    self._do(self._setup, self.on_setup)
 
   def teardown(self) -> None:
     """Tears down the feature."""
-    # If a sandbox is down during setting up, feature.shutdown might be called
-    # before the feature is setup. In this case, we don't need to teardown the
-    # feature.
-    if self._sandbox is None:
-      return
+    self._do(self._teardown, event_handler=self.on_teardown)
 
-    interface.call_with_event(
-        action=self._teardown,
-        event_handler=self.on_teardown,
-    )
-
-  def setup_session(self, session_id: str) -> None:
+  def setup_session(self) -> None:
     """Sets up the feature for a user session."""
-    interface.call_with_event(
-        action=self._setup_session,
-        event_handler=self.on_session_setup,
-        action_kwargs={'session_id': session_id},
-        event_handler_kwargs={'session_id': session_id},
-    )
+    self._do(self._setup_session, event_handler=self.on_setup_session)
 
-  def teardown_session(self, session_id: str) -> None:
+  def teardown_session(self) -> None:
     """Teardowns the feature for a user session."""
-    interface.call_with_event(
-        action=self._teardown_session,
-        event_handler=self.on_session_teardown,
-        action_kwargs={'session_id': session_id},
-        event_handler_kwargs={'session_id': session_id},
-    )
+    self._do(self._teardown_session, self.on_teardown_session)
 
   #
   # Housekeeping.
@@ -159,7 +146,59 @@ class BaseFeature(interface.Feature):
 
   def housekeep(self) -> None:
     """Performs housekeeping for the feature."""
-    interface.call_with_event(
-        action=self._housekeep,
-        event_handler=self.on_housekeep,
+    self._do(self._housekeep, self.on_housekeep)
+
+  #
+  # Event handlers subclasses can override.
+  #
+
+  def on_setup(
+      self,
+      error: BaseException | None = None
+  ) -> None:
+    """Called when the feature is setup."""
+    self.sandbox.on_feature_setup(self, error)
+
+  def on_teardown(
+      self,
+      error: BaseException | None = None
+  ) -> None:
+    """Called when the feature is teardown."""
+    self.sandbox.on_feature_teardown(self, error)
+
+  def on_housekeep(
+      self,
+      error: BaseException | None = None
+  ) -> None:
+    """Called when the feature has done housekeeping."""
+    self.sandbox.on_feature_housekeep(self, error)
+
+  def on_setup_session(
+      self,
+      error: BaseException | None = None,
+  ) -> None:
+    """Called when the feature is setup for a user session."""
+    self.sandbox.on_feature_setup_session(self, error)
+
+  def on_teardown_session(
+      self,
+      error: BaseException | None = None,
+  ) -> None:
+    """Called when the feature is teardown for a user session."""
+    self.sandbox.on_feature_teardown_session(self, error)
+
+  def on_session_activity(
+      self,
+      session_id: str,
+      name: str,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed."""
+    self.sandbox.on_session_activity(
+        session_id=session_id,
+        name=name,
+        feature=self,
+        error=error,
+        **kwargs
     )

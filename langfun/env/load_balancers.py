@@ -51,9 +51,9 @@ class RoundRobin(LoadBalancer):
       for _ in range(len(sandbox_pool)):
         sandbox = sandbox_pool[self._counter % len(sandbox_pool)]
         self._counter = self._counter + 1
-        if sandbox.is_alive and not sandbox.is_busy and not sandbox.is_pending:
-          # Mark the sandbox as pending so that it will not be acquired by other
-          # threads.
-          sandbox.set_pending()
+        if sandbox.status == interface.Sandbox.Status.READY:
+          # Mark the sandbox as acquired to prevent it from being acquired by
+          # other threads.
+          sandbox.set_acquired()
           return sandbox
     raise IndexError('No free sandbox in the pool.')

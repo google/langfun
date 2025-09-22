@@ -27,7 +27,6 @@ from langfun.env.interface import SandboxStateError
 from langfun.env.interface import Environment
 from langfun.env.interface import Sandbox
 from langfun.env.interface import Feature
-from langfun.env.interface import call_with_event
 
 from langfun.env.base_environment import BaseEnvironment
 from langfun.env.base_sandbox import BaseSandbox
