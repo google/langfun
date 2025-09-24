@@ -23,6 +23,7 @@ the `Environment` and `Sandbox` interfaces directly.
 """
 
 import functools
+import time
 from typing import Annotated, Callable
 
 from langfun.env import interface
@@ -82,6 +83,7 @@ class BaseFeature(interface.Feature):
     """Called when the feature is bound."""
     super()._on_bound()
     self._sandbox = None
+    self._housekeep_counter = 0
 
   @functools.cached_property
   def name(self) -> str:
@@ -115,13 +117,14 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Triggers an event handler."""
     error = None
+    start_time = time.time()
     try:
       action()
     except BaseException as e:  # pylint: disable=broad-except
       error = e
       raise
     finally:
-      event_handler(error=error)
+      event_handler(duration=time.time() - start_time, error=error)
 
   def setup(self, sandbox: interface.Sandbox) -> None:
     """Sets up the feature."""
@@ -146,7 +149,10 @@ class BaseFeature(interface.Feature):
 
   def housekeep(self) -> None:
     """Performs housekeeping for the feature."""
-    self._do(self._housekeep, self.on_housekeep)
+    try:
+      self._do(self._housekeep, self.on_housekeep)
+    finally:
+      self._housekeep_counter += 1
 
   #
   # Event handlers subclasses can override.
@@ -154,51 +160,58 @@ class BaseFeature(interface.Feature):
 
   def on_setup(
       self,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when the feature is setup."""
-    self.sandbox.on_feature_setup(self, error)
+    self.sandbox.on_feature_setup(self, duration, error)
 
   def on_teardown(
       self,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when the feature is teardown."""
-    self.sandbox.on_feature_teardown(self, error)
+    self.sandbox.on_feature_teardown(self, duration, error)
 
   def on_housekeep(
       self,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when the feature has done housekeeping."""
-    self.sandbox.on_feature_housekeep(self, error)
+    self.sandbox.on_feature_housekeep(
+        self, self._housekeep_counter, duration, error
+    )
 
   def on_setup_session(
       self,
+      duration: float,
       error: BaseException | None = None,
   ) -> None:
     """Called when the feature is setup for a user session."""
-    self.sandbox.on_feature_setup_session(self, error)
+    self.sandbox.on_feature_setup_session(self, duration, error)
 
   def on_teardown_session(
       self,
+      duration: float,
       error: BaseException | None = None,
   ) -> None:
     """Called when the feature is teardown for a user session."""
-    self.sandbox.on_feature_teardown_session(self, error)
+    self.sandbox.on_feature_teardown_session(self, duration, error)
 
-  def on_session_activity(
+  def on_activity(
       self,
-      session_id: str,
       name: str,
+      duration: float,
       error: BaseException | None,
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
-    self.sandbox.on_session_activity(
-        session_id=session_id,
-        name=name,
+    self.sandbox.on_activity(
+        name=f'{self.name}.{name}',
         feature=self,
         error=error,
+        duration=duration,
         **kwargs
     )

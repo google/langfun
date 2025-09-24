@@ -92,10 +92,12 @@ class BaseSandbox(interface.Sandbox):
     assert self._status != status, (self._status, status)
     self.on_status_change(self._status, status)
     self._status = status
+    self._status_start_time = time.time()
 
-  def _maybe_report_state_error(self, e: BaseException | None) -> None:
+  def report_maybe_state_error(self, e: BaseException | None) -> None:
     """Reports sandbox state errors."""
-    if isinstance(e, interface.SandboxStateError):
+    if (isinstance(e, interface.SandboxStateError)
+        and e not in self._state_errors):
       self._state_errors.append(e)
 
   def _setup_features(self) -> None:
@@ -133,7 +135,7 @@ class BaseSandbox(interface.Sandbox):
         try:
           feature.teardown()
         except BaseException as e:  # pylint: disable=broad-except
-          self._maybe_report_state_error(e)
+          self.report_maybe_state_error(e)
           errors[feature.name] = e
     if errors:
       return interface.FeatureTeardownError(sandbox=self, errors=errors)
@@ -167,7 +169,7 @@ class BaseSandbox(interface.Sandbox):
         try:
           feature.teardown_session()
         except BaseException as e:  # pylint: disable=broad-except
-          self._maybe_report_state_error(e)
+          self.report_maybe_state_error(e)
           feature_teardown_errors[name] = e
 
     return interface.SessionTeardownError(
@@ -190,7 +192,6 @@ class BaseSandbox(interface.Sandbox):
         for name, feature in self.environment.features.items()
     })
     self._event_handlers = []
-
     self._enable_pre_session_setup = (
         self.reusable and self.proactive_session_setup
     )
@@ -202,17 +203,23 @@ class BaseSandbox(interface.Sandbox):
         )
     )
     self._housekeep_thread = None
-    self._housekeep_count = 0
+    self._housekeep_counter = 0
 
     # Runtime state.
     self._status = self.Status.CREATED
+    self._status_start_time = time.time()
+
     self._start_time = None
     self._state_errors = []
+
     self._features_with_setup_called = set()
     self._features_with_setup_session_called = set()
 
     self._session_id = None
     self._session_start_time = None
+
+    # Thread local state for this sandbox.
+    self._tls_state = threading.local()
 
   @functools.cached_property
   def working_dir(self) -> str | None:
@@ -227,6 +234,11 @@ class BaseSandbox(interface.Sandbox):
   def set_acquired(self) -> None:
     """Marks the sandbox as acquired."""
     self._set_status(self.Status.ACQUIRED)
+
+  @property
+  def housekeep_counter(self) -> int:
+    """Returns the housekeeping counter."""
+    return self._housekeep_counter
 
   def add_event_handler(
       self,
@@ -248,9 +260,38 @@ class BaseSandbox(interface.Sandbox):
     return self._state_errors
 
   @property
+  def is_shutting_down(self) -> bool:
+    """Returns True if the sandbox is shutting down."""
+    return self._status == self.Status.SHUTTING_DOWN or (
+        self._state_errors and self._status == self.Status.EXITING_SESSION
+    )
+
+  @property
   def features(self) -> dict[str, interface.Feature]:
     """Returns the features in the sandbox."""
     return self._features
+
+  def _enter_service_call(self) -> bool:
+    """Enters a service call.
+
+    Returns:
+      True if the service call is at the top of the call stack.
+    """
+    v = getattr(self._tls_state, 'service_call_depth', None)
+    if v is None:
+      v = 0
+    setattr(self._tls_state, 'service_call_depth', v + 1)
+    return v == 0
+
+  def _exit_service_call(self) -> bool:
+    """Exits a service call.
+
+    Returns:
+      True if the service call is at the top of the call stack.
+    """
+    v = getattr(self._tls_state, 'service_call_depth')
+    setattr(self._tls_state, 'service_call_depth', v - 1)
+    return v == 1
 
   #
   # Sandbox start/shutdown.
@@ -289,7 +330,7 @@ class BaseSandbox(interface.Sandbox):
         f'it is in {self._status} status.'
     )
 
-    t = time.time()
+    starting_time = time.time()
     self._state = self.Status.SETTING_UP
 
     try:
@@ -314,18 +355,20 @@ class BaseSandbox(interface.Sandbox):
       # Mark the sandbox as ready when all setup succeeds.
       self._set_status(self.Status.READY)
 
-      self.on_start()
+      duration = time.time() - starting_time
+      self.on_start(duration)
       pg.logging.info(
           '[%s]: Sandbox started in %.2f seconds.',
-          self.id, time.time() - t
+          self.id, duration
       )
     except BaseException as e:  # pylint: disable=broad-except
+      duration = time.time() - starting_time
       pg.logging.error(
-          '[%s]: Sandbox failed to start: %s',
-          self.id, e
+          '[%s]: Sandbox failed to start in %.2f seconds: %s',
+          self.id, duration, e
       )
-      self._maybe_report_state_error(e)
-      self.on_start(e)
+      self.report_maybe_state_error(e)
+      self.on_start(duration, e)
       self.shutdown()
       raise e
 
@@ -403,7 +446,7 @@ class BaseSandbox(interface.Sandbox):
       shutdown_error = None
     except BaseException as e:  # pylint: disable=broad-except
       shutdown_error = e
-      self._maybe_report_state_error(e)
+      self.report_maybe_state_error(e)
       self._set_status(interface.Sandbox.Status.OFFLINE)
       pg.logging.error(
           '[%s]: Sandbox shutdown with error: %s',
@@ -496,10 +539,12 @@ class BaseSandbox(interface.Sandbox):
     try:
       self._start_session()
       self._set_status(self.Status.IN_SESSION)
-      self.on_session_start(session_id)
+      self.on_session_start(session_id, time.time() - self._session_start_time)
     except BaseException as e:  # pylint: disable=broad-except
-      self._maybe_report_state_error(e)
-      self.on_session_start(session_id, e)
+      self.report_maybe_state_error(e)
+      self.on_session_start(
+          session_id, time.time() - self._session_start_time, e
+      )
       self.shutdown()
       raise e
 
@@ -507,15 +552,19 @@ class BaseSandbox(interface.Sandbox):
     """Ends the user session with the sandbox.
 
     State transitions:
-      IN_SESSION -> READY: When user session exits normally, and sandbox is set
-        to reuse.
-      IN_SESSION -> SHUTTING_DOWN -> OFFLINE: When user session exits while
+      IN_SESSION -> EXITING_SESSION -> READY: When user session exits normally,
+        and sandbox is set to reuse.
+      IN_SESSION -> EXITING_SESSION -> SHUTTING_DOWN -> OFFLINE: When user
+        session exits while
         sandbox is set not to reuse, or session teardown fails.
-      IN_SESSION -> SETTING_UP -> READY: When user session exits normally, and
-        sandbox is set to reuse, and proactive session setup is enabled.
-      IN_SESSION -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When user session
-        exits normally, and proactive session setup is enabled but fails.
-      not (IN_SESSION) -> same state: No operation
+      IN_SESSION -> EXITING_SESSION -> SETTING_UP -> READY: When user session
+        exits normally, and sandbox is set to reuse, and proactive session setup
+        is enabled.
+      IN_SESSION -> EXITING_SESSION -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE:
+        When user session exits normally, and proactive session setup is enabled
+        but fails.
+      EXITING_SESSION -> EXITING_SESSION: No operation.
+      not IN_SESSION -> same state: No operation
 
     `end_session` should always be called for each `start_session` call, even
     when the session fails to start, to ensure proper cleanup.
@@ -541,6 +590,9 @@ class BaseSandbox(interface.Sandbox):
     Raises:
       BaseException: If session teardown failed with user-defined errors.
     """
+    if self._status == self.Status.EXITING_SESSION:
+      return
+
     if self._status not in (
         self.Status.IN_SESSION,
     ):
@@ -549,6 +601,8 @@ class BaseSandbox(interface.Sandbox):
     assert self._session_id is not None, (
         'No user session is active for this sandbox'
     )
+    # Set sandbox status to EXITING_SESSION to avoid re-entry.
+    self._set_status(self.Status.EXITING_SESSION)
     shutdown_sandbox = shutdown_sandbox or not self.reusable
 
     # Teardown features for the current session.
@@ -572,7 +626,7 @@ class BaseSandbox(interface.Sandbox):
                 self.id,
                 e
             )
-            self._maybe_report_state_error(e)
+            self.report_maybe_state_error(e)
             self.shutdown()
 
         # End session before setting up the next session.
@@ -634,6 +688,7 @@ class BaseSandbox(interface.Sandbox):
     last_housekeep_time = {name: now for name in self._features.keys()}
 
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
+      housekeep_start = time.time()
       if self.keepalive_interval is not None:
         if time.time() - last_ping > self.keepalive_interval:
           try:
@@ -645,8 +700,9 @@ class BaseSandbox(interface.Sandbox):
                 self.id,
                 str(e)
             )
-            self._housekeep_count += 1
-            self._maybe_report_state_error(e)
+            self._housekeep_counter += 1
+            self.report_maybe_state_error(e)
+            self.on_housekeep(time.time() - housekeep_start, e)
             self.shutdown()
             break
           last_ping = time.time()
@@ -667,20 +723,28 @@ class BaseSandbox(interface.Sandbox):
                 feature.name,
                 e,
             )
-            self._maybe_report_state_error(e)
+            self.report_maybe_state_error(e)
+            self._housekeep_counter += 1
+            self.on_housekeep(time.time() - housekeep_start, e)
             self.shutdown()
             break
-      self._housekeep_count += 1
+
+      self._housekeep_counter += 1
+      self.on_housekeep(time.time() - housekeep_start)
       time.sleep(1)
 
   #
   # Event handlers subclasses can override.
   #
 
-  def on_start(self, error: BaseException | None = None) -> None:
+  def on_start(
+      self,
+      duration: float,
+      error: BaseException | None = None
+  ) -> None:
     """Called when the sandbox is started."""
     for handler in self._event_handlers:
-      handler.on_sandbox_start(self.environment, self, error)
+      handler.on_sandbox_start(self.environment, self, duration, error)
 
   def on_status_change(
       self,
@@ -690,96 +754,124 @@ class BaseSandbox(interface.Sandbox):
     """Called when the sandbox status changes."""
     for handler in self._event_handlers:
       handler.on_sandbox_status_change(
-          self.environment, self, old_status, new_status
+          self.environment,
+          self,
+          old_status,
+          new_status,
+          time.time() - self._status_start_time
       )
 
   def on_shutdown(self, error: BaseException | None = None) -> None:
     """Called when the sandbox is shutdown."""
+    if self._start_time is None:
+      lifetime = 0.0
+    else:
+      lifetime = time.time() - self._start_time
     for handler in self._event_handlers:
-      handler.on_sandbox_shutdown(self.environment, self, error)
+      handler.on_sandbox_shutdown(self.environment, self, lifetime, error)
+
+  def on_housekeep(
+      self,
+      duration: float,
+      error: BaseException | None = None
+  ) -> None:
+    """Called when the sandbox finishes a round of housekeeping."""
+    counter = self._housekeep_counter
+    for handler in self._event_handlers:
+      handler.on_sandbox_housekeep(
+          self.environment, self, counter, duration, error
+      )
 
   def on_feature_setup(
       self,
       feature: interface.Feature,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when a feature is setup."""
     for handler in self._event_handlers:
       handler.on_feature_setup(
-          self.environment, self, feature, error
+          self.environment, self, feature, duration, error
       )
 
   def on_feature_teardown(
       self,
       feature: interface.Feature,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when a feature is teardown."""
     for handler in self._event_handlers:
       handler.on_feature_teardown(
-          self.environment, self, feature, error
+          self.environment, self, feature, duration, error
       )
 
   def on_feature_setup_session(
       self,
       feature: interface.Feature,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when a feature is setup for a user session."""
     for handler in self._event_handlers:
       handler.on_feature_setup_session(
-          self.environment, self, feature, self.session_id, error
+          self.environment, self, feature, self.session_id, duration, error
       )
 
   def on_feature_teardown_session(
       self,
       feature: interface.Feature,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when a feature is teardown for a user session."""
     for handler in self._event_handlers:
       handler.on_feature_teardown_session(
-          self.environment, self, feature, self.session_id, error
+          self.environment, self, feature, self.session_id, duration, error
       )
 
   def on_feature_housekeep(
       self,
       feature: interface.Feature,
+      counter: int,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when a feature is housekeeping."""
     for handler in self._event_handlers:
       handler.on_feature_housekeep(
-          self.environment, self, feature, error
+          self.environment, self, feature, counter, duration, error
       )
 
   def on_session_start(
       self,
       session_id: str,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when the user session starts."""
     for handler in self._event_handlers:
       handler.on_session_start(
-          self.environment, self, session_id, error
+          self.environment, self, session_id, duration, error
       )
 
-  def on_session_activity(
+  def on_activity(
       self,
-      session_id: str,
       name: str,
+      duration: float,
       feature: interface.Feature | None = None,
       error: BaseException | None = None,
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
     for handler in self._event_handlers:
-      handler.on_session_activity(
-          session_id=session_id,
+      handler.on_sandbox_activity(
           name=name,
           environment=self.environment,
           sandbox=self,
           feature=feature,
+          session_id=self.session_id,
+          duration=duration,
           error=error,
           **kwargs
       )
@@ -790,9 +882,10 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the user session ends."""
+    lifetime = time.time() - self._session_start_time
     for handler in self._event_handlers:
       handler.on_session_end(
-          self.environment, self, session_id, error
+          self.environment, self, session_id, lifetime, error
       )
 
 
@@ -876,8 +969,13 @@ def sandbox_service(
     @functools.wraps(func)
     def method_wrapper(self, *args, **kwargs) -> Any:
       """Helper function to safely execute logics in the sandbox."""
+
       assert isinstance(self, (BaseSandbox, interface.Feature)), self
       sandbox = self.sandbox if isinstance(self, interface.Feature) else self
+
+      # We count the service call stack depth so we could shutdown the sandbox
+      # at the top upon sandbox state error.
+      sandbox._enter_service_call()  # pylint: disable=protected-access
 
       # When a capability is directly accessed from the environment,
       # we create a new session for the capability call. This
@@ -895,70 +993,102 @@ def sandbox_service(
         new_session = False
 
       kwargs.pop('session_id', None)
-      session_id = sandbox.session_id
       result = None
-      state_error = None
       error = None
+      start_time = time.time()
 
       try:
         # Execute the service function.
         result = func(self, *args, **kwargs)
 
-        # If the result is a context manager, use it and end the session
-        # afterwards.
-        if new_session and isinstance(
-            result, contextlib.AbstractContextManager
-        ):
-          return _end_session_when_exit(result, sandbox)
+        # If the result is a context manager, wrap it with a context manager
+        # to end the session when exiting.
+        if isinstance(result, contextlib.AbstractContextManager):
+          return _service_context_manager_wrapper(
+              service=result,
+              sandbox_or_feature=self,
+              sandbox=sandbox,
+              name=func.__name__,
+              kwargs=to_kwargs(*args, **kwargs),
+              start_time=start_time,
+              new_session=new_session
+          )
 
         # Otherwise, return the result and end the session in the finally block.
         return result
-      except interface.SandboxStateError as e:
-        sandbox._maybe_report_state_error(e)  # pylint: disable=protected-access
-        state_error = e
-        error = e
-        raise
       except BaseException as e:
         error = e
+        sandbox.report_maybe_state_error(e)
         if pg.match_error(e, critical_errors):
           state_error = interface.SandboxStateError(
               'Sandbox encountered an unexpected error executing '
               f'`{func.__name__}` (args={args!r}, kwargs={kwargs!r}): {e}',
               sandbox=self
           )
-          sandbox._maybe_report_state_error(state_error)  # pylint: disable=protected-access
+          sandbox.report_maybe_state_error(state_error)
           raise state_error from e
         raise
       finally:
-        if session_id is not None:
-          self.on_session_activity(
+        is_topmost_call = sandbox._exit_service_call()  # pylint: disable=protected-access
+        if not isinstance(result, contextlib.AbstractContextManager):
+          self.on_activity(
               name=func.__name__,
-              session_id=session_id,
+              duration=time.time() - start_time,
               error=error,
               **to_kwargs(*args, **kwargs),
           )
+          if new_session:
+            assert is_topmost_call
 
-        if state_error is not None:
+            # End the session if it's from a feature method and the result
+            # is not a context manager.
+            sandbox.end_session()
+
+        # Shutdown the sandbox if it is at the top of the service call stack and
+        # has state errors.
+        if (is_topmost_call
+            and sandbox.state_errors
+            # Sandbox service method might be called during shutting down, in
+            # that case we don't want to shutdown the sandbox again.
+            and not sandbox.is_shutting_down):
           sandbox.shutdown()
-        elif (new_session
-              and not isinstance(result, contextlib.AbstractContextManager)):
-          # End the session if it's from a feature method and the result is not
-          # a context manager.
-          sandbox.end_session(
-              shutdown_sandbox=isinstance(error, interface.SandboxStateError)
-          )
+
     return method_wrapper
   return decorator
 
 
 @contextlib.contextmanager
-def _end_session_when_exit(
+def _service_context_manager_wrapper(
     service: contextlib.AbstractContextManager[Any],
-    sandbox: interface.Sandbox
+    sandbox_or_feature: BaseSandbox | interface.Feature,
+    sandbox: interface.Sandbox,
+    name: str,
+    kwargs: dict[str, Any],
+    new_session: bool,
+    start_time: float,
 ) -> Iterator[Any]:
   """Context manager wrapper for ending a sandbox session when exiting."""
+  error = None
+  sandbox._enter_service_call()  # pylint: disable=protected-access
+
   try:
     with service as result:
       yield result
+  except BaseException as e:
+    error = e
+    sandbox.report_maybe_state_error(error)
+    raise
   finally:
-    sandbox.end_session()
+    sandbox_or_feature.on_activity(
+        name=name,
+        error=error,
+        duration=time.time() - start_time,
+        **kwargs,
+    )
+    is_topmost_call = sandbox._exit_service_call()  # pylint: disable=protected-access
+
+    if new_session:
+      assert is_topmost_call
+      sandbox.end_session()
+    elif isinstance(error, interface.SandboxStateError):
+      sandbox.shutdown()

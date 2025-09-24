@@ -60,7 +60,7 @@ class BaseEnvironment(interface.Environment):
           'will be used as both min and max size. If 0, sandboxes will be '
           'created on demand and shutdown when user session ends.'
       )
-  ] = 1
+  ] = (0, 256)
 
   load_balancer: Annotated[
       load_balancers.LoadBalancer,
@@ -132,7 +132,7 @@ class BaseEnvironment(interface.Environment):
         random if self.random_seed is None else random.Random(self.random_seed)
     )
 
-    self._maintenance_thread = None
+    self._housekeep_thread = None
     self._offline_start_time = None
 
   #
@@ -170,6 +170,11 @@ class BaseEnvironment(interface.Environment):
     ).hex[:7]
     return f'session-{suffix}'
 
+  @property
+  def housekeep_counter(self) -> int:
+    """Returns the housekeeping counter."""
+    return self._housekeep_counter
+
   #
   # Subclasses can override:
   #
@@ -189,36 +194,36 @@ class BaseEnvironment(interface.Environment):
   def _start(self) -> None:
     """Implementation of starting the environment."""
     if self.min_pool_size > 0:
-      self._sandbox_pool = [
-          sandbox
-          for _, sandbox, _ in lf.concurrent_map(
-              lambda i: self._bring_up_sandbox_with_retry(
-                  sandbox_id=str(i), shutdown_env_upon_outage=False
-              ),
-              range(self.min_pool_size),
-              silence_on_errors=None,
-              max_workers=min(
-                  self.pool_operation_max_parallelism,
-                  self.min_pool_size
-              ),
-          )
-      ]
+      self._sandbox_pool = [None] * self.min_pool_size
+      for i, sandbox, _ in lf.concurrent_map(
+          lambda i: self._bring_up_sandbox_with_retry(
+              sandbox_id=str(i), shutdown_env_upon_outage=False
+          ),
+          range(self.min_pool_size),
+          silence_on_errors=None,
+          max_workers=min(
+              self.pool_operation_max_parallelism,
+              self.min_pool_size
+          ),
+      ):
+        self._sandbox_pool[i] = sandbox
     self._next_sandbox_id = len(self._sandbox_pool)
-    self._maintenance_thread = threading.Thread(
-        target=self._maintenance_loop, daemon=True
+    self._housekeep_thread = threading.Thread(
+        target=self._housekeep_loop, daemon=True
     )
-    self._maintenance_count = 0
-    self._maintenance_thread.start()
+    self._housekeep_counter = 0
+    self._housekeep_thread.start()
 
   def _shutdown(self) -> None:
     """Implementation of shutting down the environment."""
-    if (self._maintenance_thread is not None
-        and threading.current_thread() is not self._maintenance_thread):
-      self._maintenance_thread.join()
-      self._maintenance_thread = None
+    if (self._housekeep_thread is not None
+        and threading.current_thread() is not self._housekeep_thread):
+      self._housekeep_thread.join()
+      self._housekeep_thread = None
 
     def _shutdown_sandbox(sandbox: base_sandbox.BaseSandbox) -> None:
-      sandbox.shutdown()
+      if sandbox is not None:
+        sandbox.shutdown()
 
     if self._sandbox_pool:
       _ = list(
@@ -303,18 +308,19 @@ class BaseEnvironment(interface.Environment):
         f'it is in {self._status.value!r} status.'
     )
 
+    starting_time = time.time()
     try:
-      with pg.timeit('env.start') as t:
-        self._start()
-        self._start_time = time.time()
+      self._start()
+      self._start_time = time.time()
+      self._set_status(self.Status.ONLINE)
+      self.on_start(duration=time.time() - starting_time)
+
       pg.logging.info(
           '[%s]: %s started in %.2f seconds.',
-          self.id, self.__class__.__name__, t.elapse
+          self.id, self.__class__.__name__, time.time() - starting_time
       )
-      self._set_status(self.Status.ONLINE)
-      self.on_start()
     except BaseException as e:
-      self.on_start(error=e)
+      self.on_start(duration=time.time() - starting_time, error=e)
       self.shutdown()
       raise e
 
@@ -474,13 +480,14 @@ class BaseEnvironment(interface.Environment):
   # Environment maintenance loop.
   #
 
-  def _maintenance_loop(self) -> None:
-    """Maintains the server pool."""
+  def _housekeep_loop(self) -> None:
+    """Housekeeping loop for the environment."""
     pg.logging.info(
         '[%s]: %s maintenance thread started.', self.id, self.__class__.__name__
     )
     stats_report_time = time.time()
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
+      housekeep_start_time = time.time()
       if time.time() - stats_report_time > self.stats_report_interval:
         pg.logging.info(
             '[%s] %s stats: %s.',
@@ -496,9 +503,17 @@ class BaseEnvironment(interface.Environment):
           dead_pool_indices
       ):
         self.shutdown()
-        self._maintenance_count += 1
+        self._housekeep_counter += 1
+        self.on_housekeep(
+            time.time() - housekeep_start_time,
+            interface.EnvironmentOutageError(
+                environment=self,
+                offline_duration=self.offline_duration
+            )
+        )
         break
-      self._maintenance_count += 1
+      self._housekeep_counter += 1
+      self.on_housekeep(time.time() - housekeep_start_time)
       time.sleep(1)
 
   def _replace_dead_sandboxes(self, dead_pool_indices: list[int]) -> bool:
@@ -526,6 +541,8 @@ class BaseEnvironment(interface.Environment):
           str(i), shutdown_env_upon_outage=False
       )
 
+    # TODO(daiyip): Consider to loose the condition to allow some dead
+    # sandboxes to be replaced successfully.
     return not any([
         error for _, _, error in lf.concurrent_map(
             _replace, dead_pool_indices,
@@ -540,12 +557,26 @@ class BaseEnvironment(interface.Environment):
   # Event handlers subclasses can override.
   #
 
-  def on_start(self, error: BaseException | None = None) -> None:
+  def on_start(
+      self,
+      duration: float, error: BaseException | None = None
+  ) -> None:
     """Called when the environment is started."""
     for handler in self.event_handlers:
-      handler.on_environment_start(self, error)
+      handler.on_environment_start(self, duration, error)
+
+  def on_housekeep(
+      self,
+      duration: float,
+      error: BaseException | None = None
+  ) -> None:
+    """Called when the environment finishes a round of housekeeping."""
+    housekeep_counter = self.housekeep_counter
+    for handler in self.event_handlers:
+      handler.on_environment_housekeep(self, housekeep_counter, duration, error)
 
   def on_shutdown(self, error: BaseException | None = None) -> None:
     """Called when the environment is shutdown."""
+    lifetime = (time.time() - self.start_time) if self.start_time else 0.0
     for handler in self.event_handlers:
-      handler.on_environment_shutdown(self, error)
+      handler.on_environment_shutdown(self, lifetime, error)

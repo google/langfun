@@ -230,30 +230,38 @@ class SessionEventHandler:
       environment: 'Environment',
       sandbox: 'Sandbox',
       session_id: str,
+      duration: float,
       error: BaseException | None
   ) -> None:
-    """Called when a sandbox session starts."""
+    """Called when a sandbox session starts.
 
-  def on_session_activity(
-      self,
-      session_id: str,
-      name: str,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: Optional['Feature'],
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      session_id: The session ID.
+      duration: The time spent on starting the session.
+      error: The error that caused the session to start. If None, the session
+        started normally.
+    """
 
   def on_session_end(
       self,
       environment: 'Environment',
       sandbox: 'Sandbox',
       session_id: str,
+      lifetime: float,
       error: BaseException | None
   ) -> None:
-    """Called when a sandbox session ends."""
+    """Called when a sandbox session ends.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      session_id: The session ID.
+      lifetime: The session lifetime in seconds.
+      error: The error that caused the session to end. If None, the session
+        ended normally.
+    """
 
 
 class FeatureEventHandler:
@@ -264,6 +272,7 @@ class FeatureEventHandler:
       environment: 'Environment',
       sandbox: 'Sandbox',
       feature: 'Feature',
+      duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is setup."""
@@ -273,6 +282,7 @@ class FeatureEventHandler:
       environment: 'Environment',
       sandbox: 'Sandbox',
       feature: 'Feature',
+      duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is teardown."""
@@ -283,6 +293,7 @@ class FeatureEventHandler:
       sandbox: 'Sandbox',
       feature: 'Feature',
       session_id: str,
+      duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a feature is teardown with a session."""
@@ -293,6 +304,7 @@ class FeatureEventHandler:
       sandbox: 'Sandbox',
       feature: 'Feature',
       session_id: str | None,
+      duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a feature is setup with a session."""
@@ -302,6 +314,8 @@ class FeatureEventHandler:
       environment: 'Environment',
       sandbox: 'Sandbox',
       feature: 'Feature',
+      counter: int,
+      duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
@@ -314,9 +328,18 @@ class SandboxEventHandler(FeatureEventHandler, SessionEventHandler):
       self,
       environment: 'Environment',
       sandbox: 'Sandbox',
+      duration: float,
       error: BaseException | None
   ) -> None:
-    """Called when a sandbox is started."""
+    """Called when a sandbox is started.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      duration: The time spent on starting the sandbox.
+      error: The error that caused the sandbox to start. If None, the sandbox
+        started normally.
+    """
 
   def on_sandbox_status_change(
       self,
@@ -324,16 +347,78 @@ class SandboxEventHandler(FeatureEventHandler, SessionEventHandler):
       sandbox: 'Sandbox',
       old_status: 'Sandbox.Status',
       new_status: 'Sandbox.Status',
+      span: float,
   ) -> None:
-    """Called when a sandbox status changes."""
+    """Called when a sandbox status changes.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      old_status: The old sandbox status.
+      new_status: The new sandbox status.
+      span: Time spent on the old status in seconds.
+    """
 
   def on_sandbox_shutdown(
       self,
       environment: 'Environment',
       sandbox: 'Sandbox',
+      lifetime: float,
       error: BaseException | None
   ) -> None:
-    """Called when a sandbox is shutdown."""
+    """Called when a sandbox is shutdown.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      lifetime: The sandbox lifetime in seconds.
+      error: The error that caused the sandbox to shutdown. If None, the
+        sandbox shutdown normally.
+    """
+
+  def on_sandbox_activity(
+      self,
+      name: str,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      feature: Optional['Feature'],
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed.
+
+    Args:
+      name: The name of the sandbox activity.
+      environment: The environment.
+      sandbox: The sandbox.
+      feature: The feature that is associated with the sandbox activity.
+      session_id: The session ID.
+      duration: The sandbox activity duration in seconds.
+      error: The error that caused the sandbox activity to perform. If None,
+        the sandbox activity performed normally.
+      **kwargs: The keyword arguments of the sandbox activity.
+    """
+
+  def on_sandbox_housekeep(
+      self,
+      environment: 'Environment',
+      sandbox: 'Sandbox',
+      counter: int,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox finishes a round of housekeeping.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      counter: Zero-based counter of the housekeeping round.
+      duration: The sandbox housekeeping duration in seconds.
+      error: The error that caused the sandbox to housekeeping. If None, the
+        sandbox housekeeping normally.
+    """
 
 
 class EnvironmentEventHandler(SandboxEventHandler):
@@ -342,16 +427,49 @@ class EnvironmentEventHandler(SandboxEventHandler):
   def on_environment_start(
       self,
       environment: 'Environment',
+      duration: float,
       error: BaseException | None
   ) -> None:
-    """Called when the environment is started."""
+    """Called when the environment is started.
+
+    Args:
+      environment: The environment.
+      duration: The environment start duration in seconds.
+      error: The error that failed the environment start. If None, the
+        environment started normally.
+    """
+
+  def on_environment_housekeep(
+      self,
+      environment: 'Environment',
+      counter: int,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when the environment finishes a round of housekeeping.
+
+    Args:
+      environment: The environment.
+      counter: Zero-based counter of the housekeeping round.
+      duration: The environment start duration in seconds.
+      error: The error that failed the housekeeping. If None, the
+        housekeeping succeeded.
+    """
 
   def on_environment_shutdown(
       self,
       environment: 'Environment',
+      lifetime: float,
       error: BaseException | None
   ) -> None:
-    """Called when the environment is shutdown."""
+    """Called when the environment is shutdown.
+
+    Args:
+      environment: The environment.
+      lifetime: The environment lifetime in seconds.
+      error: The error that caused the environment to shutdown. If None, the
+        environment shutdown normally.
+    """
 
 
 #
@@ -534,21 +652,28 @@ class Sandbox(pg.Object):
                                        |                          |      |
                                        | (set_acquired)           |      |
                                        v                          |      |
-                                    +----------+                  |      |
-                                    | ACQUIRED |                  |      |
-                                    +----------+                  |      |
+                                  +----------+                    |      |
+                                  | ACQUIRED |                    |      |
+                                  +----------+                    |      |
                                        |                          |      |
                                        | (call start_session)     |      |
-                                    +------------+                |      |
-                                    | SETTING_UP | --(failed) -----------+
-                                    +------------+                |      |
+                                 +------------+                   |      |
+                                 | SETTING_UP |--(failed, call shutdown)-+
+                                 +------------+                   |      |
                                        |                          |      |
-                                       v (start_session succeeded)|      |
+                                       v  (succeeded)             |      |
                                  +--------------+                 |      |
-                                 |  IN_SESSION  |--(end_session)--+      |
-                                 +--------------+                        |
+                                 |  IN_SESSION  |                 |      |
+                                 +--------------+                 |      |
+                                         |                        |      |
+                                  (call end_session)              |      |
+                                         |                        |      |
+                                         v                        |      |
+                                +-----------------+               |      |
+                                | EXITING_SESSION |--(succeeded)--+      |
+                                +-----------------+                      |
                                          |                               |
-                                         +------(shutdown)---------------+
+                                         +------(failed, call shutdown)--+
     """
 
     # The sandbox is created, but not yet started.
@@ -565,6 +690,9 @@ class Sandbox(pg.Object):
 
     # The sandbox is in a user session.
     IN_SESSION = 'in_session'
+
+    # The sandbox is exiting a user session.
+    EXITING_SESSION = 'exiting_session'
 
     # The sandbox is being shut down.
     SHUTTING_DOWN = 'shutting_down'
@@ -742,14 +870,18 @@ class Sandbox(pg.Object):
     """Ends the user session with the sandbox.
 
     State transitions:
-      IN_SESSION -> READY: When user session exits normally, and sandbox is set
-        to reuse.
-      IN_SESSION -> SHUTTING_DOWN -> OFFLINE: When user session exits while
+      IN_SESSION -> EXITING_SESSION -> READY: When user session exits normally,
+        and sandbox is set to reuse.
+      IN_SESSION -> EXITING_SESSION -> SHUTTING_DOWN -> OFFLINE: When user
+        session exits while
         sandbox is set not to reuse, or session teardown fails.
-      IN_SESSION -> SETTING_UP -> READY: When user session exits normally, and
-        sandbox is set to reuse, and proactive session setup is enabled.
-      IN_SESSION -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE: When user session
-        exits normally, and proactive session setup is enabled but fails.
+      IN_SESSION -> EXITING_SESSION -> SETTING_UP -> READY: When user session
+        exits normally, and sandbox is set to reuse, and proactive session setup
+        is enabled.
+      IN_SESSION -> EXITING_SESSION -> SETTING_UP -> SHUTTING_DOWN -> OFFLINE:
+        When user session exits normally, and proactive session setup is enabled
+        but fails.
+      EXITING_SESSION -> EXITING_SESSION: No operation.
       not IN_SESSION -> same state: No operation
 
     `end_session` should always be called for each `start_session` call, even
