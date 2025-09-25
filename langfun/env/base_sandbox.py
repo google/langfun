@@ -29,6 +29,7 @@ import time
 from typing import Annotated, Any, Callable, Iterator, Sequence, Type
 
 from langfun.env import interface
+from langfun.env.event_handlers import base as event_handler_base
 import pyglove as pg
 
 
@@ -36,7 +37,7 @@ class BaseSandbox(interface.Sandbox):
   """Base class for a sandbox."""
 
   id: Annotated[
-      interface.SandboxId,
+      interface.Sandbox.Id,
       'The identifier for the sandbox.'
   ]
 
@@ -242,14 +243,14 @@ class BaseSandbox(interface.Sandbox):
 
   def add_event_handler(
       self,
-      event_handler: interface.EnvironmentEventHandler | None
+      event_handler: event_handler_base.EventHandler | None
   ) -> None:
     """Sets the event handler for the sandbox."""
     self._event_handlers.append(event_handler)
 
   def remove_event_handler(
       self,
-      event_handler: interface.EnvironmentEventHandler | None
+      event_handler: event_handler_base.EventHandler | None
   ) -> None:
     """Removes the event handler for the sandbox."""
     self._event_handlers.remove(event_handler)
@@ -357,10 +358,6 @@ class BaseSandbox(interface.Sandbox):
 
       duration = time.time() - starting_time
       self.on_start(duration)
-      pg.logging.info(
-          '[%s]: Sandbox started in %.2f seconds.',
-          self.id, duration
-      )
     except BaseException as e:  # pylint: disable=broad-except
       duration = time.time() - starting_time
       pg.logging.error(
@@ -422,7 +419,6 @@ class BaseSandbox(interface.Sandbox):
       return
 
     self._set_status(interface.Sandbox.Status.SHUTTING_DOWN)
-    shutdown_start_time = time.time()
 
     if (self._housekeep_thread is not None
         and threading.current_thread() is not self._housekeep_thread):
@@ -433,15 +429,6 @@ class BaseSandbox(interface.Sandbox):
     try:
       self._shutdown()
       self._set_status(interface.Sandbox.Status.OFFLINE)
-
-      pg.logging.info(
-          '[%s]: Sandbox shutdown in %.2f seconds. '
-          '(lifetime: %.2f seconds, teardown errors: %s)',
-          self.id,
-          time.time() - shutdown_start_time,
-          time.time() - self._start_time if self._start_time else 0,
-          teardown_error
-      )
       self.on_shutdown(teardown_error)
       shutdown_error = None
     except BaseException as e:  # pylint: disable=broad-except
@@ -656,14 +643,6 @@ class BaseSandbox(interface.Sandbox):
       self._set_status(interface.Sandbox.Status.ACQUIRED)
       shutdown_sandbox = True
 
-    pg.logging.info(
-        '[%s]: User session %s ended. '
-        '(lifetime: %.2f seconds, teardown errors: %s).',
-        self.id,
-        self._session_id,
-        time.time() - self._session_start_time,
-        end_session_error
-    )
     self._session_start_time = None
     self._session_event_handler = None
 
@@ -687,9 +666,31 @@ class BaseSandbox(interface.Sandbox):
     last_ping = now
     last_housekeep_time = {name: now for name in self._features.keys()}
 
+    def _next_housekeep_wait_time() -> float:
+      # Decide how long to sleep for the next housekeeping.
+      next_housekeep_time = None
+      if self.keepalive_interval is not None:
+        next_housekeep_time = last_ping + self.keepalive_interval
+
+      for name, feature in self._features.items():
+        if feature.housekeep_interval is None:
+          continue
+        next_feature_housekeep_time = (
+            last_housekeep_time[name] + feature.housekeep_interval
+        )
+        if (next_housekeep_time is None
+            or next_housekeep_time > next_feature_housekeep_time):
+          next_housekeep_time = next_feature_housekeep_time
+
+      # Housekeep loop is installed when at least one feature requires
+      # housekeeping or the sandbox has a keepalive interval.
+      assert next_housekeep_time is not None
+      return max(0, next_housekeep_time - time.time())
+
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       housekeep_start = time.time()
       if self.keepalive_interval is not None:
+
         if time.time() - last_ping > self.keepalive_interval:
           try:
             self.ping()
@@ -731,7 +732,7 @@ class BaseSandbox(interface.Sandbox):
 
       self._housekeep_counter += 1
       self.on_housekeep(time.time() - housekeep_start)
-      time.sleep(1)
+      time.sleep(_next_housekeep_wait_time())
 
   #
   # Event handlers subclasses can override.

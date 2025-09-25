@@ -21,50 +21,47 @@ from langfun.env import base_environment
 from langfun.env import base_feature
 from langfun.env import base_sandbox
 from langfun.env import interface
+from langfun.env.event_handlers import base as event_handler_base
 import pyglove as pg
 
 
 class TestingEnvironment(base_environment.BaseEnvironment):
   """Testing environment for unit tests."""
 
+  housekeep_interval: float = 0.0
   simulate_start_error: Type[BaseException] | None = None
   simulate_shutdown_error: Type[BaseException] | None = None
   simulate_ping_error: Type[BaseException] | None = None
-  keepalive_interval: float | None = 60.0
   offline: bool = False
 
   @property
-  def id(self) -> interface.EnvironmentId:
-    return interface.EnvironmentId('testing-env')
+  def id(self) -> interface.Environment.Id:
+    return interface.Environment.Id('testing-env')
 
   def wait_for_housekeeping(self):
     housekeep_counter = self.housekeep_counter
     while self.housekeep_counter == housekeep_counter:
-      time.sleep(0.1)
+      time.sleep(0.01)
 
   def _create_sandbox(
       self,
       sandbox_id: str,
       reusable: bool,
       proactive_session_setup: bool,
+      keepalive_interval: float | None,
   ) -> base_sandbox.BaseSandbox:
-    if self.offline:
-      raise interface.EnvironmentError(
-          'Unknown environment error.',
-          environment=self,
-      )
     return TestingSandbox(
         environment=self,
-        id=interface.SandboxId(
+        id=interface.Sandbox.Id(
             environment_id=self.id,
             sandbox_id=sandbox_id
         ),
         reusable=reusable,
         proactive_session_setup=proactive_session_setup,
+        keepalive_interval=keepalive_interval,
         simulate_start_error=self.simulate_start_error,
         simulate_shutdown_error=self.simulate_shutdown_error,
         simulate_ping_error=self.simulate_ping_error,
-        keepalive_interval=self.keepalive_interval,
     )
 
 
@@ -88,15 +85,6 @@ class TestingSandbox(base_sandbox.BaseSandbox):
     else:
       raise error_type(message)
 
-  def wait_until(
-      self,
-      status: interface.Sandbox.Status | tuple[interface.Sandbox.Status, ...]
-  ) -> None:
-    if not isinstance(status, tuple):
-      status = (status,)
-    while self.status not in status:
-      time.sleep(0.1)
-
   def wait_until_not(
       self,
       status: interface.Sandbox.Status | tuple[interface.Sandbox.Status, ...]
@@ -104,12 +92,12 @@ class TestingSandbox(base_sandbox.BaseSandbox):
     if not isinstance(status, tuple):
       status = (status,)
     while self.status in status:
-      time.sleep(0.1)
+      time.sleep(0.01)
 
   def wait_until_next_housekeep(self) -> None:
     housekeep_counter = self.housekeep_counter
     while self.housekeep_counter == housekeep_counter:
-      time.sleep(0.1)
+      time.sleep(0.01)
 
   def _start(self) -> None:
     if self.simulate_start_error:
@@ -230,8 +218,8 @@ class TestingFeature(base_feature.BaseFeature):
       )
 
 
-class TestingEnvironmentEventHandler(
-    pg.Object, interface.EnvironmentEventHandler
+class TestingEventHandler(
+    pg.Object, event_handler_base.EventHandler
 ):
   """Testing environment event handler for unit tests."""
 

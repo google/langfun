@@ -28,9 +28,9 @@ class TestingSandbox(interface.Sandbox):
     self._session_id = None
 
   @property
-  def id(self) -> interface.SandboxId:
-    return interface.SandboxId(
-        environment_id=interface.EnvironmentId('testing-env'),
+  def id(self) -> interface.Sandbox.Id:
+    return interface.Sandbox.Id(
+        environment_id=interface.Environment.Id('testing-env'),
         sandbox_id=self.sandbox_id
     )
 
@@ -51,18 +51,6 @@ class TestingSandbox(interface.Sandbox):
 
   def set_acquired(self) -> None:
     self.set_status(self.Status.ACQUIRED)
-
-  def add_event_handler(
-      self,
-      event_handler: interface.EnvironmentEventHandler
-  ) -> None:
-    pass
-
-  def remove_event_handler(
-      self,
-      event_handler: interface.EnvironmentEventHandler
-  ) -> None:
-    pass
 
   def start(self) -> None:
     self.set_alive()

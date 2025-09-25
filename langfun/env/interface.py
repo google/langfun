@@ -23,60 +23,6 @@ from typing import Annotated, Any, ContextManager, ClassVar, Iterator, Optional
 import pyglove as pg
 
 #
-# Environemnt identifiers.
-#
-
-
-@dataclasses.dataclass(frozen=True)
-class EnvironmentId:
-  """Identifier for an environment."""
-  environment_id: str
-
-  def __str__(self) -> str:
-    return self.environment_id
-
-  def working_dir(self, root_dir: str | None) -> str | None:
-    """Returns the download directory for the service."""
-    if root_dir is None:
-      return None
-    return os.path.join(root_dir, _make_path_compatible(self.environment_id))
-
-# Enable automatic conversion from str to EnvironmentId.
-pg.typing.register_converter(str, EnvironmentId, EnvironmentId)
-
-
-@dataclasses.dataclass(frozen=True)
-class SandboxId:
-  """Identifier for a sandbox."""
-  environment_id: EnvironmentId
-  sandbox_id: str
-
-  def __str__(self) -> str:
-    return f'{self.environment_id}/{self.sandbox_id}'
-
-  def working_dir(self, root_dir: str | None) -> str | None:
-    """Returns the download directory for the sandbox."""
-    if root_dir is None:
-      return None
-    return os.path.join(
-        self.environment_id.working_dir(root_dir),
-        _make_path_compatible(self.sandbox_id)
-    )
-
-
-def _make_path_compatible(id_str: str) -> str:
-  """Makes a path compatible with CNS."""
-  return id_str.translate(
-      str.maketrans({
-          '@': '_',
-          ':': '_',
-          '#': '_',
-          ' ': '',
-      })
-  )
-
-
-#
 # Environment errors.
 #
 
@@ -216,262 +162,6 @@ class SessionTeardownError(SandboxError):
         not isinstance(e, SandboxStateError) for e in self.errors.values()
     )
 
-
-#
-# Event handler.
-#
-
-
-class SessionEventHandler:
-  """Base class for session event handlers."""
-
-  def on_session_start(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session starts.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      session_id: The session ID.
-      duration: The time spent on starting the session.
-      error: The error that caused the session to start. If None, the session
-        started normally.
-    """
-
-  def on_session_end(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      session_id: str,
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session ends.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      session_id: The session ID.
-      lifetime: The session lifetime in seconds.
-      error: The error that caused the session to end. If None, the session
-        ended normally.
-    """
-
-
-class FeatureEventHandler:
-  """Base class for feature event handlers."""
-
-  def on_feature_setup(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-
-  def on_feature_teardown(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-
-  def on_feature_teardown_session(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a feature is teardown with a session."""
-
-  def on_feature_setup_session(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a feature is setup with a session."""
-
-  def on_feature_housekeep(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: 'Feature',
-      counter: int,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is housekeeping."""
-
-
-class SandboxEventHandler(FeatureEventHandler, SessionEventHandler):
-  """Base class for sandbox event handlers."""
-
-  def on_sandbox_start(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox is started.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      duration: The time spent on starting the sandbox.
-      error: The error that caused the sandbox to start. If None, the sandbox
-        started normally.
-    """
-
-  def on_sandbox_status_change(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      old_status: 'Sandbox.Status',
-      new_status: 'Sandbox.Status',
-      span: float,
-  ) -> None:
-    """Called when a sandbox status changes.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      old_status: The old sandbox status.
-      new_status: The new sandbox status.
-      span: Time spent on the old status in seconds.
-    """
-
-  def on_sandbox_shutdown(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox is shutdown.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      lifetime: The sandbox lifetime in seconds.
-      error: The error that caused the sandbox to shutdown. If None, the
-        sandbox shutdown normally.
-    """
-
-  def on_sandbox_activity(
-      self,
-      name: str,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      feature: Optional['Feature'],
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed.
-
-    Args:
-      name: The name of the sandbox activity.
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature that is associated with the sandbox activity.
-      session_id: The session ID.
-      duration: The sandbox activity duration in seconds.
-      error: The error that caused the sandbox activity to perform. If None,
-        the sandbox activity performed normally.
-      **kwargs: The keyword arguments of the sandbox activity.
-    """
-
-  def on_sandbox_housekeep(
-      self,
-      environment: 'Environment',
-      sandbox: 'Sandbox',
-      counter: int,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox finishes a round of housekeeping.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      counter: Zero-based counter of the housekeeping round.
-      duration: The sandbox housekeeping duration in seconds.
-      error: The error that caused the sandbox to housekeeping. If None, the
-        sandbox housekeeping normally.
-    """
-
-
-class EnvironmentEventHandler(SandboxEventHandler):
-  """Base class for environment event handlers."""
-
-  def on_environment_start(
-      self,
-      environment: 'Environment',
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when the environment is started.
-
-    Args:
-      environment: The environment.
-      duration: The environment start duration in seconds.
-      error: The error that failed the environment start. If None, the
-        environment started normally.
-    """
-
-  def on_environment_housekeep(
-      self,
-      environment: 'Environment',
-      counter: int,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when the environment finishes a round of housekeeping.
-
-    Args:
-      environment: The environment.
-      counter: Zero-based counter of the housekeeping round.
-      duration: The environment start duration in seconds.
-      error: The error that failed the housekeeping. If None, the
-        housekeeping succeeded.
-    """
-
-  def on_environment_shutdown(
-      self,
-      environment: 'Environment',
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when the environment is shutdown.
-
-    Args:
-      environment: The environment.
-      lifetime: The environment lifetime in seconds.
-      error: The error that caused the environment to shutdown. If None, the
-        environment shutdown normally.
-    """
-
-
 #
 # Interface for sandbox-based environment.
 #
@@ -479,6 +169,20 @@ class EnvironmentEventHandler(SandboxEventHandler):
 
 class Environment(pg.Object):
   """Base class for an environment."""
+
+  @dataclasses.dataclass(frozen=True)
+  class Id:
+    """Identifier for an environment."""
+    environment_id: str
+
+    def __str__(self) -> str:
+      return self.environment_id
+
+    def working_dir(self, root_dir: str | None) -> str | None:
+      """Returns the download directory for the service."""
+      if root_dir is None:
+        return None
+      return os.path.join(root_dir, _make_path_compatible(self.environment_id))
 
   class Status(enum.Enum):
     """Environment state.
@@ -502,13 +206,6 @@ class Environment(pg.Object):
       'Features to be exposed by the environment.'
   ] = {}
 
-  event_handlers: Annotated[
-      list[EnvironmentEventHandler],
-      (
-          'User handler for the environment events.'
-      )
-  ] = []
-
   _ENV_STACK: Annotated[
       ClassVar[list['Environment']],
       'Recording the environments stacked through context managers.'
@@ -520,7 +217,7 @@ class Environment(pg.Object):
 
   @property
   @abc.abstractmethod
-  def id(self) -> EnvironmentId:
+  def id(self) -> Id:
     """Returns the identifier for the environment."""
 
   @property
@@ -584,6 +281,10 @@ class Environment(pg.Object):
     Environment._ENV_STACK.pop()
     self.shutdown()
 
+  def __del__(self):
+    """Deletes the environment."""
+    self.shutdown()
+
   @classmethod
   def current(cls) -> Optional['Environment']:
     """Returns the current environment."""
@@ -624,56 +325,78 @@ class Environment(pg.Object):
     raise AttributeError(name)
 
 
+# Enable automatic conversion from str to Environment.Id.
+pg.typing.register_converter(str, Environment.Id, Environment.Id)
+
+
 class Sandbox(pg.Object):
   """Interface for sandboxes."""
 
+  @dataclasses.dataclass(frozen=True, slots=True)
+  class Id:
+    """Identifier for a sandbox."""
+    environment_id: Environment.Id
+    sandbox_id: str
+
+    def __str__(self) -> str:
+      return f'{self.environment_id}/{self.sandbox_id}'
+
+    def working_dir(self, root_dir: str | None) -> str | None:
+      """Returns the download directory for the sandbox."""
+      if root_dir is None:
+        return None
+      return os.path.join(
+          self.environment_id.working_dir(root_dir),
+          _make_path_compatible(self.sandbox_id)
+      )
+
   class Status(enum.Enum):
-    """Sandbox state.
+    r"""Sandbox state.
 
     State transitions:
 
-            +---------------+          +---------------+
-            |  <OFFLINE>    | <------  | SHUTTING_DOWN |
-            +---------------+          +---------------+
-                                           ^    ^
-                                           |    |
-                                 (shutdown)|    +------------------------+
-                                           |                             |
-    +-----------+    (call start) +------------+                         |
-    | <CREATED> | ------------->  | SETTING_UP | <----------------+      |
-    +-----------+                 +------------+                  |      |
-                                       |                          |      |
-                                       | (start succeeded)        |      |
-                                       | OR (_setup_session)      |      |
-                                       v                          |      |
-                                   +---------+                    |      |
-                                   |  READY  |                    |      |
-                                   +---------+                    |      |
-                                       |                          |      |
-                                       | (set_acquired)           |      |
-                                       v                          |      |
-                                  +----------+                    |      |
-                                  | ACQUIRED |                    |      |
-                                  +----------+                    |      |
-                                       |                          |      |
-                                       | (call start_session)     |      |
-                                 +------------+                   |      |
-                                 | SETTING_UP |--(failed, call shutdown)-+
-                                 +------------+                   |      |
-                                       |                          |      |
-                                       v  (succeeded)             |      |
-                                 +--------------+                 |      |
-                                 |  IN_SESSION  |                 |      |
-                                 +--------------+                 |      |
-                                         |                        |      |
-                                  (call end_session)              |      |
-                                         |                        |      |
-                                         v                        |      |
-                                +-----------------+               |      |
-                                | EXITING_SESSION |--(succeeded)--+      |
-                                +-----------------+                      |
-                                         |                               |
-                                         +------(failed, call shutdown)--+
+                    (sandbox / feature
+    +------------+   teardown)            +---------------+
+    | <OFFLINE>  | <--------------------- | SHUTTING_DOWN |
+    +------------+                        +---------------+
+                                            ^     ^
+                                           /       \
+                          (setup failed)  /         \
+                                         /           \
+    +-----------+   (start)  +------------+           \
+    | <CREATED> | -------->  | SETTING_UP |            \
+    +-----------+         ^  +------------+             \
+                         /        |                      \
+                        /         | (sandbox /            \
+                       /          |  feature /session      \
+                      /           v  setup succeeded)       \
+                     /        +---------+                    \
+                    /         |  READY  |                     \
+                   /          +---------+                      \
+                  /                |                            \
+                 /                 |  (acquire)                  \
+                /                  v                              \
+               /              +----------+                         \
+              |               | ACQUIRED |                          \
+              |               +----------+                           |
+              |                    |                                 |
+              |                    |  (start_session)                |
+              |               +------------+                         |
+              |               | SETTING_UP |-- (setup failed) ------>+
+              |               +------------+                         |
+              |                    |                                 |
+              |                    v  (succeeded)                    |
+              |               +--------------+                       |
+              |               |  IN_SESSION  |- (op failed) -------->+
+              |               +--------------+                       |
+              |                    |                                 |
+              |                    |  (end_session)                  |
+              |                    |                                 |
+              |                    v             (session teardown   |
+      (setup next            +-----------------+  failed OR          |
+      session for  <---------| EXITING_SESSION |- non-reusable  -----+
+      reusable sandbox)      +-----------------+  sandbox)
+
     """
 
     # The sandbox is created, but not yet started.
@@ -712,7 +435,7 @@ class Sandbox(pg.Object):
 
   @property
   @abc.abstractmethod
-  def id(self) -> SandboxId:
+  def id(self) -> Id:
     """Returns the identifier for the sandbox."""
 
   @property
@@ -734,24 +457,6 @@ class Sandbox(pg.Object):
   def is_online(self) -> bool:
     """Returns True if the sandbox is online."""
     return self.status.is_online
-
-  @abc.abstractmethod
-  def set_acquired(self) -> None:
-    """Marks the sandbox as acquired."""
-
-  @abc.abstractmethod
-  def add_event_handler(
-      self,
-      event_handler: EnvironmentEventHandler
-  ) -> None:
-    """Sets the status of the sandbox."""
-
-  @abc.abstractmethod
-  def remove_event_handler(
-      self,
-      event_handler: EnvironmentEventHandler
-  ) -> None:
-    """Removes the status of the sandbox."""
 
   @property
   @abc.abstractmethod
@@ -970,6 +675,10 @@ class Sandbox(pg.Object):
       return self.features[name]
     raise AttributeError(name)
 
+  def __del__(self):
+    """Deletes the sandbox."""
+    self.shutdown()
+
 
 class Feature(pg.Object):
   """Interface for sandbox features."""
@@ -1101,3 +810,17 @@ class Feature(pg.Object):
     """Returns the current user session identifier."""
     assert self.sandbox is not None
     return self.sandbox.session_id
+
+
+def _make_path_compatible(id_str: str) -> str:
+  """Makes a path compatible with CNS."""
+  return id_str.translate(
+      str.maketrans({
+          '@': '_',
+          ':': '_',
+          '#': '_',
+          ' ': '',
+          '<': '',
+          '>': '',
+      })
+  )

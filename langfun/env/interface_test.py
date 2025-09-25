@@ -18,7 +18,7 @@ from langfun.env import interface
 class IdTest(unittest.TestCase):
 
   def test_environment_id(self):
-    env_id = interface.EnvironmentId('env@1/a b:c#def')
+    env_id = interface.Environment.Id('env@1/a b:c#def')
     self.assertEqual(str(env_id), 'env@1/a b:c#def')
     self.assertEqual(
         env_id.working_dir(root_dir='/tmp'),
@@ -27,8 +27,8 @@ class IdTest(unittest.TestCase):
     self.assertIsNone(env_id.working_dir(root_dir=None))
 
   def test_sandbox_id(self):
-    sandbox_id = interface.SandboxId(
-        environment_id=interface.EnvironmentId('env'),
+    sandbox_id = interface.Sandbox.Id(
+        environment_id=interface.Environment.Id('env'),
         sandbox_id='sandbox'
     )
     self.assertEqual(str(sandbox_id), 'env/sandbox')

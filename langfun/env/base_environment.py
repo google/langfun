@@ -34,6 +34,7 @@ import langfun.core as lf
 from langfun.env import base_sandbox
 from langfun.env import interface
 from langfun.env import load_balancers
+from langfun.env.event_handlers import base as event_handler_base
 import pyglove as pg
 
 
@@ -65,9 +66,19 @@ class BaseEnvironment(interface.Environment):
   load_balancer: Annotated[
       load_balancers.LoadBalancer,
       (
-          'The load balancer for the environment.'
+          'The load balancer for the environment to acquire sandboxes.'
       )
   ] = load_balancers.RoundRobin()
+
+  sandbox_keepalive_interval: Annotated[
+      float | None,
+      (
+          'The interval in seconds to send keepalive pings to sandboxes. '
+          'If None, sandbox keepalive is disabled. Please note that sandbox '
+          'keepalive is different from feature housekeeping. Usually sandbox '
+          'keepalive and feature housekeeping are different operations.'
+      )
+  ] = None
 
   proactive_session_setup: Annotated[
       bool,
@@ -78,6 +89,13 @@ class BaseEnvironment(interface.Environment):
           'long time.'
       )
   ] = True
+
+  event_handlers: Annotated[
+      list[event_handler_base.EventHandler],
+      (
+          'User handler for the environment events.'
+      )
+  ] = []
 
   outage_grace_period: Annotated[
       float,
@@ -97,13 +115,15 @@ class BaseEnvironment(interface.Environment):
       )
   ] = 10.0
 
-  stats_report_interval: Annotated[
+  housekeep_interval: Annotated[
       float,
       (
-          'The interval in seconds for reporting the environment stats. '
-          'If 0, stats will not be reported.'
+          'The interval in seconds for environment housekeeping. It recycles '
+          'the dead sandboxes in the pool. This interval is the minimal time '
+          'to detect outage while there is no request to obtain new sandboxes.'
+          'This is applicable only when the environment enables pooling.'
       )
-  ] = 60.0
+  ] = 10.0
 
   pool_operation_max_parallelism: Annotated[
       int,
@@ -145,6 +165,7 @@ class BaseEnvironment(interface.Environment):
       sandbox_id: str,
       reusable: bool,
       proactive_session_setup: bool,
+      keepalive_interval: float | None,
   ) -> base_sandbox.BaseSandbox:
     """Creates a sandbox with the given identifier.
 
@@ -153,6 +174,8 @@ class BaseEnvironment(interface.Environment):
       reusable: Whether the sandbox is reusable across user sessions.
       proactive_session_setup: Whether the sandbox performs session setup work
         before a user session is started.
+      keepalive_interval: Interval to ping the sandbox for keeping it alive.
+        If None, the sandbox will not be pinged.
 
     Returns:
       The created sandbox.
@@ -194,6 +217,7 @@ class BaseEnvironment(interface.Environment):
   def _start(self) -> None:
     """Implementation of starting the environment."""
     if self.min_pool_size > 0:
+      # Pre-allocate the sandbox pool before usage.
       self._sandbox_pool = [None] * self.min_pool_size
       for i, sandbox, _ in lf.concurrent_map(
           lambda i: self._bring_up_sandbox_with_retry(
@@ -207,12 +231,15 @@ class BaseEnvironment(interface.Environment):
           ),
       ):
         self._sandbox_pool[i] = sandbox
+
     self._next_sandbox_id = len(self._sandbox_pool)
-    self._housekeep_thread = threading.Thread(
-        target=self._housekeep_loop, daemon=True
-    )
-    self._housekeep_counter = 0
-    self._housekeep_thread.start()
+
+    if self.enable_pooling:
+      self._housekeep_thread = threading.Thread(
+          target=self._housekeep_loop, daemon=True
+      )
+      self._housekeep_counter = 0
+      self._housekeep_thread.start()
 
   def _shutdown(self) -> None:
     """Implementation of shutting down the environment."""
@@ -256,7 +283,7 @@ class BaseEnvironment(interface.Environment):
   @property
   def enable_pooling(self) -> bool:
     """Returns whether the environment enables pooling."""
-    return self.min_pool_size > 0
+    return self.max_pool_size > 0
 
   @property
   def status(self) -> interface.Environment.Status:
@@ -314,11 +341,6 @@ class BaseEnvironment(interface.Environment):
       self._start_time = time.time()
       self._set_status(self.Status.ONLINE)
       self.on_start(duration=time.time() - starting_time)
-
-      pg.logging.info(
-          '[%s]: %s started in %.2f seconds.',
-          self.id, self.__class__.__name__, time.time() - starting_time
-      )
     except BaseException as e:
       self.on_start(duration=time.time() - starting_time, error=e)
       self.shutdown()
@@ -338,13 +360,8 @@ class BaseEnvironment(interface.Environment):
     self._set_status(self.Status.SHUTTING_DOWN)
 
     try:
-      with pg.timeit('env.shutdown') as t:
-        self._shutdown()
+      self._shutdown()
       self.on_shutdown()
-      pg.logging.info(
-          '[%s]: %s shutdown in %.2f seconds.',
-          self.id, self.__class__.__name__, t.elapse
-      )
     except BaseException as e:  # pylint: disable=broad-except
       self.on_shutdown(error=e)
       raise e
@@ -416,6 +433,7 @@ class BaseEnvironment(interface.Environment):
         sandbox_id=sandbox_id,
         reusable=self.enable_pooling,
         proactive_session_setup=self.proactive_session_setup,
+        keepalive_interval=self.sandbox_keepalive_interval,
     )
     for handler in self.event_handlers:
       sandbox.add_event_handler(handler)
@@ -482,19 +500,8 @@ class BaseEnvironment(interface.Environment):
 
   def _housekeep_loop(self) -> None:
     """Housekeeping loop for the environment."""
-    pg.logging.info(
-        '[%s]: %s maintenance thread started.', self.id, self.__class__.__name__
-    )
-    stats_report_time = time.time()
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       housekeep_start_time = time.time()
-      if time.time() - stats_report_time > self.stats_report_interval:
-        pg.logging.info(
-            '[%s] %s stats: %s.',
-            self.id, self.__class__.__name__, self.stats()
-        )
-        stats_report_time = time.time()
-
       dead_pool_indices = [
           i for i, s in enumerate(self._sandbox_pool)
           if s.status == interface.Sandbox.Status.OFFLINE
@@ -514,7 +521,7 @@ class BaseEnvironment(interface.Environment):
         break
       self._housekeep_counter += 1
       self.on_housekeep(time.time() - housekeep_start_time)
-      time.sleep(1)
+      time.sleep(self.housekeep_interval)
 
   def _replace_dead_sandboxes(self, dead_pool_indices: list[int]) -> bool:
     """Replaces a dead sandbox with a new one.

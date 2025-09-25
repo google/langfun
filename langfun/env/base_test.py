@@ -18,12 +18,13 @@ import unittest
 from langfun.env import base_sandbox
 from langfun.env import interface
 from langfun.env import test_utils
+from langfun.env.event_handlers import base as event_handler_base
 
 
 TestingEnvironment = test_utils.TestingEnvironment
 TestingSandbox = test_utils.TestingSandbox
 TestingFeature = test_utils.TestingFeature
-TestingEnvironmentEventHandler = test_utils.TestingEnvironmentEventHandler
+TestingEventHandler = test_utils.TestingEventHandler
 
 
 class EnvironmentTests(unittest.TestCase):
@@ -42,9 +43,8 @@ class EnvironmentTests(unittest.TestCase):
     self.assertEqual(env.min_pool_size, 0)
     self.assertEqual(env.max_pool_size, 0)
     self.assertEqual(env.sandbox_pool, [])
-    self.assertEqual(env.id, interface.EnvironmentId('testing-env'))
+    self.assertEqual(env.id, interface.Environment.Id('testing-env'))
     self.assertEqual(env.outage_grace_period, 1)
-    self.assertEqual(env.stats_report_interval, 60)
     self.assertEqual(env.features['test_feature'].name, 'test_feature')
 
     self.assertIsNone(env.start_time)
@@ -60,12 +60,16 @@ class EnvironmentTests(unittest.TestCase):
 
       with env.sandbox('session1') as sb:
         self.assertEqual(
-            sb.id, interface.SandboxId(environment_id=env.id, sandbox_id='0')
+            sb.id, interface.Sandbox.Id(environment_id=env.id, sandbox_id='0')
         )
         self.assertEqual(sb.session_id, 'session1')
         self.assertEqual(sb.working_dir, '/tmp/testing-env/0')
         self.assertTrue(sb.is_online)
         self.assertIs(sb.test_feature, sb.features['test_feature'])
+        self.assertEqual(
+            sb.test_feature.working_dir,
+            '/tmp/testing-env/0/test_feature'
+        )
         with self.assertRaises(AttributeError):
           _ = sb.test_feature2
       self.assertFalse(sb.is_online)
@@ -74,14 +78,26 @@ class EnvironmentTests(unittest.TestCase):
       with self.assertRaises(AttributeError):
         _ = env.test_feature2
 
+  def test_del(self):
+    env = TestingEnvironment(
+        features={'test_feature': TestingFeature()},
+        pool_size=0,
+        outage_grace_period=1,
+        outage_retry_interval=0,
+        sandbox_keepalive_interval=0,
+    )
+    env.start()
+    sb = env.acquire()
+    del sb
+    del env
+
   def test_acquire_env_offline(self):
     env = TestingEnvironment(
         features={'test_feature': TestingFeature()},
         pool_size=0,
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with self.assertRaises(interface.EnvironmentOutageError):
       env.acquire()
@@ -92,12 +108,14 @@ class EnvironmentTests(unittest.TestCase):
         pool_size=0,
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       sb = env.acquire()
       self.assertEqual(sb.status, interface.Sandbox.Status.ACQUIRED)
+      self.assertIsNone(env.working_dir)
+      self.assertIsNone(sb.working_dir)
+      self.assertIsNone(sb.test_feature.working_dir)
 
   def test_acquire_no_pooling_with_error(self):
     env = TestingEnvironment(
@@ -109,8 +127,7 @@ class EnvironmentTests(unittest.TestCase):
         pool_size=0,
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       with self.assertRaises(interface.EnvironmentOutageError):
@@ -122,8 +139,7 @@ class EnvironmentTests(unittest.TestCase):
         pool_size=1,
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       sb = env.acquire()
@@ -135,8 +151,7 @@ class EnvironmentTests(unittest.TestCase):
         pool_size=1,
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       sb = env.acquire()
@@ -150,17 +165,76 @@ class EnvironmentTests(unittest.TestCase):
         pool_size=(1, 3),
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       self.assertEqual(len(env.sandbox_pool), 1)
+      self.assertEqual(
+          env.stats(),
+          {
+              'sandbox': {
+                  'created': 0,
+                  'setting_up': 0,
+                  'ready': 1,
+                  'acquired': 0,
+                  'in_session': 0,
+                  'exiting_session': 0,
+                  'shutting_down': 0,
+                  'offline': 0,
+              }
+          }
+      )
       sb = env.acquire()
       self.assertEqual(sb.status, interface.Sandbox.Status.ACQUIRED)
+      self.assertEqual(
+          env.stats(),
+          {
+              'sandbox': {
+                  'created': 0,
+                  'setting_up': 0,
+                  'ready': 0,
+                  'acquired': 1,
+                  'in_session': 0,
+                  'exiting_session': 0,
+                  'shutting_down': 0,
+                  'offline': 0,
+              }
+          }
+      )
       self.assertEqual(len(env.sandbox_pool), 1)
       sb2 = env.acquire()
       self.assertEqual(sb2.status, interface.Sandbox.Status.ACQUIRED)
       self.assertEqual(len(env.sandbox_pool), 2)
+      self.assertEqual(
+          env.stats(),
+          {
+              'sandbox': {
+                  'created': 0,
+                  'setting_up': 0,
+                  'ready': 0,
+                  'acquired': 2,
+                  'in_session': 0,
+                  'exiting_session': 0,
+                  'shutting_down': 0,
+                  'offline': 0,
+              }
+          }
+      )
+    self.assertEqual(
+        env.stats(),
+        {
+            'sandbox': {
+                'created': 0,
+                'setting_up': 0,
+                'ready': 0,
+                'acquired': 0,
+                'in_session': 0,
+                'exiting_session': 0,
+                'shutting_down': 0,
+                'offline': 0,
+            }
+        }
+    )
 
   def test_acquire_with_growing_pool_failure(self):
     env = TestingEnvironment(
@@ -168,8 +242,7 @@ class EnvironmentTests(unittest.TestCase):
         pool_size=(1, 3),
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       self.assertEqual(len(env.sandbox_pool), 1)
@@ -184,15 +257,14 @@ class EnvironmentTests(unittest.TestCase):
       with self.assertRaises(interface.EnvironmentOutageError):
         env.acquire()
 
-  def test_maintenance_error(self):
+  def test_housekeep_error(self):
     env = TestingEnvironment(
         features={'test_feature': TestingFeature()},
         pool_size=1,
         proactive_session_setup=True,
         outage_grace_period=1,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
     with env:
       self.assertEqual(len(env.sandbox_pool), 1)
@@ -216,7 +288,7 @@ class SandboxStatusTests(unittest.TestCase):
 
   def setUp(self):
     super().setUp()
-    self.event_handler = TestingEnvironmentEventHandler(
+    self.event_handler = TestingEventHandler(
         log_sandbox_status=True,
         log_feature_setup=True,
         log_session_setup=True,
@@ -246,6 +318,7 @@ class SandboxStatusTests(unittest.TestCase):
             'feature2': TestingFeature(),
         },
     )
+    self.assertFalse(env.enable_pooling)
     with env:
       with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
@@ -294,6 +367,7 @@ class SandboxStatusTests(unittest.TestCase):
         pool_size=1,
         proactive_session_setup=True,
     )
+    self.assertTrue(env.enable_pooling)
     with env:
       with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
@@ -343,7 +417,7 @@ class SandboxStatusTests(unittest.TestCase):
         features={'test_feature': TestingFeature(setup_session_delay=0.5)},
         pool_size=1,
     )
-    event_handler = TestingEnvironmentEventHandler(
+    event_handler = TestingEventHandler(
         log_sandbox_status=True,
         log_feature_setup=True,
         log_session_setup=True,
@@ -919,6 +993,7 @@ class SandboxStatusTests(unittest.TestCase):
         self.assertEqual(len(sb.state_errors), 0)
         sb.shell('echo bar')
         self.assertEqual(sb.status, interface.Sandbox.Status.IN_SESSION)
+      sb.wait_until_not(interface.Sandbox.Status.SETTING_UP)
       self.assertEqual(sb.status, interface.Sandbox.Status.READY)
       self.assertEqual(
           self.event_handler.logs,
@@ -1020,7 +1095,7 @@ class SandboxActivityTests(unittest.TestCase):
     env = TestingEnvironment(
         features={'test_feature': TestingFeature(housekeep_interval=0)},
         pool_size=1,
-        keepalive_interval=0,
+        sandbox_keepalive_interval=0,
     )
     with env:
       with env.sandbox('session1') as sb:
@@ -1037,7 +1112,7 @@ class SandboxActivityTests(unittest.TestCase):
         pool_size=1,
         outage_grace_period=0,
         outage_retry_interval=0,
-        keepalive_interval=0,
+        sandbox_keepalive_interval=0,
     )
     with env:
       with env.sandbox('session1') as sb:
@@ -1052,7 +1127,7 @@ class SandboxActivityTests(unittest.TestCase):
         while sb.housekeep_counter == housekeep_count or (
             sb.status == interface.Sandbox.Status.IN_SESSION
         ):
-          time.sleep(0.1)
+          time.sleep(0.01)
         self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
 
   def test_remove_event_handler(self):
@@ -1061,10 +1136,9 @@ class SandboxActivityTests(unittest.TestCase):
         pool_size=1,
         outage_grace_period=0,
         outage_retry_interval=0,
-        keepalive_interval=0,
-        stats_report_interval=1,
+        sandbox_keepalive_interval=0,
     )
-    event_handler = TestingEnvironmentEventHandler()
+    event_handler = TestingEventHandler()
     with env:
       with env.sandbox('session1') as sb:
         sb.add_event_handler(event_handler)
@@ -1082,21 +1156,20 @@ class SandboxServiceTests(unittest.TestCase):
   def setUp(self):
     super().setUp()
     self.maxDiff = None
-    self.event_handler = TestingEnvironmentEventHandler()
+    self.event_handler = TestingEventHandler()
     self.env = TestingEnvironment(
         features={'test_feature': TestingFeature()},
         pool_size=0,
         outage_grace_period=0,
         outage_retry_interval=0,
-        keepalive_interval=0,
+        sandbox_keepalive_interval=0,
         event_handlers=[self.event_handler],
-        stats_report_interval=1,
         random_seed=1,
     )
 
   def test_service_call_activity_log(self):
 
-    class CustomEventHandler(interface.EnvironmentEventHandler):
+    class CustomEventHandler(event_handler_base.EventHandler):
 
       def __init__(self):
         self.calls = []

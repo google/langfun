@@ -13,16 +13,12 @@
 # limitations under the License.
 """Environment for LLM agents."""
 
-# pylint: disable=g-importing-member, g-bad-import-order
-from langfun.env.interface import EnvironmentId
-from langfun.env.interface import SandboxId
-
+# pylint: disable=g-importing-member, g-bad-import-order, g-import-not-at-top
 from langfun.env.interface import EnvironmentError   # pylint: disable=redefined-builtin
 from langfun.env.interface import EnvironmentOutageError
 from langfun.env.interface import EnvironmentOverloadError
 from langfun.env.interface import SandboxError
 from langfun.env.interface import SandboxStateError
-from langfun.env.interface import EnvironmentEventHandler
 
 from langfun.env.interface import Environment
 from langfun.env.interface import Sandbox
@@ -34,5 +30,8 @@ from langfun.env.base_feature import BaseFeature
 
 from langfun.env import load_balancers
 from langfun.env.load_balancers import LoadBalancer
+
+from langfun.env import event_handlers
+EventHandler = event_handlers.EventHandler
 
 # Google-internal imports.

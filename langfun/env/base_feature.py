@@ -23,6 +23,7 @@ the `Environment` and `Sandbox` interfaces directly.
 """
 
 import functools
+import os
 import time
 from typing import Annotated, Callable
 
@@ -105,6 +106,14 @@ class BaseFeature(interface.Feature):
     """Returns the sandbox that the feature is running in."""
     assert self._sandbox is not None, 'Feature has not been set up yet.'
     return self._sandbox
+
+  @property
+  def working_dir(self) -> str | None:
+    """Returns the working directory of the feature."""
+    sandbox_workdir = self.sandbox.working_dir
+    if sandbox_workdir is None:
+      return None
+    return os.path.join(sandbox_workdir, self.name)
 
   #
   # Setup and teardown of the feature.
