@@ -213,7 +213,7 @@ class BaseFeature(interface.Feature):
       self,
       name: str,
       duration: float,
-      error: BaseException | None,
+      error: BaseException | None = None,
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""

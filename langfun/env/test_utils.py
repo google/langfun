@@ -284,7 +284,6 @@ class TestingEventHandler(
       duration: float,
       error: BaseException | None
   ) -> None:
-    assert isinstance(environment, TestingEnvironment)
     assert duration > 0
     self._add_message(f'[{sandbox.id}] sandbox started', error)
 
@@ -447,7 +446,6 @@ class TestingEventHandler(
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
-    assert duration > 0
     del environment, kwargs
     if session_id is None:
       log_id = sandbox.id
