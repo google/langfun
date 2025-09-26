@@ -418,6 +418,7 @@ class BaseSandbox(interface.Sandbox):
       self.end_session(shutdown_sandbox=True)
       return
 
+    shutting_down_time = time.time()
     self._set_status(interface.Sandbox.Status.SHUTTING_DOWN)
 
     if (self._housekeep_thread is not None
@@ -429,7 +430,10 @@ class BaseSandbox(interface.Sandbox):
     try:
       self._shutdown()
       self._set_status(interface.Sandbox.Status.OFFLINE)
-      self.on_shutdown(teardown_error)
+      self.on_shutdown(
+          duration=time.time() - shutting_down_time,
+          error=teardown_error
+      )
       shutdown_error = None
     except BaseException as e:  # pylint: disable=broad-except
       shutdown_error = e
@@ -439,7 +443,10 @@ class BaseSandbox(interface.Sandbox):
           '[%s]: Sandbox shutdown with error: %s',
           self.id, e
       )
-      self.on_shutdown(teardown_error or shutdown_error)
+      self.on_shutdown(
+          duration=time.time() - shutting_down_time,
+          error=teardown_error or shutdown_error
+      )
 
     # We raise non-state errors to the user following timely order, so the user
     # code could be surfaced and handled properly.
@@ -591,6 +598,7 @@ class BaseSandbox(interface.Sandbox):
     # Set sandbox status to EXITING_SESSION to avoid re-entry.
     self._set_status(self.Status.EXITING_SESSION)
     shutdown_sandbox = shutdown_sandbox or not self.reusable
+    ending_time = time.time()
 
     # Teardown features for the current session.
     end_session_error = self._end_session()
@@ -617,7 +625,9 @@ class BaseSandbox(interface.Sandbox):
             self.shutdown()
 
         # End session before setting up the next session.
-        self.on_session_end(previous_session_id)
+        self.on_session_end(
+            previous_session_id, duration=time.time() - ending_time
+        )
 
         # Mark the sandbox as setting up to prevent it from being acquired by
         # other threads.
@@ -628,7 +638,9 @@ class BaseSandbox(interface.Sandbox):
         threading.Thread(target=_setup_next_session).start()
       else:
         # End session before reporting sandbox status change.
-        self.on_session_end(previous_session_id)
+        self.on_session_end(
+            previous_session_id, duration=time.time() - ending_time
+        )
 
         # If shutdown is requested, mark the sandbox as acquired to prevent it
         # from being acquired by other threads.
@@ -639,7 +651,11 @@ class BaseSandbox(interface.Sandbox):
 
     # Otherwise, shutdown the sandbox.
     else:
-      self.on_session_end(previous_session_id, self.state_errors[0])
+      self.on_session_end(
+          previous_session_id,
+          duration=time.time() - ending_time,
+          error=self.state_errors[0]
+      )
       self._set_status(interface.Sandbox.Status.ACQUIRED)
       shutdown_sandbox = True
 
@@ -762,14 +778,20 @@ class BaseSandbox(interface.Sandbox):
           time.time() - self._status_start_time
       )
 
-  def on_shutdown(self, error: BaseException | None = None) -> None:
+  def on_shutdown(
+      self,
+      duration: float,
+      error: BaseException | None = None
+  ) -> None:
     """Called when the sandbox is shutdown."""
     if self._start_time is None:
       lifetime = 0.0
     else:
       lifetime = time.time() - self._start_time
     for handler in self._event_handlers:
-      handler.on_sandbox_shutdown(self.environment, self, lifetime, error)
+      handler.on_sandbox_shutdown(
+          self.environment, self, duration, lifetime, error
+      )
 
   def on_housekeep(
       self,
@@ -880,13 +902,14 @@ class BaseSandbox(interface.Sandbox):
   def on_session_end(
       self,
       session_id: str,
+      duration: float,
       error: BaseException | None = None
   ) -> None:
     """Called when the user session ends."""
     lifetime = time.time() - self._session_start_time
     for handler in self._event_handlers:
       handler.on_session_end(
-          self.environment, self, session_id, lifetime, error
+          self.environment, self, session_id, duration, lifetime, error
       )
 
 

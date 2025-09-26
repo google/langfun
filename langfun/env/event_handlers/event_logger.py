@@ -107,6 +107,18 @@ class EventLogger(pg.Object, base.EventHandler):
       return False
     return True
 
+  def on_environment_starting(
+      self,
+      environment: base.Environment,
+  ) -> None:
+    """Called when the environment is starting."""
+    self._print(
+        f'[{environment.id}] environment starting',
+        error=None,
+        color='green',
+        styles=['bold'],
+    )
+
   def on_environment_start(
       self,
       environment: base.Environment,
@@ -151,13 +163,14 @@ class EventLogger(pg.Object, base.EventHandler):
   def on_environment_shutdown(
       self,
       environment: base.Environment,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     """Called when the environment is shutdown."""
     self._print(
         f'[{environment.id}] environment shutdown '
-        f'(lifetime={lifetime:.2f} seconds)',
+        f'(duration={duration:.2f} seconds), lifetime={lifetime:.2f} seconds)',
         error=error,
         color='green',
         styles=['bold'],
@@ -199,13 +212,15 @@ class EventLogger(pg.Object, base.EventHandler):
       self,
       environment: base.Environment,
       sandbox: base.Sandbox,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     if self.sandbox_status:
       self._print(
           f'[{sandbox.id}] sandbox shutdown '
-          f'(lifetime={lifetime:.2f} seconds)',
+          f'(duration={duration:.2f} seconds), '
+          f'lifetime={lifetime:.2f} seconds)',
           error=error,
           color='white',
           styles=['bold'],
@@ -338,6 +353,7 @@ class EventLogger(pg.Object, base.EventHandler):
       environment: base.Environment,
       sandbox: base.Sandbox,
       session_id: str,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
@@ -345,7 +361,8 @@ class EventLogger(pg.Object, base.EventHandler):
     if self.session_status:
       self._print(
           f'[{sandbox.id}/{session_id}] session ended '
-          f'(lifetime={lifetime:.2f} seconds)',
+          f'(duration={duration:.2f} seconds), '
+          f'lifetime={lifetime:.2f} seconds)',
           error=error,
           color='blue',
       )
