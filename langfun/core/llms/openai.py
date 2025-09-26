@@ -49,6 +49,53 @@ class OpenAIModelInfo(lf.ModelInfo):
 #
 
 SUPPORTED_MODELS = [
+    # GPT-5 models
+    OpenAIModelInfo(
+        model_id='gpt-5',
+        alias_for='gpt-5-2025-08-07',
+        in_service=True,
+        model_type='instruction-tuned',
+        description='GPT 5 model (latest stable).',
+        url='https://platform.openai.com/docs/models/gpt-5',
+        input_modalities=OpenAIModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=400_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.125,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=10.0,
+        ),
+        # Tier 5 rate limits.
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=15_000,
+            max_tokens_per_minute=40_000_000,
+        ),
+    ),
+    OpenAIModelInfo(
+        model_id='gpt-5-mini',
+        alias_for='gpt-5-mini-2025-08-07',
+        in_service=True,
+        model_type='instruction-tuned',
+        description='GPT 5 mini model (latest stable).',
+        url='https://platform.openai.com/docs/models/gpt-5-mini',
+        input_modalities=OpenAIModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=400_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.025,
+            cost_per_1m_input_tokens=0.25,
+            cost_per_1m_output_tokens=2.0,
+        ),
+        # Tier 5 rate limits.
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=180_000_000,
+            max_tokens_per_minute=30_000_000,
+        ),
+    ),
     # GPT-4.1 models
     OpenAIModelInfo(
         model_id='gpt-4.1',
@@ -1067,6 +1114,16 @@ class OpenAI(openai_compatible.OpenAICompatible):
     if options.logprobs and self.model.startswith(('o1-', 'o3-')):
       raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
     return super()._request_args(options)
+
+
+class Gpt5(OpenAI):
+  """GPT-5."""
+  model = 'gpt-5'
+
+
+class Gpt5Mini(OpenAI):
+  """GPT-5 mini."""
+  model = 'gpt-5-mini'
 
 
 class Gpt41(OpenAI):
