@@ -51,7 +51,7 @@ class Template(
 ):
   """Langfun string template.
 
-  Langfun uses jinja2 as its template engine. Pleaes check out
+  Langfun uses jinja2 as its template engine. Please check out
   https://jinja.palletsprojects.com/en/3.1.x/templates/ for detailed
   explanation on the template language.
   """
@@ -85,7 +85,7 @@ class Template(
   ]
 
   def __init_subclass__(cls):
-    # NOTE(daiyip): class attribute `template_str` may exists in 2 ways:
+    # NOTE(daiyip): class attribute `template_str` may exist in 2 ways:
     # A string: specified by the user as the new default value for template_str.
     # A property: inherited from the base class. In this case, we only update
     #   its default value when template_str can be extracted from the docstr.
@@ -366,7 +366,7 @@ class Template(
       assert top is self, (top, self)
 
   def additional_metadata(self) -> dict[str, Any]:
-    """Returns additional metadta to be carried in the rendered message."""
+    """Returns additional metadata to be carried in the rendered message."""
     metadata = {}
     # Carry metadata from `lf.context`.
     for k, v in component.all_contextual_values().items():

@@ -46,7 +46,7 @@ def sweep(
     num_examples: Number of examples to sample.
     max_workers: Max number of concurrent workers to do sampling.
     silence_on_errors: Return None for `lm_input` and `lm_output` when errors
-      in this category happen. Otherwise error will be raised during sampling.
+      in this category happen. Otherwise, error will be raised during sampling.
     ignore_examples_with_errors: If True, the examples with erratic lm_input
       or lm_output will not be included.
     **kwargs: Keyword arguments as rendering variables.
@@ -92,7 +92,7 @@ def random_sample(
     num_examples: Number of examples to sample.
     max_workers: Max number of concurrent workers to do sampling.
     silence_on_errors: Return None for `lm_input` and `lm_output` when errors
-      in this category happen. Otherwise error will be raised during sampling.
+      in this category happen. Otherwise, error will be raised during sampling.
     ignore_examples_with_errors: If True, the examples with erratic lm_input
       or lm_output will not be included.
     seed: Random seed.
