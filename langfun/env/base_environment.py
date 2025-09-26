@@ -335,6 +335,7 @@ class BaseEnvironment(interface.Environment):
         f'it is in {self._status.value!r} status.'
     )
 
+    self.on_starting()
     starting_time = time.time()
     try:
       self._start()
@@ -359,11 +360,12 @@ class BaseEnvironment(interface.Environment):
 
     self._set_status(self.Status.SHUTTING_DOWN)
 
+    shutting_down_time = time.time()
     try:
       self._shutdown()
-      self.on_shutdown()
+      self.on_shutdown(duration=time.time() - shutting_down_time)
     except BaseException as e:  # pylint: disable=broad-except
-      self.on_shutdown(error=e)
+      self.on_shutdown(duration=time.time() - shutting_down_time, error=e)
       raise e
 
   #
@@ -564,6 +566,11 @@ class BaseEnvironment(interface.Environment):
   # Event handlers subclasses can override.
   #
 
+  def on_starting(self) -> None:
+    """Called when the environment is getting started."""
+    for handler in self.event_handlers:
+      handler.on_environment_starting(self)
+
   def on_start(
       self,
       duration: float, error: BaseException | None = None
@@ -582,8 +589,11 @@ class BaseEnvironment(interface.Environment):
     for handler in self.event_handlers:
       handler.on_environment_housekeep(self, housekeep_counter, duration, error)
 
-  def on_shutdown(self, error: BaseException | None = None) -> None:
+  def on_shutdown(
+      self,
+      duration: float,
+      error: BaseException | None = None) -> None:
     """Called when the environment is shutdown."""
     lifetime = (time.time() - self.start_time) if self.start_time else 0.0
     for handler in self.event_handlers:
-      handler.on_environment_shutdown(self, lifetime, error)
+      handler.on_environment_shutdown(self, duration, lifetime, error)

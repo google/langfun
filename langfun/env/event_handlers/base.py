@@ -48,6 +48,7 @@ class _SessionEventHandler:
       environment: Environment,
       sandbox: Sandbox,
       session_id: str,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
@@ -57,6 +58,7 @@ class _SessionEventHandler:
       environment: The environment.
       sandbox: The sandbox.
       session_id: The session ID.
+      duration: The time spent on ending the session.
       lifetime: The session lifetime in seconds.
       error: The error that caused the session to end. If None, the session
         ended normally.
@@ -162,6 +164,7 @@ class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
       self,
       environment: Environment,
       sandbox: Sandbox,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
@@ -170,6 +173,7 @@ class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
     Args:
       environment: The environment.
       sandbox: The sandbox.
+      duration: The time spent on shutting down the sandbox.
       lifetime: The sandbox lifetime in seconds.
       error: The error that caused the sandbox to shutdown. If None, the
         sandbox shutdown normally.
@@ -223,6 +227,13 @@ class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
 class EventHandler(_SandboxEventHandler):
   """Base class for event handlers of an environment."""
 
+  def on_environment_starting(self, environment: Environment) -> None:
+    """Called when the environment is getting started.
+
+    Args:
+      environment: The environment.
+    """
+
   def on_environment_start(
       self,
       environment: Environment,
@@ -258,6 +269,7 @@ class EventHandler(_SandboxEventHandler):
   def on_environment_shutdown(
       self,
       environment: Environment,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
@@ -265,6 +277,7 @@ class EventHandler(_SandboxEventHandler):
 
     Args:
       environment: The environment.
+      duration: The environment shutdown duration in seconds.
       lifetime: The environment lifetime in seconds.
       error: The error that caused the environment to shutdown. If None, the
         environment shutdown normally.

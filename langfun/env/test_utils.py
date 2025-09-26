@@ -270,11 +270,12 @@ class TestingEventHandler(
   def on_environment_shutdown(
       self,
       environment: interface.Environment,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     """Called when the environment is shutdown."""
-    assert lifetime is not None
+    assert duration > 0 and lifetime is not None
     self._add_message(f'[{environment.id}] environment shutdown', error)
 
   def on_sandbox_start(
@@ -306,10 +307,11 @@ class TestingEventHandler(
       self,
       environment: interface.Environment,
       sandbox: interface.Sandbox,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
-    assert lifetime is not None
+    assert duration > 0 and lifetime is not None
     self._add_message(f'[{sandbox.id}] sandbox shutdown', error)
 
   def on_sandbox_housekeep(
@@ -423,11 +425,12 @@ class TestingEventHandler(
       environment: interface.Environment,
       sandbox: interface.Sandbox,
       session_id: str,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox session ends."""
-    assert lifetime > 0
+    assert duration > 0 and lifetime > 0
     self._add_message(
         f'[{sandbox.id}] session {session_id!r} ended', error
     )

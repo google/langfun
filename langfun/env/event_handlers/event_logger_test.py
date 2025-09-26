@@ -92,6 +92,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_all_flags_on',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment housekeeping',
@@ -122,6 +123,7 @@ class EventLoggerTest(unittest.TestCase):
             'RuntimeError',
         ],
         unexpected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment housekeeping',
@@ -139,6 +141,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_regex',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment housekeeping',
@@ -161,6 +164,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_sandbox_status_off',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment housekeeping',
@@ -185,6 +189,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_feature_status_off',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment housekeeping',
@@ -210,6 +215,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_session_status_off',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment stats',
@@ -235,6 +241,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_housekeep_status_off',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment stats',
@@ -260,6 +267,7 @@ class EventLoggerTest(unittest.TestCase):
     return self._test_logger(
         test_name='test_housekeep_status_off',
         expected_substrings=[
+            'environment starting',
             'environment started',
             'environment shutdown',
             'environment housekeeping',
