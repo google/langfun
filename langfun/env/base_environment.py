@@ -221,7 +221,7 @@ class BaseEnvironment(interface.Environment):
       self._sandbox_pool = [None] * self.min_pool_size
       for i, sandbox, _ in lf.concurrent_map(
           lambda i: self._bring_up_sandbox_with_retry(
-              sandbox_id=str(i), shutdown_env_upon_outage=False
+              sandbox_id=f'{i}:0', shutdown_env_upon_outage=False
           ),
           range(self.min_pool_size),
           silence_on_errors=None,
@@ -414,7 +414,8 @@ class BaseEnvironment(interface.Environment):
         else:
           try:
             sandbox = self._bring_up_sandbox(
-                sandbox_id=str(self._increment_sandbox_id()), set_acquired=True,
+                sandbox_id=f'{self._increment_sandbox_id()}:0',
+                set_acquired=True,
             )
             # Append is atomic and does not require locking.
             self._sandbox_pool.append(sandbox)
@@ -546,8 +547,9 @@ class BaseEnvironment(interface.Environment):
         len(dead_pool_indices),
     )
     def _replace(i: int):
+      generation = int(self._sandbox_pool[i].id.sandbox_id.split(':')[1])
       self._sandbox_pool[i] = self._bring_up_sandbox_with_retry(
-          str(i), shutdown_env_upon_outage=False
+          f'{i}:{generation + 1}', shutdown_env_upon_outage=False
       )
 
     # TODO(daiyip): Consider to loose the condition to allow some dead

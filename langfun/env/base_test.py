@@ -381,34 +381,34 @@ class SandboxStatusTests(unittest.TestCase):
       self.assertEqual(
           self.event_handler.logs,
           [
-              '[testing-env/0] shell: "feature1" setup',
-              '[testing-env/0/feature1] feature setup',
-              '[testing-env/0] shell: "feature2" setup',
-              '[testing-env/0/feature2] feature setup',
-              '[testing-env/0] shell: "feature1" setup session',
-              '[testing-env/0/feature1] feature setup session',
-              '[testing-env/0] shell: "feature2" setup session',
-              '[testing-env/0/feature2] feature setup session',
-              '[testing-env/0] created -> ready',
-              '[testing-env/0] sandbox started',
+              '[testing-env/0:0] shell: "feature1" setup',
+              '[testing-env/0:0/feature1] feature setup',
+              '[testing-env/0:0] shell: "feature2" setup',
+              '[testing-env/0:0/feature2] feature setup',
+              '[testing-env/0:0] shell: "feature1" setup session',
+              '[testing-env/0:0/feature1] feature setup session',
+              '[testing-env/0:0] shell: "feature2" setup session',
+              '[testing-env/0:0/feature2] feature setup session',
+              '[testing-env/0:0] created -> ready',
+              '[testing-env/0:0] sandbox started',
               '[testing-env] environment started',
-              '[testing-env/0] ready -> acquired',
-              '[testing-env/0] acquired -> setting_up',
-              '[testing-env/0] setting_up -> in_session',
-              "[testing-env/0] session 'session1' started",
-              '[testing-env/0/session1] shell: echo "hello"',
-              '[testing-env/0] in_session -> exiting_session',
-              '[testing-env/0/session1] shell: "feature1" teardown session',
-              '[testing-env/0/feature1] feature teardown session',
-              '[testing-env/0/session1] shell: "feature2" teardown session',
-              '[testing-env/0/feature2] feature teardown session',
-              "[testing-env/0] session 'session1' ended",
-              '[testing-env/0] exiting_session -> setting_up',
-              '[testing-env/0] shell: "feature1" setup session',
-              '[testing-env/0/feature1] feature setup session',
-              '[testing-env/0] shell: "feature2" setup session',
-              '[testing-env/0/feature2] feature setup session',
-              '[testing-env/0] setting_up -> ready'
+              '[testing-env/0:0] ready -> acquired',
+              '[testing-env/0:0] acquired -> setting_up',
+              '[testing-env/0:0] setting_up -> in_session',
+              "[testing-env/0:0] session 'session1' started",
+              '[testing-env/0:0/session1] shell: echo "hello"',
+              '[testing-env/0:0] in_session -> exiting_session',
+              '[testing-env/0:0/session1] shell: "feature1" teardown session',
+              '[testing-env/0:0/feature1] feature teardown session',
+              '[testing-env/0:0/session1] shell: "feature2" teardown session',
+              '[testing-env/0:0/feature2] feature teardown session',
+              "[testing-env/0:0] session 'session1' ended",
+              '[testing-env/0:0] exiting_session -> setting_up',
+              '[testing-env/0:0] shell: "feature1" setup session',
+              '[testing-env/0:0/feature1] feature setup session',
+              '[testing-env/0:0] shell: "feature2" setup session',
+              '[testing-env/0:0/feature2] feature setup session',
+              '[testing-env/0:0] setting_up -> ready'
           ]
       )
 
@@ -440,17 +440,19 @@ class SandboxStatusTests(unittest.TestCase):
       self.assertEqual(
           event_handler.logs,
           [
-              '[testing-env/0] in_session -> exiting_session',
-              '[testing-env/0/session1] shell: "test_feature" teardown session',
-              '[testing-env/0/test_feature] feature teardown session',
-              "[testing-env/0] session 'session1' ended",
-              '[testing-env/0] exiting_session -> setting_up',
-              '[testing-env/0/test_feature] feature setup session with SandboxStateError',  # pylint: disable=line-too-long
-              '[testing-env/0] setting_up -> shutting_down',
-              '[testing-env/0] shell: "test_feature" teardown',
-              '[testing-env/0/test_feature] feature teardown',
-              '[testing-env/0] shutting_down -> offline',
-              '[testing-env/0] sandbox shutdown'
+              # pylint: disable=line-too-long
+              '[testing-env/0:0] in_session -> exiting_session',
+              '[testing-env/0:0/session1] shell: "test_feature" teardown session',
+              '[testing-env/0:0/test_feature] feature teardown session',
+              "[testing-env/0:0] session 'session1' ended",
+              '[testing-env/0:0] exiting_session -> setting_up',
+              '[testing-env/0:0/test_feature] feature setup session with SandboxStateError',  # pylint: disable=line-too-long
+              '[testing-env/0:0] setting_up -> shutting_down',
+              '[testing-env/0:0] shell: "test_feature" teardown',
+              '[testing-env/0:0/test_feature] feature teardown',
+              '[testing-env/0:0] shutting_down -> offline',
+              '[testing-env/0:0] sandbox shutdown'
+              # pylint: enable=line-too-long
           ]
       )
 
@@ -493,10 +495,10 @@ class SandboxStatusTests(unittest.TestCase):
     self.assertEqual(
         self.event_handler.logs,
         [
-            '[testing-env/0] sandbox started with SandboxStateError',
-            '[testing-env/0] created -> shutting_down',
-            '[testing-env/0] shutting_down -> offline',
-            '[testing-env/0] sandbox shutdown',
+            '[testing-env/0:0] sandbox started with SandboxStateError',
+            '[testing-env/0:0] created -> shutting_down',
+            '[testing-env/0:0] shutting_down -> offline',
+            '[testing-env/0:0] sandbox shutdown',
             '[testing-env] environment started with EnvironmentOutageError',
             '[testing-env] environment shutdown'
         ]
@@ -569,24 +571,24 @@ class SandboxStatusTests(unittest.TestCase):
     self.assertEqual(
         self.event_handler.logs,
         [
-            '[testing-env/0] shell: "feature1" setup',
-            '[testing-env/0/feature1] feature setup',
-            '[testing-env/0] shell: "feature2" setup',
-            '[testing-env/0/feature2] feature setup',
-            '[testing-env/0] shell: "feature1" setup session',
-            '[testing-env/0/feature1] feature setup session',
-            '[testing-env/0] shell: "feature2" setup session',
-            '[testing-env/0/feature2] feature setup session',
-            '[testing-env/0] created -> ready',
-            '[testing-env/0] sandbox started',
+            '[testing-env/0:0] shell: "feature1" setup',
+            '[testing-env/0:0/feature1] feature setup',
+            '[testing-env/0:0] shell: "feature2" setup',
+            '[testing-env/0:0/feature2] feature setup',
+            '[testing-env/0:0] shell: "feature1" setup session',
+            '[testing-env/0:0/feature1] feature setup session',
+            '[testing-env/0:0] shell: "feature2" setup session',
+            '[testing-env/0:0/feature2] feature setup session',
+            '[testing-env/0:0] created -> ready',
+            '[testing-env/0:0] sandbox started',
             '[testing-env] environment started',
-            '[testing-env/0] ready -> shutting_down',
-            '[testing-env/0] shell: "feature1" teardown',
-            '[testing-env/0/feature1] feature teardown',
-            '[testing-env/0] shell: "feature2" teardown',
-            '[testing-env/0/feature2] feature teardown',
-            '[testing-env/0] shutting_down -> offline',
-            '[testing-env/0] sandbox shutdown with ValueError',
+            '[testing-env/0:0] ready -> shutting_down',
+            '[testing-env/0:0] shell: "feature1" teardown',
+            '[testing-env/0:0/feature1] feature teardown',
+            '[testing-env/0:0] shell: "feature2" teardown',
+            '[testing-env/0:0/feature2] feature teardown',
+            '[testing-env/0:0] shutting_down -> offline',
+            '[testing-env/0:0] sandbox shutdown with ValueError',
             '[testing-env] environment shutdown with ValueError'
         ]
     )
@@ -998,27 +1000,27 @@ class SandboxStatusTests(unittest.TestCase):
       self.assertEqual(
           self.event_handler.logs,
           [
-              '[testing-env/0] shell: "feature1" setup',
-              '[testing-env/0/feature1] feature setup',
-              '[testing-env/0] shell: "feature1" setup session',
-              '[testing-env/0/feature1] feature setup session',
-              '[testing-env/0] created -> ready',
-              '[testing-env/0] sandbox started',
+              '[testing-env/0:0] shell: "feature1" setup',
+              '[testing-env/0:0/feature1] feature setup',
+              '[testing-env/0:0] shell: "feature1" setup session',
+              '[testing-env/0:0/feature1] feature setup session',
+              '[testing-env/0:0] created -> ready',
+              '[testing-env/0:0] sandbox started',
               '[testing-env] environment started',
-              '[testing-env/0] ready -> acquired',
-              '[testing-env/0] acquired -> setting_up',
-              '[testing-env/0] setting_up -> in_session',
-              "[testing-env/0] session 'session1' started",
-              '[testing-env/0/session1] shell: echo foo with ValueError',
-              '[testing-env/0/session1] shell: echo bar',
-              '[testing-env/0] in_session -> exiting_session',
-              '[testing-env/0/session1] shell: "feature1" teardown session',
-              '[testing-env/0/feature1] feature teardown session',
-              "[testing-env/0] session 'session1' ended",
-              '[testing-env/0] exiting_session -> setting_up',
-              '[testing-env/0] shell: "feature1" setup session',
-              '[testing-env/0/feature1] feature setup session',
-              '[testing-env/0] setting_up -> ready',
+              '[testing-env/0:0] ready -> acquired',
+              '[testing-env/0:0] acquired -> setting_up',
+              '[testing-env/0:0] setting_up -> in_session',
+              "[testing-env/0:0] session 'session1' started",
+              '[testing-env/0:0/session1] shell: echo foo with ValueError',
+              '[testing-env/0:0/session1] shell: echo bar',
+              '[testing-env/0:0] in_session -> exiting_session',
+              '[testing-env/0:0/session1] shell: "feature1" teardown session',
+              '[testing-env/0:0/feature1] feature teardown session',
+              "[testing-env/0:0] session 'session1' ended",
+              '[testing-env/0:0] exiting_session -> setting_up',
+              '[testing-env/0:0] shell: "feature1" setup session',
+              '[testing-env/0:0/feature1] feature setup session',
+              '[testing-env/0:0] setting_up -> ready',
           ]
       )
 
@@ -1039,29 +1041,31 @@ class SandboxStatusTests(unittest.TestCase):
       self.assertEqual(
           self.event_handler.logs,
           [
-              '[testing-env/0] shell: "feature1" setup',
-              '[testing-env/0/feature1] feature setup',
-              '[testing-env/0] shell: "feature1" setup session',
-              '[testing-env/0/feature1] feature setup session',
-              '[testing-env/0] created -> ready',
-              '[testing-env/0] sandbox started',
+              # pylint: disable=line-too-long
+              '[testing-env/0:0] shell: "feature1" setup',
+              '[testing-env/0:0/feature1] feature setup',
+              '[testing-env/0:0] shell: "feature1" setup session',
+              '[testing-env/0:0/feature1] feature setup session',
+              '[testing-env/0:0] created -> ready',
+              '[testing-env/0:0] sandbox started',
               '[testing-env] environment started',
-              '[testing-env/0] ready -> acquired',
-              '[testing-env/0] acquired -> setting_up',
-              '[testing-env/0] setting_up -> in_session',
-              "[testing-env/0] session 'session1' started",
-              '[testing-env/0/session1] shell: echo foo with RuntimeError',
-              '[testing-env/0] in_session -> exiting_session',
-              '[testing-env/0/session1] shell: "feature1" teardown session',
-              '[testing-env/0/feature1] feature teardown session',
-              "[testing-env/0] session 'session1' ended with SandboxStateError",
-              '[testing-env/0] exiting_session -> acquired',
-              '[testing-env/0] acquired -> shutting_down',
-              '[testing-env/0] shell: "feature1" teardown',
-              '[testing-env/0/feature1] feature teardown',
-              '[testing-env/0] shutting_down -> offline',
-              '[testing-env/0] sandbox shutdown',
-              '[testing-env/0] shell: echo bar',
+              '[testing-env/0:0] ready -> acquired',
+              '[testing-env/0:0] acquired -> setting_up',
+              '[testing-env/0:0] setting_up -> in_session',
+              "[testing-env/0:0] session 'session1' started",
+              '[testing-env/0:0/session1] shell: echo foo with RuntimeError',
+              '[testing-env/0:0] in_session -> exiting_session',
+              '[testing-env/0:0/session1] shell: "feature1" teardown session',
+              '[testing-env/0:0/feature1] feature teardown session',
+              "[testing-env/0:0] session 'session1' ended with SandboxStateError",
+              '[testing-env/0:0] exiting_session -> acquired',
+              '[testing-env/0:0] acquired -> shutting_down',
+              '[testing-env/0:0] shell: "feature1" teardown',
+              '[testing-env/0:0/feature1] feature teardown',
+              '[testing-env/0:0] shutting_down -> offline',
+              '[testing-env/0:0] sandbox shutdown',
+              '[testing-env/0:0] shell: echo bar',
+              # pylint: enable=line-too-long
           ]
       )
 
@@ -1107,12 +1111,14 @@ class SandboxActivityTests(unittest.TestCase):
         self.assertEqual(sb.status, sb.Status.OFFLINE)
 
   def test_housekeep_error(self):
+    event_handler = TestingEventHandler(log_housekeep=False)
     env = TestingEnvironment(
         features={'test_feature': TestingFeature(housekeep_interval=0)},
         pool_size=1,
         outage_grace_period=0,
-        outage_retry_interval=0,
+        outage_retry_interval=0.1,
         sandbox_keepalive_interval=0,
+        event_handlers=[event_handler],
     )
     with env:
       with env.sandbox('session1') as sb:
@@ -1129,6 +1135,30 @@ class SandboxActivityTests(unittest.TestCase):
         ):
           time.sleep(0.01)
         self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+    self.assertEqual(
+        event_handler.logs,
+        [
+            '[testing-env/0:0] shell: "test_feature" setup',
+            '[testing-env/0:0/test_feature] feature setup',
+            '[testing-env/0:0] shell: "test_feature" setup session',
+            '[testing-env/0:0] sandbox started',
+            '[testing-env] environment started',
+            "[testing-env/0:0] session 'session1' started",
+            '[testing-env/0:0/session1] shell: "test_feature" teardown session',
+            "[testing-env/0:0] session 'session1' ended with SandboxStateError",
+            '[testing-env/0:0] shell: "test_feature" teardown',
+            '[testing-env/0:0/test_feature] feature teardown',
+            '[testing-env/0:0] sandbox shutdown',
+            '[testing-env/0:1] shell: "test_feature" setup',
+            '[testing-env/0:1/test_feature] feature setup',
+            '[testing-env/0:1] shell: "test_feature" setup session',
+            '[testing-env/0:1] sandbox started',
+            '[testing-env/0:1] shell: "test_feature" teardown',
+            '[testing-env/0:1/test_feature] feature teardown',
+            '[testing-env/0:1] sandbox shutdown',
+            '[testing-env] environment shutdown'
+        ]
+    )
 
   def test_remove_event_handler(self):
     env = TestingEnvironment(
