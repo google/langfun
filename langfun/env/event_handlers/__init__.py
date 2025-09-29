@@ -8,5 +8,7 @@ from langfun.env.event_handlers.base import EventHandler
 from langfun.env.event_handlers.event_logger import EventLogger
 from langfun.env.event_handlers.event_logger import ConsoleEventLogger
 
+from langfun.env.event_handlers.metric_writer import MetricWriter
+
 # pylint: enable=g-importing-member
 # pylint: enable=g-bad-import-order
