@@ -23,6 +23,13 @@ import pyglove as pg
 class EventLogger(pg.Object, base.EventHandler):
   """Event handler for logging debugger."""
 
+  colored: Annotated[
+      bool,
+      (
+          'If True, log events with colors.'
+      )
+  ] = False
+
   regex: Annotated[
       str | list[str] | None,
       (
@@ -85,6 +92,13 @@ class EventLogger(pg.Object, base.EventHandler):
     self._regex_exps = [re.compile(x) for x in regex_exps]
     self._last_stats_report_time = None
 
+  def _maybe_colored(
+      self, message: str, color: str, styles: list[str] | None = None
+  ) -> str:
+    if self.colored:
+      return pg.colored(message, color, styles=styles)
+    return message
+
   def _format_message(
       self,
       message: str,
@@ -106,6 +120,18 @@ class EventLogger(pg.Object, base.EventHandler):
     ):
       return False
     return True
+
+  def on_environment_starting(
+      self,
+      environment: base.Environment,
+  ) -> None:
+    """Called when the environment is starting."""
+    self._print(
+        f'[{environment.id}] environment starting',
+        error=None,
+        color='green',
+        styles=['bold'],
+    )
 
   def on_environment_start(
       self,
@@ -151,13 +177,14 @@ class EventLogger(pg.Object, base.EventHandler):
   def on_environment_shutdown(
       self,
       environment: base.Environment,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     """Called when the environment is shutdown."""
     self._print(
         f'[{environment.id}] environment shutdown '
-        f'(lifetime={lifetime:.2f} seconds)',
+        f'(duration={duration:.2f} seconds), lifetime={lifetime:.2f} seconds)',
         error=error,
         color='green',
         styles=['bold'],
@@ -199,13 +226,15 @@ class EventLogger(pg.Object, base.EventHandler):
       self,
       environment: base.Environment,
       sandbox: base.Sandbox,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     if self.sandbox_status:
       self._print(
           f'[{sandbox.id}] sandbox shutdown '
-          f'(lifetime={lifetime:.2f} seconds)',
+          f'(duration={duration:.2f} seconds), '
+          f'lifetime={lifetime:.2f} seconds)',
           error=error,
           color='white',
           styles=['bold'],
@@ -338,6 +367,7 @@ class EventLogger(pg.Object, base.EventHandler):
       environment: base.Environment,
       sandbox: base.Sandbox,
       session_id: str,
+      duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
@@ -345,7 +375,8 @@ class EventLogger(pg.Object, base.EventHandler):
     if self.session_status:
       self._print(
           f'[{sandbox.id}/{session_id}] session ended '
-          f'(lifetime={lifetime:.2f} seconds)',
+          f'(duration={duration:.2f} seconds), '
+          f'lifetime={lifetime:.2f} seconds)',
           error=error,
           color='blue',
       )
@@ -394,22 +425,29 @@ class EventLogger(pg.Object, base.EventHandler):
       color: str | None = None,
       styles: list[str] | None = None,
   ):
+    message = self._maybe_colored(
+        message, color if error is None else 'red', styles=styles
+    )
     if error is not None:
-      pg.logging.error(pg.colored(message, 'red', styles=styles))
+      pg.logging.error(message)
     else:
-      pg.logging.info(pg.colored(message, color, styles=styles))
+      pg.logging.info(message)
 
 
 class ConsoleEventLogger(EventLogger):
   """Event handler for console debugger."""
+
+  colored = True
 
   def _write_log(
       self,
       message: str,
       error: BaseException | None,
       color: str | None = None,
-      styles: list[str] | None = None,
+      styles: list[str] | None = None
   ):
     print(
-        pg.colored(message, color if error is None else 'red', styles=styles)
+        self._maybe_colored(
+            message, color if error is None else 'red', styles=styles
+        )
     )
