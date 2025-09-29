@@ -45,112 +45,94 @@ class MetricWriterTest(unittest.TestCase):
 
     self.assertEqual(
         writer._sandbox_start.value(
-            environment_id='testing-env', has_error=False
+            environment_id='testing-env', error=''
         ),
         2
     )
     self.assertGreater(
         writer._sandbox_housekeep.value(
             environment_id='testing-env',
-            has_error=False
+            error=''
         ),
         0,
     )
     self.assertEqual(
         writer._sandbox_shutdown.value(
-            environment_id='testing-env', has_error=False
+            environment_id='testing-env', error=''
         ),
         2
     )
     self.assertEqual(
         writer._feature_setup.value(
-            environment_id='testing-env',
-            feature_name='test_feature1',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature1', error=''
         ),
         2,
     )
     self.assertEqual(
         writer._feature_setup.value(
-            environment_id='testing-env',
-            feature_name='test_feature2',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature2', error=''
         ),
         2,
     )
     self.assertEqual(
         writer._feature_setup_session.value(
-            environment_id='testing-env',
-            feature_name='test_feature1',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature1', error=''
         ),
         3,
     )
     self.assertEqual(
         writer._feature_setup_session.value(
-            environment_id='testing-env',
-            feature_name='test_feature2',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature2', error=''
         ),
         3,
     )
     self.assertEqual(
         writer._feature_teardown_session.value(
-            environment_id='testing-env',
-            feature_name='test_feature1',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature1', error=''
         ),
         2,
     )
     self.assertEqual(
         writer._feature_teardown_session.value(
-            environment_id='testing-env',
-            feature_name='test_feature2',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature2', error=''
         ),
         2,
     )
     self.assertEqual(
         writer._feature_teardown.value(
-            environment_id='testing-env',
-            feature_name='test_feature1',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature1', error=''
         ),
         2,
     )
     self.assertEqual(
         writer._feature_teardown.value(
-            environment_id='testing-env',
-            feature_name='test_feature2',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature2', error=''
         ),
         2,
     )
     self.assertGreater(
         writer._feature_housekeep.value(
-            environment_id='testing-env',
-            feature_name='test_feature1',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature1', error=''
         ),
         0,
     )
     self.assertEqual(
         writer._feature_housekeep.value(
-            environment_id='testing-env',
-            feature_name='test_feature2',
-            has_error=False
+            environment_id='testing-env', feature_name='test_feature2', error=''
         ),
         0,
     )
     self.assertEqual(
         writer._sandbox_activity.value(
-            environment_id='testing-env', activity='shell', has_error=False
+            environment_id='testing-env', activity='shell', error=''
         ),
         18
     )
     self.assertEqual(
         writer._sandbox_activity.value(
-            environment_id='testing-env', activity='shell', has_error=True
+            environment_id='testing-env',
+            activity='shell',
+            error='RuntimeError'
         ),
         1
     )

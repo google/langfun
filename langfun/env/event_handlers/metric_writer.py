@@ -47,6 +47,11 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters=parameters
     )
 
+  def _error_tag(self, error: BaseException | None) -> str:
+    if error is None:
+      return ''
+    return pg.utils.ErrorInfo.from_exception(error).tag
+
   def _initialize_metrics(self) -> None:
     """Initializes metrics."""
 
@@ -61,7 +66,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Environment housekeeping duration in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
 
@@ -75,7 +80,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox start counter',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._sandbox_shutdown = self._get_counter(
@@ -83,7 +88,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox shutdown counter',
         parameters={
             'environment_id': str,
-            'has_error': bool
+            'error': str
         }
     )
     self._sandbox_housekeep = self._get_counter(
@@ -91,7 +96,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox housekeeping counter',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._sandbox_activity = self._get_counter(
@@ -100,7 +105,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'activity': str,
-            'has_error': bool,
+            'error': str,
         }
     )
 
@@ -110,7 +115,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox life time in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._sandbox_start_duration_ms = self._get_scalar(
@@ -118,7 +123,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox start duration in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._sandbox_shutdown_duration_ms = self._get_scalar(
@@ -126,7 +131,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox shutdown duration in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._sandbox_housekeep_duration_ms = self._get_scalar(
@@ -134,7 +139,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Sandbox housekeeping duration in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._sandbox_status_duration_ms = self._get_scalar(
@@ -151,7 +156,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'activity': str,
-            'has_error': bool,
+            'error': str,
         }
     )
 
@@ -166,7 +171,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_teardown = self._get_counter(
@@ -175,7 +180,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_setup_session = self._get_counter(
@@ -184,7 +189,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_teardown_session = self._get_counter(
@@ -193,7 +198,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_housekeep = self._get_counter(
@@ -202,7 +207,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
 
@@ -213,7 +218,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_teardown_duration_ms = self._get_scalar(
@@ -222,7 +227,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_setup_session_duration_ms = self._get_scalar(
@@ -231,7 +236,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_teardown_session_duration_ms = self._get_scalar(
@@ -240,7 +245,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._feature_housekeep_duration_ms = self._get_scalar(
@@ -249,7 +254,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'environment_id': str,
             'feature_name': str,
-            'has_error': bool,
+            'error': str,
         }
     )
 
@@ -262,7 +267,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Session start duration in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._session_end_duration_ms = self._get_scalar(
@@ -270,7 +275,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Session end duration in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
     self._session_lifetime_ms = self._get_scalar(
@@ -278,7 +283,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         description='Session lifetime in milliseconds',
         parameters={
             'environment_id': str,
-            'has_error': bool,
+            'error': str,
         }
     )
 
@@ -300,7 +305,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._environment_housekeep_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_sandbox_start(
@@ -312,12 +317,12 @@ class MetricWriter(pg.Object, base.EventHandler):
   ) -> None:
     self._sandbox_start.increment(
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._sandbox_start_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_sandbox_status_change(
@@ -344,17 +349,17 @@ class MetricWriter(pg.Object, base.EventHandler):
   ) -> None:
     self._sandbox_shutdown.increment(
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._sandbox_shutdown_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._sandbox_lifetime_ms.record(
         int(lifetime * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_sandbox_housekeep(
@@ -368,12 +373,12 @@ class MetricWriter(pg.Object, base.EventHandler):
     """Called when a sandbox feature is housekeeping."""
     self._sandbox_housekeep.increment(
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._sandbox_housekeep_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_feature_setup(
@@ -388,13 +393,13 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_setup.increment(
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._feature_setup_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_feature_teardown(
@@ -409,13 +414,13 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_teardown.increment(
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._feature_teardown_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_feature_setup_session(
@@ -431,13 +436,13 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_setup_session.increment(
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._feature_setup_session_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_feature_teardown_session(
@@ -453,13 +458,13 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_teardown_session.increment(
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._feature_teardown_session_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_feature_housekeep(
@@ -475,13 +480,13 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_housekeep.increment(
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._feature_housekeep_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
         feature_name=feature.name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_session_start(
@@ -496,7 +501,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._session_start_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_session_end(
@@ -512,12 +517,12 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._session_end_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._session_lifetime_ms.record(
         int(lifetime * 1000),
         environment_id=str(environment.id),
-        has_error=error is not None
+        error=self._error_tag(error)
     )
 
   def on_sandbox_activity(
@@ -535,11 +540,11 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._sandbox_activity.increment(
         environment_id=str(environment.id),
         activity=name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
     self._sandbox_activity_duration_ms.record(
         int(duration * 1000),
         environment_id=str(environment.id),
         activity=name,
-        has_error=error is not None
+        error=self._error_tag(error)
     )
