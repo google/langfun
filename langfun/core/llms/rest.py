@@ -98,7 +98,9 @@ class REST(lf.LanguageModel):
       raise lf.TemporaryLMError(str(e)) from e
     except (
         requests.exceptions.ConnectionError,
+        requests.exceptions.ChunkedEncodingError,
         ConnectionError,
+        ConnectionResetError,
     ) as e:
       error_message = str(e)
       if 'REJECTED_CLIENT_THROTTLED' in error_message:
@@ -106,6 +108,8 @@ class REST(lf.LanguageModel):
       if 'UNREACHABLE_NO_RESPONSE' in error_message:
         raise lf.TemporaryLMError(error_message) from e
       if 'UNREACHABLE_ERROR' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
+      if 'Connection reset by peer' in error_message:
         raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
 
