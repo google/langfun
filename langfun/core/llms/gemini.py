@@ -752,6 +752,11 @@ class Gemini(rest.REST):
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
     request['contents'] = contents
+    # Users could use `metadata_gemini_tools` to pass Gemini tools. For example,
+    # for enabling Search Grounding, users could pass:
+    # metadata_gemini_tools=[{'google_search': {}}]
+    if tools := prompt.metadata.get('gemini_tools'):
+      request['tools'] = tools
     return request
 
   def _generation_config(
