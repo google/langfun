@@ -105,7 +105,9 @@ class EventLogger(pg.Object, base.EventHandler):
       error: BaseException | None,
   ) -> str:
     if error is not None:
-      message = f'{message} with error: {error}'
+      message = (
+          f'{message} with error: {pg.utils.ErrorInfo.from_exception(error)}'
+      )
     return message
 
   def _keep(
@@ -133,6 +135,20 @@ class EventLogger(pg.Object, base.EventHandler):
         styles=['bold'],
     )
 
+  def on_environment_shutting_down(
+      self,
+      environment: base.Environment,
+      offline_duration: float,
+  ) -> None:
+    """Called when the environment is shutting down."""
+    self._print(
+        f'[{environment.id}] environment shutting down '
+        f'(offline_duration={offline_duration:.2f} seconds)',
+        error=None,
+        color='green',
+        styles=['bold'],
+    )
+
   def on_environment_start(
       self,
       environment: base.Environment,
@@ -153,13 +169,15 @@ class EventLogger(pg.Object, base.EventHandler):
       environment: base.Environment,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when the environment is housekeeping."""
     if self.housekeep_status:
       self._print(
-          f'[{environment.id}] environment housekeeping complete'
-          f'(counter={counter}, duration={duration:.2f} seconds)',
+          f'[{environment.id}] environment housekeeping complete '
+          f'(counter={counter}, duration={duration:.2f} seconds, '
+          f'housekeep_info={kwargs})',
           error=error,
           color='green',
       )
@@ -246,13 +264,15 @@ class EventLogger(pg.Object, base.EventHandler):
       sandbox: base.Sandbox,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
     if self.sandbox_status and self.housekeep_status:
       self._print(
           f'[{sandbox.id}] sandbox housekeeping complete '
-          f'(counter={counter}, duration={duration:.2f} seconds)',
+          f'(counter={counter}, duration={duration:.2f} seconds, '
+          f'housekeep_info={kwargs})',
           error=error,
           color='white',
       )
@@ -334,13 +354,15 @@ class EventLogger(pg.Object, base.EventHandler):
       feature: base.Feature,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
     if self.feature_status and self.housekeep_status:
       self._print(
           f'[{sandbox.id}/<idle>/{feature.name}] feature housekeeping complete '
-          f'(counter={counter}, (duration={duration:.2f} seconds)',
+          f'(counter={counter}, (duration={duration:.2f} seconds, '
+          f'housekeep_info={kwargs})',
           error=error,
           color='white',
       )

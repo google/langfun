@@ -280,7 +280,11 @@ class EnvironmentTests(unittest.TestCase):
         with self.assertRaises(interface.SandboxStateError):
           sb.shell('bad command', raise_error=interface.SandboxStateError)
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
-      env.wait_for_housekeeping()
+      sb_offline_time = time.time()
+      while time.time() - sb_offline_time < 10:
+        if not env.is_online:
+          break
+        time.sleep(0.5)
       self.assertFalse(env.is_online)
 
 
@@ -1177,6 +1181,7 @@ class SandboxActivityTests(unittest.TestCase):
         sb.shell('test_feature')
         sb.remove_event_handler(event_handler)
       events = list(event_handler.logs)
+      sb.wait_until_not(interface.Sandbox.Status.SETTING_UP)
       self.assertGreater(len(events), 0)
       with env.sandbox('session2') as sb:
         sb.shell('test_feature')

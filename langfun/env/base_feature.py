@@ -186,11 +186,12 @@ class BaseFeature(interface.Feature):
   def on_housekeep(
       self,
       duration: float,
-      error: BaseException | None = None
+      error: BaseException | None = None,
+      **kwargs
   ) -> None:
     """Called when the feature has done housekeeping."""
     self.sandbox.on_feature_housekeep(
-        self, self._housekeep_counter, duration, error
+        self, self._housekeep_counter, duration, error, **kwargs
     )
 
   def on_setup_session(

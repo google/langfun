@@ -76,7 +76,16 @@ class _FeatureEventHandler:
       duration: float,
       error: BaseException | None
   ) -> None:
-    """Called when a sandbox feature is setup."""
+    """Called when a sandbox feature is setup.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      feature: The feature.
+      duration: The feature setup duration in seconds.
+      error: The error happened during the feature setup. If None,
+        the feature setup performed normally.
+    """
 
   def on_feature_teardown(
       self,
@@ -86,7 +95,16 @@ class _FeatureEventHandler:
       duration: float,
       error: BaseException | None
   ) -> None:
-    """Called when a sandbox feature is teardown."""
+    """Called when a sandbox feature is teardown.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      feature: The feature.
+      duration: The feature teardown duration in seconds.
+      error: The error happened during the feature teardown. If None,
+        the feature teardown performed normally.
+    """
 
   def on_feature_teardown_session(
       self,
@@ -97,7 +115,17 @@ class _FeatureEventHandler:
       duration: float,
       error: BaseException | None
   ) -> None:
-    """Called when a feature is teardown with a session."""
+    """Called when a feature is teardown with a session.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      feature: The feature.
+      session_id: The session ID.
+      duration: The feature teardown session duration in seconds.
+      error: The error happened during the feature teardown session. If
+        None, the feature teardown session performed normally.
+    """
 
   def on_feature_setup_session(
       self,
@@ -106,9 +134,19 @@ class _FeatureEventHandler:
       feature: Feature,
       session_id: str | None,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
-    """Called when a feature is setup with a session."""
+    """Called when a feature is setup with a session.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      feature: The feature.
+      session_id: The session ID.
+      duration: The feature setup session duration in seconds.
+      error: The error happened during the feature setup session. If
+        None, the feature setup session performed normally.
+    """
 
   def on_feature_housekeep(
       self,
@@ -117,9 +155,21 @@ class _FeatureEventHandler:
       feature: Feature,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs,
   ) -> None:
-    """Called when a sandbox feature is housekeeping."""
+    """Called when a sandbox feature is housekeeping.
+
+    Args:
+      environment: The environment.
+      sandbox: The sandbox.
+      feature: The feature.
+      counter: Zero-based counter of the housekeeping round.
+      duration: The feature housekeeping duration in seconds.
+      error: The error happened during the feature housekeeping. If None, the
+        feature housekeeping normally.
+      **kwargs: Feature-specific properties computed during housekeeping.
+    """
 
 
 class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
@@ -210,7 +260,8 @@ class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
       sandbox: Sandbox,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when a sandbox finishes a round of housekeeping.
 
@@ -221,6 +272,7 @@ class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
       duration: The sandbox housekeeping duration in seconds.
       error: The error that caused the sandbox to housekeeping. If None, the
         sandbox housekeeping normally.
+      **kwargs: Sandbox-specific properties computed during housekeeping.
     """
 
 
@@ -254,7 +306,8 @@ class EventHandler(_SandboxEventHandler):
       environment: Environment,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when the environment finishes a round of housekeeping.
 
@@ -264,6 +317,19 @@ class EventHandler(_SandboxEventHandler):
       duration: The environment start duration in seconds.
       error: The error that failed the housekeeping. If None, the
         housekeeping succeeded.
+      **kwargs: Environment-specific properties computed during housekeeping.
+    """
+
+  def on_environment_shutting_down(
+      self,
+      environment: Environment,
+      offline_duration: float,
+  ) -> None:
+    """Called when the environment is shutting down.
+
+    Args:
+      environment: The environment.
+      offline_duration: The environment offline duration in seconds.
     """
 
   def on_environment_shutdown(

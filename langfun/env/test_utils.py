@@ -258,7 +258,8 @@ class TestingEventHandler(
       environment: interface.Environment,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when the environment finishes a round of housekeeping."""
     assert duration > 0
@@ -320,7 +321,8 @@ class TestingEventHandler(
       sandbox: interface.Sandbox,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     assert duration > 0
     if self.log_housekeep:
@@ -397,7 +399,8 @@ class TestingEventHandler(
       feature: interface.Feature,
       counter: int,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
+      **kwargs
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
     assert duration > 0

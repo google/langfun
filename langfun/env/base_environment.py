@@ -359,6 +359,7 @@ class BaseEnvironment(interface.Environment):
       return
 
     self._set_status(self.Status.SHUTTING_DOWN)
+    self.on_shutting_down()
 
     shutting_down_time = time.time()
     try:
@@ -419,7 +420,6 @@ class BaseEnvironment(interface.Environment):
             )
             # Append is atomic and does not require locking.
             self._sandbox_pool.append(sandbox)
-            self._offline_start_time = None
             return sandbox
           except (
               interface.EnvironmentError, interface.SandboxStateError
@@ -432,18 +432,28 @@ class BaseEnvironment(interface.Environment):
       set_acquired: bool = False,
   ) -> base_sandbox.BaseSandbox:
     """Brings up a new sandbox."""
-    sandbox = self._create_sandbox(
-        sandbox_id=sandbox_id,
-        reusable=self.enable_pooling,
-        proactive_session_setup=self.proactive_session_setup,
-        keepalive_interval=self.sandbox_keepalive_interval,
-    )
-    for handler in self.event_handlers:
-      sandbox.add_event_handler(handler)
-    sandbox.start()
-    if set_acquired:
-      sandbox.set_acquired()
-    return sandbox
+    env_error = None
+    try:
+      sandbox = self._create_sandbox(
+          sandbox_id=sandbox_id,
+          reusable=self.enable_pooling,
+          proactive_session_setup=self.proactive_session_setup,
+          keepalive_interval=self.sandbox_keepalive_interval,
+      )
+      for handler in self.event_handlers:
+        sandbox.add_event_handler(handler)
+      sandbox.start()
+      if set_acquired:
+        sandbox.set_acquired()
+      return sandbox
+    except (interface.EnvironmentError, interface.SandboxStateError) as e:
+      env_error = e
+      raise e
+    finally:
+      if env_error is None:
+        self._offline_start_time = None
+      elif self._offline_start_time is None:
+        self._offline_start_time = time.time()
 
   def _bring_up_sandbox_with_retry(
       self,
@@ -486,8 +496,6 @@ class BaseEnvironment(interface.Environment):
       shutdown_env_upon_outage: bool = True
   ):
     """Raises error if the grace period has passed or wait for retry."""
-    if self._offline_start_time is None:
-      self._offline_start_time = time.time()
     if self.offline_duration > self.outage_grace_period:
       if shutdown_env_upon_outage:
         self.shutdown()
@@ -505,39 +513,47 @@ class BaseEnvironment(interface.Environment):
     """Housekeeping loop for the environment."""
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       housekeep_start_time = time.time()
+
+      is_online = True
       dead_pool_indices = [
           i for i, s in enumerate(self._sandbox_pool)
           if s.status == interface.Sandbox.Status.OFFLINE
       ]
-      if dead_pool_indices and not self._replace_dead_sandboxes(
-          dead_pool_indices
-      ):
-        self.shutdown()
-        self._housekeep_counter += 1
-        self.on_housekeep(
-            time.time() - housekeep_start_time,
-            interface.EnvironmentOutageError(
-                environment=self,
-                offline_duration=self.offline_duration
-            )
-        )
-        break
-      self._housekeep_counter += 1
-      self.on_housekeep(time.time() - housekeep_start_time)
-      time.sleep(self.housekeep_interval)
+      replaced_indices = []
 
-  def _replace_dead_sandboxes(self, dead_pool_indices: list[int]) -> bool:
+      if dead_pool_indices:
+        replaced_indices = self._replace_dead_sandboxes(dead_pool_indices)
+        if not replaced_indices:
+          is_online = self.offline_duration < self.outage_grace_period
+
+      self._housekeep_counter += 1
+      duration = time.time() - housekeep_start_time
+      kwargs = dict(
+          dead_pool_indices=dead_pool_indices,
+          replaced_indices=replaced_indices,
+          offline_duration=self.offline_duration,
+      )
+      if is_online:
+        self.on_housekeep(duration, **kwargs)
+        time.sleep(self.housekeep_interval)
+      else:
+        self.shutdown()
+        self.on_housekeep(
+            duration,
+            interface.EnvironmentOutageError(
+                environment=self, offline_duration=self.offline_duration
+            ),
+            **kwargs
+        )
+
+  def _replace_dead_sandboxes(self, dead_pool_indices: list[int]) -> list[int]:
     """Replaces a dead sandbox with a new one.
 
     Args:
       dead_pool_indices: The indices of the dead sandboxes to replace.
 
     Returns:
-      Whether all of the dead sandboxes are replaced successfully.
-
-    Raises:
-      interface.EnvironmentOutageError: If the XBox sandboxes cannot be created
-        within the wait time specified by `xbox_outage_grace_period`.
+      Successfully replaced indices.
     """
     pg.logging.warning(
         '[%s]: %s maintenance: '
@@ -548,21 +564,31 @@ class BaseEnvironment(interface.Environment):
     )
     def _replace(i: int):
       generation = int(self._sandbox_pool[i].id.sandbox_id.split(':')[1])
-      self._sandbox_pool[i] = self._bring_up_sandbox_with_retry(
-          f'{i}:{generation + 1}', shutdown_env_upon_outage=False
-      )
+      self._sandbox_pool[i] = self._bring_up_sandbox(f'{i}:{generation + 1}')
 
     # TODO(daiyip): Consider to loose the condition to allow some dead
     # sandboxes to be replaced successfully.
-    return not any([
-        error for _, _, error in lf.concurrent_map(
-            _replace, dead_pool_indices,
-            max_workers=min(
-                self.pool_operation_max_parallelism,
-                len(dead_pool_indices)
-            ),
-        )
-    ])
+    replaced_indices = []
+    for index, _, error in lf.concurrent_map(
+        _replace, dead_pool_indices,
+        max_workers=min(
+            self.pool_operation_max_parallelism,
+            len(dead_pool_indices)
+        ),
+    ):
+      if error is None:
+        replaced_indices.append(index)
+
+    pg.logging.warning(
+        '[%s]: %s maintenance: '
+        '%d/%d dead sandbox(es) have been replaced with new ones. (slots=%s)',
+        self.id,
+        self.__class__.__name__,
+        len(replaced_indices),
+        len(dead_pool_indices),
+        replaced_indices
+    )
+    return replaced_indices
 
   #
   # Event handlers subclasses can override.
@@ -584,12 +610,20 @@ class BaseEnvironment(interface.Environment):
   def on_housekeep(
       self,
       duration: float,
-      error: BaseException | None = None
+      error: BaseException | None = None,
+      **kwargs
   ) -> None:
     """Called when the environment finishes a round of housekeeping."""
     housekeep_counter = self.housekeep_counter
     for handler in self.event_handlers:
-      handler.on_environment_housekeep(self, housekeep_counter, duration, error)
+      handler.on_environment_housekeep(
+          self, housekeep_counter, duration, error, **kwargs
+      )
+
+  def on_shutting_down(self) -> None:
+    """Called when the environment is shutting down."""
+    for handler in self.event_handlers:
+      handler.on_environment_shutting_down(self, self.offline_duration)
 
   def on_shutdown(
       self,

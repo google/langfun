@@ -125,6 +125,7 @@ class EventLoggerTest(unittest.TestCase):
         unexpected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment housekeeping',
             'sandbox started',
@@ -143,6 +144,7 @@ class EventLoggerTest(unittest.TestCase):
         expected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment housekeeping',
         ],
@@ -166,6 +168,7 @@ class EventLoggerTest(unittest.TestCase):
         expected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment housekeeping',
             'feature setup complete',
@@ -191,6 +194,7 @@ class EventLoggerTest(unittest.TestCase):
         expected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment housekeeping',
             'environment stats',
@@ -217,6 +221,7 @@ class EventLoggerTest(unittest.TestCase):
         expected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment stats',
             'environment housekeeping',
@@ -243,6 +248,7 @@ class EventLoggerTest(unittest.TestCase):
         expected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment stats',
             'sandbox started',
@@ -269,6 +275,7 @@ class EventLoggerTest(unittest.TestCase):
         expected_substrings=[
             'environment starting',
             'environment started',
+            'environment shutting down',
             'environment shutdown',
             'environment housekeeping',
         ],

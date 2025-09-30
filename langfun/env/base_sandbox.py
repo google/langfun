@@ -706,7 +706,6 @@ class BaseSandbox(interface.Sandbox):
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       housekeep_start = time.time()
       if self.keepalive_interval is not None:
-
         if time.time() - last_ping > self.keepalive_interval:
           try:
             self.ping()
@@ -796,13 +795,14 @@ class BaseSandbox(interface.Sandbox):
   def on_housekeep(
       self,
       duration: float,
-      error: BaseException | None = None
+      error: BaseException | None = None,
+      **kwargs
   ) -> None:
     """Called when the sandbox finishes a round of housekeeping."""
     counter = self._housekeep_counter
     for handler in self._event_handlers:
       handler.on_sandbox_housekeep(
-          self.environment, self, counter, duration, error
+          self.environment, self, counter, duration, error, **kwargs
       )
 
   def on_feature_setup(
