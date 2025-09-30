@@ -1115,6 +1115,7 @@ class SandboxActivityTests(unittest.TestCase):
     env = TestingEnvironment(
         features={'test_feature': TestingFeature(housekeep_interval=0)},
         pool_size=1,
+        housekeep_interval=1.0,
         outage_grace_period=0,
         outage_retry_interval=0.1,
         sandbox_keepalive_interval=0,
@@ -1135,6 +1136,7 @@ class SandboxActivityTests(unittest.TestCase):
         ):
           time.sleep(0.01)
         self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+      env.wait_for_housekeeping()
     self.assertEqual(
         event_handler.logs,
         [
