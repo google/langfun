@@ -768,13 +768,14 @@ class BaseSandbox(interface.Sandbox):
       new_status: interface.Sandbox.Status,
   ) -> None:
     """Called when the sandbox status changes."""
+    status_duration = time.time() - self._status_start_time
     for handler in self._event_handlers:
       handler.on_sandbox_status_change(
           self.environment,
           self,
           old_status,
           new_status,
-          time.time() - self._status_start_time
+          status_duration
       )
 
   def on_shutdown(
