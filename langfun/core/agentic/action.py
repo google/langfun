@@ -187,10 +187,22 @@ class Action(pg.Object):
     self._session = None
     self._invocation: ActionInvocation | None = None
 
+    # NOTE(daiyip): Users could use `self._state` to keep track of the state
+    # during the execution of the action.
+    # Strictly speaking action state should better fit into
+    # ActionInvocation, we make it a property of Action as it's usually
+    # initialized before `__call__` is called.
+    self._state: Any = None
+
   @property
   def session(self) -> Optional['Session']:
     """Returns the session started by this action."""
     return self._session
+
+  @property
+  def state(self) -> Any:
+    """Returns the state of the action."""
+    return self._state
 
   @property
   def result(self) -> Any:
@@ -852,7 +864,11 @@ class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
 class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   """A class for capturing the invocation of an action."""
-  action: Action
+
+  action: Annotated[
+      Action,
+      'The action being invoked.'
+  ]
 
   result: Annotated[
       Any,
@@ -930,6 +946,11 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def has_error(self) -> bool:
     """Returns True if the action invocation has an error."""
     return self.error is not None
+
+  @property
+  def state(self) -> Any:
+    """Returns the state of the action."""
+    return self.action.state
 
   @property
   def logs(self) -> list[lf.logging.LogEntry]:
