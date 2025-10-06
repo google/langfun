@@ -66,12 +66,18 @@ class Foo(action_lib.Action):
       time.sleep(self.simulate_execution_time[2])
       return lf_structured.query(f'subtask_{i}', lm=lm)
 
+    self._state = []
     for i, output, error in session.concurrent_map(
-        _sub_task, range(3), max_workers=2, silence_on_errors=None,
+        _sub_task,
+        range(3),
+        max_workers=2,
+        ordered=True,
+        silence_on_errors=None,
     ):
       assert isinstance(i, int), i
       assert isinstance(output, str), output
       assert error is None, error
+      self._state.append(i)
     return self.x + Bar(
         simulate_action_error=self.simulate_action_error,
         simulate_execution_time=self.simulate_execution_time[3]
@@ -118,6 +124,7 @@ class SessionTest(unittest.TestCase):
     foo = Foo(1)
     self.assertIsNone(foo.session)
     self.assertIsNone(foo.invocation)
+    self.assertIsNone(foo.state)
     self.assertIsNone(foo.result)
     self.assertIsNone(foo.metadata)
 
@@ -136,6 +143,8 @@ class SessionTest(unittest.TestCase):
     self.assertTrue(session.has_stopped)
     self.assertEqual(result, 3)
     self.assertIsNone(foo.session)
+    self.assertEqual(foo.state, [0, 1, 2])
+    self.assertIs(foo.invocation.state, foo.state)
     self.assertEqual(foo.result, 3)
     self.assertEqual(
         foo.metadata, dict(note='foo', subtask_0=0, subtask_1=1, subtask_2=2)
