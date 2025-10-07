@@ -1159,21 +1159,35 @@ class LanguageModel(component.Component):
   ) -> message_lib.Message:
     """Returns the first candidate."""
     prompt = message_lib.UserMessage.from_value(prompt)
-    with component.context(override_attrs=True, **kwargs):
-      sampling_options = self.sampling_options
-      if sampling_options.n != 1:
-        sampling_options = sampling_options.clone(override=dict(n=1))
+    start_time = time.time()
+    error_tag = ''
+    try:
+      with component.context(override_attrs=True, **kwargs):
+        sampling_options = self.sampling_options
+        if sampling_options.n != 1:
+          sampling_options = sampling_options.clone(override=dict(n=1))
 
-      call_counter = self._call_counter
-      self._call_counter += 1
-      request_start = time.time()
-      result = self.sample(
-          [prompt], sampling_options=sampling_options, cache_seed=cache_seed
-      )[0]
-      elapse = time.time() - request_start
-      response = result.samples[0].response
-      self._debug(prompt, response, call_counter, result.usage, elapse)
-      return response
+        call_counter = self._call_counter
+        self._call_counter += 1
+        request_start = time.time()
+        result = self.sample(
+            [prompt], sampling_options=sampling_options, cache_seed=cache_seed
+        )[0]
+        elapse = time.time() - request_start
+        response = result.samples[0].response
+        self._debug(prompt, response, call_counter, result.usage, elapse)
+        return response
+    except BaseException as e:
+      error_tag = pg.ErrorInfo.from_exception(e).tag
+      raise e
+    finally:
+      _METRICS.language_model_calls.increment(
+          model=self.model_id, error=error_tag
+      )
+      _METRICS.language_model_call_duration_ms.record(
+          int((time.time() - start_time) * 1000),
+          model=self.model_id, error=error_tag,
+      )
 
   def _debug(
       self,
@@ -1436,6 +1450,25 @@ class LanguageModel(component.Component):
     elif max_requests_per_minute is not None:
       return max(int(max_requests_per_minute / 60), 1)
     return None
+
+
+class _Metrics:
+  """Metrics for Langfun."""
+
+  def __init__(self):
+    self._metrics = pg.monitoring.metric_collection('/third_party/langfun')
+    self.language_model_calls = self._metrics.get_counter(
+        'language_model_calls',
+        'Number of calls to the language model.',
+        parameters={'model': str, 'error': str},
+    )
+    self.language_model_call_duration_ms = self._metrics.get_scalar(
+        'language_model_call_duration_ms',
+        'Duration of calls to the language model in milliseconds.',
+        parameters={'model': str, 'error': str},
+    )
+
+_METRICS = _Metrics()
 
 
 class _ConcurrencyControl:
