@@ -446,6 +446,9 @@ def query(
     **kwargs: Additional keyword arguments for:
       - Rendering templates (e.g., `template_str`, `preamble`),
       - Configuring `lf.structured.Mapping`.
+      - metadata_xxx, which will be passed through to the rendered message
+        metadata under key `xxx`. This allows LLM behavior customization based
+        on metadata `xxx` from the prompt.
 
   Returns:
     The result of the query:
