@@ -47,7 +47,7 @@ class MetricWriterTest(unittest.TestCase):
         writer._sandbox_start.value(
             app='test_app',
             environment_id='testing-env',
-            error=''
+            error='Success'
         ),
         2
     )
@@ -55,7 +55,7 @@ class MetricWriterTest(unittest.TestCase):
         writer._sandbox_housekeep.value(
             app='test_app',
             environment_id='testing-env',
-            error=''
+            error='Success'
         ),
         0,
     )
@@ -63,7 +63,23 @@ class MetricWriterTest(unittest.TestCase):
         writer._sandbox_shutdown.value(
             app='test_app',
             environment_id='testing-env',
-            error=''
+            error='Success'
+        ),
+        2
+    )
+    self.assertEqual(
+        writer._sandbox_count.value(
+            app='test_app',
+            environment_id='testing-env',
+            status='ready',
+        ),
+        0
+    )
+    self.assertEqual(
+        writer._sandbox_count.value(
+            app='test_app',
+            environment_id='testing-env',
+            status='offline',
         ),
         2
     )
@@ -71,7 +87,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_setup.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature1', error=''
+            feature_name='test_feature1',
+            error='Success'
         ),
         2,
     )
@@ -79,7 +96,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_setup.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature2', error=''
+            feature_name='test_feature2',
+            error='Success'
         ),
         2,
     )
@@ -87,7 +105,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_setup_session.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature1', error=''
+            feature_name='test_feature1',
+            error='Success'
         ),
         3,
     )
@@ -95,7 +114,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_setup_session.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature2', error=''
+            feature_name='test_feature2',
+            error='Success'
         ),
         3,
     )
@@ -103,7 +123,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_teardown_session.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature1', error=''
+            feature_name='test_feature1',
+            error='Success'
         ),
         2,
     )
@@ -111,7 +132,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_teardown_session.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature2', error=''
+            feature_name='test_feature2',
+            error='Success'
         ),
         2,
     )
@@ -119,7 +141,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_teardown.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature1', error=''
+            feature_name='test_feature1',
+            error='Success'
         ),
         2,
     )
@@ -127,7 +150,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_teardown.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature2', error=''
+            feature_name='test_feature2',
+            error='Success'
         ),
         2,
     )
@@ -135,7 +159,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_housekeep.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature1', error=''
+            feature_name='test_feature1',
+            error='Success'
         ),
         0,
     )
@@ -143,7 +168,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._feature_housekeep.value(
             app='test_app',
             environment_id='testing-env',
-            feature_name='test_feature2', error=''
+            feature_name='test_feature2',
+            error='Success'
         ),
         0,
     )
@@ -151,7 +177,8 @@ class MetricWriterTest(unittest.TestCase):
         writer._sandbox_activity.value(
             app='test_app',
             environment_id='testing-env',
-            activity='shell', error=''
+            activity='shell',
+            error='Success'
         ),
         18
     )
