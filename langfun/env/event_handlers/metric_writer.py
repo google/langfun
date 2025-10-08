@@ -55,7 +55,7 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def _error_tag(self, error: BaseException | None) -> str:
     if error is None:
-      return ''
+      return 'Success'
     return pg.utils.ErrorInfo.from_exception(error).tag
 
   def _initialize_metrics(self) -> None:
@@ -98,6 +98,15 @@ class MetricWriter(pg.Object, base.EventHandler):
             'app': str,
             'environment_id': str,
             'error': str
+        }
+    )
+    self._sandbox_count = self._get_counter(
+        'sandbox_count',
+        description='Sandbox count',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'status': str,
         }
     )
     self._sandbox_housekeep = self._get_counter(
@@ -372,6 +381,18 @@ class MetricWriter(pg.Object, base.EventHandler):
         app=self.app,
         environment_id=str(environment.id),
         status=old_status.value
+    )
+    if old_status != base.Sandbox.Status.CREATED:
+      self._sandbox_count.increment(
+          delta=-1,
+          app=self.app,
+          environment_id=str(environment.id),
+          status=old_status.value
+      )
+    self._sandbox_count.increment(
+        app=self.app,
+        environment_id=str(environment.id),
+        status=new_status.value
     )
 
   def on_sandbox_shutdown(
