@@ -81,7 +81,7 @@ def use_settings(
   Args:
     cascade: If True, this override will apply to both current scope and nested
       scope, meaning that this `lf.context` will take precedence over all
-      nested `lf.context` on the overriden variables.
+      nested `lf.context` on the overridden variables.
     **settings: Key/values as override for component attributes.
 
   Returns:

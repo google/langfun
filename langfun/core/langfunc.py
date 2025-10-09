@@ -95,7 +95,7 @@ class LangFunc(
       {{ tool_examples }}
       {{ user_input }}
       '''
-      # Default preamble, which could be overriden from subclass
+      # Default preamble, which could be overridden from subclass
       # or parsed from the `__init__` argument.
       preamble = 'Please help me on my task based on the following tools.',
 

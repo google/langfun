@@ -406,7 +406,7 @@ class LMSamplingUsage(pg.Object):
       float | None,
       (
           'Estimated cost in US dollars. If None, cost estimating is not '
-          'suppported on the model being queried.'
+          'supported on the model being queried.'
       ),
   ] = None
   retry_stats: RetryStats = RetryStats()
@@ -605,7 +605,7 @@ class LMScoringResult(pg.Object):
   ]
   gradients: Annotated[
       Any | None,
-      '(Optional) gradients from the score method, w.r.t.' +
+      '(Optional) gradients from the score method, w.r.t.'
       ' prompt.metadata.weights.',
   ] = None
 
@@ -675,7 +675,7 @@ class LanguageModel(component.Component):
   """Interface of a language model.
 
   Language models are at the center of LLM-based agents. ``LanguageModel``
-  is the interface to interact with different language modles.
+  is the interface to interact with different language models.
 
   In langfun, users can use different language models with the same agents,
   allowing fast prototype, as well as side-by-side comparisons.
@@ -713,7 +713,7 @@ class LanguageModel(component.Component):
       int,
       (
           'A number of max attempts to request the LM if fails.'
-          'The retry wait time is determined per LM serivice.'
+          'The retry wait time is determined per LM service.'
       ),
   ] = 5
 
@@ -722,7 +722,7 @@ class LanguageModel(component.Component):
       (
           'An integer as a constant wait time in seconds before next retry, '
           'or a tuple of two integers representing the range of wait time, '
-          'based on which the next wait time will be randmly chosen.'
+          'based on which the next wait time will be randomly chosen.'
       )
   ] = (5, 60)
 
@@ -888,7 +888,7 @@ class LanguageModel(component.Component):
   @final
   @property
   def resource_id(self) -> str:
-    """Resource ID for performing request parallism control."""
+    """Resource ID for performing request parallelism control."""
     return self.model_info.resource_id
 
   @final
@@ -1439,7 +1439,7 @@ class LanguageModel(component.Component):
       max_requests_per_minute: int | None,
       average_tokens_per_request: int = 250
   ) -> int | None:
-    """Estimates max concurrency concurrency based on the rate limits."""
+    """Estimates max concurrency based on the rate limits."""
     # NOTE(daiyip): max concurrency is estimated based on the rate limit.
     # We assume each request has approximately 250 tokens, and each request
     # takes 1 second to complete. This might not be accurate for all models.
@@ -1512,7 +1512,7 @@ class _ConcurrencyControl:
 
 
 class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
-  """Usage sumary."""
+  """Usage summary."""
 
   class AggregatedUsage(pg.Object):
     """Aggregated usage."""
@@ -1727,7 +1727,7 @@ def track_usages(
     *lm: The language model(s) to track. If None, track all models in scope.
 
   Yields:
-    A dictionary of model ID to usage. If a model does not supports usage
+    A dictionary of model ID to usage. If a model does not support usage
     counting, the dict entry will be None.
   """
   if not lm:
