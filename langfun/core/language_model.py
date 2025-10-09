@@ -1462,7 +1462,7 @@ class _Metrics:
         'Number of calls to the language model.',
         parameters={'model': str, 'error': str},
     )
-    self.language_model_call_duration_ms = self._metrics.get_scalar(
+    self.language_model_call_duration_ms = self._metrics.get_distribution(
         'language_model_call_duration_ms',
         'Duration of calls to the language model in milliseconds.',
         parameters={'model': str, 'error': str},

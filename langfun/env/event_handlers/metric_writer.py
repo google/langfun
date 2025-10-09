@@ -33,12 +33,12 @@ class MetricWriter(pg.Object, base.EventHandler):
       self,
       name: str,
       description: str,
-      parameters: dict[str, type[str]] | None = None
+      parameters: dict[str, type[str]] | None = None,
   ) -> pg.monitoring.Counter:
     return self._metric_collection.get_counter(
         name=name,
         description=description,
-        parameters=parameters
+        parameters=parameters,
     )
 
   def _get_scalar(
@@ -53,9 +53,21 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters=parameters
     )
 
+  def _get_distribution(
+      self,
+      name: str,
+      description: str,
+      parameters: dict[str, type[str]] | None = None
+  ) -> pg.monitoring.Metric:
+    return self._metric_collection.get_distribution(
+        name=name,
+        description=description,
+        parameters=parameters
+    )
+
   def _error_tag(self, error: BaseException | None) -> str:
     if error is None:
-      return ''
+      return 'Success'
     return pg.utils.ErrorInfo.from_exception(error).tag
 
   def _initialize_metrics(self) -> None:
@@ -67,7 +79,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     # Environment metrics.
     #
 
-    self._environment_housekeep_duration_ms = self._get_scalar(
+    self._environment_housekeep_duration_ms = self._get_distribution(
         'environment_housekeep_duration_ms',
         description='Environment housekeeping duration in milliseconds',
         parameters={
@@ -100,6 +112,15 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str
         }
     )
+    self._sandbox_count = self._get_scalar(
+        'sandbox_count',
+        description='Sandbox count',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'status': str,
+        },
+    )
     self._sandbox_housekeep = self._get_counter(
         'sandbox_housekeep',
         description='Sandbox housekeeping counter',
@@ -121,7 +142,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     )
 
     # Sandbox scalars.
-    self._sandbox_lifetime_ms = self._get_scalar(
+    self._sandbox_lifetime_ms = self._get_distribution(
         'sandbox_lifetime_ms',
         description='Sandbox life time in milliseconds',
         parameters={
@@ -130,7 +151,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._sandbox_start_duration_ms = self._get_scalar(
+    self._sandbox_start_duration_ms = self._get_distribution(
         'sandbox_start_duration_ms',
         description='Sandbox start duration in milliseconds',
         parameters={
@@ -139,7 +160,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._sandbox_shutdown_duration_ms = self._get_scalar(
+    self._sandbox_shutdown_duration_ms = self._get_distribution(
         'sandbox_shutdown_duration_ms',
         description='Sandbox shutdown duration in milliseconds',
         parameters={
@@ -148,7 +169,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._sandbox_housekeep_duration_ms = self._get_scalar(
+    self._sandbox_housekeep_duration_ms = self._get_distribution(
         'sandbox_housekeep_duration_ms',
         description='Sandbox housekeeping duration in milliseconds',
         parameters={
@@ -157,7 +178,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._sandbox_status_duration_ms = self._get_scalar(
+    self._sandbox_status_duration_ms = self._get_distribution(
         'sandbox_status_duration_ms',
         description='Sandbox duration of specific status in milliseconds',
         parameters={
@@ -166,7 +187,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'status': str,
         }
     )
-    self._sandbox_activity_duration_ms = self._get_scalar(
+    self._sandbox_activity_duration_ms = self._get_distribution(
         'sandbox_activity_duration_ms',
         description='Sandbox activity duration in milliseconds',
         parameters={
@@ -234,7 +255,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     )
 
     # Feature scalars.
-    self._feature_setup_duration_ms = self._get_scalar(
+    self._feature_setup_duration_ms = self._get_distribution(
         'feature_setup_duration_ms',
         description='Feature setup duration in milliseconds',
         parameters={
@@ -244,7 +265,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._feature_teardown_duration_ms = self._get_scalar(
+    self._feature_teardown_duration_ms = self._get_distribution(
         'feature_teardown_duration_ms',
         description='Feature teardown duration in milliseconds',
         parameters={
@@ -254,7 +275,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._feature_setup_session_duration_ms = self._get_scalar(
+    self._feature_setup_session_duration_ms = self._get_distribution(
         'feature_setup_session_duration_ms',
         description='Feature setup session duration in milliseconds',
         parameters={
@@ -264,7 +285,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._feature_teardown_session_duration_ms = self._get_scalar(
+    self._feature_teardown_session_duration_ms = self._get_distribution(
         'feature_teardown_session_duration_ms',
         description='Feature teardown session duration in milliseconds',
         parameters={
@@ -274,7 +295,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._feature_housekeep_duration_ms = self._get_scalar(
+    self._feature_housekeep_duration_ms = self._get_distribution(
         'feature_housekeep_duration_ms',
         description='Feature housekeeping duration in milliseconds',
         parameters={
@@ -289,7 +310,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     # Session metrics.
     #
 
-    self._session_start_duration_ms = self._get_scalar(
+    self._session_start_duration_ms = self._get_distribution(
         'session_start_duration_ms',
         description='Session start duration in milliseconds',
         parameters={
@@ -298,7 +319,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._session_end_duration_ms = self._get_scalar(
+    self._session_end_duration_ms = self._get_distribution(
         'session_end_duration_ms',
         description='Session end duration in milliseconds',
         parameters={
@@ -307,7 +328,7 @@ class MetricWriter(pg.Object, base.EventHandler):
             'error': str,
         }
     )
-    self._session_lifetime_ms = self._get_scalar(
+    self._session_lifetime_ms = self._get_distribution(
         'session_lifetime_ms',
         description='Session lifetime in milliseconds',
         parameters={
@@ -373,6 +394,19 @@ class MetricWriter(pg.Object, base.EventHandler):
         environment_id=str(environment.id),
         status=old_status.value
     )
+    if old_status != base.Sandbox.Status.CREATED:
+      self._sandbox_count.increment(
+          delta=-1,
+          app=self.app,
+          environment_id=str(environment.id),
+          status=old_status.value
+      )
+    if new_status != base.Sandbox.Status.OFFLINE:
+      self._sandbox_count.increment(
+          app=self.app,
+          environment_id=str(environment.id),
+          status=new_status.value
+      )
 
   def on_sandbox_shutdown(
       self,
