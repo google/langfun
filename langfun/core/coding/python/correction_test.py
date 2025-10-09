@@ -45,6 +45,43 @@ class RunWithCorrectionTest(unittest.TestCase):
     )
     self.assertEqual(result, 4)
 
+  def test_run_with_correction_with_schema(self):
+    class Flight(pg.Object):
+      airline: str
+      flight_number: str
+
+    class Result(pg.Object):
+      flights: list[Flight]
+
+    result = correction.run_with_correction(
+        inspect.cleandoc("""
+            Result(
+                flights=[
+                    Flight(airline='DELTA', flight_number='DL123'),
+                    Flight(airline='UNITED', flight_number='UA456'),
+                ]
+            )
+            """),
+        schema=Result,
+        global_vars=dict(Result=Result, Flight=Flight),
+        lm=fake.StaticSequence([
+            inspect.cleandoc("""
+                CorrectedCode(
+                    corrected_code='Result(flights=[Flight(airline="DELTA", flight_number="DL123"), Flight(airline="UNITED", flight_number="UA456")])',
+                )
+                """),
+        ]),
+    )
+    self.assertEqual(
+        result,
+        Result(
+            flights=[
+                Flight(airline='DELTA', flight_number='DL123'),
+                Flight(airline='UNITED', flight_number='UA456'),
+            ]
+        ),
+    )
+
   def test_run_with_correction_upon_custom_validation(self):
 
     class Foo(pg.Object):
