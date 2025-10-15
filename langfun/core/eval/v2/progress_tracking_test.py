@@ -14,6 +14,7 @@
 import contextlib
 import io
 import os
+import sys
 import tempfile
 import unittest
 
@@ -49,6 +50,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
       _ = experiment.run(root_dir, 'new', plugins=[])
+    sys.stderr.flush()
     self.assertIn('All: 100%', string_io.getvalue())
 
   def test_with_example_ids(self):
@@ -59,6 +61,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
     string_io = io.StringIO()
     with contextlib.redirect_stderr(string_io):
       _ = experiment.run(root_dir, 'new', example_ids=[1], plugins=[])
+    sys.stderr.flush()
     self.assertIn('All: 100%', string_io.getvalue())
 
 
