@@ -26,6 +26,10 @@ from langfun.core.agentic.action import ExecutionTrace
 from langfun.core.agentic.action import ParallelExecutions
 from langfun.core.agentic.action import Session
 
+from langfun.core.agentic.action import SessionEventHandler
+from langfun.core.agentic.action import SessionEventHandlerChain
+from langfun.core.agentic.action import SessionLogging
+
 from langfun.core.agentic.action_eval import ActionEval
 from langfun.core.agentic.action_eval import ActionEvalV1
 

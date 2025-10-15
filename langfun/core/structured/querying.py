@@ -1209,14 +1209,14 @@ class _QueryTracker:
       )
   ] = True
 
-  start_callabck: Annotated[
+  start_callback: Annotated[
       Callable[[QueryInvocation], None] | None,
       (
           'A callback function to be called when a query is started.'
       )
   ] = None
 
-  end_callabck: Annotated[
+  end_callback: Annotated[
       Callable[[QueryInvocation], None] | None,
       (
           'A callback function to be called when a query is completed.'
@@ -1232,21 +1232,21 @@ class _QueryTracker:
 
   def track(self, invocation: QueryInvocation) -> None:
     self.tracked_queries.append(invocation)
-    if self.start_callabck is not None:
-      self.start_callabck(invocation)
+    if self.start_callback is not None:
+      self.start_callback(invocation)
 
   def mark_completed(self, invocation: QueryInvocation) -> None:
     assert invocation in self.tracked_queries, invocation
-    if self.end_callabck is not None:
-      self.end_callabck(invocation)
+    if self.end_callback is not None:
+      self.end_callback(invocation)
 
 
 @contextlib.contextmanager
 def track_queries(
     include_child_scopes: bool = True,
     *,
-    start_callabck: Callable[[QueryInvocation], None] | None = None,
-    end_callabck: Callable[[QueryInvocation], None] | None = None,
+    start_callback: Callable[[QueryInvocation], None] | None = None,
+    end_callback: Callable[[QueryInvocation], None] | None = None,
 ) -> Iterator[list[QueryInvocation]]:
   """Track all queries made during the context.
 
@@ -1264,8 +1264,8 @@ def track_queries(
     include_child_scopes: If True, the queries made in child scopes will be
       included in the returned list. Otherwise, only the queries made in the
       current scope will be included.
-    start_callabck: A callback function to be called when a query is started.
-    end_callabck: A callback function to be called when a query is completed.
+    start_callback: A callback function to be called when a query is started.
+    end_callback: A callback function to be called when a query is completed.
 
   Yields:
     A list of `QueryInvocation` objects representing the queries made during
@@ -1274,8 +1274,8 @@ def track_queries(
   trackers = lf.context_value('__query_trackers__', [])
   tracker = _QueryTracker(
       include_child_scopes=include_child_scopes,
-      start_callabck=start_callabck,
-      end_callabck=end_callabck
+      start_callback=start_callback,
+      end_callback=end_callback
   )
 
   with lf.context(

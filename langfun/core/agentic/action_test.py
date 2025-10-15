@@ -34,6 +34,7 @@ class Bar(action_lib.Action):
     time.sleep(self.simulate_execution_time)
     session.query('bar', lm=lm)
     session.add_metadata(note='bar')
+    session.update_progress('Query completed')
     if self.simulate_action_error:
       raise ValueError('Bar error')
     return 2 + pg.contextual_value('baz', 0)
@@ -128,7 +129,7 @@ class SessionTest(unittest.TestCase):
     self.assertIsNone(foo.result)
     self.assertIsNone(foo.metadata)
 
-    session = action_lib.Session(id='agent@1')
+    session = action_lib.Session(id='agent@1', verbose=True)
     self.assertEqual(session.id, 'agent@1')
     self.assertFalse(session.has_started)
     self.assertFalse(session.has_stopped)
@@ -137,7 +138,7 @@ class SessionTest(unittest.TestCase):
     _ = session.to_html()
 
     with session:
-      result = foo(session, lm=lm, verbose=True)
+      result = foo(session, lm=lm)
 
     self.assertTrue(session.has_started)
     self.assertTrue(session.has_stopped)
@@ -375,7 +376,7 @@ class SessionTest(unittest.TestCase):
     self.assertFalse(session.has_stopped)
 
     session.start()
-    result = foo(session, lm=lm, verbose=True)
+    result = foo(session, lm=lm)
     session.end(result)
 
     self.assertTrue(session.has_started)
@@ -395,7 +396,7 @@ class SessionTest(unittest.TestCase):
     session = action_lib.Session(id='agent@1')
     with self.assertRaisesRegex(ValueError, 'Bar error'):
       with session:
-        foo(session, lm=lm, verbose=True)
+        foo(session, lm=lm)
     self.assertTrue(session.has_started)
     self.assertTrue(session.has_stopped)
     self.assertTrue(session.has_error)
@@ -408,7 +409,7 @@ class SessionTest(unittest.TestCase):
     foo = Foo(1, simulate_action_error=True)
     session = action_lib.Session(id='agent@1')
     with self.assertRaisesRegex(ValueError, 'Please call `Session.start'):
-      foo(session, lm=lm, verbose=True)
+      foo(session, lm=lm)
 
   def test_succeed_with_multiple_actions(self):
     lm = fake.StaticResponse('lm response')
@@ -488,6 +489,33 @@ class SessionTest(unittest.TestCase):
         'Action .*Foo.* has exceeded .*1.0 seconds'
     ):
       foo(lm=lm, max_execution_time=1.0)
+
+  def test_event_handler(self):
+
+    class MyActionHandler(pg.Object, action_lib.SessionEventHandler):
+      def _on_bound(self):
+        super()._on_bound()
+        self.progresses = []
+
+      def on_action_progress(self, session, action, title, **kwargs):
+        self.progresses.append((action.id, title))
+
+    handler = MyActionHandler()
+    session = action_lib.Session(
+        id='agent@1',
+        event_handler=action_lib.SessionEventHandlerChain(
+            handlers=[handler, action_lib.SessionLogging()]
+        )
+    )
+    bar = Bar()
+    with session:
+      bar(session, lm=fake.StaticResponse('lm response'))
+      session.update_progress('Trajectory completed')
+
+    self.assertEqual(handler.progresses, [
+        ('agent@1:/a1', 'Query completed'),
+        ('agent@1:', 'Trajectory completed'),
+    ])
 
   def test_log(self):
     session = action_lib.Session()

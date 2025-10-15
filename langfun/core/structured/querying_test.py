@@ -1590,7 +1590,7 @@ class TrackQueriesTest(unittest.TestCase):
         'bar',
     ])
     state = {}
-    def start_callabck(query):
+    def start_callback(query):
       self.assertFalse(query.is_completed)
       self.assertIsNone(query.end_time)
       elapse1 = query.elapse
@@ -1615,7 +1615,7 @@ class TrackQueriesTest(unittest.TestCase):
       state['end'] = query
 
     with querying.track_queries(
-        start_callabck=start_callabck, end_callabck=end_callback
+        start_callback=start_callback, end_callback=end_callback
     ) as queries:
       querying.query('foo', lm=lm)
     self.assertIs(state['start'], queries[0])
@@ -1626,7 +1626,7 @@ class TrackQueriesTest(unittest.TestCase):
         'bar',
     ])
     state = {}
-    def start_callabck(query):
+    def start_callback(query):
       self.assertFalse(query.is_completed)
       self.assertIsNone(query.end_time)
       self.assertIsNotNone(query.usage_summary)
@@ -1648,7 +1648,7 @@ class TrackQueriesTest(unittest.TestCase):
 
     with self.assertRaises(mapping.MappingError):
       with querying.track_queries(
-          start_callabck=start_callabck, end_callabck=end_callback
+          start_callback=start_callback, end_callback=end_callback
       ) as queries:
         querying.query('foo', int, lm=lm)
     self.assertIs(state['start'], queries[0])

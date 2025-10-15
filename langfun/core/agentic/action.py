@@ -15,6 +15,7 @@
 
 import abc
 import contextlib
+import dataclasses
 import functools
 import threading
 import time
@@ -1161,26 +1162,271 @@ class RootAction(Action):
     raise NotImplementedError('Shall not be called.')
 
 
+class SessionEventHandler:
+  """Interface for handling session events."""
+
+  def on_session_start(
+      self,
+      session: 'Session'
+  ) -> None:
+    """Called when a session starts."""
+
+  def on_session_end(
+      self,
+      session: 'Session'
+  ) -> None:
+    """Called when a session ends."""
+
+  def on_action_start(
+      self,
+      session: 'Session',
+      action: ActionInvocation
+  ) -> None:
+    """Called when an action starts."""
+
+  def on_action_end(
+      self,
+      session: 'Session',
+      action: ActionInvocation
+  ) -> None:
+    """Called when an action ends."""
+
+  def on_action_progress(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      title: str,
+      **kwargs
+  ) -> None:
+    """Called when an action progress is updated."""
+
+  def on_query_start(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      query: lf_structured.QueryInvocation,
+  ) -> None:
+    """Called when a query starts."""
+
+  def on_query_end(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      query: lf_structured.QueryInvocation,
+  ) -> None:
+    """Called when a query ends."""
+
+
+@dataclasses.dataclass
+class SessionEventHandlerChain(SessionEventHandler):
+  """A session event handler that chains multiple event handlers."""
+
+  handlers: list[SessionEventHandler]
+
+  def on_session_start(self, session: 'Session') -> None:
+    """Called when a session starts."""
+    for handler in self.handlers:
+      handler.on_session_start(session)
+
+  def on_session_end(self, session: 'Session') -> None:
+    """Called when a session ends."""
+    for handler in self.handlers:
+      handler.on_session_end(session)
+
+  def on_action_start(
+      self,
+      session: 'Session',
+      action: ActionInvocation) -> None:
+    """Called when an action starts."""
+    for handler in self.handlers:
+      handler.on_action_start(session, action)
+
+  def on_action_end(
+      self,
+      session: 'Session',
+      action: ActionInvocation) -> None:
+    """Called when an action ends."""
+    for handler in self.handlers:
+      handler.on_action_end(session, action)
+
+  def on_action_progress(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      title: str,
+      **kwargs
+  ) -> None:
+    """Called when an action progress is updated."""
+    for handler in self.handlers:
+      handler.on_action_progress(session, action, title, **kwargs)
+
+  def on_query_start(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      query: lf_structured.QueryInvocation,
+  ) -> None:
+    """Called when a query starts."""
+    for handler in self.handlers:
+      handler.on_query_start(session, action, query)
+
+  def on_query_end(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      query: lf_structured.QueryInvocation,
+  ) -> None:
+    """Called when a query ends."""
+    for handler in self.handlers:
+      handler.on_query_end(session, action, query)
+
+
+@dataclasses.dataclass
+class SessionLogging(SessionEventHandler):
+  """An event handler that logs Session events."""
+
+  verbose: bool = False
+
+  def on_session_end(self, session: 'Session'):
+    if session.has_error:
+      session.error(
+          f'Trajectory failed in {session.elapse:.2f} seconds.',
+          error=session.final_error,
+          metadata=session.root.metadata,
+          keep=True,
+      )
+    elif self.verbose:
+      session.info(
+          f'Trajectory succeeded in {session.elapse:.2f} seconds.',
+          result=session.final_result,
+          metadata=session.root.metadata,
+          keep=False,
+      )
+
+  def on_action_start(
+      self,
+      session: 'Session',
+      action: ActionInvocation
+  ) -> None:
+    if self.verbose:
+      session.info(
+          'Action execution started.',
+          action=action.action,
+          keep=False,
+      )
+
+  def on_action_end(
+      self,
+      session: 'Session',
+      action: ActionInvocation
+  ) -> None:
+    if action.has_error:
+      session.warning(
+          (
+              f'Action execution failed in '
+              f'{action.execution.elapse:.2f} seconds.'
+          ),
+          action=action.action,
+          error=action.error,
+          keep=True,
+      )
+    elif self.verbose:
+      session.info(
+          (
+              f'Action execution succeeded in '
+              f'{action.execution.elapse:.2f} seconds.'
+          ),
+          action=action.action,
+          result=action.result,
+          keep=False,
+      )
+
+  def on_query_start(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      query: lf_structured.QueryInvocation,
+  ) -> None:
+    if self.verbose:
+      session.info(
+          'Querying LLM started.',
+          lm=query.lm.model_id,
+          output_type=(
+              lf_structured.annotation(query.schema.spec)
+              if query.schema is not None else None
+          ),
+          keep=False,
+      )
+
+  def on_query_end(
+      self,
+      session: 'Session',
+      action: ActionInvocation,
+      query: lf_structured.QueryInvocation,
+  ) -> None:
+    if query.has_error:
+      session.warning(
+          (
+              f'Querying LLM failed in '
+              f'{time.time() - query.start_time:.2f} seconds.'
+          ),
+          lm=query.lm.model_id,
+          output_type=(
+              lf_structured.annotation(query.schema.spec)
+              if query.schema is not None else None
+          ),
+          error=query.error,
+          keep=True,
+      )
+    elif self.verbose:
+      session.info(
+          (
+              f'Querying LLM succeeded in '
+              f'{time.time() - query.start_time:.2f} seconds.'
+          ),
+          lm=query.lm.model_id,
+          output_type=(
+              lf_structured.annotation(query.schema.spec)
+              if query.schema is not None else None
+          ),
+          keep=False,
+      )
+
+
 class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   """Session for performing an agentic task."""
 
   root: Annotated[
       ActionInvocation,
       'The root action invocation of the session.'
-  ] = ActionInvocation(RootAction())
+  ]
 
   id: Annotated[
       str | None,
-      'An optional identifier for the sessin, which will be used for logging.'
-  ] = None
+      'An optional identifier for the session, which will be used for logging.'
+  ]
 
-  verbose: Annotated[
-      bool,
-      (
-          'If True, the session will be logged with verbose action and query '
-          'activities.'
-      )
-  ] = False
+  event_handler: Annotated[
+      SessionEventHandler,
+      'Event handler for the session.'
+  ]
+
+  @pg.explicit_method_override
+  def __init__(
+      self,
+      id: str | None = None,   # pylint: disable=redefined-builtin
+      *,
+      verbose: bool = False,
+      event_handler: SessionEventHandler | None = None,
+      root: ActionInvocation | None = None,
+      **kwargs
+  ):
+    super().__init__(
+        id=id,
+        root=root or ActionInvocation(RootAction()),
+        event_handler=event_handler or SessionLogging(verbose=verbose),
+        **kwargs
+    )
 
   #
   # Shortcut methods for accessing the root action invocation.
@@ -1271,6 +1517,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def start(self) -> None:
     """Starts the session."""
     self.root.execution.start()
+    self.event_handler.on_session_start(self)
 
   def end(
       self,
@@ -1279,21 +1526,8 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       metadata: dict[str, Any] | None = None,
   ) -> None:
     """Ends the session."""
-    if error is not None:
-      self.error(
-          f'Trajectory failed in {self.elapse:.2f} seconds.',
-          error=error,
-          metadata=metadata,
-          keep=True,
-      )
-    elif self.verbose:
-      self.info(
-          f'Trajectory succeeded in {self.elapse:.2f} seconds.',
-          result=result,
-          metadata=metadata,
-          keep=False,
-      )
     self.root.end(result, error, metadata)
+    self.event_handler.on_session_end(self)
 
   def check_execution_time(self) -> None:
     """Checks the execution time of the current action."""
@@ -1311,6 +1545,20 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           f'maximum execution time of {current_action.max_execution_time} '
           'seconds.'
       )
+
+  def update_progress(self, title: str, **kwargs: Any) -> None:
+    """Update the progress of current action's execution.
+
+    Args:
+      title: The title of the progress update.
+      **kwargs: Additional keyword arguments to pass to the event handler.
+    """
+    self.event_handler.on_action_progress(
+        self,
+        self._current_action,
+        title,
+        **kwargs
+    )
 
   def __enter__(self):
     """Enters the session."""
@@ -1371,34 +1619,10 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       self._current_execution = invocation.execution
       # Start the execution of the current action.
       self._current_action.start()
-      if self.verbose:
-        self.info(
-            'Action execution started.',
-            action=invocation.action,
-            keep=False,
-        )
+      self.event_handler.on_action_start(self, self._current_action)
       yield invocation
     finally:
-      if invocation.has_error:
-        self.warning(
-            (
-                f'Action execution failed in '
-                f'{invocation.execution.elapse:.2f} seconds.'
-            ),
-            action=invocation.action,
-            error=invocation.error,
-            keep=True,
-        )
-      elif self.verbose:
-        self.info(
-            (
-                f'Action execution succeeded in '
-                f'{invocation.execution.elapse:.2f} seconds.'
-            ),
-            action=invocation.action,
-            result=invocation.result,
-            keep=False,
-        )
+      self.event_handler.on_action_end(self, self._current_action)
       self._current_execution = parent_execution
       self._current_action = parent_action
 
@@ -1446,51 +1670,16 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           skip_notification=False, raise_on_no_change=False
       )
       execution.append(invocation)
-      if self.verbose:
-        self.info(
-            'Querying LLM started.',
-            lm=invocation.lm.model_id,
-            output_type=(
-                lf_structured.annotation(invocation.schema.spec)
-                if invocation.schema is not None else None
-            ),
-            keep=False,
-        )
+      self.event_handler.on_query_start(self, self._current_action, invocation)
 
     def _query_end(invocation: lf_structured.QueryInvocation):
       self._current_execution.merge_usage_summary(invocation.usage_summary)
-      if invocation.has_error:
-        self.warning(
-            (
-                f'Querying LLM failed in '
-                f'{time.time() - invocation.start_time:.2f} seconds.'
-            ),
-            lm=invocation.lm.model_id,
-            output_type=(
-                lf_structured.annotation(invocation.schema.spec)
-                if invocation.schema is not None else None
-            ),
-            error=invocation.error,
-            keep=True,
-        )
-      elif self.verbose:
-        self.info(
-            (
-                f'Querying LLM succeeded in '
-                f'{time.time() - invocation.start_time:.2f} seconds.'
-            ),
-            lm=invocation.lm.model_id,
-            output_type=(
-                lf_structured.annotation(invocation.schema.spec)
-                if invocation.schema is not None else None
-            ),
-            keep=False,
-        )
+      self.event_handler.on_query_end(self, self._current_action, invocation)
 
     with self.track_phase(phase), lf_structured.track_queries(
         include_child_scopes=False,
-        start_callabck=_query_start,
-        end_callabck=_query_end,
+        start_callback=_query_start,
+        end_callback=_query_end,
     ) as queries:
       try:
         yield queries
