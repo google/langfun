@@ -262,6 +262,7 @@ class ProgressControlTest(unittest.TestCase):
     with contextlib.redirect_stderr(string_io):
       ctrl.update(1)
       ctrl.refresh()
+      sys.stderr.flush()
     self.assertEqual(string_io.getvalue(), '')
     concurrent.progress_bar = 'tqdm'
 
@@ -274,6 +275,7 @@ class ProgressControlTest(unittest.TestCase):
       ctrl.set_status('bar')
       ctrl.update(10)
       ctrl.refresh()
+      sys.stderr.flush()
     self.assertEqual(
         string_io.getvalue(),
         '\x1b[1m\x1b[31mfoo\x1b[0m: \x1b[34m10% (10/100)\x1b[0m : bar\n'
@@ -288,6 +290,7 @@ class ProgressControlTest(unittest.TestCase):
       self.assertIsInstance(ctrl, concurrent._TqdmProgressControl)
       ctrl.update(10)
       ctrl.refresh()
+      sys.stderr.flush()
     self.assertIn('10/100', string_io.getvalue())
 
     tqdm = concurrent.tqdm
@@ -316,6 +319,7 @@ class ProgressBarTest(unittest.TestCase):
       for _ in concurrent.concurrent_execute(fun, range(5)):
         concurrent.ProgressBar.refresh()
       concurrent.ProgressBar.uninstall(bar_id)
+      sys.stderr.flush()
     output_str = string_io.getvalue()
     self.assertIn('100%', output_str)
     self.assertIn('5/5', output_str)
@@ -332,7 +336,7 @@ class ProgressBarTest(unittest.TestCase):
         concurrent.ProgressBar.update(bar_id, 0, status=1)
       concurrent.ProgressBar.uninstall(bar_id)
       sys.stderr.flush()
-      time.sleep(1)
+    time.sleep(1)
     self.assertIn('1/4', string_io.getvalue())
     # TODO(daiyip): Re-enable once flakiness is fixed.
     # self.assertIn('2/4', string_io.getvalue())
@@ -564,7 +568,8 @@ class ConcurrentMapTest(unittest.TestCase):
               fun, [1, 2, 3], timeout=1.5, max_workers=1, show_progress=True
           )
       ], key=lambda x: x[0])
-      string_io.flush()
+      sys.stderr.flush()
+
     self.assertEqual(   # pylint: disable=g-generic-assert
         output,
         [
@@ -592,6 +597,7 @@ class ConcurrentMapTest(unittest.TestCase):
               show_progress=bar_id, status_fn=lambda p: dict(x=1, y=1)
           )
       ], key=lambda x: x[0])
+      sys.stderr.flush()
 
     self.assertEqual(  # pylint: disable=g-generic-assert
         output,
