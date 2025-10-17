@@ -66,8 +66,8 @@ from langfun.core import agentic
 Action = agentic.Action
 Session = agentic.Session
 
+from langfun.core import mcp
 from langfun.core import memories
-
 from langfun.core import modalities
 
 Mime = modalities.Mime
