@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import asyncio
+import contextlib
 import time
 import unittest
 
@@ -33,6 +34,28 @@ class AsyncSupportTest(unittest.TestCase):
     self.assertLess(time.time() - t, 1)
     with pg.contextual_override(z=3):
       self.assertEqual(asyncio.run(r), 6)
+
+  def test_invoke_sync(self):
+    @contextlib.asynccontextmanager
+    async def bar(x):
+      try:
+        yield x
+      finally:
+        pass
+
+    async def foo(x, *, y):
+      time.sleep(2)
+      return x + y + pg.contextual_value('z', 0)
+
+    with pg.contextual_override(z=3):
+      with async_support.sync_context_manager(bar(1)) as x:
+        self.assertEqual(x, 1)
+        with async_support.sync_context_manager(bar(2)) as y:
+          self.assertEqual(y, 2)
+          self.assertEqual(async_support.invoke_sync(foo, 1, y=2), 6)
+
+    with pg.contextual_override(z=2):
+      self.assertEqual(async_support.invoke_sync(foo, 1, y=2), 5)
 
 
 if __name__ == '__main__':

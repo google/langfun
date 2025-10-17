@@ -40,8 +40,12 @@ from langfun.core.component import context
 as_context = context
 use_context = context
 
-# Invoke a callable object asynchronously.
+# Support for async IO.
 from langfun.core.async_support import invoke_async
+
+# Adaptors for async function/context manager to sync versions.
+from langfun.core.async_support import invoke_sync
+from langfun.core.async_support import sync_context_manager
 
 # Shortcut function for overriding components attributes, usually for
 # override settings.
