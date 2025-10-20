@@ -287,7 +287,7 @@ class Evaluation(experiment_lib.Experiment):
       A unique string representing the resource required.
     """
     return {
-        v.resource_id for _, v in self.sym_init_args.items()
+        v.resource_id for _, v in self.sym_init_args.sym_items()
         if isinstance(v, lf.LanguageModel)
     }
 

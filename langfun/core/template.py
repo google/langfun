@@ -374,7 +374,7 @@ class Template(
         metadata[k.removeprefix(_ADDITIONAL_METADATA_PREFIX)] = v
 
     # Carry metadata from fields.
-    for k, v in self.sym_init_args.items():
+    for k, v in self.sym_init_args.sym_items():
       if k.startswith(_ADDITIONAL_METADATA_PREFIX):
         metadata[k.removeprefix(_ADDITIONAL_METADATA_PREFIX)] = v
     return metadata

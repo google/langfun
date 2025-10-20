@@ -595,7 +595,7 @@ class Suite(Evaluable):
   def _on_bound(self):
     super()._on_bound()
     overrides = {
-        k: v for k, v in self.sym_init_args.items()
+        k: v for k, v in self.sym_init_args.sym_items()
         if k not in ('id', 'children')
     }
     for child in self.children:
