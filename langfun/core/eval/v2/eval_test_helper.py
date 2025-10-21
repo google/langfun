@@ -75,7 +75,7 @@ class TestEvaluation(Evaluation):
 
 class BadJsonConvertible(pg.Object):
 
-  def to_json(self, *args, **kwargs):
+  def sym_jsonify(self, *args, **kwargs):
     raise ValueError('Cannot convert to JSON.')
 
 
