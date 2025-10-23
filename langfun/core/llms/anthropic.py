@@ -60,6 +60,60 @@ class AnthropicModelInfo(lf.ModelInfo):
 
 SUPPORTED_MODELS = [
     AnthropicModelInfo(
+        model_id='claude-haiku-4-5-20251001',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4.5 Haiku model (10/15/2025).',
+        release_date=datetime.datetime(2025, 10, 15),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.1,
+            cost_per_1m_input_tokens=1,
+            cost_per_1m_output_tokens=5,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=4_000_000,
+            max_output_tokens_per_minute=800_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-sonnet-4-5-20250929',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4.5 Sonnet model (9/29/2025).',
+        release_date=datetime.datetime(2025, 9, 29),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            # This rate limit is a total limit that applies to combined traffic
+            # across both Sonnet 4 and Sonnet 4.5.
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=2_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-4-opus-20250514',
         provider='Anthropic',
         in_service=True,
@@ -188,6 +242,62 @@ SUPPORTED_MODELS = [
             max_requests_per_minute=4000,
             max_input_tokens_per_minute=400_000,
             max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-haiku-4-5@20251001',
+        alias_for='claude-haiku-4-5-20251001',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 4.5 Haiku model served on VertexAI (10/15/2025).',
+        release_date=datetime.datetime(2025, 10, 15),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            # For global endpoint
+            cost_per_1m_cached_input_tokens=0.1,
+            cost_per_1m_input_tokens=1,
+            cost_per_1m_output_tokens=5,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # For global endpoint
+            max_requests_per_minute=2500,
+            max_input_tokens_per_minute=200_000,
+            max_output_tokens_per_minute=0,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-sonnet-4-5@20250929',
+        alias_for='claude-sonnet-4-5-20250929',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 4.5 Sonnet model (9/29/2025).',
+        release_date=datetime.datetime(2025, 9, 29),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            # For global endpoint
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # For global endpoint
+            max_requests_per_minute=1500,
+            max_input_tokens_per_minute=200_000,
+            max_output_tokens_per_minute=0,
         ),
     ),
     AnthropicModelInfo(
@@ -677,6 +787,24 @@ class Anthropic(rest.REST):
     if status_code == 413 and b'Prompt is too long' in content:
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
+
+
+class Claude45(Anthropic):
+  """Base class for Claude 4.5 models."""
+
+
+# pylint: disable=invalid-name
+class Claude45Haiku_20251001(Claude45):
+  """Claude 4.5 Haiku model 20251001."""
+
+  model = 'claude-haiku-4-5-20251001'
+
+
+# pylint: disable=invalid-name
+class Claude45Sonnet_20250929(Claude45):
+  """Claude 4.5 Sonnet model 20250929."""
+
+  model = 'claude-sonnet-4-5-20250929'
 
 
 class Claude4(Anthropic):
