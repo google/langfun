@@ -101,7 +101,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(s.dir, os.path.join(s.root_dir, s.id))
     self.assertEqual(s.hash, s.clone().hash)
     # Test persistent hash.
-    self.assertEqual(s.hash, 'e43392e4')
+    self.assertEqual(s.hash, 'ee958159')
     self.assertEqual(
         s.hash, s.clone(override={'max_workers': 2, 'lm.timeout': 20}).hash
     )
@@ -211,7 +211,7 @@ class EvaluationTest(unittest.TestCase):
         s.result,
         dict(
             experiment_setup=dict(
-                id='Evaluation@2fbf1b05',
+                id='Evaluation@27a702cb',
                 dir=s.dir,
                 model='StaticSequence',
                 prompt_template='{{example.question}}',
@@ -376,7 +376,7 @@ class EvaluationTest(unittest.TestCase):
         s.children[0].dir, os.path.join(s.root_dir, s.children[0].id)
     )
     # Test persistent hash.
-    self.assertEqual(s.hash, 'de23bf31')
+    self.assertEqual(s.hash, 'f47532a7')
 
     summary = s.run(verbose=True)
     self.assertEqual(len(summary.evaluations), 2)
@@ -526,7 +526,7 @@ class SuiteTest(unittest.TestCase):
         lm=lm
     )
     # Test for persistent hash.
-    self.assertEqual(s.hash, '1c42f93e')
+    self.assertEqual(s.hash, '4bd6a2f5')
     s.run()
     expected = {
         s.children[0].id: dict(

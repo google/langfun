@@ -62,6 +62,8 @@ class OpenAICompatible(rest.REST):
       args['seed'] = options.random_seed
     if options.reasoning_effort is not None:
       args['reasoning_effort'] = options.reasoning_effort
+    if options.extras:
+      args.update(options.extras)
     return args
 
   def request(

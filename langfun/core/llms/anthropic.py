@@ -768,6 +768,8 @@ class Anthropic(rest.REST):
       args.pop('temperature', None)
       args.pop('top_k', None)
       args.pop('top_p', None)
+    if options.extras:
+      args.update(options.extras)
     return args
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:

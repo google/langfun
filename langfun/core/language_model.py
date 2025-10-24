@@ -584,6 +584,15 @@ class LMSamplingOptions(component.Component):
       ),
   ] = None
 
+  extras: Annotated[
+      dict[str, Any],
+      (
+          'Extra arguments (e.g. configuration for tool calls) to pass to '
+          'the model. This is model-specific, please check model '
+          'implementation to see how to use this.'
+      ),
+  ] = {}
+
   def cache_key(self) -> tuple[Any, ...]:
     """Returns a tuple of current values as cache key."""
     return (

@@ -107,8 +107,8 @@ class LangFuncCallTest(unittest.TestCase):
         ' lm=ExcitedEchoer(sampling_options=LMSamplingOptions(temperature=None,'
         ' max_tokens=None, n=1, top_k=40, top_p=None, stop=None,'
         ' random_seed=None, logprobs=False, top_logprobs=None,'
-        ' max_thinking_tokens=None, reasoning_effort=None), cache=None,'
-        ' max_concurrency=None, timeout=120.0, max_attempts=5,'
+        ' max_thinking_tokens=None, reasoning_effort=None, extras={}),'
+        ' cache=None, max_concurrency=None, timeout=120.0, max_attempts=5,'
         ' retry_interval=(5, 60), exponential_backoff=True,'
         ' max_retry_interval=300, debug=False))',
     )
