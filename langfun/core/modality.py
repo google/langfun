@@ -14,21 +14,13 @@
 """Interface for modality (e.g. Image, Video, etc.)."""
 
 import abc
+import contextlib
 import functools
 import hashlib
-from typing import Any, ContextManager
+import re
+from typing import Any, ContextManager, Iterator
 from langfun.core import component
 import pyglove as pg
-
-
-_TLS_MODALITY_AS_REF = '__format_modality_as_ref__'
-
-
-def format_modality_as_ref(enabled: bool = True) -> ContextManager[None]:
-  """A context manager that formats modality objects as references."""
-  return pg.object_utils.thread_local_value_scope(
-      _TLS_MODALITY_AS_REF, enabled, False
-  )
 
 
 class Modality(component.Component, pg.views.HtmlTreeView.Extension):
@@ -39,15 +31,18 @@ class Modality(component.Component, pg.views.HtmlTreeView.Extension):
 
   def _on_bound(self):
     super()._on_bound()
-    # Invalidate cached hash if modality member is changed.
+    # Invalidate cached hash and id if modality member is changed.
     self.__dict__.pop('hash', None)
+    self.__dict__.pop('id', None)
 
   def format(self, *args, **kwargs) -> str:
-    if self.referred_name is None or not pg.object_utils.thread_local_get(
-        _TLS_MODALITY_AS_REF, False
-    ):
+    if not pg.object_utils.thread_local_get(_TLS_MODALITY_AS_REF, False):
       return super().format(*args, **kwargs)
-    return Modality.text_marker(self.referred_name)
+
+    capture_scope = get_modality_capture_context()
+    if capture_scope is not None:
+      capture_scope.capture(self)
+    return Modality.text_marker(self.id)
 
   def __str_kwargs__(self) -> dict[str, Any]:
     # For modality objects, we don't want to use markdown format when they
@@ -70,14 +65,11 @@ class Modality(component.Component, pg.views.HtmlTreeView.Extension):
     """Returns a marker in the text for this object."""
     return Modality.REF_START + var_name + Modality.REF_END
 
-  @property
-  def referred_name(self) -> str | None:
+  @functools.cached_property
+  def id(self) -> str | None:
     """Returns the referred name of this object in its template."""
-    if not self.sym_path:
-      return None
-    # Strip the metadata prefix under message.
-    path = str(self.sym_path)
-    return path[9:] if path.startswith('metadata.') else path
+    modality_type = _camel_to_snake(self.__class__.__name__)
+    return f'{modality_type}:{self.hash}'
 
   @classmethod
   def from_value(cls, value: pg.Symbolic) -> dict[str, 'Modality']:
@@ -86,7 +78,7 @@ class Modality(component.Component, pg.views.HtmlTreeView.Extension):
     def _visit(k, v, p):
       del k, p
       if isinstance(v, Modality):
-        modalities[v.referred_name] = v
+        modalities[v.id] = v
         return pg.TraverseAction.CONTINUE
       return pg.TraverseAction.ENTER
 
@@ -102,7 +94,7 @@ class ModalityRef(pg.Object, pg.typing.CustomTyping):
   structure.
   """
 
-  name: str
+  id: str
 
   def custom_apply(
       self, path: pg.KeyPath, value_spec: pg.ValueSpec, *args, **kwargs
@@ -122,12 +114,97 @@ class ModalityRef(pg.Object, pg.typing.CustomTyping):
     """
 
     def _placehold(k, v, p):
-      del p
+      del k, p
       if isinstance(v, Modality):
-        return ModalityRef(name=value.sym_path + k)
+        return ModalityRef(id=v.id)
       return v
     return value.clone().rebind(_placehold, raise_on_no_change=False)
+
+  @classmethod
+  def restore(cls, value: pg.Symbolic, modalities: dict[str, Modality]) -> Any:
+    """Returns a copy of value by replacing refs with modality objects."""
+    def _restore(k, v, p):
+      del k, p
+      if isinstance(v, ModalityRef):
+        modality_object = modalities.get(v.id)
+        if modality_object is None:
+          raise ValueError(
+              f'Modality {v.id} not found in modalities {modalities.keys()}'
+          )
+        return modality_object
+      return v
+    return value.rebind(_restore, raise_on_no_change=False)
 
 
 class ModalityError(RuntimeError):  # pylint: disable=g-bad-exception-name
   """Exception raised when modality is not supported."""
+
+
+#
+# Context managers to deal with modality objects.
+#
+
+
+_TLS_MODALITY_CAPTURE_SCOPE = '__modality_capture_scope__'
+_TLS_MODALITY_AS_REF = '__format_modality_as_ref__'
+
+
+def format_modality_as_ref(enabled: bool = True) -> ContextManager[None]:
+  """A context manager that formats modality objects as references."""
+  return pg.object_utils.thread_local_value_scope(
+      _TLS_MODALITY_AS_REF, enabled, False
+  )
+
+
+class _ModalityCaptureContext:
+  """A context to capture modality objects when being rendered."""
+
+  def __init__(self):
+    self._references: dict[str, pg.Ref[Modality]] = {}
+
+  def capture(self, modality: Modality) -> None:
+    """Captures the modality object."""
+    self._references[modality.id] = pg.Ref(modality)
+
+  @property
+  def references(self) -> dict[str, pg.Ref[Modality]]:
+    """Returns the modality references captured in this context."""
+    return self._references
+
+
+@contextlib.contextmanager
+def capture_rendered_modalities() -> Iterator[dict[str, pg.Ref[Modality]]]:
+  """Capture modality objects whose references is being rendered.
+
+  Example:
+    ```
+    image = lf.Image.from_url(...)
+    with lf.modality.capture_rendered_modalities() as rendered_modalities:
+      with lf.modality.format_modality_as_ref():
+        print(f'Hello {image}')
+    self.assertEqual(rendered_modalities, {'image:<hash>': pg.Ref(image)})
+    ```
+  """
+  context = get_modality_capture_context()
+  top_level = context is None
+  if top_level:
+    context = _ModalityCaptureContext()
+    pg.object_utils.thread_local_set(_TLS_MODALITY_CAPTURE_SCOPE, context)
+
+  try:
+    yield context.references  # pylint: disable=attribute-error
+  finally:
+    if top_level:
+      pg.object_utils.thread_local_del(_TLS_MODALITY_CAPTURE_SCOPE)
+
+
+def get_modality_capture_context() -> _ModalityCaptureContext | None:
+  """Returns the current modality capture context."""
+  return pg.object_utils.thread_local_get(_TLS_MODALITY_CAPTURE_SCOPE, None)
+
+
+def _camel_to_snake(name: str) -> str:
+  """Converts a camelCase name to snake_case."""
+  return re.sub(
+      pattern=r'([A-Z]+)', repl=r'_\1', string=name
+  ).lower().lstrip('_')

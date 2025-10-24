@@ -20,7 +20,7 @@ import contextlib
 import functools
 import inspect
 import io
-from typing import Annotated, Any, ClassVar, Optional, Type, Union
+from typing import Annotated, Any, Callable, ClassVar, Optional, Type, Union
 
 from langfun.core import modality
 from langfun.core import natural_language
@@ -86,6 +86,11 @@ class Message(
 
   sender: Annotated[str, 'The sender of the message.']
 
+  referred_modalities: Annotated[
+      dict[str, pg.Ref[modality.Modality]],
+      'The modality objects referred in the message.'
+  ] = pg.Dict()
+
   metadata: Annotated[
       dict[str, Any],
       (
@@ -111,6 +116,11 @@ class Message(
       *,
       # Default sender is specified in subclasses.
       sender: str | pg.object_utils.MissingValue = pg.MISSING_VALUE,
+      referred_modalities: (
+          list[modality.Modality]
+          | dict[str, modality.Modality]
+          | None
+      ) = None,
       metadata: dict[str, Any] | None = None,
       tags: list[str] | None = None,
       source: Optional['Message'] = None,
@@ -125,6 +135,7 @@ class Message(
     Args:
       text: The text in the message.
       sender: The sender name of the message.
+      referred_modalities: The modality objects referred in the message.
       metadata: Structured meta-data associated with this message.
       tags: Tags for the message.
       source: The source message of the current message.
@@ -138,9 +149,13 @@ class Message(
     """
     metadata = metadata or {}
     metadata.update(kwargs)
+    if isinstance(referred_modalities, list):
+      referred_modalities = {m.id: pg.Ref(m) for m in referred_modalities}
+
     super().__init__(
         text=text,
         metadata=metadata,
+        referred_modalities=referred_modalities or {},
         tags=tags or [],
         sender=sender,
         allow_partial=allow_partial,
@@ -186,7 +201,7 @@ class Message(
       A message created from the value.
     """
     if isinstance(value, modality.Modality):
-      return cls('<<[[object]]>>', object=value)
+      return cls(f'<<[[{value.id}]]>>', referred_modalities=[value])
     if isinstance(value, Message):
       return value
     if isinstance(value, str):
@@ -280,8 +295,7 @@ class Message(
     if key_path == Message.PATH_TEXT:
       return self.text
     else:
-      v = self.metadata.sym_get(key_path, default, use_inferred=True)
-      return v.value if isinstance(v, pg.Ref) else v
+      return self.metadata.sym_get(key_path, default, use_inferred=True)
 
   #
   # API for accessing the structured result and error.
@@ -361,43 +375,53 @@ class Message(
   # API for supporting modalities.
   #
 
+  def modalities(
+      self,
+      filter: (  # pylint: disable=redefined-builtin
+          Type[modality.Modality]
+          | Callable[[modality.Modality], bool]
+          | None
+      ) = None  # pylint: disable=bad-whitespace
+  ) -> list[modality.Modality]:
+    """Returns the modality objects referred in the message."""
+    if inspect.isclass(filter) and issubclass(filter, modality.Modality):
+      filter_fn = lambda v: isinstance(v, filter)  # pytype: disable=wrong-arg-types
+    elif filter is None:
+      filter_fn = lambda v: True
+    else:
+      filter_fn = filter
+    return [v for v in self.referred_modalities.values() if filter_fn(v)]
+
   @property
-  def text_with_modality_hash(self) -> str:
-    """Returns text with modality object placeheld by their 8-byte MD5 hash."""
-    parts = [self.text]
-    for name, modality_obj in self.referred_modalities().items():
-      parts.append(
-          f'<{name}>{modality_obj.hash}</{name}>'
-      )
-    return ''.join(parts)
+  def images(self) -> list[modality.Modality]:
+    """Returns the image objects referred in the message."""
+    assert False, 'Overridden in core/modalities/__init__.py'
+
+  @property
+  def videos(self) -> list[modality.Modality]:
+    """Returns the video objects referred in the message."""
+    assert False, 'Overridden in core/modalities/__init__.py'
+
+  @property
+  def audios(self) -> list[modality.Modality]:
+    """Returns the audio objects referred in the message."""
+    assert False, 'Overridden in core/modalities/__init__.py'
 
   def get_modality(
-      self, var_name: str, default: Any = None, from_message_chain: bool = True
+      self,
+      var_name: str,
+      default: Any = None
   ) -> modality.Modality | None:
     """Gets the modality object referred in the message.
 
     Args:
       var_name: The referred variable name for the modality object.
       default: default value.
-      from_message_chain: If True, the look up will be performed from the
-        message chain. Otherwise it will be performed in current message.
 
     Returns:
       A modality object if found, otherwise None.
     """
-    obj = self.get(var_name, None)
-    if isinstance(obj, modality.Modality):
-      return obj
-    elif obj is None and self.source is not None:
-      return self.source.get_modality(var_name, default, from_message_chain)
-    return default
-
-  def referred_modalities(self) -> dict[str, modality.Modality]:
-    """Returns modality objects attached on this message."""
-    chunks = self.chunk()
-    return {
-        m.referred_name: m for m in chunks if isinstance(m, modality.Modality)
-    }
+    return self.referred_modalities.get(var_name, default)
 
   def chunk(self, text: str | None = None) -> list[str | modality.Modality]:
     """Chunk a message into a list of str or modality objects."""
@@ -425,10 +449,15 @@ class Message(
 
       var_name = text[var_start:ref_end].strip()
       var_value = self.get_modality(var_name)
-      if var_value is not None:
-        add_text_chunk(text[chunk_start:ref_start].strip(' '))
-        chunks.append(var_value)
-        chunk_start = ref_end + len(modality.Modality.REF_END)
+      if var_value is None:
+        raise ValueError(
+            f'Unknown modality reference: {var_name!r}. '
+            'Please make sure the modality object is present in '
+            f'`referred_modalities` when creating {self.__class__.__name__}.'
+        )
+      add_text_chunk(text[chunk_start:ref_start].strip(' '))
+      chunks.append(var_value)
+      chunk_start = ref_end + len(modality.Modality.REF_END)
     return chunks
 
   @classmethod
@@ -437,8 +466,8 @@ class Message(
   ) -> 'Message':
     """Assembly a message from a list of string or modality objects."""
     fused_text = io.StringIO()
-    ref_index = 0
     metadata = dict()
+    referred_modalities = dict()
     last_char = None
     for i, chunk in enumerate(chunks):
       if i > 0 and last_char not in ('\t', ' ', '\n', None):
@@ -451,14 +480,16 @@ class Message(
           last_char = None
       else:
         assert isinstance(chunk, modality.Modality), chunk
-        var_name = f'obj{ref_index}'
-        fused_text.write(modality.Modality.text_marker(var_name))
+        fused_text.write(modality.Modality.text_marker(chunk.id))
         last_char = modality.Modality.REF_END[-1]
         # Make a reference if the chunk is already owned by another object
         # to avoid copy.
-        metadata[var_name] = pg.maybe_ref(chunk)
-        ref_index += 1
-    return cls(fused_text.getvalue().strip(), metadata=metadata)
+        referred_modalities[chunk.id] = pg.Ref(chunk)
+    return cls(
+        fused_text.getvalue().strip(),
+        referred_modalities=referred_modalities,
+        metadata=metadata,
+    )
 
   #
   # Tagging
@@ -551,6 +582,11 @@ class Message(
   #
 
   def natural_language_format(self) -> str:
+    """Returns the natural language format representation."""
+    # Propagate the modality references to parent context if any.
+    if capture_context := modality.get_modality_capture_context():
+      for v in self.referred_modalities.values():
+        capture_context.capture(v)
     return self.text
 
   def __eq__(self, other: Any) -> bool:
@@ -568,8 +604,7 @@ class Message(
   def __getattr__(self, key: str) -> Any:
     if key not in self.metadata:
       raise AttributeError(key)
-    v = self.metadata[key]
-    return v.value if isinstance(v, pg.Ref) else v
+    return self.metadata[key]
 
   def _html_tree_view_content(
       self,
@@ -646,15 +681,14 @@ class Message(
           s.write(s.escape(chunk))
         else:
           assert isinstance(chunk, modality.Modality), chunk
-          child_path = pg.KeyPath(['metadata', chunk.referred_name], root_path)
           s.write(
               pg.Html.element(
                   'div',
                   [
                       view.render(
                           chunk,
-                          name=chunk.referred_name,
-                          root_path=child_path,
+                          name=chunk.id,
+                          root_path=chunk.sym_path,
                           collapse_level=(
                               0 if collapse_modalities_in_text else 1
                           ),
@@ -667,7 +701,7 @@ class Message(
                   css_classes=['modality-in-text'],
               )
           )
-          referred_chunks[chunk.referred_name] = chunk
+          referred_chunks[chunk.id] = chunk
       s.write('</div>')
       return s
 

@@ -1253,11 +1253,11 @@ class LanguageModel(component.Component):
         title=f'\n[{call_counter}] PROMPT SENT TO LM{title_suffix}:',
         color='green',
     )
-    referred_modalities = prompt.referred_modalities()
-    if referred_modalities:
+    if prompt.referred_modalities:
       console.write(
           pg.object_utils.kvlist_str(
-              [(k, repr(v), None) for k, v in referred_modalities.items()]
+              [(k, repr(v), None)
+               for k, v in prompt.referred_modalities.items()]
           ),
           title=f'\n[{call_counter}] MODALITY OBJECTS SENT TO LM:',
           color='green',
@@ -1343,9 +1343,9 @@ class LanguageModel(component.Component):
           color='green',
       )
       if isinstance(prompt, list):
-        referred_modalities_lst = [p.referred_modalities() for p in prompt]
+        referred_modalities_lst = [p.referred_modalities for p in prompt]
       else:
-        referred_modalities_lst = [prompt.referred_modalities(),]
+        referred_modalities_lst = [prompt.referred_modalities,]
       if referred_modalities_lst:
         for referred_modalities in referred_modalities_lst:
           console.write(
@@ -1420,7 +1420,7 @@ class LanguageModel(component.Component):
           title=f'\n[{call_counter}] PROMPT TO TOKENIZE:',
           color='green',
       )
-      referred_modalities_lst = [prompt.referred_modalities(),]
+      referred_modalities_lst = [prompt.referred_modalities,]
       if referred_modalities_lst:
         for referred_modalities in referred_modalities_lst:
           console.write(

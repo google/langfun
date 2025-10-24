@@ -249,35 +249,60 @@ class QueryTest(unittest.TestCase):
 
   def test_root_modality_to_structure_render(self):
     lm = fake.StaticResponse('1')
+    image = modalities.Image.from_bytes(b'mock_image')
     self.assert_render(
-        modalities.Image.from_bytes(b'mock_image'),
+        image,
         int,
         lm=lm,
-        expected_snippet='\n\nREQUEST:\n  <<[[input]]>>\n\n',
+        expected_snippet=f'\n\nREQUEST:\n  <<[[{image.id}]]>>\n\n',
         expected_modalities=1,
     )
 
   def test_root_modality_to_str_render(self):
     lm = fake.StaticResponse('1')
+    modality = modalities.Image.from_bytes(b'mock_image')
     self.assert_render(
-        modalities.Image.from_bytes(b'mock_image'),
+        modality,
         None,
         lm=lm,
-        expected_snippet='<<[[input]]>>',
+        expected_snippet=f'<<[[{modality.id}]]>>',
         exact_match=True,
         expected_modalities=1,
     )
 
   def test_str_with_modality_to_str_render(self):
     lm = fake.StaticResponse('A cat and a mouse.')
+    cat_image = modalities.Image.from_bytes(b'cat_image')
+    mouse_image = modalities.Image.from_bytes(b'mouse_image')
     self.assert_render(
         'What are these? {{this_image}} and {{that_image}}',
         None,
-        this_image=modalities.Image.from_bytes(b'cat_image'),
-        that_image=modalities.Image.from_bytes(b'mouse_image'),
+        this_image=cat_image,
+        that_image=mouse_image,
         lm=lm,
         expected_snippet=(
-            'What are these? <<[[this_image]]>> and <<[[that_image]]>>'
+            f'What are these? <<[[{cat_image.id}]]>> and '
+            f'<<[[{mouse_image.id}]]>>'
+        ),
+        exact_match=True,
+        expected_modalities=2,
+    )
+
+  def test_message_with_modality_to_str_render(self):
+    lm = fake.StaticResponse('A cat and a mouse.')
+    cat_image = modalities.Image.from_bytes(b'cat_image')
+    mouse_image = modalities.Image.from_bytes(b'mouse_image')
+    self.assert_render(
+        lf.Template(
+            'What are these? {{this_image}} and {{that_image}}',
+            this_image=cat_image,
+            that_image=mouse_image,
+        ).render(),
+        None,
+        lm=lm,
+        expected_snippet=(
+            f'What are these? <<[[{cat_image.id}]]>> and '
+            f'<<[[{mouse_image.id}]]>>'
         ),
         exact_match=True,
         expected_modalities=2,
@@ -285,33 +310,33 @@ class QueryTest(unittest.TestCase):
 
   def test_structure_with_modality_to_str_render(self):
     lm = fake.StaticResponse('A cat and a mouse.')
+    cat_image = modalities.Image.from_bytes(b'cat_image')
+    mouse_image = modalities.Image.from_bytes(b'mouse_image')
     self.assert_render(
-        [
-            modalities.Image.from_bytes(b'cat_image'),
-            modalities.Image.from_bytes(b'mouse_image'),
-        ],
+        [cat_image, mouse_image],
         None,
         lm=lm,
-        expected_snippet='`[<<[[input[0]]]>>, <<[[input[1]]]>>]`',
+        expected_snippet=(
+            f'`[<<[[{cat_image.id}]]>>, <<[[{mouse_image.id}]]>>]`'
+        ),
         exact_match=True,
         expected_modalities=2,
     )
 
   def test_structure_with_modality_to_structure_render(self):
     lm = fake.StaticResponse('["cat", "mouse"]')
+    cat_image = modalities.Image.from_bytes(b'cat_image')
+    mouse_image = modalities.Image.from_bytes(b'mouse_image')
     self.assert_render(
-        [
-            modalities.Image.from_bytes(b'cat_image'),
-            modalities.Image.from_bytes(b'mouse_image'),
-        ],
+        [cat_image, mouse_image],
         list[str],
         lm=lm,
-        expected_snippet=inspect.cleandoc("""
+        expected_snippet=inspect.cleandoc(f"""
             REQUEST:
               ```python
               [
-                <<[[input[0]]]>>,
-                <<[[input[1]]]>>
+                <<[[{cat_image.id}]]>>,
+                <<[[{mouse_image.id}]]>>
               ]
               ```
             """),
@@ -320,25 +345,25 @@ class QueryTest(unittest.TestCase):
 
   def test_structure_with_modality_and_examples_to_structure_render(self):
     lm = fake.StaticResponse('["cat", "mouse"]')
+    cat_image = modalities.Image.from_bytes(b'cat_image')
+    mouse_image = modalities.Image.from_bytes(b'mouse_image')
+    dog_image = modalities.Image.from_bytes(b'dog_image')
     self.assert_render(
-        [
-            modalities.Image.from_bytes(b'cat_image'),
-            modalities.Image.from_bytes(b'mouse_image'),
-        ],
+        [cat_image, mouse_image],
         list[str],
         examples=[
             mapping.MappingExample(
-                input=[modalities.Image.from_bytes(b'dog_image')],
+                input=[dog_image],
                 schema=list[str],
                 output=['dog'],
             ),
         ],
         lm=lm,
-        expected_snippet=inspect.cleandoc("""
+        expected_snippet=inspect.cleandoc(f"""
             REQUEST:
               ```python
               [
-                <<[[examples[0].input[0]]]>>
+                <<[[{dog_image.id}]]>>
               ]
               ```
 
@@ -356,8 +381,8 @@ class QueryTest(unittest.TestCase):
             REQUEST:
               ```python
               [
-                <<[[input[0]]]>>,
-                <<[[input[1]]]>>
+                <<[[{cat_image.id}]]>>,
+                <<[[{mouse_image.id}]]>>
               ]
               ```
 
@@ -368,6 +393,17 @@ class QueryTest(unittest.TestCase):
             """),
         expected_modalities=3,
     )
+
+  def test_query_with_modality_output(self):
+    cat_image = modalities.Image.from_bytes(b'cat_image')
+    lm = fake.StaticResponse(
+        lf.Template('Here you go: {{image}}', image=cat_image).render(
+            message_cls=lf.AIMessage
+        )
+    )
+    response = querying.query('Generate a cat image', lm=lm)
+    self.assertIsInstance(response, lf.AIMessage)
+    self.assertEqual(response.modalities(), [cat_image])
 
   def test_multiple_queries(self):
     self.assertEqual(
@@ -545,7 +581,7 @@ class QueryTest(unittest.TestCase):
             )
         ).input,
     )
-    self.assertIsNotNone(output.get_modality('image'))
+    self.assertEqual(len(output.referred_modalities), 1)
 
   def test_query_and_reduce(self):
     self.assertEqual(

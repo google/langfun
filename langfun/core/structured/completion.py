@@ -118,13 +118,8 @@ class _CompleteStructure(mapping.Mapping):
   def postprocess_result(self, result: Any) -> Any:
     """Postprocess result."""
     # Try restore modality objects from the input value to output value.
-    modalities = self.modalities(self.input)
-    if modalities:
-      # Remove the `input` prefix for all entries.
-      modalities = pg.object_utils.flatten(
-          pg.object_utils.canonicalize(modalities)['input']
-      )
-      result.rebind(modalities)
+    if modalities := self.modalities(self.input):
+      result = lf.ModalityRef.restore(result, modalities)
     return result
 
   def globals(self):

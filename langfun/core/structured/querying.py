@@ -529,24 +529,22 @@ def query(
     ).render(message_cls=lf.SystemMessage)
 
   # Normalize query input.
-  if isinstance(prompt, (lf.Message, str)):
+  if isinstance(prompt, str):
     # Query with structured output.
     prompt_kwargs = kwargs.copy()
     prompt_kwargs.pop('template_str', None)
     query_input = lf.Template.from_value(prompt, **prompt_kwargs)
+  elif isinstance(prompt, lf.Message):
+    query_input = prompt
   elif isinstance(prompt, lf.Template):
-    # Create a copy of the prompt if it has a parent object, so all child
-    # modality objects could be referred by path relative to the prompt.
-    query_input = prompt.clone() if prompt.sym_parent is not None else prompt
-
     # Attach template metadata from kwargs. This is used to pass through fields
     # from kwargs to the rendered message.
-    template_metadata = {
-        k: v for k, v in kwargs.items() if k.startswith('metadata_')
-    }
-    query_input.rebind(
-        template_metadata, skip_notification=True, raise_on_no_change=False
+    prompt.rebind(
+        {k: v for k, v in kwargs.items() if k.startswith('metadata_')},
+        skip_notification=True,
+        raise_on_no_change=False
     )
+    query_input = prompt
   elif pg.MISSING_VALUE == prompt:
     query_input = lf.UserMessage('')
   else:
@@ -665,7 +663,11 @@ def query(
 
   if returns_message:
     return output_message
-  return output_message.text if schema in (None, str) else output_message.result
+  if schema not in (None, str):
+    return output_message.result
+  if returns_message or output_message.referred_modalities:
+    return output_message
+  return output_message.text
 
 
 async def aquery(

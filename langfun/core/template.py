@@ -171,6 +171,7 @@ class Template(
 
     # Last render output.
     self._cached_render_output = None
+    self._referred_modalities = None
 
   @property
   def render_output(self) -> message_lib.Message | None:
@@ -322,24 +323,46 @@ class Template(
                 compact=True,
                 python_format=True,
             ):
-              # Natural language formattable objects will be returned in natural
-              # language when they are directly returned as rendering elements
-              # in the template.
-              with modality.format_modality_as_ref():
-                rendered_text = self._template.render(**inputs)
 
-            # Carry additional metadata.
-            metadata = self.additional_metadata()
+              # Capture the modality objects whose references are being
+              # rendered
+              # in the template.
+              with modality.capture_rendered_modalities() as modality_refs:
+
+                # Natural language formattable objects will be returned in
+                # natural language when they are directly returned as rendering
+                # elements in the template.
+                with modality.format_modality_as_ref():
+                  rendered_text = self._template.render(**inputs)
+
+              # Carry the modality references passed from the constructor.
+              # This is to support modality objects that is already rendered
+              # in the template string.
+              if self._referred_modalities:
+                modality_refs.update(self._referred_modalities)
 
         if self.clean:
           rendered_text = rendered_text.strip()
 
-        metadata.update(
-            {k: pg.Ref(v) for k, v in inputs.items() if not inspect.ismethod(v)}
-        )
+        # Fill message metadata.
+        metadata = {
+            '__template_input__': {
+                k: pg.Ref(v) for k, v in inputs.items()
+                if not inspect.ismethod(v)
+            },
+        }
+
+        # Carry additional metadata.
+        # TODO(daiyip): Consider to put additional metadata into a separate
+        # key under `metadata`.
+        metadata.update(self.additional_metadata())
 
         # Fill the variables for rendering the template as metadata.
-        message = message_cls(text=rendered_text, metadata=metadata)
+        message = message_cls(
+            text=rendered_text,
+            referred_modalities=modality_refs,
+            metadata=metadata
+        )
 
         # Tag input as rendered message.
         message.tag(message_lib.Message.TAG_RENDERED)
@@ -518,10 +541,13 @@ class Template(
     if isinstance(value, str):
       return cls(template_str=value, **kwargs)
     if isinstance(value, message_lib.Message):
-      kwargs.update(value.metadata)
-      return cls(template_str=value.text, **kwargs)
+      for k, v in value.metadata.sym_items():  # pylint: disable=attribute-error
+        kwargs[_ADDITIONAL_METADATA_PREFIX + k] = v
+      t = cls(template_str=value.text, **kwargs)
+      t._referred_modalities = value.referred_modalities
+      return t
     if isinstance(value, Template):
-      lfun = cls(template_str=value.template_str, **kwargs)
+      lfun = cls(template_str=value.template_str, **kwargs)  # pylint: disable=attribute-error
       # So lfun could acccess all attributes from value.
       lfun.sym_setparent(value)
       return lfun

@@ -407,22 +407,17 @@ class CompleteStructureTest(unittest.TestCase):
       image: modalities.Image
       name: str
 
+    image_elephant = modalities.Image.from_bytes(b'image_of_elephant')
+    image_rabbit = modalities.Image.from_bytes(b'image_of_rabbit')
     input_value = schema_lib.mark_missing(
-        Animal.partial(
-            modalities.Image.from_bytes(b'image_of_elephant'),
-        )
+        Animal.partial(image_elephant)
     )
     l = completion._CompleteStructure(
         input=input_value,
         examples=[
             mapping.MappingExample(
-                input=Animal.partial(
-                    modalities.Image.from_bytes(b'image_of_rabbit')
-                ),
-                output=Animal(
-                    modalities.Image.from_bytes(b'image_of_rabbit'),
-                    'rabbit',
-                ),
+                input=Animal.partial(image_rabbit),
+                output=Animal(image_rabbit, 'rabbit'),
             )
         ],
     )
@@ -430,7 +425,7 @@ class CompleteStructureTest(unittest.TestCase):
     self.maxDiff = None
     self.assertEqual(
         lm_input.text,
-        inspect.cleandoc("""
+        inspect.cleandoc(f"""
             Please generate the OUTPUT_OBJECT by completing the MISSING fields from the last INPUT_OBJECT.
 
             INSTRUCTIONS:
@@ -457,22 +452,22 @@ class CompleteStructureTest(unittest.TestCase):
               ```python
               Animal(
                 image=ModalityRef(
-                  name='examples[0].input.image'
+                  id='{image_rabbit.id}'
                 ),
                 name=MISSING(str)
               )
               ```
 
             MODALITY_REFERENCES:
-              {
-                'examples[0].input.image': <<[[examples[0].input.image]]>>
-              }
+              {{
+                '{image_rabbit.id}': <<[[{image_rabbit.id}]]>>
+              }}
 
             OUTPUT_OBJECT:
               ```python
               Animal(
                 image=ModalityRef(
-                  name='examples[0].output.image'
+                  id='{image_rabbit.id}'
                 ),
                 name='rabbit'
               )
@@ -483,16 +478,16 @@ class CompleteStructureTest(unittest.TestCase):
               ```python
               Animal(
                 image=ModalityRef(
-                  name='input.image'
+                  id='{image_elephant.id}'
                 ),
                 name=MISSING(str)
               )
               ```
 
             MODALITY_REFERENCES:
-              {
-                'input.image': <<[[input.image]]>>
-              }
+              {{
+                '{image_elephant.id}': <<[[{image_elephant.id}]]>>
+              }}
 
             OUTPUT_OBJECT:
             """),
@@ -500,39 +495,27 @@ class CompleteStructureTest(unittest.TestCase):
     self.assertTrue(
         pg.eq(
             {
-                'examples': lm_input.get('examples'),
-                'input': lm_input.get('input'),
+                'examples': lm_input.__template_input__.examples,
+                'input': lm_input.__template_input__.mapping_request.input,
             },
             {
                 'examples': [
                     mapping.MappingExample(
-                        input=Animal.partial(
-                            image=modalities.Image.from_bytes(
-                                b'image_of_rabbit'
-                            )
-                        ),
-                        output=Animal.partial(
-                            image=modalities.Image.from_bytes(
-                                b'image_of_rabbit'
-                            ),
-                            name='rabbit',
-                        ),
+                        input=Animal.partial(image_rabbit),
+                        output=Animal.partial(image_rabbit, 'rabbit'),
                     )
                 ],
-                'input': Animal(
-                    image=modalities.Image.from_bytes(b'image_of_elephant'),
-                    name=schema_lib.MISSING,
-                ),
+                'input': Animal(image_elephant, name=schema_lib.MISSING),
             },
         )
     )
     lm_output = l(
         input=input_value,
-        lm=fake.StaticResponse(inspect.cleandoc("""
+        lm=fake.StaticResponse(inspect.cleandoc(f"""
             ```python
             Animal(
               image=ModalityRef(
-                name='input.image'
+                id='{image_elephant.id}'
               ),
               name='elephant'
             )
@@ -542,10 +525,7 @@ class CompleteStructureTest(unittest.TestCase):
     self.assertTrue(
         pg.eq(
             lm_output.result,
-            Animal(
-                image=modalities.Image.from_bytes(b'image_of_elephant'),
-                name='elephant',
-            ),
+            Animal(image=image_elephant, name='elephant'),
         )
     )
 

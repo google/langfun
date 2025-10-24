@@ -39,8 +39,13 @@ class SamplingTest(unittest.TestCase):
     l = LangFunc('Compute {{x}} and {{y}}', x=pg.oneof([1, 2]))
     with component.context(lm=ExcitedEchoer()):
       samples = list(sampling.sweep(l, y=pg.oneof([3, 4])))
-      samples = sorted(samples, key=lambda x: (x[0].x, x[0].y))
-
+      samples = sorted(
+          samples,
+          key=lambda x: (
+              x[0].__template_input__.x,
+              x[0].__template_input__.y
+          )
+      )
     self.assertEqual(
         samples,
         [
@@ -57,7 +62,12 @@ class SamplingTest(unittest.TestCase):
       samples = list(
           sampling.random_sample(l, y=pg.oneof([2, 4]), num_examples=3, seed=1)
       )
-      samples = sorted(samples, key=lambda x: (x[0].x, x[0].y))
+      samples = sorted(
+          samples, key=lambda x: (
+              x[0].__template_input__.x,
+              x[0].__template_input__.y
+          )
+      )
 
     self.assertEqual(
         samples,
@@ -97,7 +107,13 @@ class SamplingTest(unittest.TestCase):
         silence_on_errors=(AttributeError,),
         ignore_examples_with_errors=False))
 
-    samples = sorted(samples, key=lambda x: (x[0].x, x[0].y))
+    samples = sorted(
+        samples,
+        key=lambda x: (
+            x[0].__template_input__.x,
+            x[0].__template_input__.y
+        )
+    )
     self.assertEqual(
         [x[0] for x in samples],
         [

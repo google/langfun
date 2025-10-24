@@ -175,18 +175,28 @@ class InMemoryLMCacheTest(unittest.TestCase):
 
     cache = in_memory.InMemory()
     lm = fake.StaticSequence(['1', '2', '3', '4', '5', '6'], cache=cache)
-    lm(lf.UserMessage('hi <<[[image]]>>', image=CustomModality('foo')))
-    lm(lf.UserMessage('hi <<[[image]]>>', image=CustomModality('bar')))
+    image_foo = CustomModality('foo')
+    image_bar = CustomModality('bar')
+    lm(
+        lf.UserMessage(
+            f'hi <<[[{image_foo.id}]]>>', referred_modalities=[image_foo]
+        )
+    )
+    lm(
+        lf.UserMessage(
+            f'hi <<[[{image_bar.id}]]>>', referred_modalities=[image_bar]
+        )
+    )
     self.assertEqual(
         list(cache.keys()),
         [
             (
-                'hi <<[[image]]>><image>acbd18db</image>',
+                f'hi <<[[{image_foo.id}]]>>',
                 (None, None, 1, 40, None, None),
                 0,
             ),
             (
-                'hi <<[[image]]>><image>37b51d19</image>',
+                f'hi <<[[{image_bar.id}]]>>',
                 (None, None, 1, 40, None, None),
                 0,
             ),

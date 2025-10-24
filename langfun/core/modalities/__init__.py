@@ -24,6 +24,14 @@ from langfun.core.modalities.image import Image
 from langfun.core.modalities.pdf import PDF
 from langfun.core.modalities.video import Video
 
+from langfun.core import message as _message_lib
+
+# Override the `images`, `videos` and `audios` properties of `Message` to
+# return the modalities of the corresponding types.
+_message_lib.Message.images = property(lambda self: self.modalities(Image))
+_message_lib.Message.videos = property(lambda self: self.modalities(Video))
+_message_lib.Message.audios = property(lambda self: self.modalities(Audio))
+
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-bad-import-order
 # pylint: enable=g-importing-member

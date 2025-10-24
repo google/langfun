@@ -253,14 +253,16 @@ class AnthropicConversionTest(unittest.TestCase):
     )
     self.assertEqual(
         m.text,
-        'What are the common words from <<[[obj0]]>> and <<[[obj1]]>> ?'
+        'What are the common words from <<[[image:dc6e1e43]]>> and'
+        ' <<[[pdf:5daf5f31]]>> ?'
     )
-    self.assertIsInstance(m.obj0, lf_modalities.Image)
-    self.assertEqual(m.obj0.mime_type, 'image/png')
-    self.assertEqual(m.obj0.to_bytes(), image_content)
+    modalities = m.modalities()
+    self.assertIsInstance(modalities[0], lf_modalities.Image)
+    self.assertEqual(modalities[0].mime_type, 'image/png')
+    self.assertEqual(modalities[0].content, image_content)
 
-    self.assertIsInstance(m.obj1, lf_modalities.PDF)
-    self.assertEqual(m.obj1.to_bytes(), pdf_content)
+    self.assertIsInstance(modalities[1], lf_modalities.PDF)
+    self.assertEqual(modalities[1].content, pdf_content)
 
 
 if __name__ == '__main__':

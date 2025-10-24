@@ -127,6 +127,8 @@ class MappingExample(lf.NaturalLanguageFormattable,
   ) -> str:
     if isinstance(value, str):
       return value
+    if isinstance(value, lf.Message):
+      return str(value)
     if isinstance(value, lf.Modality):
       with lf.modality.format_modality_as_ref():
         return str(value)
@@ -192,9 +194,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
 
     def render_value(view, *, value, **kwargs):
       if isinstance(value, lf.Template):
-        # Make a shallow copy to make sure modalities are rooted by
-        # the input.
-        value = value.clone().render()
+        value = value.render()
       if value is None:
         return None
       return view.render(value, **kwargs)
@@ -286,12 +286,8 @@ class Mapping(lf.LangFunc):
   @property
   def mapping_request(self) -> MappingExample:
     """Returns a MappingExample as the mapping request."""
-    if isinstance(self.input, lf.Message):
-      input_value = self.input.text
-    else:
-      input_value = pg.Ref(self.input)
     return MappingExample(
-        input=input_value,
+        input=pg.Ref(self.input),
         schema=pg.Ref(self.schema),
         context=self.context,
     )
@@ -402,11 +398,6 @@ class Mapping(lf.LangFunc):
 
   def transform_input(self, lm_input: lf.Message) -> lf.Message:
     # Find modalities to fill the input message.
-    lm_input.metadata.update(
-        examples=pg.Ref(self.examples),
-        input=pg.Ref(self.input),
-        schema=pg.Ref(self.schema) if self.schema is not None else None,
-    )
     if isinstance(self.input, lf.Message):
       lm_input.source = self.input
     return lm_input

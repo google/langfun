@@ -656,11 +656,17 @@ class LanguageModelTest(unittest.TestCase):
 
     string_io = io.StringIO()
     lm = MockModel(sampling_options=lm_lib.LMSamplingOptions(top_k=1))
+    image = Image()
     with contextlib.redirect_stdout(string_io):
       self.assertEqual(
-          lm(message_lib.UserMessage(
-              'hi <<[[image]]>>', image=Image()), debug=True),
-          'hi <<[[image]]>>'
+          lm(
+              message_lib.UserMessage(
+                  f'hi <<[[{image.id}]]>>',
+                  referred_modalities=[image],
+              ),
+              debug=True
+          ),
+          f'hi <<[[{image.id}]]>>'
       )
 
     debug_info = string_io.getvalue()

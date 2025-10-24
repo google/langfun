@@ -288,6 +288,7 @@ class OpenAIChatCompletionAPITest(unittest.TestCase):
       def mime_type(self) -> str:
         return 'image/png'
 
+    image = FakeImage.from_uri('https://fake/image')
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request_vision
       lm_1 = openai_compatible.OpenAIChatCompletionAPI(
@@ -302,8 +303,8 @@ class OpenAIChatCompletionAPITest(unittest.TestCase):
         self.assertEqual(
             lm(
                 lf.UserMessage(
-                    'hello <<[[image]]>>',
-                    image=FakeImage.from_uri('https://fake/image')
+                    f'hello <<[[{image.id}]]>>',
+                    referred_modalities=[image],
                 ),
                 sampling_options=lf.LMSamplingOptions(n=2)
             ),
@@ -325,8 +326,8 @@ class OpenAIChatCompletionAPITest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Unsupported modality'):
       lm_3(
           lf.UserMessage(
-              'hello <<[[image]]>>',
-              image=FakeImage.from_uri('https://fake/image')
+              f'hello <<[[{image.id}]]>>',
+              referred_modalities=[image],
           ),
       )
 
@@ -644,6 +645,7 @@ class OpenAIResponsesAPITest(unittest.TestCase):
       def mime_type(self) -> str:
         return 'image/png'
 
+    image = FakeImage.from_uri('https://fake/image')
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_responses_request_vision
       lm = openai_compatible.OpenAIResponsesAPI(
@@ -653,8 +655,8 @@ class OpenAIResponsesAPITest(unittest.TestCase):
       self.assertEqual(
           lm(
               lf.UserMessage(
-                  'hello <<[[image]]>>',
-                  image=FakeImage.from_uri('https://fake/image'),
+                  f'hello <<[[{image.id}]]>>',
+                  referred_modalities=[image],
               )
           ),
           'Sample 0 for message: https://fake/image',

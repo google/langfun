@@ -160,16 +160,17 @@ class OpenAIChatCompletionAPIConverterTest(unittest.TestCase):
       )
 
   def test_from_value_with_image(self):
+    image = lf_modalities.Image.from_bytes(image_content)
     m = lf.Message.from_openai_chat_completion_api_format(
         lf.Template(
             'What is this {{image}}?',
-            image=lf_modalities.Image.from_bytes(image_content)
+            image=image
         ).render().as_format('openai_chat_completion_api'),
     )
-    self.assertEqual(m.text, 'What is this <<[[obj0]]>> ?')
-    self.assertIsInstance(m.obj0, lf_modalities.Image)
-    self.assertEqual(m.obj0.mime_type, 'image/png')
-    self.assertEqual(m.obj0.to_bytes(), image_content)
+    self.assertEqual(m.text, f'What is this <<[[{image.id}]]>> ?')
+    self.assertIsInstance(m.images[0], lf_modalities.Image)
+    self.assertEqual(m.images[0].mime_type, 'image/png')
+    self.assertEqual(m.images[0].to_bytes(), image_content)
 
 
 class OpenAIResponsesAPIMessageConverterTest(unittest.TestCase):
@@ -305,17 +306,15 @@ class OpenAIResponsesAPIMessageConverterTest(unittest.TestCase):
       )
 
   def test_from_value_with_image(self):
+    image = lf_modalities.Image.from_bytes(image_content)
     m = lf.Message.from_openai_responses_api_format(
         lf.Template(
-            'What is this {{image}}?',
-            image=lf_modalities.Image.from_bytes(image_content)
+            'What is this {{image}}?', image=image
         ).render().as_format('openai_responses_api'),
     )
-    self.assertEqual(m.text, 'What is this <<[[obj0]]>> ?')
-    self.assertIsInstance(m.obj0, lf_modalities.Image)
-    self.assertEqual(m.obj0.mime_type, 'image/png')
-    self.assertEqual(m.obj0.to_bytes(), image_content)
-
+    self.assertEqual(m.text, f'What is this <<[[{image.id}]]>> ?')
+    self.assertIsInstance(m.modalities()[0], lf_modalities.Image)
+    self.assertEqual(m.modalities()[0].content, image_content)
 
 if __name__ == '__main__':
   unittest.main()

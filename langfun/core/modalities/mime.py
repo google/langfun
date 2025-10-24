@@ -15,6 +15,7 @@
 
 import base64
 import functools
+import hashlib
 from typing import Annotated, Any, Iterable, Type, Union
 import langfun.core as lf
 # Placeholder for Google-internal internet access import.
@@ -86,6 +87,14 @@ class Mime(lf.Modality):
   def is_binary(self) -> bool:
     """Returns True if the MIME type is a binary type."""
     return not self.is_text
+
+  @property
+  def hash(self) -> str:
+    """Returns the hash of the MIME content."""
+    # Hash the URI to avoid downloading the content.
+    if self.uri is not None:
+      return hashlib.md5(self.uri.encode()).hexdigest()[:8]
+    return super().hash
 
   def to_text(self) -> str:
     """Returns the text content of the MIME type."""

@@ -176,6 +176,51 @@ class DefinitionTest(unittest.TestCase):
       Template('{{x=1')
 
 
+class FromValueTest(unittest.TestCase):
+
+  def test_from_str(self):
+    t = Template.from_value('Hello {{x}}', x=1)
+    self.assertTrue(pg.eq(t, Template('Hello {{x}}', x=1)))
+    self.assertEqual(t.render(), 'Hello 1')
+
+  def test_from_message(self):
+    class CustomModality(modality.Modality):
+      content: str
+
+      def to_bytes(self):
+        return self.content.encode()
+
+    message = Template('{{image}}', image=CustomModality('foo')).render()
+    t = Template.from_value(message)
+    m = t.render()
+    self.assertTrue(
+        pg.eq(m.modalities(), [CustomModality('foo')])
+    )
+    self.assertEqual(message.metadata, m.metadata)
+
+  def test_from_same_template(self):
+    t = Template('Hello {{x}}', x=1)
+    t2 = Template.from_value(t)
+    self.assertTrue(pg.eq(t, t2))
+    self.assertEqual(t2.x, 1)
+
+  def test_from_different_template(self):
+    t = Template('Hello {{x}}', x=1)
+
+    class MyTemplate(Template):
+      pass
+
+    t2 = MyTemplate.from_value(t, x=2)
+    self.assertIsInstance(t2, MyTemplate)
+    self.assertEqual(t2.template_str, t.template_str)
+    self.assertEqual(t2.x, 2)
+
+  def test_from_python_object(self):
+    t = Template.from_value(pg.Dict(x=1, y=2))
+    self.assertEqual(t.template_str, '{{input}}')
+    self.assertEqual(t.input, pg.Dict(x=1, y=2))
+
+
 class VarsTest(unittest.TestCase):
 
   def assert_missing_vars(self, t: Template, missing_vars: set[str]):
@@ -251,6 +296,10 @@ class VarsTest(unittest.TestCase):
 
 class RenderTest(unittest.TestCase):
 
+  def setUp(self):
+    super().setUp()
+    self.maxDiff = None
+
   def test_clean(self):
     l = Template('\n Hello\n ')
     self.assertEqual(l.render(), 'Hello')
@@ -279,19 +328,20 @@ class RenderTest(unittest.TestCase):
     )
     v = l.render()
     self.assertEqual(v, 'How are you 1')
-    self.assertIs(v.x, l.x)
-    self.assertEqual(v.x.render_output, 'are you 1')
-    self.assertIs(v.x.y, l.x.y)
-    self.assertEqual(v.x.y.render_output, 'you 1')
-    self.assertEqual(v.x.y.n, 1)
+    self.assertIs(v.__template_input__.x, l.x)
+    self.assertEqual(v.__template_input__.x.render_output, 'are you 1')
+    self.assertIs(v.__template_input__.x.y, l.x.y)
+    self.assertIs(v.__template_input__.x.y.n, l.x.y.n)
+    self.assertEqual(v.__template_input__.x.y.render_output, 'you 1')
+    self.assertEqual(v.__template_input__.x.y.n, 1)
 
   def test_render_with_call_args(self):
     l = Template('Hello {{x}} and {{y}}', x=1, y=Template('{{z}}'), z=3)
     v = l.render(x=2)
     self.assertEqual(v, 'Hello 2 and 3')
-    self.assertEqual(v.x, 2)
-    self.assertEqual(v.y, '3')
-    self.assertEqual(v.y.z, 3)
+    self.assertEqual(v.__template_input__.x, 2)
+    self.assertEqual(v.__template_input__.y, '3')
+    self.assertEqual(v.__template_input__.y.z, 3)
 
   def test_render_cache(self):
     class DynamicContent(Template):
@@ -321,11 +371,17 @@ class RenderTest(unittest.TestCase):
       def to_bytes(self):
         return self.content.encode()
 
+    foo = CustomModality('foo')
+    message = Template('This is {{ x }} and {{ a }}', x=1, a=foo).render()
     self.assertEqual(
-        Template(
-            'This is {{ x }} and {{ a }}', x=1, a=CustomModality('foo')
-        ).render(),
-        'This is 1 and <<[[a]]>>',
+        message,
+        'This is 1 and <<[[custom_modality:acbd18db]]>>',
+    )
+    self.assertIn(
+        'custom_modality:acbd18db', message.referred_modalities
+    )
+    self.assertIs(
+        message.referred_modalities['custom_modality:acbd18db'], foo
     )
 
   def test_render_with_default(self):
@@ -511,12 +567,22 @@ class RenderTest(unittest.TestCase):
     self.assert_partial(Template('Hello {{len(x)}}'), 'Hello {{len(x)}}')
 
   def test_additional_metadata(self):
-    t = Template('hi', metadata_weights=1.0, y=2)
-    self.assertEqual(t.render(), message_lib.UserMessage('hi', weights=1.0))
+    t = Template('hi {{y}}', metadata_weights=1.0, y=2, z=1)
+    self.assertEqual(
+        t.render(),
+        message_lib.UserMessage(
+            'hi 2', weights=1.0, __template_input__={'y': 2}
+        )
+    )
 
-    t = Template('hi')
-    with component.context(metadata_weights=1.0, y=2):
-      self.assertEqual(t.render(), message_lib.UserMessage('hi', weights=1.0))
+    t = Template('hi {{y}}')
+    with component.context(metadata_weights=1.0, y=3):
+      self.assertEqual(
+          t.render(z=2),
+          message_lib.UserMessage(
+              'hi 3', weights=1.0, __template_input__={'y': 3}
+          )
+      )
 
 
 class TemplateRenderEventTest(unittest.TestCase):

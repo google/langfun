@@ -121,4 +121,6 @@ class LMCacheBase(lf.LMCache):
 
 def default_key(lm: lf.LanguageModel, prompt: lf.Message, seed: int) -> Any:
   """Default key for LM cache."""
-  return (prompt.text_with_modality_hash, lm.sampling_options.cache_key(), seed)
+  # prompt text already contains the modality id for referenced modality
+  # objects, so no need to include them in the key.
+  return (prompt.text, lm.sampling_options.cache_key(), seed)

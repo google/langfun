@@ -225,19 +225,22 @@ class GeminiConversionTest(unittest.TestCase):
     self.assertEqual(
         m.text,
         (
-            'What are the common words from <<[[obj0]]>> , <<[[obj1]]>> '
-            'and <<[[obj2]]>> ?'
+            'What are the common words from <<[[image:dc6e1e43]]>> , '
+            '<<[[pdf:4dc12e93]]>> and <<[[video:7e169565]]>> ?'
         )
     )
-    self.assertIsInstance(m.obj0, lf_modalities.Image)
-    self.assertEqual(m.obj0.mime_type, 'image/png')
-    self.assertEqual(m.obj0.to_bytes(), image_content)
+    self.assertIsInstance(m.modalities()[0], lf_modalities.Image)
+    self.assertEqual(m.modalities()[0].mime_type, 'image/png')
+    self.assertEqual(m.modalities()[0].to_bytes(), image_content)
 
-    self.assertIsInstance(m.obj1, lf_modalities.PDF)
-    self.assertEqual(m.obj1.uri, 'https://my.pdf')
+    self.assertIsInstance(m.modalities()[1], lf_modalities.PDF)
+    self.assertEqual(m.modalities()[1].uri, 'https://my.pdf')
 
-    self.assertIsInstance(m.obj2, lf_modalities.Video)
-    self.assertEqual(m.obj2.uri, 'https://www.youtube.com/watch?v=abcd')
+    self.assertIsInstance(m.modalities()[2], lf_modalities.Video)
+    self.assertEqual(
+        m.modalities()[2].uri,
+        'https://www.youtube.com/watch?v=abcd'
+    )
 
 
 if __name__ == '__main__':
