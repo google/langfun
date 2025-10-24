@@ -497,7 +497,7 @@ _LLAMA_MODELS_BY_MODEL_ID = {m.model_id: m for m in LLAMA_MODELS}
 
 @pg.use_init_args(['model'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
-class VertexAILlama(VertexAI, openai_compatible.OpenAICompatible):
+class VertexAILlama(VertexAI, openai_compatible.OpenAIChatCompletionAPI):
   """Llama models on VertexAI."""
 
   model: pg.typing.Annotated[
@@ -610,7 +610,7 @@ _MISTRAL_MODELS_BY_MODEL_ID = {m.model_id: m for m in MISTRAL_MODELS}
 
 @pg.use_init_args(['model'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
-class VertexAIMistral(VertexAI, openai_compatible.OpenAICompatible):
+class VertexAIMistral(VertexAI, openai_compatible.OpenAIChatCompletionAPI):
   """Mistral AI models on VertexAI."""
 
   model: pg.typing.Annotated[

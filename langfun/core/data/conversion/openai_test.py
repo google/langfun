@@ -30,25 +30,25 @@ image_content = (
 )
 
 
-class OpenAIConversionTest(unittest.TestCase):
+class OpenAIChatCompletionAPIConverterTest(unittest.TestCase):
 
   def test_as_format_with_role(self):
     self.assertEqual(
-        lf.UserMessage('hi').as_format('openai'),
+        lf.UserMessage('hi').as_format('openai_chat_completion_api'),
         {
             'role': 'user',
             'content': [{'type': 'text', 'text': 'hi'}],
         },
     )
     self.assertEqual(
-        lf.AIMessage('hi').as_format('openai'),
+        lf.AIMessage('hi').as_format('openai_chat_completion_api'),
         {
             'role': 'assistant',
             'content': [{'type': 'text', 'text': 'hi'}],
         },
     )
     self.assertEqual(
-        lf.SystemMessage('hi').as_format('openai'),
+        lf.SystemMessage('hi').as_format('openai_chat_completion_api'),
         {
             'role': 'system',
             'content': [{'type': 'text', 'text': 'hi'}],
@@ -60,7 +60,7 @@ class OpenAIConversionTest(unittest.TestCase):
         lf.Template(
             'What is this {{image}}?',
             image=lf_modalities.Image.from_bytes(image_content)
-        ).render().as_format('openai'),
+        ).render().as_format('openai_chat_completion_api'),
         {
             'role': 'user',
             'content': [
@@ -90,7 +90,7 @@ class OpenAIConversionTest(unittest.TestCase):
         lf.Template(
             'What is this {{image}}?',
             image=lf_modalities.Image.from_bytes(image_content)
-        ).render().as_openai_format(
+        ).render().as_openai_chat_completion_api_format(
             chunk_preprocessor=lambda x: x if isinstance(x, str) else None
         ),
         {
@@ -114,7 +114,7 @@ class OpenAIConversionTest(unittest.TestCase):
             {
                 'content': 'this is a text',
             },
-            format='openai',
+            format='openai_chat_completion_api',
         ),
         lf.AIMessage('this is a text'),
     )
@@ -126,7 +126,7 @@ class OpenAIConversionTest(unittest.TestCase):
                 'role': 'user',
                 'content': [{'type': 'text', 'text': 'hi'}],
             },
-            format='openai',
+            format='openai_chat_completion_api',
         ),
         lf.UserMessage('hi'),
     )
@@ -136,7 +136,7 @@ class OpenAIConversionTest(unittest.TestCase):
                 'role': 'assistant',
                 'content': [{'type': 'text', 'text': 'hi'}],
             },
-            format='openai',
+            format='openai_chat_completion_api',
         ),
         lf.AIMessage('hi'),
     )
@@ -146,7 +146,7 @@ class OpenAIConversionTest(unittest.TestCase):
                 'role': 'system',
                 'content': [{'type': 'text', 'text': 'hi'}],
             },
-            format='openai',
+            format='openai_chat_completion_api',
         ),
         lf.SystemMessage('hi'),
     )
@@ -156,15 +156,160 @@ class OpenAIConversionTest(unittest.TestCase):
               'role': 'function',
               'content': [{'type': 'text', 'text': 'hi'}],
           },
-          format='openai',
+          format='openai_chat_completion_api',
       )
 
   def test_from_value_with_image(self):
-    m = lf.Message.from_openai_format(
+    m = lf.Message.from_openai_chat_completion_api_format(
         lf.Template(
             'What is this {{image}}?',
             image=lf_modalities.Image.from_bytes(image_content)
-        ).render().as_format('openai'),
+        ).render().as_format('openai_chat_completion_api'),
+    )
+    self.assertEqual(m.text, 'What is this <<[[obj0]]>> ?')
+    self.assertIsInstance(m.obj0, lf_modalities.Image)
+    self.assertEqual(m.obj0.mime_type, 'image/png')
+    self.assertEqual(m.obj0.to_bytes(), image_content)
+
+
+class OpenAIResponsesAPIMessageConverterTest(unittest.TestCase):
+
+  def test_as_format_with_role(self):
+    self.assertEqual(
+        lf.UserMessage('hi').as_format('openai_responses_api'),
+        {
+            'type': 'message',
+            'role': 'user',
+            'content': [{'type': 'input_text', 'text': 'hi'}],
+        },
+    )
+    self.assertEqual(
+        lf.AIMessage('hi').as_format('openai_responses_api'),
+        {
+            'type': 'message',
+            'role': 'assistant',
+            'content': [{'type': 'output_text', 'text': 'hi'}],
+        },
+    )
+    self.assertEqual(
+        lf.SystemMessage('hi').as_format('openai_responses_api'),
+        {
+            'type': 'message',
+            'role': 'system',
+            'content': [{'type': 'input_text', 'text': 'hi'}],
+        },
+    )
+
+  def test_as_format_with_image(self):
+    self.assertEqual(
+        lf.Template(
+            'What is this {{image}}?',
+            image=lf_modalities.Image.from_bytes(image_content)
+        ).render().as_format('openai_responses_api'),
+        {
+            'type': 'message',
+            'role': 'user',
+            'content': [
+                {
+                    'type': 'input_text',
+                    'text': 'What is this'
+                },
+                {
+                    'type': 'input_image',
+                    'image_url': (
+                        'data:image/png;base64,'
+                        + base64.b64encode(image_content).decode('utf-8')
+                    )
+                },
+                {
+                    'type': 'input_text',
+                    'text': '?'
+                }
+            ],
+        },
+    )
+
+  def test_as_format_with_chunk_preprocessor(self):
+    self.assertEqual(
+        lf.Template(
+            'What is this {{image}}?',
+            image=lf_modalities.Image.from_bytes(image_content)
+        ).render().as_openai_responses_api_format(
+            chunk_preprocessor=lambda x: x if isinstance(x, str) else None
+        ),
+        {
+            'type': 'message',
+            'role': 'user',
+            'content': [
+                {
+                    'type': 'input_text',
+                    'text': 'What is this'
+                },
+                {
+                    'type': 'input_text',
+                    'text': '?'
+                }
+            ],
+        },
+    )
+
+  def test_from_value_with_simple_text(self):
+    self.assertEqual(
+        lf.Message.from_value(
+            {
+                'content': 'this is a text',
+            },
+            format='openai_responses_api',
+        ),
+        lf.AIMessage('this is a text'),
+    )
+
+  def test_from_value_with_role(self):
+    self.assertEqual(
+        lf.Message.from_value(
+            {
+                'role': 'user',
+                'content': [{'type': 'input_text', 'text': 'hi'}],
+            },
+            format='openai_responses_api',
+        ),
+        lf.UserMessage('hi'),
+    )
+    self.assertEqual(
+        lf.Message.from_value(
+            {
+                'role': 'assistant',
+                'content': [{'type': 'output_text', 'text': 'hi'}],
+            },
+            format='openai_responses_api',
+        ),
+        lf.AIMessage('hi'),
+    )
+    self.assertEqual(
+        lf.Message.from_value(
+            {
+                'role': 'system',
+                'content': [{'type': 'input_text', 'text': 'hi'}],
+            },
+            format='openai_responses_api',
+        ),
+        lf.SystemMessage('hi'),
+    )
+    with self.assertRaisesRegex(ValueError, 'Unsupported role: .*'):
+      lf.Message.from_value(
+          {
+              'role': 'function',
+              'content': [{'type': 'input_text', 'text': 'hi'}],
+          },
+          format='openai_responses_api',
+      )
+
+  def test_from_value_with_image(self):
+    m = lf.Message.from_openai_responses_api_format(
+        lf.Template(
+            'What is this {{image}}?',
+            image=lf_modalities.Image.from_bytes(image_content)
+        ).render().as_format('openai_responses_api'),
     )
     self.assertEqual(m.text, 'What is this <<[[obj0]]>> ?')
     self.assertIsInstance(m.obj0, lf_modalities.Image)

@@ -259,7 +259,7 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 
 @lf.use_init_args(['model'])
-class Groq(openai_compatible.OpenAICompatible):
+class Groq(openai_compatible.OpenAIChatCompletionAPI):
   """Groq LLMs through REST APIs (OpenAI compatible).
 
   See https://platform.openai.com/docs/api-reference/chat

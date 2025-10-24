@@ -20,7 +20,7 @@ import pyglove as pg
 
 @pg.use_init_args(['url', 'model'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
-class LlamaCppRemote(openai_compatible.OpenAICompatible):
+class LlamaCppRemote(openai_compatible.OpenAIChatCompletionAPI):
   """The remote LLaMA C++ model.
 
   The Remote LLaMA C++ models can be launched via

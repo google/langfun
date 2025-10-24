@@ -93,7 +93,7 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 # DeepSeek API uses an API format compatible with OpenAI.
 # Reference: https://api-docs.deepseek.com/
 @lf.use_init_args(['model'])
-class DeepSeek(openai_compatible.OpenAICompatible):
+class DeepSeek(openai_compatible.OpenAIChatCompletionAPI):
   """DeepSeek model."""
 
   model: pg.typing.Annotated[

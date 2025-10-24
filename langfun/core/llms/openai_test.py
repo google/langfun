@@ -61,8 +61,6 @@ class OpenAITest(unittest.TestCase):
         ),
         dict(
             model='gpt-4',
-            top_logprobs=None,
-            n=1,
             temperature=1.0,
             stop=['\n'],
             seed=123,

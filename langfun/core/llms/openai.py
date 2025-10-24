@@ -1031,7 +1031,7 @@ _SUPPORTED_MODELS_BY_MODEL_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 
 @lf.use_init_args(['model'])
-class OpenAI(openai_compatible.OpenAICompatible):
+class OpenAI(openai_compatible.OpenAIResponsesAPI):
   """OpenAI model."""
 
   model: pg.typing.Annotated[
@@ -1041,7 +1041,12 @@ class OpenAI(openai_compatible.OpenAICompatible):
       'The name of the model to use.',
   ]
 
-  api_endpoint: str = 'https://api.openai.com/v1/chat/completions'
+  # Disable message storage by default.
+  sampling_options = lf.LMSamplingOptions(
+      extras={'store': False}
+  )
+
+  api_endpoint: str = 'https://api.openai.com/v1/responses'
 
   api_key: Annotated[
       str | None,

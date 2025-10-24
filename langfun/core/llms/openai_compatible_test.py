@@ -38,7 +38,7 @@ def mock_chat_completion_request(url: str, json: dict[str, Any], **kwargs):
     response_format = ''
 
   choices = []
-  for k in range(json['n']):
+  for k in range(json.get('n', 1)):
     if json.get('logprobs'):
       logprobs = dict(
           content=[
@@ -89,7 +89,7 @@ def mock_chat_completion_request_vision(
       c['image_url']['url']
       for c in json['messages'][0]['content'] if c['type'] == 'image_url'
   ]
-  for k in range(json['n']):
+  for k in range(json.get('n', 1)):
     choices.append(pg.Dict(
         message=pg.Dict(
             content=f'Sample {k} for message: {"".join(urls)}'
@@ -111,12 +111,88 @@ def mock_chat_completion_request_vision(
   return response
 
 
-class OpenAIComptibleTest(unittest.TestCase):
+def mock_responses_request(url: str, json: dict[str, Any], **kwargs):
+  del url, kwargs
+  _ = json['input']
+
+  system_message = ''
+  if 'instructions' in json:
+    system_message = f' system={json["instructions"]}'
+
+  response_format = ''
+  if 'text' in json and 'format' in json['text']:
+    response_format = f' format={json["text"]["format"]["type"]}'
+
+  output = [
+      dict(
+          type='message',
+          content=[
+              dict(
+                  type='output_text',
+                  text=(
+                      f'Sample 0 for message.{system_message}{response_format}'
+                  )
+              )
+          ],
+      )
+  ]
+
+  response = requests.Response()
+  response.status_code = 200
+  response._content = pg.to_json_str(
+      dict(
+          output=output,
+          usage=dict(
+              input_tokens=100,
+              output_tokens=100,
+              total_tokens=200,
+          ),
+      )
+  ).encode()
+  return response
+
+
+def mock_responses_request_vision(
+    url: str, json: dict[str, Any], **kwargs
+):
+  del url, kwargs
+  urls = [
+      c['image_url']
+      for c in json['input'][0]['content']
+      if c['type'] == 'input_image'
+  ]
+  output = [
+      pg.Dict(
+          type='message',
+          content=[
+              pg.Dict(
+                  type='output_text',
+                  text=f'Sample 0 for message: {"".join(urls)}',
+              )
+          ],
+      )
+  ]
+  response = requests.Response()
+  response.status_code = 200
+  response._content = pg.to_json_str(
+      dict(
+          output=output,
+          usage=dict(
+              input_tokens=100,
+              output_tokens=100,
+              total_tokens=200,
+          ),
+      )
+  ).encode()
+  return response
+
+
+class OpenAIChatCompletionAPITest(unittest.TestCase):
   """Tests for OpenAI compatible language model."""
 
   def test_request_args(self):
     self.assertEqual(
-        openai_compatible.OpenAICompatible(
+        openai_compatible.OpenAIChatCompletionAPI(
             api_endpoint='https://test-server',
             model='test-model'
         )._request_args(
@@ -126,8 +202,6 @@ class OpenAIComptibleTest(unittest.TestCase):
         ),
         dict(
             model='test-model',
-            top_logprobs=None,
-            n=1,
             temperature=1.0,
             stop=['\n'],
             seed=123,
@@ -137,7 +211,7 @@ class OpenAIComptibleTest(unittest.TestCase):
   def test_call_chat_completion(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model',
       )
       self.assertEqual(
@@ -148,7 +222,7 @@ class OpenAIComptibleTest(unittest.TestCase):
   def test_call_chat_completion_with_logprobs(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model',
       )
       results = lm.sample(['hello'], logprobs=True)
@@ -216,11 +290,11 @@ class OpenAIComptibleTest(unittest.TestCase):
 
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request_vision
-      lm_1 = openai_compatible.OpenAICompatible(
+      lm_1 = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server',
           model='test-model1',
       )
-      lm_2 = openai_compatible.OpenAICompatible(
+      lm_2 = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server',
           model='test-model2',
       )
@@ -236,7 +310,7 @@ class OpenAIComptibleTest(unittest.TestCase):
             'Sample 0 for message: https://fake/image',
         )
 
-    class TextOnlyModel(openai_compatible.OpenAICompatible):
+    class TextOnlyModel(openai_compatible.OpenAIChatCompletionAPI):
 
       class ModelInfo(lf.ModelInfo):
         input_modalities: list[str] = lf.ModelInfo.TEXT_INPUT_ONLY
@@ -259,7 +333,7 @@ class OpenAIComptibleTest(unittest.TestCase):
   def test_sample_chat_completion(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model'
       )
       results = lm.sample(
@@ -400,7 +474,7 @@ class OpenAIComptibleTest(unittest.TestCase):
   def test_sample_with_contextual_options(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model'
       )
       with lf.use_settings(sampling_options=lf.LMSamplingOptions(n=2)):
@@ -458,7 +532,7 @@ class OpenAIComptibleTest(unittest.TestCase):
   def test_call_with_system_message(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model'
       )
       self.assertEqual(
@@ -475,7 +549,7 @@ class OpenAIComptibleTest(unittest.TestCase):
   def test_call_with_json_schema(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_chat_completion_request
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model'
       )
       self.assertEqual(
@@ -515,13 +589,124 @@ class OpenAIComptibleTest(unittest.TestCase):
 
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_context_limit_error
-      lm = openai_compatible.OpenAICompatible(
+      lm = openai_compatible.OpenAIChatCompletionAPI(
           api_endpoint='https://test-server', model='test-model'
       )
       with self.assertRaisesRegex(
           lf.ContextLimitError, 'string_above_max_length'
       ):
         lm(lf.UserMessage('hello'))
+
+
+class OpenAIResponsesAPITest(unittest.TestCase):
+  """Tests for OpenAI compatible language model on Responses API."""
+
+  def test_request_args(self):
+    lm = openai_compatible.OpenAIResponsesAPI(
+        api_endpoint='https://test-server', model='test-model'
+    )
+    # Test valid args.
+    self.assertEqual(
+        lm._request_args(
+            lf.LMSamplingOptions(
+                temperature=1.0, stop=['\n'], n=1, random_seed=123
+            )
+        ),
+        dict(
+            model='test-model',
+            temperature=1.0,
+            stop=['\n'],
+            seed=123,
+        ),
+    )
+    # Test unsupported n.
+    with self.assertRaisesRegex(ValueError, 'n must be 1 for Responses API.'):
+      lm._request_args(lf.LMSamplingOptions(n=2))
+
+    # Test unsupported logprobs.
+    with self.assertRaisesRegex(
+        ValueError, 'logprobs is not supported on Responses API.'
+    ):
+      lm._request_args(lf.LMSamplingOptions(logprobs=True))
+
+  def test_call_responses(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_responses_request
+      lm = openai_compatible.OpenAIResponsesAPI(
+          api_endpoint='https://test-server',
+          model='test-model',
+      )
+      self.assertEqual(lm('hello'), 'Sample 0 for message.')
+
+  def test_call_responses_vision(self):
+    class FakeImage(lf_modalities.Image):
+      @property
+      def mime_type(self) -> str:
+        return 'image/png'
+
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_responses_request_vision
+      lm = openai_compatible.OpenAIResponsesAPI(
+          api_endpoint='https://test-server',
+          model='test-model1',
+      )
+      self.assertEqual(
+          lm(
+              lf.UserMessage(
+                  'hello <<[[image]]>>',
+                  image=FakeImage.from_uri('https://fake/image'),
+              )
+          ),
+          'Sample 0 for message: https://fake/image',
+      )
+
+  def test_call_with_system_message(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_responses_request
+      lm = openai_compatible.OpenAIResponsesAPI(
+          api_endpoint='https://test-server', model='test-model'
+      )
+      self.assertEqual(
+          lm(
+              lf.UserMessage(
+                  'hello',
+                  system_message=lf.SystemMessage('hi'),
+              )
+          ),
+          'Sample 0 for message. system=hi',
+      )
+
+  def test_call_with_json_schema(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_responses_request
+      lm = openai_compatible.OpenAIResponsesAPI(
+          api_endpoint='https://test-server', model='test-model'
+      )
+      self.assertEqual(
+          lm(
+              lf.UserMessage(
+                  'hello',
+                  json_schema={
+                      'type': 'object',
+                      'properties': {
+                          'name': {'type': 'string'},
+                      },
+                      'required': ['name'],
+                      'title': 'Person',
+                  },
+              )
+          ),
+          'Sample 0 for message. format=json_schema',
+      )
+
+    # Test bad json schema.
+    with self.assertRaisesRegex(ValueError, '`json_schema` must be a dict'):
+      lm(lf.UserMessage('hello', json_schema='foo'))
+
+    with self.assertRaisesRegex(
+        ValueError, 'The root of `json_schema` must have a `title` field'
+    ):
+      lm(lf.UserMessage('hello', json_schema={}))
 
 
 if __name__ == '__main__':

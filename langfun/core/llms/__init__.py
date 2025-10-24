@@ -30,7 +30,8 @@ from langfun.core.llms.compositional import RandomChoice
 
 # Base models by request/response protocol.
 from langfun.core.llms.rest import REST
-from langfun.core.llms.openai_compatible import OpenAICompatible
+from langfun.core.llms.openai_compatible import OpenAIChatCompletionAPI
+from langfun.core.llms.openai_compatible import OpenAIResponsesAPI
 from langfun.core.llms.gemini import Gemini
 from langfun.core.llms.anthropic import Anthropic
 

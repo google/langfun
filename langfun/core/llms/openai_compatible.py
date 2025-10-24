@@ -23,8 +23,13 @@ import pyglove as pg
 
 
 @lf.use_init_args(['api_endpoint', 'model'])
-class OpenAICompatible(rest.REST):
-  """Base for OpenAI compatible models."""
+class OpenAIChatCompletionAPI(rest.REST):
+  """Base for OpenAI compatible models based on ChatCompletion API.
+
+  See https://platform.openai.com/docs/api-reference/chat
+  As of 2025-10-23, OpenAI is migrating from ChatCompletion API to Responses
+  API.
+  """
 
   model: Annotated[
       str, 'The name of the model to use.',
@@ -42,12 +47,14 @@ class OpenAICompatible(rest.REST):
     # Reference:
     # https://platform.openai.com/docs/api-reference/completions/create
     # NOTE(daiyip): options.top_k is not applicable.
-    args = dict(
-        n=options.n,
-        top_logprobs=options.top_logprobs,
-    )
+    args = {}
+
     if self.model:
       args['model'] = self.model
+    if options.n != 1:
+      args['n'] = options.n
+    if options.top_logprobs is not None:
+      args['top_logprobs'] = options.top_logprobs
     if options.logprobs:
       args['logprobs'] = options.logprobs
     if options.temperature is not None:
@@ -74,27 +81,13 @@ class OpenAICompatible(rest.REST):
     """Returns the JSON input for a message."""
     request_args = self._request_args(sampling_options)
 
-    # Users could use `metadata_json_schema` to pass additional
-    # request arguments.
-    json_schema = prompt.metadata.get('json_schema')
-    if json_schema is not None:
-      if not isinstance(json_schema, dict):
-        raise ValueError(
-            f'`json_schema` must be a dict, got {json_schema!r}.'
-        )
-      if 'title' not in json_schema:
-        raise ValueError(
-            f'The root of `json_schema` must have a `title` field, '
-            f'got {json_schema!r}.'
-        )
+    # Handle structured output.
+    output_schema = self._structure_output_schema(prompt)
+    if output_schema is not None:
       request_args.update(
           response_format=dict(
               type='json_schema',
-              json_schema=dict(
-                  schema=json_schema,
-                  name=json_schema['title'],
-                  strict=True,
-              )
+              json_schema=output_schema,
           )
       )
       prompt.metadata.formatted_text = (
@@ -120,16 +113,42 @@ class OpenAICompatible(rest.REST):
       assert isinstance(system_message, lf.SystemMessage), type(system_message)
       messages.append(
           system_message.as_format(
-              'openai', chunk_preprocessor=modality_check
+              'openai_chat_completion_api', chunk_preprocessor=modality_check
           )
       )
     messages.append(
-        prompt.as_format('openai', chunk_preprocessor=modality_check)
+        prompt.as_format(
+            'openai_chat_completion_api',
+            chunk_preprocessor=modality_check
+        )
     )
     request = dict()
     request.update(request_args)
     request['messages'] = messages
     return request
+
+  def _structure_output_schema(
+      self, prompt: lf.Message
+  ) -> dict[str, Any] | None:
+    # Users could use `metadata_json_schema` to pass additional
+    # request arguments.
+    json_schema = prompt.metadata.get('json_schema')
+    if json_schema is not None:
+      if not isinstance(json_schema, dict):
+        raise ValueError(
+            f'`json_schema` must be a dict, got {json_schema!r}.'
+        )
+      if 'title' not in json_schema:
+        raise ValueError(
+            f'The root of `json_schema` must have a `title` field, '
+            f'got {json_schema!r}.'
+        )
+      return dict(
+          schema=json_schema,
+          name=json_schema['title'],
+          strict=True,
+      )
+    return None
 
   def _parse_choice(self, choice: dict[str, Any]) -> lf.LMSample:
     # Reference:
@@ -146,7 +165,10 @@ class OpenAICompatible(rest.REST):
           for t in choice_logprobs['content']
       ]
     return lf.LMSample(
-        lf.Message.from_value(choice['message'], format='openai'),
+        lf.Message.from_value(
+            choice['message'],
+            format='openai_chat_completion_api'
+        ),
         score=0.0,
         logprobs=logprobs,
     )
@@ -171,3 +193,88 @@ class OpenAICompatible(rest.REST):
         or (status_code == 400 and b'string_above_max_length' in content)):
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
+
+
+class OpenAIResponsesAPI(OpenAIChatCompletionAPI):
+  """Base for OpenAI compatible models based on Responses API.
+
+  https://platform.openai.com/docs/api-reference/responses/create
+  """
+
+  def _request_args(
+      self, options: lf.LMSamplingOptions) -> dict[str, Any]:
+    """Returns a dict as request arguments."""
+    if options.logprobs:
+      raise ValueError('logprobs is not supported on Responses API.')
+    if options.n != 1:
+      raise ValueError('n must be 1 for Responses API.')
+    return super()._request_args(options)
+
+  def request(
+      self,
+      prompt: lf.Message,
+      sampling_options: lf.LMSamplingOptions
+  ) -> dict[str, Any]:
+    """Returns the JSON input for a message."""
+    request_args = self._request_args(sampling_options)
+
+    # Handle structured output.
+    output_schema = self._structure_output_schema(prompt)
+    if output_schema is not None:
+      output_schema['type'] = 'json_schema'
+      request_args.update(text=dict(format=output_schema))
+      prompt.metadata.formatted_text = (
+          prompt.text
+          + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
+          + pg.to_json_str(request_args['text'], json_indent=2)
+      )
+
+    request = dict()
+    request.update(request_args)
+
+    # Users could use `metadata_system_message` to pass system message.
+    system_message = prompt.metadata.get('system_message')
+    if system_message:
+      assert isinstance(system_message, lf.SystemMessage), type(system_message)
+      request['instructions'] = system_message.text
+
+    # Prepare input.
+    def modality_check(chunk: str | lf.Modality) -> Any:
+      if (isinstance(chunk, lf_modalities.Mime)
+          and not self.supports_input(chunk.mime_type)):
+        raise ValueError(
+            f'Unsupported modality: {chunk!r}.'
+        )
+      return chunk
+
+    request['input'] = [
+        prompt.as_format(
+            'openai_responses_api',
+            chunk_preprocessor=modality_check
+        )
+    ]
+    return request
+
+  def _parse_output(self, output: dict[str, Any]) -> lf.LMSample:
+    for item in output:
+      if isinstance(item, dict) and item.get('type') == 'message':
+        return lf.LMSample(
+            lf.Message.from_value(item, format='openai_responses_api'),
+            score=0.0,
+        )
+    raise ValueError('No message found in output.')
+
+  def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    """Returns a LMSamplingResult from a JSON response."""
+    usage = json['usage']
+    return lf.LMSamplingResult(
+        samples=[self._parse_output(json['output'])],
+        usage=lf.LMSamplingUsage(
+            prompt_tokens=usage['input_tokens'],
+            completion_tokens=usage['output_tokens'],
+            total_tokens=usage['total_tokens'],
+            completion_tokens_details=usage.get(
+                'output_tokens_details', None
+            ),
+        ),
+    )
