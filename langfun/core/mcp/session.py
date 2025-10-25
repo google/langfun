@@ -89,34 +89,19 @@ class McpSession:
       self,
       tool: mcp_tool.McpTool,
       *,
-      returns_call_result: bool = False
+      returns_message: bool = False
   ) -> Any:
     """Calls a MCP tool synchronously."""
-    return async_support.invoke_sync(
-        self.acall_tool,
-        tool,
-        returns_call_result=returns_call_result
-    )
+    return tool(self, returns_message=returns_message)
 
   async def acall_tool(
       self,
       tool: mcp_tool.McpTool,
       *,
-      returns_call_result: bool = False
+      returns_message: bool = False
   ) -> Any:
     """Calls a MCP tool asynchronously."""
-    assert self._session is not None, 'MCP session is not entered.'
-    tool_call_result = await self._session.call_tool(
-        tool.TOOL_NAME, tool.input_parameters()
-    )
-    if returns_call_result:
-      return tool_call_result
-    if (
-        tool_call_result.structuredContent
-        and 'result' in tool_call_result.structuredContent
-    ):
-      return tool_call_result.structuredContent['result']
-    return tool_call_result.content
+    return await tool.acall(self, returns_message=returns_message)
 
   @classmethod
   def from_command(
