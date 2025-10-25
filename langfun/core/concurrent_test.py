@@ -608,6 +608,7 @@ class ConcurrentMapTest(unittest.TestCase):
         ],
     )
     concurrent.ProgressBar.uninstall(bar_id)
+    concurrent.ProgressBar.refresh()
     self.assertIn('100%', string_io.getvalue())
 
 

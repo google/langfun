@@ -18,6 +18,7 @@ import sys
 import tempfile
 import unittest
 
+from langfun.core import concurrent as lf_concurrent
 from langfun.core import console as lf_console
 from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import progress_tracking    # pylint: disable=unused-import
@@ -51,6 +52,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
     with contextlib.redirect_stderr(string_io):
       _ = experiment.run(root_dir, 'new', plugins=[])
       sys.stderr.flush()
+    lf_concurrent.ProgressBar.refresh()
     self.assertIn('All: 100%', string_io.getvalue())
 
   def test_with_example_ids(self):
@@ -62,6 +64,7 @@ class TqdmProgressTrackerTest(unittest.TestCase):
     with contextlib.redirect_stderr(string_io):
       _ = experiment.run(root_dir, 'new', example_ids=[1], plugins=[])
       sys.stderr.flush()
+    lf_concurrent.ProgressBar.refresh()
     self.assertIn('All: 100%', string_io.getvalue())
 
 

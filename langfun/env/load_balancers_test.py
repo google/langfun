@@ -53,10 +53,10 @@ class TestingSandbox(interface.Sandbox):
     self.set_status(self.Status.ACQUIRED)
 
   def start(self) -> None:
-    self.set_alive()
+    pass
 
   def shutdown(self) -> None:
-    self.set_alive(False)
+    pass
 
   def start_session(self, session_id: str) -> None:
     self._session_id = session_id

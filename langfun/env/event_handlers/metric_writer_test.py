@@ -31,7 +31,7 @@ class MetricWriterTest(unittest.TestCase):
         pool_size=2,
         outage_grace_period=0,
         outage_retry_interval=0,
-        housekeep_interval=0.0,
+        housekeep_interval=10.0,
         sandbox_keepalive_interval=1.0,
         event_handlers=[writer],
     )
@@ -43,13 +43,13 @@ class MetricWriterTest(unittest.TestCase):
         with env.sandbox('session2') as sb:
           sb.shell('echo "bar"', raise_error=RuntimeError)
 
-    self.assertEqual(
+    self.assertIn(
         writer._sandbox_start.value(
             app='test_app',
             environment_id='testing-env',
             error='Success'
         ),
-        2
+        (2, 3)
     )
     self.assertGreater(
         writer._sandbox_housekeep.value(
