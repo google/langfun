@@ -13,8 +13,12 @@
 # limitations under the License.
 """MCP tool."""
 
+import base64
 from typing import Annotated, Any, ClassVar
 
+from langfun.core import async_support
+from langfun.core import message as lf_message
+from langfun.core import modalities as lf_modalities
 from langfun.core.structured import schema as lf_schema
 import mcp
 import pyglove as pg
@@ -41,37 +45,99 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
         protocol='python', markdown=markdown
     )
 
+  @classmethod
+  def result_to_message(
+      cls, result: mcp.types.CallToolResult
+  ) -> lf_message.ToolMessage:
+    """Converts a tool call result to a message.
+
+    This method allows users to convert an existing mcp.CallToolResult to a
+    Langfun ToolMessage.
+
+    Args:
+      result: The MCP tool call result.
+
+    Returns:
+      A ToolMessage object.
+    """
+    chunks = []
+    for item in result.content:
+      if isinstance(item, mcp.types.TextContent):
+        chunk = item.text
+      elif isinstance(item, mcp.types.ImageContent):
+        chunk = lf_modalities.Image.from_bytes(_base64_decode(item.data))
+      elif isinstance(item, mcp.types.AudioContent):
+        chunk = lf_modalities.Audio.from_bytes(_base64_decode(item.data))
+      else:
+        raise ValueError(f'Unsupported item type: {type(item)}')
+      chunks.append(chunk)
+    message = lf_message.ToolMessage.from_chunks(chunks)
+    if result.structuredContent:
+      message.metadata.update(result.structuredContent)
+    return message
+
   def __call__(
       self,
       session,
       *,
-      returns_call_result: bool = False) -> Any:
+      returns_message: bool = False) -> Any:
     """Calls a MCP tool synchronously.
 
     Args:
       session: A MCP session.
-      returns_call_result: If True, returns the call result. Otherwise returns
-        the result from structured content, or return content.
+      returns_message: If True, always returns a ToolMessage. Otherwise,
+        return structured content (result) if available, otherwise return
+        ToolMessage if there is multi-modal content, otherwise return text.
 
     Returns:
       The call result, or the result from structured content, or content.
     """
-    return session.call_tool(
-        self,
-        returns_call_result=returns_call_result
+    return async_support.invoke_sync(
+        self.acall,
+        session,
+        returns_message=returns_message
     )
 
   async def acall(
       self,
       session,
       *,
-      returns_call_result: bool = False) -> Any:
-    """Calls a MCP tool asynchronously."""
-    return await session.acall_tool(self, returns_call_result=returns_call_result)
+      returns_message: bool = False
+  ) -> Any:
+    """Calls a MCP tool asynchronously.
+
+    Args:
+      session: McpSession or mcp.ClientSession.
+      returns_message: If True, always returns a ToolMessage. Otherwise,
+        return structured content (result) if available, otherwise return
+        ToolMessage if there is multi-modal content, otherwise return text.
+
+    Returns:
+      The call result, or the result from structured content, or content.
+    """
+    if not isinstance(session, mcp.ClientSession):
+      session = getattr(session, '_session', None)
+    assert session is not None, 'MCP session is not entered.'
+    tool_call_result = await session.call_tool(
+        self.TOOL_NAME, self.input_parameters()
+    )
+    message = self.result_to_message(tool_call_result)
+    if returns_message:
+      return message
+    if message.result:
+      return message.result
+    if message.referred_modalities:
+      return message
+    return message.text
 
   def input_parameters(self) -> dict[str, Any]:
     """Returns the input parameters of the tool."""
-    json = self.to_json()
+    # Optional fields are represented as fields with default values. Therefore,
+    # we need to remove the default values from the JSON representation of the
+    # tool.
+    json = self.to_json(hide_default_values=True)
+
+    # Remove the type name key from the JSON representation of the tool.
     def _transform(path: pg.KeyPath, x: Any) -> Any:
       del path
       if isinstance(x, dict):
@@ -123,3 +189,8 @@ class McpToolInput(pg.Object, metaclass=_McpToolInputMeta):
 def _snake_to_camel(name: str) -> str:
   """Converts a snake_case name to a CamelCase name."""
   return ''.join(x.capitalize() for x in name.split('_'))
+
+
+def _base64_decode(data: str) -> bytes:
+  """Decodes a base64 string."""
+  return base64.b64decode(data.encode('utf-8'))

@@ -93,6 +93,7 @@ from langfun.core.message import UserMessage
 from langfun.core.message import AIMessage
 from langfun.core.message import SystemMessage
 from langfun.core.message import MemoryRecord
+from langfun.core.message import ToolMessage
 
 from langfun.core.message import MessageConverter
 

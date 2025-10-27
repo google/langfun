@@ -13,10 +13,10 @@
 # limitations under the License.
 """Tests for MCP client."""
 
-import inspect
 import unittest
 from langfun.core import async_support
 from langfun.core import mcp as lf_mcp
+from langfun.core import message as lf_message
 from mcp.server import fastmcp as fastmcp_lib
 
 mcp = fastmcp_lib.FastMCP(host='0.0.0.0', port=1234)
@@ -42,38 +42,11 @@ class McpTest(unittest.TestCase):
     client = lf_mcp.McpClient.from_fastmcp(mcp)
     tools = client.list_tools()
     self.assertEqual(len(tools), 1)
-    tool_cls = tools['add']
-    print(tool_cls.python_definition())
-    self.assertEqual(
-        tool_cls.python_definition(),
-        inspect.cleandoc(
-            '''
-            Add
-
-            ```python
-            class Add:
-              """Adds two integers and returns their sum.
-
-              Args:
-                a: The first integer.
-                b: The second integer.
-
-              Returns:
-                The sum of the two integers.
-              """
-              a: int
-              b: int
-            ```
-            '''
-        )
-    )
-    self.assertEqual(repr(tool_cls), '<tool-class \'Add\'>')
-    self.assertEqual(tool_cls.__name__, 'Add')
-    self.assertEqual(tool_cls.TOOL_NAME, 'add')
-    self.assertEqual(tool_cls(a=1, b=2).input_parameters(), {'a': 1, 'b': 2})
     with client.session() as session:
       self.assertEqual(
-          tool_cls(a=1, b=2)(session), 3
+          # Test `session.call_tool` method as `tool.__call__` is already tested
+          # in `tool_test.py`.
+          session.call_tool(tools['add'](a=1, b=2)), 3
       )
 
   def test_async_usages(self):
@@ -86,10 +59,10 @@ class McpTest(unittest.TestCase):
       self.assertEqual(tool_cls.TOOL_NAME, 'add')
       async with client.session() as session:
         self.assertEqual(
-            (await tool_cls(a=1, b=2).acall(
-                session, returns_call_result=True))
-            .structuredContent['result'],
-            3
+            # Test `session.acall_tool` method as `tool.acall` is already
+            # tested in `tool_test.py`.
+            await session.acall_tool(tool_cls(a=1, b=2), returns_message=True),
+            lf_message.ToolMessage(text='3', result=3)
         )
     async_support.invoke_sync(_test)
 

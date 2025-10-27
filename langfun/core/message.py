@@ -1070,3 +1070,10 @@ class MemoryRecord(Message):
   """Message used as a memory record."""
 
   sender = 'Memory'
+
+
+@pg.use_init_args(['text', 'sender', 'metadata'])
+class ToolMessage(Message):
+  """Message used as a tool call."""
+
+  sender = 'Tool'
