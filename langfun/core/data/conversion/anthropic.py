@@ -97,6 +97,8 @@ class AnthropicMessageConverter(lf.MessageConverter):
                 self._safe_read(source, 'media_type')
             ).from_bytes(base64.b64decode(self._safe_read(source, 'data')))
         )
+      elif t in ('server_tool_use', 'web_search_tool_result'):
+        continue
       else:
         raise ValueError(f'Unsupported content part: {part!r}.')
     message = message_cls.from_chunks(chunks)
