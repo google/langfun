@@ -811,6 +811,28 @@ class ValuePythonReprTest(unittest.TestCase):
         A([Foo(1), Foo(2)], y='bar'),
     )
 
+  def test_parse_with_correction_with_schema(self):
+    class Flight(pg.Object):
+      airline: str
+      flight_number: str
+
+    class Result(pg.Object):
+      flights: list[Flight]
+
+    self.assertEqual(
+        schema_lib.ValuePythonRepr().parse(
+            "Result(flights=[Flight(airline='DELTA', flight_number='DL123')])",
+            schema_lib.Schema(Result),
+            autofix=1,
+            autofix_lm=fake.StaticResponse(inspect.cleandoc("""
+                    CorrectedCode(
+                        corrected_code="Result(flights=[Flight(airline='DELTA', flight_number='DL123')])",
+                    )
+                    """)),
+        ),
+        Result(flights=[Flight(airline='DELTA', flight_number='DL123')]),
+    )
+
   def test_parse_class_def(self):
     self.assertTrue(
         inspect.isclass(
