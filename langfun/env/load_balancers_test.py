@@ -48,6 +48,9 @@ class TestingSandbox(interface.Sandbox):
   def state_errors(self) -> list[interface.SandboxStateError]:
     return []
 
+  def report_state_error(self, error: interface.SandboxStateError) -> None:
+    pass
+
   def set_status(self, status: interface.Sandbox.Status) -> None:
     self.rebind(status=status, skip_notification=True)
 

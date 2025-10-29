@@ -15,7 +15,6 @@ import time
 from typing import Any
 import unittest
 
-from langfun.env import base_sandbox
 from langfun.env import interface
 from langfun.env import test_utils
 from langfun.env.event_handlers import base as event_handler_base
@@ -460,10 +459,11 @@ class EnvironmentTests(unittest.TestCase):
           simulate_setup_error=interface.SandboxStateError,
           skip_notification=True
       )
-      with env.sandbox() as sb:
-        with self.assertRaises(interface.SandboxStateError):
+      with self.assertRaises(interface.SandboxStateError):
+        with env.sandbox() as sb:
           sb.shell('bad command', raise_error=interface.SandboxStateError)
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+      self.assertEqual(len(sb.state_errors), 1)
       sb_offline_time = time.time()
       while time.time() - sb_offline_time < 10:
         if not env.is_online:
@@ -1250,12 +1250,11 @@ class SandboxStatusTests(unittest.TestCase):
         },
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
-        with self.assertRaises(interface.SandboxStateError):
+      with self.assertRaises(interface.SandboxStateError):
+        with env.sandbox(session_id='session1') as sb:
           sb.shell('echo foo', raise_error=RuntimeError)
-        self.assertEqual(len(sb.state_errors), 1)
-        self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
-        sb.shell('echo bar')
+      self.assertEqual(len(sb.state_errors), 1)
+      self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
       self.assertEqual(
           self.event_handler.logs,
           [
@@ -1282,7 +1281,6 @@ class SandboxStatusTests(unittest.TestCase):
               '[testing-env/test_image:0:0/feature1] feature teardown',
               '[testing-env/test_image:0:0] shutting_down -> offline',
               '[testing-env/test_image:0:0] sandbox shutdown',
-              '[testing-env/test_image:0:0] shell: echo bar',
               # pylint: enable=line-too-long
           ]
       )
@@ -1305,11 +1303,6 @@ class SandboxActivityTests(unittest.TestCase):
             test_feature.session_id,
             r'test_feature-session-[0-9a-f]{7}'
         )
-
-    with self.assertRaisesRegex(ValueError, '`session_id` should not be used'):
-      @base_sandbox.sandbox_service()
-      def foo(session_id: str):
-        del session_id
 
   def test_ping_error(self):
     env = TestingEnvironment(
@@ -1487,10 +1480,11 @@ class SandboxServiceTests(unittest.TestCase):
 
   def test_service_call_from_feature_with_error(self):
     with self.env:
-      with self.env.sandbox(session_id='session1') as sb:
-        with self.assertRaises(interface.SandboxStateError):
+      with self.assertRaises(interface.SandboxStateError):
+        with self.env.sandbox(session_id='session1') as sb:
           sb.test_feature.bad_shell_call()
-        self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+      self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+      self.assertEqual(len(sb.state_errors), 1)
 
     self.assertEqual(
         self.event_handler.logs,
@@ -1584,7 +1578,6 @@ class SandboxServiceTests(unittest.TestCase):
             '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
             '[testing-env/test_image:0/session1] shell: hello',
-            '[testing-env/test_image:0/session1/test_feature] test_feature.my_service: None',
             '[testing-env/test_image:0/session1] shell: foo',
             '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
@@ -1598,11 +1591,12 @@ class SandboxServiceTests(unittest.TestCase):
 
   def test_service_context_manager_from_feature_with_error(self):
     with self.env:
-      with self.env.sandbox(session_id='session1') as sb:
-        with self.assertRaises(interface.SandboxStateError):
+      with self.assertRaises(interface.SandboxStateError):
+        with self.env.sandbox(session_id='session1') as sb:
           with sb.test_feature.my_service() as service:
             service.do('hello', raise_error=interface.SandboxStateError)
-        self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+      self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
+      self.assertEqual(len(sb.state_errors), 1)
     self.assertEqual(
         self.event_handler.logs,
         [
@@ -1614,7 +1608,6 @@ class SandboxServiceTests(unittest.TestCase):
             '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
             '[testing-env/test_image:0/session1] shell: hello with SandboxStateError',
-            '[testing-env/test_image:0/session1/test_feature] test_feature.my_service: None with SandboxStateError',
             '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended with SandboxStateError",
             '[testing-env/test_image:0] shell: "test_feature" teardown',
@@ -1645,7 +1638,6 @@ class SandboxServiceTests(unittest.TestCase):
             '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
             '[testing-env/test_image:0/session1] shell: foo',
-            '[testing-env/test_image:0/session1/test_feature] test_feature.my_service: None',
             '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
             '[testing-env/test_image:0] shell: "test_feature" teardown',
@@ -1657,7 +1649,6 @@ class SandboxServiceTests(unittest.TestCase):
             '[testing-env/test_image:1/test_feature-session-2291d8c] shell: "test_feature" setup session',
             "[testing-env/test_image:1] session 'test_feature-session-2291d8c' started",
             '[testing-env/test_image:1/test_feature-session-2291d8c] shell: bar',
-            '[testing-env/test_image:1/test_feature-session-2291d8c/test_feature] test_feature.my_service: None',
             '[testing-env/test_image:1/test_feature-session-2291d8c] shell: "test_feature" teardown session',
             "[testing-env/test_image:1] session 'test_feature-session-2291d8c' ended",
             '[testing-env/test_image:1] shell: "test_feature" teardown',
@@ -1685,7 +1676,6 @@ class SandboxServiceTests(unittest.TestCase):
             '[testing-env/test_image:0/test_feature-session-2291d8c] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'test_feature-session-2291d8c' started",
             '[testing-env/test_image:0/test_feature-session-2291d8c] shell: hello with SandboxStateError',
-            '[testing-env/test_image:0/test_feature-session-2291d8c/test_feature] test_feature.my_service: None with SandboxStateError',
             '[testing-env/test_image:0/test_feature-session-2291d8c] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'test_feature-session-2291d8c' ended with SandboxStateError",
             '[testing-env/test_image:0] shell: "test_feature" teardown',

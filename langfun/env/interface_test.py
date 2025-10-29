@@ -40,5 +40,75 @@ class IdTest(unittest.TestCase):
     self.assertIsNone(sandbox_id.working_dir(root_dir=None))
 
 
+class TestingSandbox(interface.Sandbox):
+
+  id: interface.Sandbox.Id = interface.Sandbox.Id(
+      environment_id=interface.Environment.Id('env'),
+      image_id='test_image',
+      sandbox_id='0:0'
+  )
+  image_id: str = 'test_image'
+  features: dict[str, interface.Feature] = {}
+  status: interface.Sandbox.Status = interface.Sandbox.Status.READY
+  session_id: str | None = None
+
+  def environment(self) -> interface.Environment:
+    pass
+
+  def _on_bound(self) -> None:
+    self.activities = []
+
+  def report_state_error(self, error: interface.SandboxStateError) -> None:
+    pass
+
+  def start(self) -> None:
+    pass
+
+  def shutdown(self) -> None:
+    pass
+
+  def start_session(self, session_id: str) -> None:
+    pass
+
+  def end_session(self, shutdown_sandbox: bool = False) -> None:
+    pass
+
+  def on_activity(
+      self,
+      name: str,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    del duration
+    self.activities.append((name, error, kwargs))
+
+
+class DecoratorTest(unittest.TestCase):
+
+  def test_treat_as_sandbox_state_error(self):
+
+    class SandboxA(TestingSandbox):
+
+      @interface.treat_as_sandbox_state_error(errors=(ValueError,))
+      def foo(self, bar: str) -> None:
+        raise ValueError(bar)
+
+    with self.assertRaises(interface.SandboxStateError):
+      SandboxA().foo('foo')
+
+  def test_log_sandbox_activity(self):
+
+    class SandboxB(TestingSandbox):
+
+      @interface.log_sandbox_activity()
+      def bar(self, x: str) -> None:
+        pass
+
+    sb = SandboxB()
+    sb.bar('foo')
+    self.assertEqual(sb.activities, [('bar', None, {'x': 'foo'})])
+
+
 if __name__ == '__main__':
   unittest.main()

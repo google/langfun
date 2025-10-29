@@ -17,8 +17,10 @@ import abc
 import contextlib
 import dataclasses
 import enum
+import functools
 import os
-from typing import Annotated, Any, ContextManager, ClassVar, Iterator, Optional
+import time
+from typing import Annotated, Any, Callable, ContextManager, ClassVar, Iterator, Optional, Sequence, Type
 
 import pyglove as pg
 
@@ -522,10 +524,17 @@ class Sandbox(pg.Object):
     """Returns True if the sandbox is online."""
     return self.status.is_online
 
-  @property
   @abc.abstractmethod
-  def state_errors(self) -> list[SandboxStateError]:
-    """Returns state errors encountered during sandbox's lifecycle."""
+  def report_state_error(self, error: SandboxStateError) -> None:
+    """Reports state error the sandbox.
+
+    If state errors are reported, the sandbox will be forcefully shutdown when
+    `Sandbox.end_session()` is called, even if the sandbox is set to be
+    reusable.
+
+    Args:
+      error: SandboxStateError to report.
+    """
 
   @abc.abstractmethod
   def start(self) -> None:
@@ -656,6 +665,9 @@ class Sandbox(pg.Object):
     `end_session` should always be called for each `start_session` call, even
     when the session fails to start, to ensure proper cleanup.
 
+    When `end_session` is called with state errors reported, the sandbox will be
+    forcefully shutdown even if the sandbox is set to be reusable.
+
     `end_session` may fail with two sources of errors:
 
     1. SandboxStateError: If the sandbox is in a bad state or session teardown
@@ -719,6 +731,9 @@ class Sandbox(pg.Object):
     self.start_session(session_id)
     try:
       yield self
+    except SandboxStateError as e:
+      self.report_state_error(e)
+      raise
     finally:
       self.end_session()
 
@@ -900,3 +915,84 @@ def _make_path_compatible(id_str: str) -> str:
           '>': '',
       })
   )
+
+
+def treat_as_sandbox_state_error(
+    errors: Sequence[
+        Type[BaseException] | tuple[Type[BaseException], str]
+    ] | None = None
+) -> Callable[..., Any]:
+  """Decorator for Sandbox/Feature methods to convert errors to SandboxStateError.
+
+  Args:
+    errors: A sequence of exception types or tuples of (error_type, msg_regex).
+      when matched, treat the error as SandboxStateError, which will lead to
+      a sandbox shutdown when caught by `Sandbox.new_session()` context manager.
+
+  Returns:
+    The decorator function.
+  """
+
+  def decorator(func):
+    @functools.wraps(func)
+    def method_wrapper(self, *args, **kwargs) -> Any:
+      """Helper function to safely execute logics in the sandbox."""
+
+      assert isinstance(self, (Sandbox, Feature)), self
+      sandbox = self.sandbox if isinstance(self, Feature) else self
+
+      try:
+        # Execute the service function.
+        return func(self, *args, **kwargs)
+      except BaseException as e:
+        if pg.match_error(e, errors):
+          state_error = SandboxStateError(
+              'Sandbox encountered an unexpected error executing '
+              f'`{func.__name__}` (args={args!r}, kwargs={kwargs!r}): {e}',
+              sandbox=sandbox
+          )
+          raise state_error from e
+        raise
+    return method_wrapper
+  return decorator
+
+
+def log_sandbox_activity(name: str | None = None):
+  """Decorator for Sandbox/Feature methods to log sandbox activity."""
+
+  def decorator(func):
+    signature = pg.typing.get_signature(func)
+    def to_kwargs(*args, **kwargs):
+      num_non_self_args = len(signature.arg_names) - 1
+      if len(args) > num_non_self_args:
+        assert signature.varargs is not None, (signature, args)
+        kwargs[signature.varargs.name] = tuple(args[num_non_self_args:])
+        args = args[:num_non_self_args]
+      for i in range(len(args)):
+        # The first argument is `self`.
+        kwargs[signature.arg_names[i + 1]] = args[i]
+      return kwargs
+
+    @functools.wraps(func)
+    def method_wrapper(self, *args, **kwargs) -> Any:
+      """Helper function to safely execute logics in the sandbox."""
+
+      assert isinstance(self, (Sandbox, Feature)), self
+      error = None
+      start_time = time.time()
+
+      try:
+        # Execute the service function.
+        return func(self, *args, **kwargs)
+      except BaseException as e:
+        error = e
+        raise
+      finally:
+        self.on_activity(  # pytype: disable=attribute-error
+            name=name or func.__name__,
+            duration=time.time() - start_time,
+            error=error,
+            **to_kwargs(*args, **kwargs),
+        )
+    return method_wrapper
+  return decorator

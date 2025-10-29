@@ -24,6 +24,10 @@ from langfun.env.interface import Environment
 from langfun.env.interface import Sandbox
 from langfun.env.interface import Feature
 
+# Decorators for sandbox/feature methods.
+from langfun.env.interface import treat_as_sandbox_state_error
+from langfun.env.interface import log_sandbox_activity
+
 from langfun.env.base_environment import BaseEnvironment
 from langfun.env.base_sandbox import BaseSandbox
 from langfun.env.base_feature import BaseFeature

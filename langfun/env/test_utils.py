@@ -112,7 +112,8 @@ class TestingSandbox(base_sandbox.BaseSandbox):
       self._raise_error('Sandbox shutdown error', self.simulate_shutdown_error)
     super()._shutdown()
 
-  @base_sandbox.sandbox_service(critical_errors=(RuntimeError,))
+  @interface.treat_as_sandbox_state_error(errors=(RuntimeError,))
+  @interface.log_sandbox_activity()
   def shell(
       self,
       code: str,
@@ -184,19 +185,19 @@ class TestingFeature(base_feature.BaseFeature):
     if self.call_end_session_on_teardown_session:
       self.sandbox.end_session()
 
-  @base_sandbox.sandbox_service()
+  @interface.log_sandbox_activity()
   def num_shell_calls(self) -> int:
     return len(self.sandbox._shell_history)  # pylint: disable=protected-access
 
-  @base_sandbox.sandbox_service()
+  @interface.log_sandbox_activity()
   def bad_shell_call(self) -> None:
     self.sandbox.shell('bad command', raise_error=RuntimeError)
 
-  @base_sandbox.sandbox_service()
+  @interface.log_sandbox_activity()
   def show_session_id(self):
     return self.session_id
 
-  @base_sandbox.sandbox_service()
+  @interface.log_sandbox_activity()
   def call_with_varargs(self, code: str, *args, **kwargs):
     del code, args, kwargs
     return 0
@@ -205,7 +206,6 @@ class TestingFeature(base_feature.BaseFeature):
     super()._on_bound()
     self._service = None
 
-  @base_sandbox.sandbox_service()
   @contextlib.contextmanager
   def my_service(self) -> Iterator[Service]:
     try:
