@@ -22,6 +22,7 @@ from langfun.env import load_balancers
 class TestingSandbox(interface.Sandbox):
   sandbox_id: str
   status: interface.Sandbox.Status = interface.Sandbox.Status.READY
+  image_id: str = 'test_image'
 
   def _on_bound(self) -> None:
     super()._on_bound()
@@ -31,6 +32,7 @@ class TestingSandbox(interface.Sandbox):
   def id(self) -> interface.Sandbox.Id:
     return interface.Sandbox.Id(
         environment_id=interface.Environment.Id('testing-env'),
+        image_id=self.image_id,
         sandbox_id=self.sandbox_id
     )
 

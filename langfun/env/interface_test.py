@@ -29,12 +29,13 @@ class IdTest(unittest.TestCase):
   def test_sandbox_id(self):
     sandbox_id = interface.Sandbox.Id(
         environment_id=interface.Environment.Id('env'),
+        image_id='image:2025_01_01_00_00_00',
         sandbox_id='sandbox'
     )
-    self.assertEqual(str(sandbox_id), 'env/sandbox')
+    self.assertEqual(str(sandbox_id), 'env/image:2025_01_01_00_00_00:sandbox')
     self.assertEqual(
         sandbox_id.working_dir(root_dir='/tmp'),
-        '/tmp/env/sandbox'
+        '/tmp/env/image_2025_01_01_00_00_00/sandbox'
     )
     self.assertIsNone(sandbox_id.working_dir(root_dir=None))
 

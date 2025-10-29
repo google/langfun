@@ -41,6 +41,11 @@ class BaseSandbox(interface.Sandbox):
       'The identifier for the sandbox.'
   ]
 
+  image_id: Annotated[
+      str,
+      'The image id for the sandbox.'
+  ]
+
   environment: Annotated[
       pg.Ref[interface.Environment],
       'The parent environment.'
@@ -187,10 +192,10 @@ class BaseSandbox(interface.Sandbox):
   def _on_bound(self) -> None:
     """Called when the sandbox is bound."""
     super()._on_bound()
-
     self._features = pg.Dict({
         name: pg.clone(feature)
         for name, feature in self.environment.features.items()
+        if feature.is_applicable(self.image_id)
     })
     self._event_handlers = []
     self._enable_pre_session_setup = (

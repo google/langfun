@@ -75,11 +75,11 @@ class EventLoggerTest(unittest.TestCase):
     )
     with self._capture_logs(test_name) as stream:
       with env:
-        with env.sandbox('session1') as sb:
+        with env.sandbox(session_id='session1') as sb:
           self.assertEqual(sb.test_feature1.num_shell_calls(), 4)
 
         with self.assertRaises(interface.SandboxStateError):
-          with env.sandbox('session2') as sb:
+          with env.sandbox(session_id='session2') as sb:
             sb.shell('echo "bar"', raise_error=RuntimeError)
 
     stdout = stream.getvalue()

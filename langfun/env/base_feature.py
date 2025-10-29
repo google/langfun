@@ -24,6 +24,7 @@ the `Environment` and `Sandbox` interfaces directly.
 
 import functools
 import os
+import re
 import time
 from typing import Annotated, Callable
 
@@ -33,6 +34,14 @@ import pyglove as pg
 
 class BaseFeature(interface.Feature):
   """Common base class for sandbox-based features."""
+
+  applicable_images: Annotated[
+      list[str],
+      (
+          'A list of regular expressions for image IDs which enable '
+          'this feature. By default, all images are enabled.'
+      )
+  ] = ['.*']
 
   housekeep_interval: Annotated[
       float | None,
@@ -114,6 +123,12 @@ class BaseFeature(interface.Feature):
     if sandbox_workdir is None:
       return None
     return os.path.join(sandbox_workdir, self.name)
+
+  def is_applicable(self, image_id: str) -> bool:
+    """Returns True if the feature is applicable to the given image."""
+    return any(
+        re.fullmatch(regex, image_id) for regex in self.applicable_images
+    )
 
   #
   # Setup and teardown of the feature.

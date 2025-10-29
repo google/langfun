@@ -23,8 +23,10 @@ Note that:
 """
 
 import abc
+import collections
 import functools
 import random
+import re
 import threading
 import time
 from typing import Annotated, Any
@@ -46,6 +48,23 @@ class BaseEnvironment(interface.Environment):
   maintenance.
   """
 
+  image_ids: Annotated[
+      list[str],
+      (
+          'A list of static image IDs served by the environment. '
+      )
+  ]
+
+  supports_dynamic_image_loading: Annotated[
+      bool,
+      (
+          'Whether the environment supports dynamic loading of images which is '
+          'not included in the `image_ids`. `image_ids` could coexist with '
+          'dynamic image loading, which allows users to specify an image id '
+          'that is not included in the `image_ids`.'
+      )
+  ] = False
+
   root_dir: Annotated[
       str | None,
       (
@@ -55,11 +74,15 @@ class BaseEnvironment(interface.Environment):
   ] = None
 
   pool_size: Annotated[
-      int | tuple[int, int],
+      int | tuple[int, int] | dict[str, int | tuple[int, int]],
       (
           'The (min_size, max_size) of the sandbox pool. If an integer, it '
-          'will be used as both min and max size. If 0, sandboxes will be '
-          'created on demand and shutdown when user session ends.'
+          'will be used as both min and max size. If 0, all sandboxes will be '
+          'created on demand and shutdown when user session ends. If a dict, '
+          'users could configure the pool size based on image IDs. The keys '
+          'are regular expressions for image IDs, and the values are '
+          '(min_size, max_size) tuples. For dynamic image IDs, min_size will '
+          'ignored while max_size will be honored.'
       )
   ] = (0, 256)
 
@@ -146,14 +169,35 @@ class BaseEnvironment(interface.Environment):
 
     self._status = self.Status.CREATED
     self._start_time = None
-    self._sandbox_pool = []
-    self._next_pooled_sandbox_id = 0
+    self._sandbox_pool: dict[str, list[base_sandbox.BaseSandbox]] = (
+        collections.defaultdict(list)
+    )
+    self._next_sandbox_id: dict[str, int] = collections.defaultdict(int)
     self._random = (
         random if self.random_seed is None else random.Random(self.random_seed)
     )
-
     self._housekeep_thread = None
     self._offline_start_time = None
+
+    # Check image IDs and feature requirements.
+    self._check_image_ids()
+    self._check_feature_requirements()
+
+  def _check_image_ids(self) -> None:
+    """Checks image ids. Subclass could override this method."""
+
+  def _check_feature_requirements(self) -> None:
+    """Checks if the image ID is supported by the feature."""
+    if self.supports_dynamic_image_loading:
+      return
+    for name, feature in self.features.items():
+      if any(feature.is_applicable(image_id) for image_id in self.image_ids):
+        continue
+      raise ValueError(
+          f'Feature {name!r} is not applicable to all available images: '
+          f'{self.image_ids!r}. '
+          f'Applicable images: {feature.applicable_images}.'
+      )
 
   #
   # Subclasses must implement:
@@ -162,6 +206,7 @@ class BaseEnvironment(interface.Environment):
   @abc.abstractmethod
   def _create_sandbox(
       self,
+      image_id: str,
       sandbox_id: str,
       reusable: bool,
       proactive_session_setup: bool,
@@ -170,6 +215,7 @@ class BaseEnvironment(interface.Environment):
     """Creates a sandbox with the given identifier.
 
     Args:
+      image_id: The image ID to use for the sandbox.
       sandbox_id: The identifier for the sandbox.
       reusable: Whether the sandbox is reusable across user sessions.
       proactive_session_setup: Whether the sandbox performs session setup work
@@ -185,13 +231,13 @@ class BaseEnvironment(interface.Environment):
       interface.SandboxStateError: If sandbox cannot be started.
     """
 
-  def new_session_id(self) -> str:
+  def new_session_id(self, feature_hint: str | None = None) -> str:
     """Generates a random session ID."""
     suffix = uuid.UUID(
         bytes=bytes(bytes(self._random.getrandbits(8) for _ in range(16))),
         version=4
     ).hex[:7]
-    return f'session-{suffix}'
+    return f'{feature_hint or "unknown"}-session-{suffix}'
 
   @property
   def housekeep_counter(self) -> int:
@@ -204,42 +250,59 @@ class BaseEnvironment(interface.Environment):
 
   def stats(self) -> dict[str, Any]:
     """Returns the stats of the environment."""
-    stats_dict = {
-        status.value: 0
-        for status in interface.Sandbox.Status
-    }
-    for sandbox in self._sandbox_pool:
-      stats_dict[sandbox.status.value] += 1
+    stats_by_image_id = {}
+    for image_id, sandboxes in self._sandbox_pool.items():
+      stats_dict = {
+          status.value: 0
+          for status in interface.Sandbox.Status
+      }
+      for sandbox in sandboxes:
+        stats_dict[sandbox.status.value] += 1
+      stats_by_image_id[image_id] = stats_dict
     return {
-        'sandbox': stats_dict,
+        'sandbox': stats_by_image_id,
     }
 
   def _start(self) -> None:
     """Implementation of starting the environment."""
-    if self.min_pool_size > 0:
-      # Pre-allocate the sandbox pool before usage.
-      self._sandbox_pool = [None] * self.min_pool_size
-      for i, sandbox, _ in lf.concurrent_map(
-          lambda i: self._bring_up_sandbox_with_retry(
-              sandbox_id=f'{i}:0', shutdown_env_upon_outage=False
-          ),
-          range(self.min_pool_size),
-          silence_on_errors=None,
-          max_workers=min(
-              self.pool_operation_max_parallelism,
-              self.min_pool_size
-          ),
-      ):
-        self._sandbox_pool[i] = sandbox
+    sandbox_startup_infos = []
+    for image_id in self.image_ids:
+      next_sandbox_id = 0
+      if self.enable_pooling(image_id):
+        min_pool_size = self.min_pool_size(image_id)
+        for i in range(min_pool_size):
+          sandbox_startup_infos.append((image_id, i))
+        self._sandbox_pool[image_id] = [None] * min_pool_size
+        next_sandbox_id = min_pool_size
+      self._next_sandbox_id[image_id] = next_sandbox_id
 
-    self._next_sandbox_id = len(self._sandbox_pool)
-
-    if self.enable_pooling:
-      self._housekeep_thread = threading.Thread(
-          target=self._housekeep_loop, daemon=True
+    def _start_sandbox(sandbox_startup_info) -> None:
+      image_id, index = sandbox_startup_info
+      self._sandbox_pool[image_id][index] = self._bring_up_sandbox_with_retry(
+          image_id=image_id,
+          sandbox_id=f'{index}:0',
+          shutdown_env_upon_outage=False
       )
-      self._housekeep_counter = 0
-      self._housekeep_thread.start()
+
+    if sandbox_startup_infos:
+      # Pre-allocate the sandbox pool before usage.
+      _ = list(
+          lf.concurrent_map(
+              _start_sandbox,
+              sandbox_startup_infos,
+              silence_on_errors=None,
+              max_workers=min(
+                  self.pool_operation_max_parallelism,
+                  len(sandbox_startup_infos)
+              ),
+          )
+      )
+
+    self._housekeep_thread = threading.Thread(
+        target=self._housekeep_loop, daemon=True
+    )
+    self._housekeep_counter = 0
+    self._housekeep_thread.start()
 
   def _shutdown(self) -> None:
     """Implementation of shutting down the environment."""
@@ -253,25 +316,30 @@ class BaseEnvironment(interface.Environment):
         sandbox.shutdown()
 
     if self._sandbox_pool:
-      _ = list(
-          lf.concurrent_map(
-              _shutdown_sandbox,
-              self._sandbox_pool,
-              silence_on_errors=None,
-              max_workers=min(
-                  self.pool_operation_max_parallelism,
-                  len(self._sandbox_pool)
-              ),
-          )
-      )
-      self._sandbox_pool = []
+      sandboxes = []
+      for sandbox in self._sandbox_pool.values():
+        sandboxes.extend(sandbox)
+      self._sandbox_pool = {}
+
+      if sandboxes:
+        _ = list(
+            lf.concurrent_map(
+                _shutdown_sandbox,
+                sandboxes,
+                silence_on_errors=None,
+                max_workers=min(
+                    self.pool_operation_max_parallelism,
+                    len(sandboxes)
+                ),
+            )
+        )
 
   #
   # Environment basics.
   #
 
   @property
-  def sandbox_pool(self) -> list[base_sandbox.BaseSandbox]:
+  def sandbox_pool(self) -> dict[str, list[base_sandbox.BaseSandbox]]:
     """Returns the sandbox pool."""
     return self._sandbox_pool
 
@@ -279,11 +347,6 @@ class BaseEnvironment(interface.Environment):
   def working_dir(self) -> str | None:
     """Returns the working directory for the environment."""
     return self.id.working_dir(self.root_dir)
-
-  @property
-  def enable_pooling(self) -> bool:
-    """Returns whether the environment enables pooling."""
-    return self.max_pool_size > 0
 
   @property
   def status(self) -> interface.Environment.Status:
@@ -294,19 +357,39 @@ class BaseEnvironment(interface.Environment):
     """Sets the status of the environment."""
     self._status = status
 
-  @property
-  def min_pool_size(self) -> int:
-    """Returns the minimum size of the sandbox pool."""
-    if isinstance(self.pool_size, int):
-      return self.pool_size
-    return self.pool_size[0]
+  def enable_pooling(self, image_id: str) -> bool:
+    """Returns whether the environment enables pooling."""
+    return self.max_pool_size(image_id) > 0
 
-  @property
-  def max_pool_size(self) -> int:
+  def min_pool_size(self, image_id: str) -> int:
+    """Returns the minimum size of the sandbox pool."""
+    return self._pool_size(image_id)[0]
+
+  def max_pool_size(self, image_id: str) -> int:
     """Returns the maximum size of the sandbox pool."""
-    if isinstance(self.pool_size, int):
-      return self.pool_size
-    return self.pool_size[1]
+    return self._pool_size(image_id)[1]
+
+  def _pool_size(self, image_id: str) -> tuple[int, int]:
+    """Returns the minimum and maximum size of the sandbox pool."""
+    if isinstance(self.pool_size, dict):
+      if image_id in self.pool_size:
+        pool_size = self.pool_size[image_id]
+      else:
+        for k, v in self.pool_size.items():
+          if re.match(k, image_id):
+            pool_size = v
+            break
+        else:
+          # Default pool size is 0 and 256.
+          pool_size = (0, 256)
+    else:
+      pool_size = self.pool_size
+
+    if isinstance(pool_size, int):
+      return pool_size, pool_size
+    else:
+      assert isinstance(pool_size, tuple) and len(pool_size) == 2
+      return pool_size
 
   @property
   def start_time(self) -> float | None:
@@ -373,8 +456,15 @@ class BaseEnvironment(interface.Environment):
   # Environment operations.
   #
 
-  def acquire(self) -> base_sandbox.BaseSandbox:
+  def acquire(
+      self,
+      image_id: str | None = None
+  ) -> base_sandbox.BaseSandbox:
     """Acquires a sandbox from the environment.
+
+    Args:
+      image_id: The image ID to use for the sandbox. If None, it will be
+        automatically determined by the environment.
 
     Returns:
       The acquired sandbox.
@@ -385,28 +475,50 @@ class BaseEnvironment(interface.Environment):
       interface.EnvironmentOverloadError: If the max pool size is reached and
         the grace period has passed.
     """
-
     if not self.is_online:
       raise interface.EnvironmentOutageError(
           f'Environment {self.id} is not alive.',
           environment=self,
           offline_duration=self.offline_duration,
       )
+    if image_id is None:
+      if not self.image_ids:
+        raise ValueError(
+            f'Environment {self.id} does not have a default image ID. '
+            'Please specify the image ID explicitly.'
+        )
+      image_id = self.image_ids[0]
+    elif (image_id not in self.image_ids
+          and not self.supports_dynamic_image_loading):
+      raise ValueError(
+          f'Environment {self.id} does not serve image ID {image_id!r}. '
+          f'Please use one of the following image IDs: {self.image_ids!r} or '
+          f'set `{self.__class__.__name__}.supports_dynamic_image_ids` '
+          'to True if dynamic image loading is supported.'
+      )
+    return self._acquire(image_id)
 
-    if not self.enable_pooling:
+  def _acquire(
+      self,
+      image_id: str | None = None
+  ) -> base_sandbox.BaseSandbox:
+    """Acquires a sandbox from the environment."""
+    if not self.enable_pooling(image_id):
       return self._bring_up_sandbox_with_retry(
-          sandbox_id=str(self._increment_sandbox_id()),
+          image_id=image_id,
+          sandbox_id=str(self._increment_sandbox_id(image_id)),
           set_acquired=True,
       )
 
     allocation_start_time = time.time()
+    sandbox_pool = self._sandbox_pool[image_id]
     while True:
       try:
         # We only append or replace items in the sandbox pool, therefore
         # there is no need to lock the pool.
-        return self.load_balancer.acquire(self._sandbox_pool)
+        return self.load_balancer.acquire(sandbox_pool)
       except IndexError:
-        if len(self._sandbox_pool) == self.max_pool_size:
+        if len(sandbox_pool) == self.max_pool_size(image_id):
           if time.time() - allocation_start_time > self.outage_grace_period:
             raise interface.EnvironmentOverloadError(  # pylint: disable=raise-missing-from
                 environment=self
@@ -415,11 +527,12 @@ class BaseEnvironment(interface.Environment):
         else:
           try:
             sandbox = self._bring_up_sandbox(
-                sandbox_id=f'{self._increment_sandbox_id()}:0',
+                image_id=image_id,
+                sandbox_id=f'{self._increment_sandbox_id(image_id)}:0',
                 set_acquired=True,
             )
             # Append is atomic and does not require locking.
-            self._sandbox_pool.append(sandbox)
+            sandbox_pool.append(sandbox)
             return sandbox
           except (
               interface.EnvironmentError, interface.SandboxStateError
@@ -428,6 +541,7 @@ class BaseEnvironment(interface.Environment):
 
   def _bring_up_sandbox(
       self,
+      image_id: str,
       sandbox_id: str,
       set_acquired: bool = False,
   ) -> base_sandbox.BaseSandbox:
@@ -435,8 +549,9 @@ class BaseEnvironment(interface.Environment):
     env_error = None
     try:
       sandbox = self._create_sandbox(
+          image_id=image_id,
           sandbox_id=sandbox_id,
-          reusable=self.enable_pooling,
+          reusable=self.enable_pooling(image_id),
           proactive_session_setup=self.proactive_session_setup,
           keepalive_interval=self.sandbox_keepalive_interval,
       )
@@ -457,6 +572,7 @@ class BaseEnvironment(interface.Environment):
 
   def _bring_up_sandbox_with_retry(
       self,
+      image_id: str,
       sandbox_id: str,
       set_acquired: bool = False,
       shutdown_env_upon_outage: bool = True,
@@ -464,6 +580,7 @@ class BaseEnvironment(interface.Environment):
     """Brings up a new sandbox with retry until grace period is passed.
 
     Args:
+      image_id: The image ID to use for the sandbox.
       sandbox_id: The ID of the sandbox to bring up.
       set_acquired: If True, the sandbox will be marked as acquired.
       shutdown_env_upon_outage: Whether to shutdown the environment when the
@@ -479,15 +596,15 @@ class BaseEnvironment(interface.Environment):
     while True:
       try:
         return self._bring_up_sandbox(
-            sandbox_id=sandbox_id, set_acquired=set_acquired
+            image_id=image_id, sandbox_id=sandbox_id, set_acquired=set_acquired
         )
       except (interface.EnvironmentError, interface.SandboxStateError) as e:
         self._report_outage_or_wait(e, shutdown_env_upon_outage)
 
-  def _increment_sandbox_id(self) -> int:
+  def _increment_sandbox_id(self, image_id: str) -> int:
     """Returns the next pooled sandbox ID."""
-    x = self._next_sandbox_id
-    self._next_sandbox_id += 1
+    x = self._next_sandbox_id[image_id]
+    self._next_sandbox_id[image_id] += 1
     return x
 
   def _report_outage_or_wait(
@@ -511,26 +628,39 @@ class BaseEnvironment(interface.Environment):
 
   def _housekeep_loop(self) -> None:
     """Housekeeping loop for the environment."""
+    def _indices_by_image_id(
+        entries: list[tuple[str, int, Any]]
+    ) -> dict[str, list[int]]:
+      indices_by_image_id = collections.defaultdict(list)
+      for image_id, i, _ in entries:
+        indices_by_image_id[image_id].append(i)
+      return indices_by_image_id
+
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       housekeep_start_time = time.time()
 
       is_online = True
-      dead_pool_indices = [
-          i for i, s in enumerate(self._sandbox_pool)
-          if s.status == interface.Sandbox.Status.OFFLINE
-      ]
-      replaced_indices = []
+      dead_sandbox_entries = []
+      for image_id, sandboxes in self._sandbox_pool.items():
+        for i, sandbox in enumerate(sandboxes):
+          if sandbox.status == interface.Sandbox.Status.OFFLINE:
+            dead_sandbox_entries.append((image_id, i, sandbox))
 
-      if dead_pool_indices:
-        replaced_indices = self._replace_dead_sandboxes(dead_pool_indices)
-        if not replaced_indices:
+      replaced_indices_by_image_id = {}
+
+      if dead_sandbox_entries:
+        replaced_indices_by_image_id = self._replace_dead_sandboxes(
+            dead_sandbox_entries
+        )
+        if not replaced_indices_by_image_id:
           is_online = self.offline_duration < self.outage_grace_period
 
       self._housekeep_counter += 1
       duration = time.time() - housekeep_start_time
+
       kwargs = dict(
-          dead_pool_indices=dead_pool_indices,
-          replaced_indices=replaced_indices,
+          dead_sandboxes=_indices_by_image_id(dead_sandbox_entries),
+          replaced_sandboxes=replaced_indices_by_image_id,
           offline_duration=self.offline_duration,
       )
       if is_online:
@@ -546,49 +676,61 @@ class BaseEnvironment(interface.Environment):
             **kwargs
         )
 
-  def _replace_dead_sandboxes(self, dead_pool_indices: list[int]) -> list[int]:
+  def _replace_dead_sandboxes(
+      self,
+      dead_sandbox_entries: list[tuple[str, int, base_sandbox.BaseSandbox]]
+  ) -> dict[str, list[int]]:
     """Replaces a dead sandbox with a new one.
 
     Args:
-      dead_pool_indices: The indices of the dead sandboxes to replace.
+      dead_sandbox_entries: A list of tuples (image_id, index, sandbox) of
+        dead sandboxes to replace.
 
     Returns:
-      Successfully replaced indices.
+      Successfully replaced sandboxes in a dict of image ID to a list of
+        indices.
     """
     pg.logging.warning(
         '[%s]: %s maintenance: '
         'Replacing %d dead sandbox(es) with new ones...',
         self.id,
         self.__class__.__name__,
-        len(dead_pool_indices),
+        len(dead_sandbox_entries),
     )
-    def _replace(i: int):
-      generation = int(self._sandbox_pool[i].id.sandbox_id.split(':')[1])
-      self._sandbox_pool[i] = self._bring_up_sandbox(f'{i}:{generation + 1}')
+    def _replace(sandbox_entry: tuple[str, int, base_sandbox.BaseSandbox]):
+      image_id, i, sandbox = sandbox_entry
+      generation = int(sandbox.id.sandbox_id.split(':')[-1])
+      replaced_sandbox = self._bring_up_sandbox(
+          image_id=image_id,
+          sandbox_id=f'{i}:{generation + 1}'
+      )
+      self._sandbox_pool[image_id][i] = replaced_sandbox
 
     # TODO(daiyip): Consider to loose the condition to allow some dead
     # sandboxes to be replaced successfully.
-    replaced_indices = []
-    for index, _, error in lf.concurrent_map(
-        _replace, dead_pool_indices,
+    replaced_indices_by_image_id = collections.defaultdict(list)
+    num_replaced = 0
+    for (image_id, index, _), _, error in lf.concurrent_map(
+        _replace, dead_sandbox_entries,
         max_workers=min(
             self.pool_operation_max_parallelism,
-            len(dead_pool_indices)
+            len(dead_sandbox_entries)
         ),
     ):
       if error is None:
-        replaced_indices.append(index)
+        replaced_indices_by_image_id[image_id].append(index)
+        num_replaced += 1
 
     pg.logging.warning(
         '[%s]: %s maintenance: '
         '%d/%d dead sandbox(es) have been replaced with new ones. (slots=%s)',
         self.id,
         self.__class__.__name__,
-        len(replaced_indices),
-        len(dead_pool_indices),
-        replaced_indices
+        num_replaced,
+        len(dead_sandbox_entries),
+        replaced_indices_by_image_id,
     )
-    return replaced_indices
+    return replaced_indices_by_image_id
 
   #
   # Event handlers subclasses can override.

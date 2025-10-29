@@ -27,7 +27,7 @@ import pyglove as pg
 
 class TestingEnvironment(base_environment.BaseEnvironment):
   """Testing environment for unit tests."""
-
+  image_ids: list[str] = ['test_image']
   housekeep_interval: float = 0.0
   simulate_start_error: Type[BaseException] | None = None
   simulate_shutdown_error: Type[BaseException] | None = None
@@ -45,6 +45,7 @@ class TestingEnvironment(base_environment.BaseEnvironment):
 
   def _create_sandbox(
       self,
+      image_id: str,
       sandbox_id: str,
       reusable: bool,
       proactive_session_setup: bool,
@@ -54,8 +55,10 @@ class TestingEnvironment(base_environment.BaseEnvironment):
         environment=self,
         id=interface.Sandbox.Id(
             environment_id=self.id,
+            image_id=image_id,
             sandbox_id=sandbox_id
         ),
+        image_id=image_id,
         reusable=reusable,
         proactive_session_setup=proactive_session_setup,
         keepalive_interval=keepalive_interval,

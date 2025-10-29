@@ -100,6 +100,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -109,6 +110,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str
         }
     )
@@ -118,6 +120,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'status': str,
         },
     )
@@ -127,6 +130,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -136,6 +140,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'activity': str,
             'error': str,
         }
@@ -148,6 +153,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -157,6 +163,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -166,6 +173,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -175,6 +183,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -184,6 +193,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'status': str,
         }
     )
@@ -193,6 +203,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'activity': str,
             'error': str,
         }
@@ -209,6 +220,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -219,6 +231,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -229,6 +242,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -239,6 +253,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -249,6 +264,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -261,6 +277,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -271,6 +288,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -281,6 +299,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -291,6 +310,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -301,6 +321,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'feature_name': str,
             'error': str,
         }
@@ -316,6 +337,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -325,6 +347,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -334,6 +357,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         parameters={
             'app': str,
             'environment_id': str,
+            'image_id': str,
             'error': str,
         }
     )
@@ -371,12 +395,14 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._sandbox_start.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_start_duration_ms.record(
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
@@ -392,6 +418,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(span * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         status=old_status.value
     )
     if old_status != base.Sandbox.Status.CREATED:
@@ -399,12 +426,14 @@ class MetricWriter(pg.Object, base.EventHandler):
           delta=-1,
           app=self.app,
           environment_id=str(environment.id),
+          image_id=sandbox.image_id,
           status=old_status.value
       )
     if new_status != base.Sandbox.Status.OFFLINE:
       self._sandbox_count.increment(
           app=self.app,
           environment_id=str(environment.id),
+          image_id=sandbox.image_id,
           status=new_status.value
       )
 
@@ -419,18 +448,21 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._sandbox_shutdown.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_shutdown_duration_ms.record(
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_lifetime_ms.record(
         int(lifetime * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
@@ -447,12 +479,14 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._sandbox_housekeep.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_housekeep_duration_ms.record(
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
@@ -468,6 +502,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_setup.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -475,6 +510,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -491,6 +527,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_teardown.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -498,6 +535,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -515,6 +553,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_setup_session.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -522,6 +561,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -539,6 +579,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_teardown_session.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -546,6 +587,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -564,6 +606,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._feature_housekeep.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -571,6 +614,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
@@ -588,6 +632,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
@@ -605,12 +650,14 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._session_lifetime_ms.record(
         int(lifetime * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
@@ -629,6 +676,7 @@ class MetricWriter(pg.Object, base.EventHandler):
     self._sandbox_activity.increment(
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         activity=name,
         error=self._error_tag(error)
     )
@@ -636,6 +684,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
+        image_id=sandbox.image_id,
         activity=name,
         error=self._error_tag(error)
     )

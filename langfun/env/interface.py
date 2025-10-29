@@ -170,6 +170,9 @@ class SessionTeardownError(SandboxError):
 class Environment(pg.Object):
   """Base class for an environment."""
 
+  # Disable symbolic comparison and hashing for environment objects.
+  use_symbolic_comparison = False
+
   @dataclasses.dataclass(frozen=True)
   class Id:
     """Identifier for an environment."""
@@ -222,6 +225,20 @@ class Environment(pg.Object):
 
   @property
   @abc.abstractmethod
+  def image_ids(self) -> list[str]:
+    """Returns the non-dynamic image IDs served by the environment."""
+
+  def image_id_for(self, feature: 'Feature') -> str:
+    """Returns the default image ID for the environment."""
+    for image_id in self.image_ids:
+      if feature.is_applicable(image_id):
+        return image_id
+    raise ValueError(
+        f'No image ID found for feature {feature.name} in {self.image_ids}.'
+    )
+
+  @property
+  @abc.abstractmethod
   def status(self) -> Status:
     """Returns the status of the environment."""
 
@@ -245,8 +262,15 @@ class Environment(pg.Object):
     """
 
   @abc.abstractmethod
-  def acquire(self) -> 'Sandbox':
+  def acquire(
+      self,
+      image_id: str | None = None,
+  ) -> 'Sandbox':
     """Acquires a free sandbox from the environment.
+
+    Args:
+      image_id: The image ID to use for the sandbox. If None, it will be
+        automatically determined by the environment.
 
     Returns:
       A free sandbox from the environment.
@@ -257,7 +281,7 @@ class Environment(pg.Object):
     """
 
   @abc.abstractmethod
-  def new_session_id(self) -> str:
+  def new_session_id(self, feature_hint: str | None = None) -> str:
     """Generates a new session ID."""
 
   #
@@ -298,31 +322,61 @@ class Environment(pg.Object):
 
   def sandbox(
       self,
+      image_id: str | None = None,
       session_id: str | None = None,
   ) -> ContextManager['Sandbox']:
     """Gets a sandbox from the environment and starts a new user session."""
-    return self.acquire().new_session(session_id)
+    return self.acquire(image_id=image_id).new_session(session_id)
 
   def __getattr__(self, name: str) -> Any:
-    """Gets a feature from a free sandbox from the environment.
+    """Gets a feature session from a free sandbox from the environment.
 
     Example:
       ```
       with XboxEnvironment(
           features={'selenium': SeleniumFeature()}
       ) as env:
-        driver = env.selenium.get_driver()
+        with env.selenium() as selenium:
+          driver = selenium.get_driver()
       ```
 
     Args:
       name: The name of the feature.
 
     Returns:
-      A feature from a free sandbox from the environment.
+      A callable `(image_id, *, session_id) -> ContextManager[Feature]` that
+      creates a context manager for the requested feature under a new client
+      session.
     """
     if name in self.features:
-      return self.acquire().features[name]
+      return _feature_session_creator(self, self.features[name])
     raise AttributeError(name)
+
+
+@contextlib.contextmanager
+def _session_for_feature(
+    environment: Environment,
+    feature: 'Feature',
+    image_id: str | None = None,
+    session_id: str | None = None,
+) -> Iterator['Feature']:
+  """Returns a context manager for a session for a feature."""
+  if image_id is None:
+    image_id = environment.image_id_for(feature)
+  elif not feature.is_applicable(image_id):
+    raise ValueError(
+        f'Feature {feature.name!r} is not applicable to image {image_id!r}.'
+    )
+  sandbox = environment.acquire(image_id=image_id)
+  with sandbox.new_session(session_id=session_id, feature_hint=feature.name):
+    yield sandbox.features[feature.name]
+
+
+def _feature_session_creator(environment: Environment, feature: 'Feature'):
+  """Returns a callable that returns a context manager for a feature session."""
+  def fn(image_id: str | None = None, session_id: str | None = None):
+    return _session_for_feature(environment, feature, image_id, session_id)
+  return fn
 
 
 # Enable automatic conversion from str to Environment.Id.
@@ -332,14 +386,18 @@ pg.typing.register_converter(str, Environment.Id, Environment.Id)
 class Sandbox(pg.Object):
   """Interface for sandboxes."""
 
+  # Disable symbolic comparison and hashing for sandbox objects.
+  use_symbolic_comparison = False
+
   @dataclasses.dataclass(frozen=True, slots=True)
   class Id:
     """Identifier for a sandbox."""
     environment_id: Environment.Id
+    image_id: str
     sandbox_id: str
 
     def __str__(self) -> str:
-      return f'{self.environment_id}/{self.sandbox_id}'
+      return f'{self.environment_id}/{self.image_id}:{self.sandbox_id}'
 
     def working_dir(self, root_dir: str | None) -> str | None:
       """Returns the download directory for the sandbox."""
@@ -347,6 +405,7 @@ class Sandbox(pg.Object):
         return None
       return os.path.join(
           self.environment_id.working_dir(root_dir),
+          _make_path_compatible(self.image_id),
           _make_path_compatible(self.sandbox_id)
       )
 
@@ -437,6 +496,11 @@ class Sandbox(pg.Object):
   @abc.abstractmethod
   def id(self) -> Id:
     """Returns the identifier for the sandbox."""
+
+  @property
+  @abc.abstractmethod
+  def image_id(self) -> str:
+    """Returns the image ID used for bootstrapping the sandbox."""
 
   @property
   @abc.abstractmethod
@@ -626,6 +690,8 @@ class Sandbox(pg.Object):
   def new_session(
       self,
       session_id: str | None = None,
+      *,
+      feature_hint: str | None = None,
   ) -> Iterator['Sandbox']:
     """Context manager for obtaining a sandbox for a user session.
 
@@ -636,6 +702,9 @@ class Sandbox(pg.Object):
     Args:
       session_id: The identifier for the user session. If not provided, a random
         ID will be generated.
+      feature_hint: A hint of which feature is the main user intent when
+        starting the session. This is used for generating the session id if
+        `session_id` is not provided.
 
     Yields:
       The sandbox for the user session.
@@ -646,7 +715,7 @@ class Sandbox(pg.Object):
         errors.
     """
     if session_id is None:
-      session_id = self.environment.new_session_id()
+      session_id = self.environment.new_session_id(feature_hint)
     self.start_session(session_id)
     try:
       yield self
@@ -683,6 +752,9 @@ class Sandbox(pg.Object):
 class Feature(pg.Object):
   """Interface for sandbox features."""
 
+  # Disable symbolic comparison and hashing for sandbox objects.
+  allow_symbolic_comparison = False
+
   @property
   @abc.abstractmethod
   def name(self) -> str:
@@ -699,6 +771,10 @@ class Feature(pg.Object):
     Raises:
       AssertError: If the feature is not set up with a sandbox yet.
     """
+
+  @abc.abstractmethod
+  def is_applicable(self, image_id: str) -> bool:
+    """Returns True if the feature is applicable to the given image."""
 
   @abc.abstractmethod
   def setup(self, sandbox: Sandbox) -> None:
