@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextlib
+from typing import Iterator
 import unittest
 from langfun.env import interface
 
@@ -38,6 +40,82 @@ class IdTest(unittest.TestCase):
         '/tmp/env/image_2025_01_01_00_00_00/sandbox'
     )
     self.assertIsNone(sandbox_id.working_dir(root_dir=None))
+
+
+class TestingSandbox(interface.Sandbox):
+
+  id: interface.Sandbox.Id = interface.Sandbox.Id(
+      environment_id=interface.Environment.Id('env'),
+      image_id='test_image',
+      sandbox_id='0:0'
+  )
+  image_id: str = 'test_image'
+  features: dict[str, interface.Feature] = {}
+  status: interface.Sandbox.Status = interface.Sandbox.Status.READY
+  session_id: str | None = None
+
+  def environment(self) -> interface.Environment:
+    pass
+
+  def _on_bound(self) -> None:
+    self.activities = []
+
+  def report_state_error(self, error: interface.SandboxStateError) -> None:
+    pass
+
+  def start(self) -> None:
+    pass
+
+  def shutdown(self) -> None:
+    pass
+
+  def start_session(self, session_id: str) -> None:
+    pass
+
+  def end_session(self, shutdown_sandbox: bool = False) -> None:
+    pass
+
+  @contextlib.contextmanager
+  def track_activity(
+      self,
+      name: str,
+      feature: interface.Feature | None = None,
+      **kwargs
+  ) -> Iterator[None]:
+    error = None
+    try:
+      yield
+    except BaseException as e:
+      error = e
+      raise
+    finally:
+      self.activities.append((name, error, kwargs))
+
+
+class DecoratorTest(unittest.TestCase):
+
+  def test_treat_as_sandbox_state_error(self):
+
+    class SandboxA(TestingSandbox):
+
+      @interface.treat_as_sandbox_state_error(errors=(ValueError,))
+      def foo(self, bar: str) -> None:
+        raise ValueError(bar)
+
+    with self.assertRaises(interface.SandboxStateError):
+      SandboxA().foo('foo')
+
+  def test_log_sandbox_activity(self):
+
+    class SandboxB(TestingSandbox):
+
+      @interface.log_sandbox_activity()
+      def bar(self, x: str) -> None:
+        pass
+
+    sb = SandboxB()
+    sb.bar('foo')
+    self.assertEqual(sb.activities, [('bar', None, {'x': 'foo'})])
 
 
 if __name__ == '__main__':

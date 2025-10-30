@@ -26,7 +26,7 @@ import contextlib
 import functools
 import threading
 import time
-from typing import Annotated, Any, Callable, Iterator, Sequence, Type
+from typing import Annotated, Any, Iterator
 
 from langfun.env import interface
 from langfun.env.event_handlers import base as event_handler_base
@@ -100,10 +100,9 @@ class BaseSandbox(interface.Sandbox):
     self._status = status
     self._status_start_time = time.time()
 
-  def report_maybe_state_error(self, e: BaseException | None) -> None:
+  def report_state_error(self, e: interface.SandboxStateError) -> None:
     """Reports sandbox state errors."""
-    if (isinstance(e, interface.SandboxStateError)
-        and e not in self._state_errors):
+    if e not in self._state_errors:
       self._state_errors.append(e)
 
   def _setup_features(self) -> None:
@@ -141,7 +140,8 @@ class BaseSandbox(interface.Sandbox):
         try:
           feature.teardown()
         except BaseException as e:  # pylint: disable=broad-except
-          self.report_maybe_state_error(e)
+          if isinstance(e, interface.SandboxStateError):
+            self.report_state_error(e)
           errors[feature.name] = e
     if errors:
       return interface.FeatureTeardownError(sandbox=self, errors=errors)
@@ -175,7 +175,8 @@ class BaseSandbox(interface.Sandbox):
         try:
           feature.teardown_session()
         except BaseException as e:  # pylint: disable=broad-except
-          self.report_maybe_state_error(e)
+          if isinstance(e, interface.SandboxStateError):
+            self.report_state_error(e)
           feature_teardown_errors[name] = e
 
     return interface.SessionTeardownError(
@@ -277,28 +278,6 @@ class BaseSandbox(interface.Sandbox):
     """Returns the features in the sandbox."""
     return self._features
 
-  def _enter_service_call(self) -> bool:
-    """Enters a service call.
-
-    Returns:
-      True if the service call is at the top of the call stack.
-    """
-    v = getattr(self._tls_state, 'service_call_depth', None)
-    if v is None:
-      v = 0
-    setattr(self._tls_state, 'service_call_depth', v + 1)
-    return v == 0
-
-  def _exit_service_call(self) -> bool:
-    """Exits a service call.
-
-    Returns:
-      True if the service call is at the top of the call stack.
-    """
-    v = getattr(self._tls_state, 'service_call_depth')
-    setattr(self._tls_state, 'service_call_depth', v - 1)
-    return v == 1
-
   #
   # Sandbox start/shutdown.
   #
@@ -369,7 +348,8 @@ class BaseSandbox(interface.Sandbox):
           '[%s]: Sandbox failed to start in %.2f seconds: %s',
           self.id, duration, e
       )
-      self.report_maybe_state_error(e)
+      if isinstance(e, interface.SandboxStateError):
+        self.report_state_error(e)
       self.on_start(duration, e)
       self.shutdown()
       raise e
@@ -442,7 +422,8 @@ class BaseSandbox(interface.Sandbox):
       shutdown_error = None
     except BaseException as e:  # pylint: disable=broad-except
       shutdown_error = e
-      self.report_maybe_state_error(e)
+      if isinstance(e, interface.SandboxStateError):
+        self.report_state_error(e)
       self._set_status(interface.Sandbox.Status.OFFLINE)
       pg.logging.error(
           '[%s]: Sandbox shutdown with error: %s',
@@ -540,7 +521,8 @@ class BaseSandbox(interface.Sandbox):
       self._set_status(self.Status.IN_SESSION)
       self.on_session_start(session_id, time.time() - self._session_start_time)
     except BaseException as e:  # pylint: disable=broad-except
-      self.report_maybe_state_error(e)
+      if isinstance(e, interface.SandboxStateError):
+        self.report_state_error(e)
       self.on_session_start(
           session_id, time.time() - self._session_start_time, e
       )
@@ -626,7 +608,8 @@ class BaseSandbox(interface.Sandbox):
                 self.id,
                 e
             )
-            self.report_maybe_state_error(e)
+            if isinstance(e, interface.SandboxStateError):
+              self.report_state_error(e)
             self.shutdown()
 
         # End session before setting up the next session.
@@ -677,6 +660,30 @@ class BaseSandbox(interface.Sandbox):
         and end_session_error.has_non_sandbox_state_error):
       raise end_session_error  # pylint: disable=raising-bad-type
 
+  @contextlib.contextmanager
+  def track_activity(
+      self,
+      name: str,
+      feature: interface.Feature | None = None,
+      **kwargs: Any
+  ) -> Iterator[None]:
+    """Tracks an activity for the sandbox."""
+    start_time = time.time()
+    error = None
+    try:
+      yield None
+    except BaseException as e:  # pylint: disable=broad-except
+      error = e
+      raise
+    finally:
+      self.on_activity(
+          name=name,
+          feature=feature,
+          duration=time.time() - start_time,
+          error=error,
+          **kwargs
+      )
+
   #
   # Housekeeping.
   #
@@ -722,7 +729,7 @@ class BaseSandbox(interface.Sandbox):
                 str(e)
             )
             self._housekeep_counter += 1
-            self.report_maybe_state_error(e)
+            self.report_state_error(e)
             self.on_housekeep(time.time() - housekeep_start, e)
             self.shutdown()
             break
@@ -744,7 +751,7 @@ class BaseSandbox(interface.Sandbox):
                 feature.name,
                 e,
             )
-            self.report_maybe_state_error(e)
+            self.report_state_error(e)
             self._housekeep_counter += 1
             self.on_housekeep(time.time() - housekeep_start, e)
             self.shutdown()
@@ -917,208 +924,3 @@ class BaseSandbox(interface.Sandbox):
       handler.on_session_end(
           self.environment, self, session_id, duration, lifetime, error
       )
-
-
-#
-# Sandbox service decorator.
-#
-
-
-def sandbox_service(
-    critical_errors: Sequence[
-        Type[BaseException] | tuple[Type[BaseException], str]
-    ] | None = None
-) -> Callable[..., Any]:
-  """Decorator for Sandbox/Feature methods exposed as sandbox services.
-
-  This decorator will catch errors and map to `SandboxStateError` if the
-  error matches any of the critical errors. Consequently, the sandbox will be
-  shutdown automatically when the error is raised.
-
-  Example:
-
-  ```
-    with env:
-      with env.sandbox() as sb:
-        try:
-          sb.test_feature.do_something_with_non_state_error()
-        except ValueError:
-          # sandbox will not be shutdown.
-          pass
-
-        try:
-          sb.test_feature.do_something_with_state_error()
-        except ValueError:
-          assert sb.state == sb.Status.OFFLINE
-  ```
-
-  If the decorated method returns a context manager, a wrapper context manager
-  will be returned, which will end the session when exiting the context.
-
-  Example:
-
-  ```
-    with env:
-      with env.test_feature.do_something_with_context_manager() as result:
-        # sandbox will be alive during the whole context manager cycle.
-  ```
-
-  For sandbox service methods, an optional `session_id` argument can be passed
-  to create a new session for the service call, even its signature does not
-  contain a `session_id` argument.
-
-  Args:
-    critical_errors: A sequence of exception types or tuples of exception type
-      and error messages (described in regular expression), when matched, treat
-      the sandbox as in a bad state, which will trigger a shutdown.
-
-  Returns:
-    The decorator function.
-  """
-  critical_errors = critical_errors or []
-
-  def decorator(func):
-    signature = pg.typing.get_signature(func)
-    if 'session_id' in signature.arg_names:
-      raise ValueError(
-          '`session_id` should not be used as argument for sandbox '
-          'service method. Please use `self.session_id` instead.'
-      )
-
-    def to_kwargs(*args, **kwargs):
-      num_non_self_args = len(signature.arg_names) - 1
-      if len(args) > num_non_self_args:
-        assert signature.varargs is not None, (signature, args)
-        kwargs[signature.varargs.name] = tuple(args[num_non_self_args:])
-        args = args[:num_non_self_args]
-      for i in range(len(args)):
-        # The first argument is `self`.
-        kwargs[signature.arg_names[i + 1]] = args[i]
-      return kwargs
-
-    @functools.wraps(func)
-    def method_wrapper(self, *args, **kwargs) -> Any:
-      """Helper function to safely execute logics in the sandbox."""
-
-      assert isinstance(self, (BaseSandbox, interface.Feature)), self
-      sandbox = self.sandbox if isinstance(self, interface.Feature) else self
-
-      # We count the service call stack depth so we could shutdown the sandbox
-      # at the top upon sandbox state error.
-      sandbox._enter_service_call()  # pylint: disable=protected-access
-
-      # When a capability is directly accessed from the environment,
-      # we create a new session for the capability call. This
-      # prevents the sandbox from being reused for other feature calls.
-      if sandbox.status == interface.Sandbox.Status.ACQUIRED:
-        new_session = True
-        new_session_id = kwargs.get('session_id')
-        if new_session_id is None:
-          new_session_id = sandbox.environment.new_session_id()
-
-        # If it's a feature method called from the environment, start a new
-        # session for the feature call.
-        sandbox.start_session(new_session_id)
-      else:
-        new_session = False
-
-      kwargs.pop('session_id', None)
-      result = None
-      error = None
-      start_time = time.time()
-
-      try:
-        # Execute the service function.
-        result = func(self, *args, **kwargs)
-
-        # If the result is a context manager, wrap it with a context manager
-        # to end the session when exiting.
-        if isinstance(result, contextlib.AbstractContextManager):
-          return _service_context_manager_wrapper(
-              service=result,
-              sandbox_or_feature=self,
-              sandbox=sandbox,
-              name=func.__name__,
-              kwargs=to_kwargs(*args, **kwargs),
-              start_time=start_time,
-              new_session=new_session
-          )
-
-        # Otherwise, return the result and end the session in the finally block.
-        return result
-      except BaseException as e:
-        error = e
-        sandbox.report_maybe_state_error(e)
-        if pg.match_error(e, critical_errors):
-          state_error = interface.SandboxStateError(
-              'Sandbox encountered an unexpected error executing '
-              f'`{func.__name__}` (args={args!r}, kwargs={kwargs!r}): {e}',
-              sandbox=self
-          )
-          sandbox.report_maybe_state_error(state_error)
-          raise state_error from e
-        raise
-      finally:
-        is_topmost_call = sandbox._exit_service_call()  # pylint: disable=protected-access
-        if not isinstance(result, contextlib.AbstractContextManager):
-          self.on_activity(
-              name=func.__name__,
-              duration=time.time() - start_time,
-              error=error,
-              **to_kwargs(*args, **kwargs),
-          )
-          if new_session:
-            assert is_topmost_call
-
-            # End the session if it's from a feature method and the result
-            # is not a context manager.
-            sandbox.end_session()
-
-        # Shutdown the sandbox if it is at the top of the service call stack and
-        # has state errors.
-        if (is_topmost_call
-            and sandbox.state_errors
-            # Sandbox service method might be called during shutting down, in
-            # that case we don't want to shutdown the sandbox again.
-            and not sandbox.is_shutting_down):
-          sandbox.shutdown()
-
-    return method_wrapper
-  return decorator
-
-
-@contextlib.contextmanager
-def _service_context_manager_wrapper(
-    service: contextlib.AbstractContextManager[Any],
-    sandbox_or_feature: BaseSandbox | interface.Feature,
-    sandbox: interface.Sandbox,
-    name: str,
-    kwargs: dict[str, Any],
-    new_session: bool,
-    start_time: float,
-) -> Iterator[Any]:
-  """Context manager wrapper for ending a sandbox session when exiting."""
-  error = None
-  sandbox._enter_service_call()  # pylint: disable=protected-access
-
-  try:
-    with service as result:
-      yield result
-  except BaseException as e:
-    error = e
-    sandbox.report_maybe_state_error(error)
-    raise
-  finally:
-    sandbox_or_feature.on_activity(
-        name=name,
-        error=error,
-        duration=time.time() - start_time,
-        **kwargs,
-    )
-    is_topmost_call = sandbox._exit_service_call()  # pylint: disable=protected-access
-
-    if new_session:
-      assert is_topmost_call
-      sandbox.end_session()
-    elif isinstance(error, interface.SandboxStateError):
-      sandbox.shutdown()

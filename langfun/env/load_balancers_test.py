@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import concurrent.futures
+import contextlib
 import time
+from typing import Any, Iterator
 import unittest
 
 from langfun.env import interface
@@ -48,6 +50,9 @@ class TestingSandbox(interface.Sandbox):
   def state_errors(self) -> list[interface.SandboxStateError]:
     return []
 
+  def report_state_error(self, error: interface.SandboxStateError) -> None:
+    pass
+
   def set_status(self, status: interface.Sandbox.Status) -> None:
     self.rebind(status=status, skip_notification=True)
 
@@ -69,6 +74,18 @@ class TestingSandbox(interface.Sandbox):
   @property
   def session_id(self) -> str | None:
     return self._session_id
+
+  @contextlib.contextmanager
+  def track_activity(
+      self,
+      name: str,
+      feature: interface.Feature | None = None,
+      **kwargs: Any
+  ) -> Iterator[None]:
+    try:
+      yield
+    finally:
+      pass
 
 
 class RoundRobinTest(unittest.TestCase):
