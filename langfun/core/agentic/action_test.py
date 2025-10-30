@@ -530,6 +530,31 @@ class SessionTest(unittest.TestCase):
     self.assertIn('agent@', session.id)
     self.assertIsInstance(session.as_message(), lf.AIMessage)
 
+  def test_query_with_track_if(self):
+    lm = fake.StaticResponse('lm response')
+    session = action_lib.Session()
+
+    # Render session to trigger javascript updates to the HTML when
+    # operating on the session.
+    _ = session.to_html()
+    with session:
+      # This query will succeed.
+      session.query(
+          'prompt1',
+          schema=None,
+          lm=lm,
+          track_if=lambda q: not q.has_error,
+          default=None)
+      # This query will fail during parsing.
+      session.query(
+          'prompt2',
+          schema=int,
+          lm=lm,
+          track_if=lambda q: not q.has_error,
+          default=None)
+    self.assertEqual(len(session.root.queries), 1)
+    self.assertIsNone(session.root.queries[0].error)
+
 
 if __name__ == '__main__':
   unittest.main()

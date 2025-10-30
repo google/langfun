@@ -538,6 +538,18 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           remove_class=['not-started'],
       )
 
+  def remove(self, item: TracedItem) -> None:
+    """Removes an item from the sequence."""
+    index = self.items.index(item)
+    if index == -1:
+      raise ValueError(f'Item not found in execution trace: {item!r}')
+
+    with pg.notify_on_change(False):
+      self.items.pop(index)
+
+    if self._tab_control is not None:
+      self._tab_control.remove(index)
+
   def extend(self, items: Iterable[TracedItem]) -> None:
     """Extends the sequence with a list of items."""
     for item in items:
@@ -1648,13 +1660,20 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   @contextlib.contextmanager
   def track_queries(
       self,
-      phase: str | None = None
+      phase: str | None = None,
+      track_if: Callable[
+          [lf_structured.QueryInvocation],
+          bool
+      ] | None = None,
   ) -> Iterator[list[lf_structured.QueryInvocation]]:
     """Tracks `lf.query` made within the context.
 
     Args:
       phase: The name of a new phase to track the queries in. If not provided,
         the queries will be tracked in the parent phase.
+      track_if: A function that takes a `lf_structured.QueryInvocation` and
+        returns True if the query should be included in the result. If None,
+        all queries (including failed queries) will be included.
 
     Yields:
       A list of `lf.QueryInvocation` objects, each for a single `lf.query`
@@ -1673,6 +1692,11 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       self.event_handler.on_query_start(self, self._current_action, invocation)
 
     def _query_end(invocation: lf_structured.QueryInvocation):
+      if track_if is not None and not track_if(invocation):
+        self._current_execution.remove(invocation)
+      # Even if the query is not included in the execution trace, we still
+      # count the usage summary to the current execution and trigger the
+      # event handler to log the query.
       self._current_execution.merge_usage_summary(invocation.usage_summary)
       self.event_handler.on_query_end(self, self._current_action, invocation)
 
@@ -1705,8 +1729,9 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       *,
       lm: lf.LanguageModel,
       examples: list[lf_structured.MappingExample] | None = None,
+      track_if: Callable[[lf_structured.QueryInvocation], bool] | None = None,
       **kwargs
-      ) -> Any:
+  ) -> Any:
     """Calls `lf.query` and associates it with the current invocation.
 
     The following code are equivalent:
@@ -1731,12 +1756,15 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       default: The default value to return if the query fails.
       lm: The language model to use for the query.
       examples: The examples to use for the query.
+      track_if: A function that takes a `lf_structured.QueryInvocation`
+        and returns True if the query should be tracked.
+        If None, all queries (including failed queries) will be tracked.
       **kwargs: Additional keyword arguments to pass to `lf.query`.
 
     Returns:
       The result of the query.
     """
-    with self.track_queries():
+    with self.track_queries(track_if=track_if):
       return lf_structured.query(
           prompt,
           schema=schema,
