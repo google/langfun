@@ -109,7 +109,7 @@ class DecoratorTest(unittest.TestCase):
 
     class SandboxB(TestingSandbox):
 
-      @interface.log_sandbox_activity()
+      @interface.log_activity()
       def bar(self, x: str) -> None:
         pass
 
