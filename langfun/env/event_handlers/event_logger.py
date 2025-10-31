@@ -16,11 +16,11 @@
 import re
 import time
 from typing import Annotated
-from langfun.env.event_handlers import base
+from langfun.env import interface
 import pyglove as pg
 
 
-class EventLogger(pg.Object, base.EventHandler):
+class EventLogger(pg.Object, interface.EventHandler):
   """Event handler for logging debugger."""
 
   colored: Annotated[
@@ -125,7 +125,7 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_environment_starting(
       self,
-      environment: base.Environment,
+      environment: interface.Environment,
   ) -> None:
     """Called when the environment is starting."""
     self._print(
@@ -137,7 +137,7 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_environment_shutting_down(
       self,
-      environment: base.Environment,
+      environment: interface.Environment,
       offline_duration: float,
   ) -> None:
     """Called when the environment is shutting down."""
@@ -151,7 +151,7 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_environment_start(
       self,
-      environment: base.Environment,
+      environment: interface.Environment,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -166,7 +166,7 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_environment_housekeep(
       self,
-      environment: base.Environment,
+      environment: interface.Environment,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -194,7 +194,7 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_environment_shutdown(
       self,
-      environment: base.Environment,
+      environment: interface.Environment,
       duration: float,
       lifetime: float,
       error: BaseException | None
@@ -210,8 +210,8 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_sandbox_start(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -226,10 +226,10 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_sandbox_status_change(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      old_status: base.Sandbox.Status,
-      new_status: base.Sandbox.Status,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      old_status: interface.Sandbox.Status,
+      new_status: interface.Sandbox.Status,
       span: float
   ) -> None:
     if self.sandbox_status:
@@ -242,8 +242,8 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_sandbox_shutdown(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
       error: BaseException | None
@@ -260,8 +260,8 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_sandbox_housekeep(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -279,9 +279,9 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_feature_setup(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -296,9 +296,9 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_feature_teardown(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -313,9 +313,9 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_feature_setup_session(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       session_id: str | None,
       duration: float,
       error: BaseException | None
@@ -331,9 +331,9 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_feature_teardown_session(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       session_id: str,
       duration: float,
       error: BaseException | None
@@ -349,9 +349,9 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_feature_housekeep(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -369,8 +369,8 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_session_start(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
       error: BaseException | None
@@ -386,8 +386,8 @@ class EventLogger(pg.Object, base.EventHandler):
 
   def on_session_end(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
       lifetime: float,
@@ -406,9 +406,9 @@ class EventLogger(pg.Object, base.EventHandler):
   def on_sandbox_activity(
       self,
       name: str,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature | None,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature | None,
       session_id: str | None,
       duration: float,
       error: BaseException | None,

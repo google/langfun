@@ -14,14 +14,14 @@
 """Environment event logger."""
 
 from typing import Annotated
-from langfun.env.event_handlers import base
+from langfun.env import interface
 import pyglove as pg
 
 
 _METRIC_NAMESPACE = '/langfun/env'
 
 
-class MetricWriter(pg.Object, base.EventHandler):
+class MetricWriter(pg.Object, interface.EventHandler):
   """Event handler for streamz metrics."""
 
   app: Annotated[
@@ -364,14 +364,14 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_environment_starting(
       self,
-      environment: base.Environment
+      environment: interface.Environment
   ) -> None:
     """Called when the environment is starting."""
     self._initialize_metrics()
 
   def on_environment_housekeep(
       self,
-      environment: base.Environment,
+      environment: interface.Environment,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -387,8 +387,8 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_sandbox_start(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -408,10 +408,10 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_sandbox_status_change(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      old_status: base.Sandbox.Status,
-      new_status: base.Sandbox.Status,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      old_status: interface.Sandbox.Status,
+      new_status: interface.Sandbox.Status,
       span: float
   ) -> None:
     self._sandbox_status_duration_ms.record(
@@ -421,7 +421,7 @@ class MetricWriter(pg.Object, base.EventHandler):
         image_id=sandbox.image_id,
         status=old_status.value
     )
-    if old_status != base.Sandbox.Status.CREATED:
+    if old_status != interface.Sandbox.Status.CREATED:
       self._sandbox_count.increment(
           delta=-1,
           app=self.app,
@@ -429,7 +429,7 @@ class MetricWriter(pg.Object, base.EventHandler):
           image_id=sandbox.image_id,
           status=old_status.value
       )
-    if new_status != base.Sandbox.Status.OFFLINE:
+    if new_status != interface.Sandbox.Status.OFFLINE:
       self._sandbox_count.increment(
           app=self.app,
           environment_id=str(environment.id),
@@ -439,8 +439,8 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_sandbox_shutdown(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
       error: BaseException | None
@@ -468,8 +468,8 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_sandbox_housekeep(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -492,9 +492,9 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_feature_setup(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -517,9 +517,9 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_feature_teardown(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -542,9 +542,9 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_feature_setup_session(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       session_id: str | None,
       duration: float,
       error: BaseException | None
@@ -568,9 +568,9 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_feature_teardown_session(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       session_id: str,
       duration: float,
       error: BaseException | None
@@ -594,9 +594,9 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_feature_housekeep(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -621,8 +621,8 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_session_start(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
       error: BaseException | None
@@ -638,8 +638,8 @@ class MetricWriter(pg.Object, base.EventHandler):
 
   def on_session_end(
       self,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
       lifetime: float,
@@ -664,9 +664,9 @@ class MetricWriter(pg.Object, base.EventHandler):
   def on_sandbox_activity(
       self,
       name: str,
-      environment: base.Environment,
-      sandbox: base.Sandbox,
-      feature: base.Feature | None,
+      environment: interface.Environment,
+      sandbox: interface.Sandbox,
+      feature: interface.Feature | None,
       session_id: str | None,
       duration: float,
       error: BaseException | None,

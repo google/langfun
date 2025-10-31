@@ -36,7 +36,6 @@ import langfun.core as lf
 from langfun.env import base_sandbox
 from langfun.env import interface
 from langfun.env import load_balancers
-from langfun.env.event_handlers import base as event_handler_base
 import pyglove as pg
 
 
@@ -113,12 +112,13 @@ class BaseEnvironment(interface.Environment):
       )
   ] = True
 
-  event_handlers: Annotated[
-      list[event_handler_base.EventHandler],
+  event_handler: Annotated[
+      interface.EventHandler,
       (
           'User handler for the environment events.'
+          'By default, the no-op event handler is used.'
       )
-  ] = []
+  ] = interface.EventHandler()
 
   outage_grace_period: Annotated[
       float,
@@ -169,6 +169,7 @@ class BaseEnvironment(interface.Environment):
 
     self._status = self.Status.CREATED
     self._start_time = None
+
     self._sandbox_pool: dict[str, list[base_sandbox.BaseSandbox]] = (
         collections.defaultdict(list)
     )
@@ -555,8 +556,6 @@ class BaseEnvironment(interface.Environment):
           proactive_session_setup=self.proactive_session_setup,
           keepalive_interval=self.sandbox_keepalive_interval,
       )
-      for handler in self.event_handlers:
-        sandbox.add_event_handler(handler)
       sandbox.start()
       if set_acquired:
         sandbox.set_acquired()
@@ -738,16 +737,14 @@ class BaseEnvironment(interface.Environment):
 
   def on_starting(self) -> None:
     """Called when the environment is getting started."""
-    for handler in self.event_handlers:
-      handler.on_environment_starting(self)
+    self.event_handler.on_environment_starting(self)
 
   def on_start(
       self,
       duration: float, error: BaseException | None = None
   ) -> None:
     """Called when the environment is started."""
-    for handler in self.event_handlers:
-      handler.on_environment_start(self, duration, error)
+    self.event_handler.on_environment_start(self, duration, error)
 
   def on_housekeep(
       self,
@@ -756,16 +753,13 @@ class BaseEnvironment(interface.Environment):
       **kwargs
   ) -> None:
     """Called when the environment finishes a round of housekeeping."""
-    housekeep_counter = self.housekeep_counter
-    for handler in self.event_handlers:
-      handler.on_environment_housekeep(
-          self, housekeep_counter, duration, error, **kwargs
-      )
+    self.event_handler.on_environment_housekeep(
+        self, self.housekeep_counter, duration, error, **kwargs
+    )
 
   def on_shutting_down(self) -> None:
     """Called when the environment is shutting down."""
-    for handler in self.event_handlers:
-      handler.on_environment_shutting_down(self, self.offline_duration)
+    self.event_handler.on_environment_shutting_down(self, self.offline_duration)
 
   def on_shutdown(
       self,
@@ -773,5 +767,4 @@ class BaseEnvironment(interface.Environment):
       error: BaseException | None = None) -> None:
     """Called when the environment is shutdown."""
     lifetime = (time.time() - self.start_time) if self.start_time else 0.0
-    for handler in self.event_handlers:
-      handler.on_environment_shutdown(self, duration, lifetime, error)
+    self.event_handler.on_environment_shutdown(self, duration, lifetime, error)

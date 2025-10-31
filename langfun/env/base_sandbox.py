@@ -29,7 +29,6 @@ import time
 from typing import Annotated, Any, Iterator
 
 from langfun.env import interface
-from langfun.env.event_handlers import base as event_handler_base
 import pyglove as pg
 
 
@@ -198,7 +197,7 @@ class BaseSandbox(interface.Sandbox):
         for name, feature in self.environment.features.items()
         if feature.is_applicable(self.image_id)
     })
-    self._event_handlers = []
+    self._event_handler = self.environment.event_handler
     self._enable_pre_session_setup = (
         self.reusable and self.proactive_session_setup
     )
@@ -246,20 +245,6 @@ class BaseSandbox(interface.Sandbox):
   def housekeep_counter(self) -> int:
     """Returns the housekeeping counter."""
     return self._housekeep_counter
-
-  def add_event_handler(
-      self,
-      event_handler: event_handler_base.EventHandler | None
-  ) -> None:
-    """Sets the event handler for the sandbox."""
-    self._event_handlers.append(event_handler)
-
-  def remove_event_handler(
-      self,
-      event_handler: event_handler_base.EventHandler | None
-  ) -> None:
-    """Removes the event handler for the sandbox."""
-    self._event_handlers.remove(event_handler)
 
   @property
   def state_errors(self) -> list[interface.SandboxStateError]:
@@ -648,7 +633,6 @@ class BaseSandbox(interface.Sandbox):
       shutdown_sandbox = True
 
     self._session_start_time = None
-    self._session_event_handler = None
 
     if shutdown_sandbox:
       self.shutdown()
@@ -771,8 +755,9 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the sandbox is started."""
-    for handler in self._event_handlers:
-      handler.on_sandbox_start(self.environment, self, duration, error)
+    self._event_handler.on_sandbox_start(
+        self.environment, self, duration, error
+    )
 
   def on_status_change(
       self,
@@ -781,14 +766,9 @@ class BaseSandbox(interface.Sandbox):
   ) -> None:
     """Called when the sandbox status changes."""
     status_duration = time.time() - self._status_start_time
-    for handler in self._event_handlers:
-      handler.on_sandbox_status_change(
-          self.environment,
-          self,
-          old_status,
-          new_status,
-          status_duration
-      )
+    self._event_handler.on_sandbox_status_change(
+        self.environment, self, old_status, new_status, status_duration
+    )
 
   def on_shutdown(
       self,
@@ -796,14 +776,13 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the sandbox is shutdown."""
-    if self._start_time is None:
-      lifetime = 0.0
-    else:
-      lifetime = time.time() - self._start_time
-    for handler in self._event_handlers:
-      handler.on_sandbox_shutdown(
-          self.environment, self, duration, lifetime, error
-      )
+    self._event_handler.on_sandbox_shutdown(
+        self.environment,
+        self,
+        duration,
+        0.0 if self._start_time is None else (time.time() - self._start_time),
+        error
+    )
 
   def on_housekeep(
       self,
@@ -812,72 +791,14 @@ class BaseSandbox(interface.Sandbox):
       **kwargs
   ) -> None:
     """Called when the sandbox finishes a round of housekeeping."""
-    counter = self._housekeep_counter
-    for handler in self._event_handlers:
-      handler.on_sandbox_housekeep(
-          self.environment, self, counter, duration, error, **kwargs
-      )
-
-  def on_feature_setup(
-      self,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when a feature is setup."""
-    for handler in self._event_handlers:
-      handler.on_feature_setup(
-          self.environment, self, feature, duration, error
-      )
-
-  def on_feature_teardown(
-      self,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when a feature is teardown."""
-    for handler in self._event_handlers:
-      handler.on_feature_teardown(
-          self.environment, self, feature, duration, error
-      )
-
-  def on_feature_setup_session(
-      self,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when a feature is setup for a user session."""
-    for handler in self._event_handlers:
-      handler.on_feature_setup_session(
-          self.environment, self, feature, self.session_id, duration, error
-      )
-
-  def on_feature_teardown_session(
-      self,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when a feature is teardown for a user session."""
-    for handler in self._event_handlers:
-      handler.on_feature_teardown_session(
-          self.environment, self, feature, self.session_id, duration, error
-      )
-
-  def on_feature_housekeep(
-      self,
-      feature: interface.Feature,
-      counter: int,
-      duration: float,
-      error: BaseException | None = None
-  ) -> None:
-    """Called when a feature is housekeeping."""
-    for handler in self._event_handlers:
-      handler.on_feature_housekeep(
-          self.environment, self, feature, counter, duration, error
-      )
+    self._event_handler.on_sandbox_housekeep(
+        self.environment,
+        self,
+        self._housekeep_counter,
+        duration,
+        error,
+        **kwargs
+    )
 
   def on_session_start(
       self,
@@ -886,10 +807,9 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the user session starts."""
-    for handler in self._event_handlers:
-      handler.on_session_start(
-          self.environment, self, session_id, duration, error
-      )
+    self._event_handler.on_session_start(
+        self.environment, self, session_id, duration, error
+    )
 
   def on_activity(
       self,
@@ -900,17 +820,16 @@ class BaseSandbox(interface.Sandbox):
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
-    for handler in self._event_handlers:
-      handler.on_sandbox_activity(
-          name=name,
-          environment=self.environment,
-          sandbox=self,
-          feature=feature,
-          session_id=self.session_id,
-          duration=duration,
-          error=error,
-          **kwargs
-      )
+    self._event_handler.on_sandbox_activity(
+        name,
+        self.environment,
+        self,
+        feature,
+        self.session_id,
+        duration,
+        error,
+        **kwargs
+    )
 
   def on_session_end(
       self,
@@ -919,8 +838,11 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the user session ends."""
-    lifetime = time.time() - self._session_start_time
-    for handler in self._event_handlers:
-      handler.on_session_end(
-          self.environment, self, session_id, duration, lifetime, error
-      )
+    self._event_handler.on_session_end(
+        self.environment,
+        self,
+        session_id,
+        duration,
+        time.time() - self._session_start_time,
+        error
+    )

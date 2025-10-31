@@ -33,7 +33,7 @@ class MetricWriterTest(unittest.TestCase):
         outage_retry_interval=0,
         housekeep_interval=10.0,
         sandbox_keepalive_interval=1.0,
-        event_handlers=[writer],
+        event_handler=writer,
     )
     with env:
       with env.sandbox(session_id='session1') as sb:

@@ -110,6 +110,15 @@ class BaseFeature(interface.Feature):
     super()._on_parent_change(old_parent, new_parent)
     self.__dict__.pop('name', None)
 
+  @functools.cached_property
+  def environment(self) -> interface.Environment:
+    """Returns the environment that the feature is running in."""
+    if self._sandbox is not None:
+      return self._sandbox.environment
+    env = self.sym_ancestor(lambda v: isinstance(v, interface.Environment))
+    assert env is not None, 'Feature is not put into an environment.'
+    return env
+
   @property
   def sandbox(self) -> interface.Sandbox:
     """Returns the sandbox that the feature is running in."""
@@ -188,7 +197,13 @@ class BaseFeature(interface.Feature):
       error: BaseException | None = None
   ) -> None:
     """Called when the feature is setup."""
-    self.sandbox.on_feature_setup(self, duration, error)
+    self.environment.event_handler.on_feature_setup(
+        environment=self.environment,
+        sandbox=self.sandbox,
+        feature=self,
+        duration=duration,
+        error=error
+    )
 
   def on_teardown(
       self,
@@ -196,7 +211,13 @@ class BaseFeature(interface.Feature):
       error: BaseException | None = None
   ) -> None:
     """Called when the feature is teardown."""
-    self.sandbox.on_feature_teardown(self, duration, error)
+    self.environment.event_handler.on_feature_teardown(
+        environment=self.environment,
+        sandbox=self.sandbox,
+        feature=self,
+        duration=duration,
+        error=error
+    )
 
   def on_housekeep(
       self,
@@ -205,8 +226,14 @@ class BaseFeature(interface.Feature):
       **kwargs
   ) -> None:
     """Called when the feature has done housekeeping."""
-    self.sandbox.on_feature_housekeep(
-        self, self._housekeep_counter, duration, error, **kwargs
+    self.environment.event_handler.on_feature_housekeep(
+        environment=self.environment,
+        sandbox=self.sandbox,
+        feature=self,
+        counter=self._housekeep_counter,
+        duration=duration,
+        error=error,
+        **kwargs
     )
 
   def on_setup_session(
@@ -215,7 +242,14 @@ class BaseFeature(interface.Feature):
       error: BaseException | None = None,
   ) -> None:
     """Called when the feature is setup for a user session."""
-    self.sandbox.on_feature_setup_session(self, duration, error)
+    self.environment.event_handler.on_feature_setup_session(
+        environment=self.environment,
+        sandbox=self.sandbox,
+        feature=self,
+        session_id=self.session_id,
+        duration=duration,
+        error=error
+    )
 
   def on_teardown_session(
       self,
@@ -223,7 +257,14 @@ class BaseFeature(interface.Feature):
       error: BaseException | None = None,
   ) -> None:
     """Called when the feature is teardown for a user session."""
-    self.sandbox.on_feature_teardown_session(self, duration, error)
+    self.environment.event_handler.on_feature_teardown_session(
+        environment=self.environment,
+        sandbox=self.sandbox,
+        feature=self,
+        session_id=self.session_id,
+        duration=duration,
+        error=error
+    )
 
   def on_activity(
       self,
@@ -233,10 +274,13 @@ class BaseFeature(interface.Feature):
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
-    self.sandbox.on_activity(
+    self.environment.event_handler.on_sandbox_activity(
         name=f'{self.name}.{name}',
+        environment=self.environment,
+        sandbox=self.sandbox,
         feature=self,
-        error=error,
+        session_id=self.session_id,
         duration=duration,
+        error=error,
         **kwargs
     )

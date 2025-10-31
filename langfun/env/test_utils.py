@@ -21,7 +21,6 @@ from langfun.env import base_environment
 from langfun.env import base_feature
 from langfun.env import base_sandbox
 from langfun.env import interface
-from langfun.env.event_handlers import base as event_handler_base
 import pyglove as pg
 
 
@@ -221,9 +220,7 @@ class TestingFeature(base_feature.BaseFeature):
       )
 
 
-class TestingEventHandler(
-    pg.Object, event_handler_base.EventHandler
-):
+class TestingEventHandler(pg.Object, interface.EventHandler):
   """Testing environment event handler for unit tests."""
 
   log_sandbox_status: bool = False

@@ -24,6 +24,8 @@ from langfun.env.interface import Environment
 from langfun.env.interface import Sandbox
 from langfun.env.interface import Feature
 
+from langfun.env.interface import EventHandler
+
 # Decorators for sandbox/feature methods.
 from langfun.env.interface import treat_as_sandbox_state_error
 from langfun.env.interface import log_sandbox_activity
@@ -35,7 +37,7 @@ from langfun.env.base_feature import BaseFeature
 from langfun.env import load_balancers
 from langfun.env.load_balancers import LoadBalancer
 
-from langfun.env import event_handlers
-EventHandler = event_handlers.EventHandler
+# Import all event handlers.
+from langfun.env.event_handlers import *
 
 # Google-internal imports.

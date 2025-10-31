@@ -71,7 +71,7 @@ class EventLoggerTest(unittest.TestCase):
         outage_retry_interval=0,
         housekeep_interval=1.0,
         sandbox_keepalive_interval=1.0,
-        event_handlers=[event_logger],
+        event_handler=event_logger,
     )
     with self._capture_logs(test_name) as stream:
       with env:

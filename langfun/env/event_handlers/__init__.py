@@ -3,7 +3,7 @@
 # pylint: disable=g-importing-member
 # pylint: disable=g-bad-import-order
 
-from langfun.env.event_handlers.base import EventHandler
+from langfun.env.event_handlers.chain import EventHandlerChain
 
 from langfun.env.event_handlers.event_logger import EventLogger
 from langfun.env.event_handlers.event_logger import ConsoleEventLogger
