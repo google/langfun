@@ -57,7 +57,7 @@ class BaseEnvironmentTests(unittest.TestCase):
       self.assertEqual(env.sandbox_pool, {})
       self.assertEqual(env.working_dir, '/tmp/testing-env')
 
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         self.assertEqual(
             sb.id, interface.Sandbox.Id(
                 environment_id=env.id,
@@ -79,7 +79,7 @@ class BaseEnvironmentTests(unittest.TestCase):
       with self.assertRaisesRegex(
           ValueError, 'Environment .* does not serve image ID .*'
       ):
-        env.sandbox('test_image2')
+        env.sandbox(image_id='test_image2')
 
       with env.test_feature() as feature:
         self.assertIsInstance(feature, TestingFeature)
@@ -174,7 +174,7 @@ class BaseEnvironmentTests(unittest.TestCase):
       with self.assertRaisesRegex(
           ValueError, 'Feature .* is not applicable to .*'
       ):
-        with env.test_feature('test_image2'):
+        with env.test_feature(image_id='test_image2'):
           pass
 
       with env.test_feature2() as feature:
@@ -183,7 +183,7 @@ class BaseEnvironmentTests(unittest.TestCase):
       with env.test_feature3() as feature:
         self.assertEqual(feature.sandbox.image_id, 'test_image1')
 
-      with env.test_feature3('test_image2') as feature:
+      with env.test_feature3(image_id='test_image2') as feature:
         self.assertEqual(feature.sandbox.image_id, 'test_image2')
 
   def test_feature_applicability_check(self):
@@ -218,7 +218,7 @@ class BaseEnvironmentTests(unittest.TestCase):
           pass
 
       # Dynamically loaded IDs.
-      with env.test_feature2('test_image2') as feature:
+      with env.test_feature2(image_id='test_image2') as feature:
         self.assertEqual(feature.sandbox.image_id, 'test_image2')
 
   def test_pool_size(self):

@@ -648,7 +648,6 @@ class BaseSandbox(interface.Sandbox):
   def track_activity(
       self,
       name: str,
-      feature: interface.Feature | None = None,
       **kwargs: Any
   ) -> Iterator[None]:
     """Tracks an activity for the sandbox."""
@@ -662,7 +661,6 @@ class BaseSandbox(interface.Sandbox):
     finally:
       self.on_activity(
           name=name,
-          feature=feature,
           duration=time.time() - start_time,
           error=error,
           **kwargs
@@ -755,9 +753,7 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the sandbox is started."""
-    self._event_handler.on_sandbox_start(
-        self.environment, self, duration, error
-    )
+    self._event_handler.on_sandbox_start(self, duration, error)
 
   def on_status_change(
       self,
@@ -767,7 +763,7 @@ class BaseSandbox(interface.Sandbox):
     """Called when the sandbox status changes."""
     status_duration = time.time() - self._status_start_time
     self._event_handler.on_sandbox_status_change(
-        self.environment, self, old_status, new_status, status_duration
+        self, old_status, new_status, status_duration
     )
 
   def on_shutdown(
@@ -777,11 +773,11 @@ class BaseSandbox(interface.Sandbox):
   ) -> None:
     """Called when the sandbox is shutdown."""
     self._event_handler.on_sandbox_shutdown(
-        self.environment,
-        self,
-        duration,
-        0.0 if self._start_time is None else (time.time() - self._start_time),
-        error
+        sandbox=self,
+        duration=duration,
+        lifetime=(0.0 if self._start_time is None
+                  else (time.time() - self._start_time)),
+        error=error
     )
 
   def on_housekeep(
@@ -792,11 +788,10 @@ class BaseSandbox(interface.Sandbox):
   ) -> None:
     """Called when the sandbox finishes a round of housekeeping."""
     self._event_handler.on_sandbox_housekeep(
-        self.environment,
-        self,
-        self._housekeep_counter,
-        duration,
-        error,
+        sandbox=self,
+        counter=self._housekeep_counter,
+        duration=duration,
+        error=error,
         **kwargs
     )
 
@@ -807,27 +802,27 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the user session starts."""
-    self._event_handler.on_session_start(
-        self.environment, self, session_id, duration, error
+    self._event_handler.on_sandbox_session_start(
+        sandbox=self,
+        session_id=session_id,
+        duration=duration,
+        error=error
     )
 
   def on_activity(
       self,
       name: str,
       duration: float,
-      feature: interface.Feature | None = None,
       error: BaseException | None = None,
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
     self._event_handler.on_sandbox_activity(
-        name,
-        self.environment,
-        self,
-        feature,
-        self.session_id,
-        duration,
-        error,
+        name=name,
+        sandbox=self,
+        session_id=self.session_id,
+        duration=duration,
+        error=error,
         **kwargs
     )
 
@@ -838,11 +833,10 @@ class BaseSandbox(interface.Sandbox):
       error: BaseException | None = None
   ) -> None:
     """Called when the user session ends."""
-    self._event_handler.on_session_end(
-        self.environment,
-        self,
-        session_id,
-        duration,
-        time.time() - self._session_start_time,
-        error
+    self._event_handler.on_sandbox_session_end(
+        sandbox=self,
+        session_id=session_id,
+        duration=duration,
+        lifetime=time.time() - self._session_start_time,
+        error=error
     )

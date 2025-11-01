@@ -24,7 +24,7 @@ TestingFeature = test_utils.TestingFeature
 TestingEventHandler = test_utils.TestingEventHandler
 
 
-class BaseSandboxTests(unittest.TestCase):
+class SandboxStateTests(unittest.TestCase):
 
   def setUp(self):
     super().setUp()
@@ -60,39 +60,39 @@ class BaseSandboxTests(unittest.TestCase):
     )
     self.assertFalse(env.enable_pooling('test_image'))
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
       self.assertEqual(
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-              '[testing-env/test_image:0/feature2] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session',
               '[testing-env/test_image:0] setting_up -> in_session',
               "[testing-env/test_image:0] session 'session1' started",
-              '[testing-env/test_image:0/session1] shell: echo "hello"',
+              '[testing-env/test_image:0@session1] shell: echo "hello"',
               '[testing-env/test_image:0] in_session -> exiting_session',
-              '[testing-env/test_image:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0/feature1] feature teardown session',
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0/feature2] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0/feature1@session1] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0] session 'session1' ended",
               '[testing-env/test_image:0] exiting_session -> acquired',
               '[testing-env/test_image:0] acquired -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
-              '[testing-env/test_image:0] shell: "feature2" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
               '[testing-env/test_image:0] sandbox shutdown'
@@ -111,7 +111,7 @@ class BaseSandboxTests(unittest.TestCase):
     )
     self.assertTrue(env.enable_pooling('test_image'))
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
       sb.wait_until_not(
           (
@@ -124,14 +124,14 @@ class BaseSandboxTests(unittest.TestCase):
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
-              '[testing-env/test_image:0:0] shell: "feature1" setup',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0:0/feature1] feature setup',
-              '[testing-env/test_image:0:0] shell: "feature2" setup',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0:0/feature2] feature setup',
-              '[testing-env/test_image:0:0] shell: "feature1" setup session',
-              '[testing-env/test_image:0:0/feature1] feature setup session',
-              '[testing-env/test_image:0:0] shell: "feature2" setup session',
-              '[testing-env/test_image:0:0/feature2] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+              '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature2" setup session',
+              '[testing-env/test_image:0:0/feature2@<idle>] feature setup session',
               '[testing-env/test_image:0:0] created -> ready',
               '[testing-env/test_image:0:0] sandbox started',
               '[testing-env] environment started',
@@ -139,18 +139,18 @@ class BaseSandboxTests(unittest.TestCase):
               '[testing-env/test_image:0:0] acquired -> setting_up',
               '[testing-env/test_image:0:0] setting_up -> in_session',
               "[testing-env/test_image:0:0] session 'session1' started",
-              '[testing-env/test_image:0:0/session1] shell: echo "hello"',
+              '[testing-env/test_image:0:0@session1] shell: echo "hello"',
               '[testing-env/test_image:0:0] in_session -> exiting_session',
-              '[testing-env/test_image:0:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0:0/feature1] feature teardown session',
-              '[testing-env/test_image:0:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0:0/feature2] feature teardown session',
+              '[testing-env/test_image:0:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0:0/feature1@session1] feature teardown session',
+              '[testing-env/test_image:0:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0:0] session 'session1' ended",
               '[testing-env/test_image:0:0] exiting_session -> setting_up',
-              '[testing-env/test_image:0:0] shell: "feature1" setup session',
-              '[testing-env/test_image:0:0/feature1] feature setup session',
-              '[testing-env/test_image:0:0] shell: "feature2" setup session',
-              '[testing-env/test_image:0:0/feature2] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+              '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature2" setup session',
+              '[testing-env/test_image:0:0/feature2@<idle>] feature setup session',
               '[testing-env/test_image:0:0] setting_up -> ready'
               # pylint: enable=line-too-long
           ]
@@ -163,7 +163,7 @@ class BaseSandboxTests(unittest.TestCase):
         housekeep_interval=10.0,
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.test_feature.rebind(
             simulate_setup_session_error=interface.SandboxStateError,
             skip_notification=True
@@ -180,10 +180,10 @@ class BaseSandboxTests(unittest.TestCase):
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
-              '[testing-env/test_image:0:0] shell: "test_feature" setup',
+              '[testing-env/test_image:0:0@<idle>] shell: "test_feature" setup',
               '[testing-env/test_image:0:0/test_feature] feature setup',
-              '[testing-env/test_image:0:0] shell: "test_feature" setup session',
-              '[testing-env/test_image:0:0/test_feature] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "test_feature" setup session',
+              '[testing-env/test_image:0:0/test_feature@<idle>] feature setup session',
               '[testing-env/test_image:0:0] created -> ready',
               '[testing-env/test_image:0:0] sandbox started',
               '[testing-env] environment started',
@@ -192,13 +192,13 @@ class BaseSandboxTests(unittest.TestCase):
               '[testing-env/test_image:0:0] setting_up -> in_session',
               "[testing-env/test_image:0:0] session 'session1' started",
               '[testing-env/test_image:0:0] in_session -> exiting_session',
-              '[testing-env/test_image:0:0/session1] shell: "test_feature" teardown session',
-              '[testing-env/test_image:0:0/test_feature] feature teardown session',
+              '[testing-env/test_image:0:0@session1] shell: "test_feature" teardown session',
+              '[testing-env/test_image:0:0/test_feature@session1] feature teardown session',
               "[testing-env/test_image:0:0] session 'session1' ended",
               '[testing-env/test_image:0:0] exiting_session -> setting_up',
-              '[testing-env/test_image:0:0/test_feature] feature setup session with SandboxStateError',
+              '[testing-env/test_image:0:0/test_feature@<idle>] feature setup session with SandboxStateError',
               '[testing-env/test_image:0:0] setting_up -> shutting_down',
-              '[testing-env/test_image:0:0] shell: "test_feature" teardown',
+              '[testing-env/test_image:0:0@<idle>] shell: "test_feature" teardown',
               '[testing-env/test_image:0:0/test_feature] feature teardown',
               '[testing-env/test_image:0:0] shutting_down -> offline',
               '[testing-env/test_image:0:0] sandbox shutdown'
@@ -216,7 +216,7 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(ValueError):
-        with env.sandbox(session_id='session1'):
+        with env.sandbox('session1'):
           pass
       self.assertTrue(env.is_online)
       self.assertEqual(
@@ -266,45 +266,44 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(ValueError):
-        with env.sandbox(session_id='session1') as sb:
+        with env.sandbox('session1') as sb:
           sb.shell('echo "hello"')
       self.assertEqual(len(sb.state_errors), 0)
-
     self.assertEqual(
         self.event_handler.logs,
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "feature1" setup',
+            '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
             '[testing-env/test_image:0/feature1] feature setup',
-            '[testing-env/test_image:0] shell: "feature2" setup',
+            '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
             '[testing-env/test_image:0/feature2] feature setup',
             '[testing-env/test_image:0] created -> ready',
             '[testing-env/test_image:0] sandbox started',
             '[testing-env/test_image:0] ready -> acquired',
             '[testing-env/test_image:0] acquired -> setting_up',
-            '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-            '[testing-env/test_image:0/feature1] feature setup session',
-            '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-            '[testing-env/test_image:0/feature2] feature setup session',
+            '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+            '[testing-env/test_image:0/feature1@session1] feature setup session',
+            '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+            '[testing-env/test_image:0/feature2@session1] feature setup session',
             '[testing-env/test_image:0] setting_up -> in_session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: echo "hello"',
+            '[testing-env/test_image:0@session1] shell: echo "hello"',
             '[testing-env/test_image:0] in_session -> exiting_session',
-            '[testing-env/test_image:0/session1] shell: "feature1" teardown session',
-            '[testing-env/test_image:0/feature1] feature teardown session',
-            '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-            '[testing-env/test_image:0/feature2] feature teardown session',
+            '[testing-env/test_image:0@session1] shell: "feature1" teardown session',
+            '[testing-env/test_image:0/feature1@session1] feature teardown session',
+            '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+            '[testing-env/test_image:0/feature2@session1] feature teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
             '[testing-env/test_image:0] exiting_session -> acquired',
             '[testing-env/test_image:0] acquired -> shutting_down',
-            '[testing-env/test_image:0] shell: "feature1" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
             '[testing-env/test_image:0/feature1] feature teardown',
-            '[testing-env/test_image:0] shell: "feature2" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
             '[testing-env/test_image:0/feature2] feature teardown',
             '[testing-env/test_image:0] shutting_down -> offline',
             '[testing-env/test_image:0] sandbox shutdown with ValueError',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
@@ -326,21 +325,21 @@ class BaseSandboxTests(unittest.TestCase):
         self.event_handler.logs,
         [
             # pylint: disable=line-too-long
-            '[testing-env/test_image:0:0] shell: "feature1" setup',
+            '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup',
             '[testing-env/test_image:0:0/feature1] feature setup',
-            '[testing-env/test_image:0:0] shell: "feature2" setup',
+            '[testing-env/test_image:0:0@<idle>] shell: "feature2" setup',
             '[testing-env/test_image:0:0/feature2] feature setup',
-            '[testing-env/test_image:0:0] shell: "feature1" setup session',
-            '[testing-env/test_image:0:0/feature1] feature setup session',
-            '[testing-env/test_image:0:0] shell: "feature2" setup session',
-            '[testing-env/test_image:0:0/feature2] feature setup session',
+            '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+            '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
+            '[testing-env/test_image:0:0@<idle>] shell: "feature2" setup session',
+            '[testing-env/test_image:0:0/feature2@<idle>] feature setup session',
             '[testing-env/test_image:0:0] created -> ready',
             '[testing-env/test_image:0:0] sandbox started',
             '[testing-env] environment started',
             '[testing-env/test_image:0:0] ready -> shutting_down',
-            '[testing-env/test_image:0:0] shell: "feature1" teardown',
+            '[testing-env/test_image:0:0@<idle>] shell: "feature1" teardown',
             '[testing-env/test_image:0:0/feature1] feature teardown',
-            '[testing-env/test_image:0:0] shell: "feature2" teardown',
+            '[testing-env/test_image:0:0@<idle>] shell: "feature2" teardown',
             '[testing-env/test_image:0:0/feature2] feature teardown',
             '[testing-env/test_image:0:0] shutting_down -> offline',
             '[testing-env/test_image:0:0] sandbox shutdown with ValueError',
@@ -358,44 +357,45 @@ class BaseSandboxTests(unittest.TestCase):
         simulate_shutdown_error=interface.SandboxStateError,
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
       self.assertEqual(len(sb.state_errors), 1)
+
     self.assertEqual(
         self.event_handler.logs,
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "feature1" setup',
+            '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
             '[testing-env/test_image:0/feature1] feature setup',
-            '[testing-env/test_image:0] shell: "feature2" setup',
+            '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
             '[testing-env/test_image:0/feature2] feature setup',
             '[testing-env/test_image:0] created -> ready',
             '[testing-env/test_image:0] sandbox started',
             '[testing-env/test_image:0] ready -> acquired',
             '[testing-env/test_image:0] acquired -> setting_up',
-            '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-            '[testing-env/test_image:0/feature1] feature setup session',
-            '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-            '[testing-env/test_image:0/feature2] feature setup session',
+            '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+            '[testing-env/test_image:0/feature1@session1] feature setup session',
+            '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+            '[testing-env/test_image:0/feature2@session1] feature setup session',
             '[testing-env/test_image:0] setting_up -> in_session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: echo "hello"',
+            '[testing-env/test_image:0@session1] shell: echo "hello"',
             '[testing-env/test_image:0] in_session -> exiting_session',
-            '[testing-env/test_image:0/session1] shell: "feature1" teardown session',
-            '[testing-env/test_image:0/feature1] feature teardown session',
-            '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-            '[testing-env/test_image:0/feature2] feature teardown session',
+            '[testing-env/test_image:0@session1] shell: "feature1" teardown session',
+            '[testing-env/test_image:0/feature1@session1] feature teardown session',
+            '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+            '[testing-env/test_image:0/feature2@session1] feature teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
             '[testing-env/test_image:0] exiting_session -> acquired',
             '[testing-env/test_image:0] acquired -> shutting_down',
-            '[testing-env/test_image:0] shell: "feature1" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
             '[testing-env/test_image:0/feature1] feature teardown',
-            '[testing-env/test_image:0] shell: "feature2" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
             '[testing-env/test_image:0/feature2] feature teardown',
             '[testing-env/test_image:0] shutting_down -> offline',
             '[testing-env/test_image:0] sandbox shutdown with SandboxStateError',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
@@ -411,24 +411,24 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(ValueError):
-        with env.sandbox(session_id='session1'):
+        with env.sandbox('session1'):
           pass
       self.assertEqual(
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
               '[testing-env/test_image:0/feature2] feature setup with ValueError',
               '[testing-env/test_image:0] sandbox started with ValueError',
               '[testing-env/test_image:0] created -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
-              '[testing-env/test_image:0] shell: "feature2" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
-              '[testing-env/test_image:0] sandbox shutdown',
+              '[testing-env/test_image:0] sandbox shutdown'
               # pylint: enable=line-too-long
           ]
       )
@@ -444,7 +444,7 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(interface.EnvironmentOutageError):
-        with env.sandbox(session_id='session1'):
+        with env.sandbox('session1'):
           pass
       self.assertEqual(
           self.event_handler.logs,
@@ -454,7 +454,7 @@ class BaseSandboxTests(unittest.TestCase):
               '[testing-env/test_image:0/feature1] feature setup with SandboxStateError',
               '[testing-env/test_image:0] sandbox started with SandboxStateError',
               '[testing-env/test_image:0] created -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
               '[testing-env/test_image:0] sandbox shutdown',
@@ -474,36 +474,36 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(interface.FeatureTeardownError):
-        with env.sandbox(session_id='session1'):
+        with env.sandbox('session1'):
           pass
       self.assertEqual(
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-              '[testing-env/test_image:0/feature2] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session',
               '[testing-env/test_image:0] setting_up -> in_session',
               "[testing-env/test_image:0] session 'session1' started",
               '[testing-env/test_image:0] in_session -> exiting_session',
-              '[testing-env/test_image:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0/feature1] feature teardown session',
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0/feature2] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0/feature1@session1] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0] session 'session1' ended",
               '[testing-env/test_image:0] exiting_session -> acquired',
               '[testing-env/test_image:0] acquired -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
               '[testing-env/test_image:0/feature2] feature teardown with ValueError',
               '[testing-env/test_image:0] shutting_down -> offline',
@@ -523,7 +523,7 @@ class BaseSandboxTests(unittest.TestCase):
         },
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         pass
       self.assertEqual(len(sb.state_errors), 1)
       self.assertEqual(
@@ -531,30 +531,30 @@ class BaseSandboxTests(unittest.TestCase):
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-              '[testing-env/test_image:0/feature2] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session',
               '[testing-env/test_image:0] setting_up -> in_session',
               "[testing-env/test_image:0] session 'session1' started",
               '[testing-env/test_image:0] in_session -> exiting_session',
-              '[testing-env/test_image:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0/feature1] feature teardown session',
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0/feature2] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0/feature1@session1] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0] session 'session1' ended",
               '[testing-env/test_image:0] exiting_session -> acquired',
               '[testing-env/test_image:0] acquired -> shutting_down',
-              '[testing-env/test_image:0/feature1] feature teardown with SandboxStateError',  # pylint: disable=line-too-long
-              '[testing-env/test_image:0] shell: "feature2" teardown',
+              '[testing-env/test_image:0/feature1] feature teardown with SandboxStateError',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
               '[testing-env/test_image:0] sandbox shutdown with FeatureTeardownError',
@@ -573,32 +573,32 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(ValueError):
-        with env.sandbox(session_id='session1') as sb:
+        with env.sandbox('session1') as sb:
           sb.shell('echo "hello"')
       self.assertEqual(
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/feature2] feature setup session with ValueError',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session with ValueError',
               "[testing-env/test_image:0] session 'session1' started with ValueError",
               '[testing-env/test_image:0] setting_up -> shutting_down',
-              '[testing-env/test_image:0/session1] shell: "feature1" teardown',
+              '[testing-env/test_image:0@session1] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
-              '[testing-env/test_image:0] sandbox shutdown',
+              '[testing-env/test_image:0] sandbox shutdown'
               # pylint: enable=line-too-long
           ]
       )
@@ -614,7 +614,7 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(interface.SessionTeardownError):
-        with env.sandbox(session_id='session1') as sb:
+        with env.sandbox('session1') as sb:
           sb.shell('echo "hello"')
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
       self.assertEqual(
@@ -622,34 +622,34 @@ class BaseSandboxTests(unittest.TestCase):
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-              '[testing-env/test_image:0/feature2] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session',
               '[testing-env/test_image:0] setting_up -> in_session',
               "[testing-env/test_image:0] session 'session1' started",
-              '[testing-env/test_image:0/session1] shell: echo "hello"',
+              '[testing-env/test_image:0@session1] shell: echo "hello"',
               '[testing-env/test_image:0] in_session -> exiting_session',
-              '[testing-env/test_image:0/feature1] feature teardown session with ValueError',  # pylint: disable=line-too-long
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0/feature2] feature teardown session',
+              '[testing-env/test_image:0/feature1@session1] feature teardown session with ValueError',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0] session 'session1' ended",
               '[testing-env/test_image:0] exiting_session -> acquired',
               '[testing-env/test_image:0] acquired -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
-              '[testing-env/test_image:0] shell: "feature2" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
-              '[testing-env/test_image:0] sandbox shutdown'
+              '[testing-env/test_image:0] sandbox shutdown',
               # pylint: enable=line-too-long
           ]
       )
@@ -664,7 +664,7 @@ class BaseSandboxTests(unittest.TestCase):
         },
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
       self.assertEqual(len(sb.state_errors), 1)
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
@@ -673,34 +673,34 @@ class BaseSandboxTests(unittest.TestCase):
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-              '[testing-env/test_image:0/feature2] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session',
               '[testing-env/test_image:0] setting_up -> in_session',
               "[testing-env/test_image:0] session 'session1' started",
-              '[testing-env/test_image:0/session1] shell: echo "hello"',
+              '[testing-env/test_image:0@session1] shell: echo "hello"',
               '[testing-env/test_image:0] in_session -> exiting_session',
-              '[testing-env/test_image:0/feature1] feature teardown session with SandboxStateError',  # pylint: disable=line-too-long
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0/feature2] feature teardown session',
+              '[testing-env/test_image:0/feature1@session1] feature teardown session with SandboxStateError',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0] session 'session1' ended with SandboxStateError",
               '[testing-env/test_image:0] exiting_session -> acquired',
               '[testing-env/test_image:0] acquired -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
-              '[testing-env/test_image:0] shell: "feature2" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
-              '[testing-env/test_image:0] sandbox shutdown'
+              '[testing-env/test_image:0] sandbox shutdown',
               # pylint: enable=line-too-long
           ]
       )
@@ -715,39 +715,39 @@ class BaseSandboxTests(unittest.TestCase):
         },
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.shell('echo "hello"')
       self.assertEqual(
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
               '[testing-env] environment started',
-              '[testing-env/test_image:0] shell: "feature1" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0/feature1] feature setup',
-              '[testing-env/test_image:0] shell: "feature2" setup',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" setup',
               '[testing-env/test_image:0/feature2] feature setup',
               '[testing-env/test_image:0] created -> ready',
               '[testing-env/test_image:0] sandbox started',
               '[testing-env/test_image:0] ready -> acquired',
               '[testing-env/test_image:0] acquired -> setting_up',
-              '[testing-env/test_image:0/session1] shell: "feature1" setup session',
-              '[testing-env/test_image:0/feature1] feature setup session',
-              '[testing-env/test_image:0/session1] shell: "feature2" setup session',
-              '[testing-env/test_image:0/feature2] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature1" setup session',
+              '[testing-env/test_image:0/feature1@session1] feature setup session',
+              '[testing-env/test_image:0@session1] shell: "feature2" setup session',
+              '[testing-env/test_image:0/feature2@session1] feature setup session',
               '[testing-env/test_image:0] setting_up -> in_session',
               "[testing-env/test_image:0] session 'session1' started",
-              '[testing-env/test_image:0/session1] shell: echo "hello"',
+              '[testing-env/test_image:0@session1] shell: echo "hello"',
               '[testing-env/test_image:0] in_session -> exiting_session',
-              '[testing-env/test_image:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0/feature1] feature teardown session',
-              '[testing-env/test_image:0/session1] shell: "feature2" teardown session',
-              '[testing-env/test_image:0/feature2] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0/feature1@session1] feature teardown session',
+              '[testing-env/test_image:0@session1] shell: "feature2" teardown session',
+              '[testing-env/test_image:0/feature2@session1] feature teardown session',
               "[testing-env/test_image:0] session 'session1' ended",
               '[testing-env/test_image:0] exiting_session -> acquired',
               '[testing-env/test_image:0] acquired -> shutting_down',
-              '[testing-env/test_image:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0/feature1] feature teardown',
-              '[testing-env/test_image:0] shell: "feature2" teardown',
+              '[testing-env/test_image:0@<idle>] shell: "feature2" teardown',
               '[testing-env/test_image:0/feature2] feature teardown',
               '[testing-env/test_image:0] shutting_down -> offline',
               '[testing-env/test_image:0] sandbox shutdown'
@@ -763,7 +763,7 @@ class BaseSandboxTests(unittest.TestCase):
         },
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         with self.assertRaises(ValueError):
           sb.shell('echo foo', raise_error=ValueError)
         self.assertEqual(len(sb.state_errors), 0)
@@ -775,10 +775,10 @@ class BaseSandboxTests(unittest.TestCase):
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
-              '[testing-env/test_image:0:0] shell: "feature1" setup',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0:0/feature1] feature setup',
-              '[testing-env/test_image:0:0] shell: "feature1" setup session',
-              '[testing-env/test_image:0:0/feature1] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+              '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
               '[testing-env/test_image:0:0] created -> ready',
               '[testing-env/test_image:0:0] sandbox started',
               '[testing-env] environment started',
@@ -786,15 +786,15 @@ class BaseSandboxTests(unittest.TestCase):
               '[testing-env/test_image:0:0] acquired -> setting_up',
               '[testing-env/test_image:0:0] setting_up -> in_session',
               "[testing-env/test_image:0:0] session 'session1' started",
-              '[testing-env/test_image:0:0/session1] shell: echo foo with ValueError',
-              '[testing-env/test_image:0:0/session1] shell: echo bar',
+              '[testing-env/test_image:0:0@session1] shell: echo foo with ValueError',
+              '[testing-env/test_image:0:0@session1] shell: echo bar',
               '[testing-env/test_image:0:0] in_session -> exiting_session',
-              '[testing-env/test_image:0:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0:0/feature1] feature teardown session',
+              '[testing-env/test_image:0:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0:0/feature1@session1] feature teardown session',
               "[testing-env/test_image:0:0] session 'session1' ended",
               '[testing-env/test_image:0:0] exiting_session -> setting_up',
-              '[testing-env/test_image:0:0] shell: "feature1" setup session',
-              '[testing-env/test_image:0:0/feature1] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+              '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
               '[testing-env/test_image:0:0] setting_up -> ready',
               # pylint: enable=line-too-long
           ]
@@ -809,7 +809,7 @@ class BaseSandboxTests(unittest.TestCase):
     )
     with env:
       with self.assertRaises(interface.SandboxStateError):
-        with env.sandbox(session_id='session1') as sb:
+        with env.sandbox('session1') as sb:
           sb.shell('echo foo', raise_error=RuntimeError)
       self.assertEqual(len(sb.state_errors), 1)
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
@@ -817,10 +817,10 @@ class BaseSandboxTests(unittest.TestCase):
           self.event_handler.logs,
           [
               # pylint: disable=line-too-long
-              '[testing-env/test_image:0:0] shell: "feature1" setup',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup',
               '[testing-env/test_image:0:0/feature1] feature setup',
-              '[testing-env/test_image:0:0] shell: "feature1" setup session',
-              '[testing-env/test_image:0:0/feature1] feature setup session',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+              '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
               '[testing-env/test_image:0:0] created -> ready',
               '[testing-env/test_image:0:0] sandbox started',
               '[testing-env] environment started',
@@ -828,14 +828,14 @@ class BaseSandboxTests(unittest.TestCase):
               '[testing-env/test_image:0:0] acquired -> setting_up',
               '[testing-env/test_image:0:0] setting_up -> in_session',
               "[testing-env/test_image:0:0] session 'session1' started",
-              '[testing-env/test_image:0:0/session1] shell: echo foo with RuntimeError',
+              '[testing-env/test_image:0:0@session1] shell: echo foo with RuntimeError',
               '[testing-env/test_image:0:0] in_session -> exiting_session',
-              '[testing-env/test_image:0:0/session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0:0/feature1] feature teardown session',
+              '[testing-env/test_image:0:0@session1] shell: "feature1" teardown session',
+              '[testing-env/test_image:0:0/feature1@session1] feature teardown session',
               "[testing-env/test_image:0:0] session 'session1' ended with SandboxStateError",
               '[testing-env/test_image:0:0] exiting_session -> acquired',
               '[testing-env/test_image:0:0] acquired -> shutting_down',
-              '[testing-env/test_image:0:0] shell: "feature1" teardown',
+              '[testing-env/test_image:0:0@<idle>] shell: "feature1" teardown',
               '[testing-env/test_image:0:0/feature1] feature teardown',
               '[testing-env/test_image:0:0] shutting_down -> offline',
               '[testing-env/test_image:0:0] sandbox shutdown',
@@ -869,7 +869,7 @@ class SandboxActivityTests(unittest.TestCase):
         sandbox_keepalive_interval=0,
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         sb.rebind(
             simulate_ping_error=interface.SandboxStateError,
             skip_notification=True
@@ -889,7 +889,7 @@ class SandboxActivityTests(unittest.TestCase):
         event_handler=event_handler,
     )
     with env:
-      with env.sandbox(session_id='session1') as sb:
+      with env.sandbox('session1') as sb:
         self.assertEqual(len(env.sandbox_pool), 1)
         self.assertEqual(sb.status, interface.Sandbox.Status.IN_SESSION)
         self.assertEqual(sb.session_id, 'session1')
@@ -909,22 +909,22 @@ class SandboxActivityTests(unittest.TestCase):
         event_handler.logs,
         [
             # pylint: disable=line-too-long
-            '[testing-env/test_image:0:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0:0/test_feature] feature setup',
-            '[testing-env/test_image:0:0] shell: "test_feature" setup session',
+            '[testing-env/test_image:0:0@<idle>] shell: "test_feature" setup session',
             '[testing-env/test_image:0:0] sandbox started',
             '[testing-env] environment started',
             "[testing-env/test_image:0:0] session 'session1' started",
-            '[testing-env/test_image:0:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0:0] session 'session1' ended with SandboxStateError",
-            '[testing-env/test_image:0:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0:0/test_feature] feature teardown',
             '[testing-env/test_image:0:0] sandbox shutdown',
-            '[testing-env/test_image:0:1] shell: "test_feature" setup',
+            '[testing-env/test_image:0:1@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0:1/test_feature] feature setup',
-            '[testing-env/test_image:0:1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0:1@<idle>] shell: "test_feature" setup session',
             '[testing-env/test_image:0:1] sandbox started',
-            '[testing-env/test_image:0:1] shell: "test_feature" teardown',
+            '[testing-env/test_image:0:1@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0:1/test_feature] feature teardown',
             '[testing-env/test_image:0:1] sandbox shutdown',
             '[testing-env] environment shutdown'
@@ -959,9 +959,17 @@ class SandboxServiceTests(unittest.TestCase):
       def on_sandbox_activity(
           self,
           name: str,
-          environment: interface.Environment,
           sandbox: interface.Sandbox,
-          feature: interface.Feature | None,
+          session_id: str | None,
+          duration: float,
+          error: BaseException | None,
+          **kwargs: Any):
+        self.calls.append((session_id, name, kwargs))
+
+      def on_feature_activity(
+          self,
+          name: str,
+          feature: interface.Feature,
           session_id: str | None,
           duration: float,
           error: BaseException | None,
@@ -990,7 +998,7 @@ class SandboxServiceTests(unittest.TestCase):
 
   def test_service_call_from_feature(self):
     with self.env:
-      with self.env.sandbox(session_id='session1') as sb:
+      with self.env.sandbox('session1') as sb:
         self.assertEqual(sb.test_feature.num_shell_calls(), 2)
         self.assertEqual(sb.test_feature.num_shell_calls(), 2)
     self.assertEqual(
@@ -998,19 +1006,19 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1/test_feature] test_feature.num_shell_calls: None',
-            '[testing-env/test_image:0/session1/test_feature] test_feature.num_shell_calls: None',
-            '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0/test_feature@session1] test_feature.num_shell_calls: None',
+            '[testing-env/test_image:0/test_feature@session1] test_feature.num_shell_calls: None',
+            '[testing-env/test_image:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
@@ -1018,26 +1026,25 @@ class SandboxServiceTests(unittest.TestCase):
   def test_service_call_from_feature_with_error(self):
     with self.env:
       with self.assertRaises(interface.SandboxStateError):
-        with self.env.sandbox(session_id='session1') as sb:
+        with self.env.sandbox('session1') as sb:
           sb.test_feature.bad_shell_call()
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
       self.assertEqual(len(sb.state_errors), 1)
-
     self.assertEqual(
         self.event_handler.logs,
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: bad command with RuntimeError',
-            '[testing-env/test_image:0/session1/test_feature] test_feature.bad_shell_call: None with SandboxStateError',
-            '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0@session1] shell: bad command with RuntimeError',
+            '[testing-env/test_image:0/test_feature@session1] test_feature.bad_shell_call: None with SandboxStateError',
+            '[testing-env/test_image:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended with SandboxStateError",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
             '[testing-env] environment shutdown'
@@ -1054,15 +1061,15 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/test_feature-session-2291d8c] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@test_feature-session-2291d8c] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'test_feature-session-2291d8c' started",
-            '[testing-env/test_image:0/test_feature-session-2291d8c/test_feature] test_feature.num_shell_calls: None',
-            '[testing-env/test_image:0/test_feature-session-2291d8c] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0/test_feature@test_feature-session-2291d8c] test_feature.num_shell_calls: None',
+            '[testing-env/test_image:0@test_feature-session-2291d8c] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'test_feature-session-2291d8c' ended",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
             '[testing-env] environment shutdown'
@@ -1080,26 +1087,26 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: bad command with RuntimeError',
-            '[testing-env/test_image:0/session1/test_feature] test_feature.bad_shell_call: None with SandboxStateError',
-            '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0@session1] shell: bad command with RuntimeError',
+            '[testing-env/test_image:0/test_feature@session1] test_feature.bad_shell_call: None with SandboxStateError',
+            '[testing-env/test_image:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended with SandboxStateError",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
 
   def test_service_context_manager_from_feature(self):
     with self.env:
-      with self.env.sandbox(session_id='session1') as sb:
+      with self.env.sandbox('session1') as sb:
         with sb.test_feature.my_service() as service:
           service.do('hello')
         sb.shell('foo')
@@ -1109,19 +1116,19 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: hello',
-            '[testing-env/test_image:0/session1] shell: foo',
-            '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0@session1] shell: hello',
+            '[testing-env/test_image:0@session1] shell: foo',
+            '[testing-env/test_image:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
@@ -1129,7 +1136,7 @@ class SandboxServiceTests(unittest.TestCase):
   def test_service_context_manager_from_feature_with_error(self):
     with self.env:
       with self.assertRaises(interface.SandboxStateError):
-        with self.env.sandbox(session_id='session1') as sb:
+        with self.env.sandbox('session1') as sb:
           with sb.test_feature.my_service() as service:
             service.do('hello', raise_error=interface.SandboxStateError)
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
@@ -1139,18 +1146,18 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: hello with SandboxStateError',
-            '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0@session1] shell: hello with SandboxStateError',
+            '[testing-env/test_image:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended with SandboxStateError",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
@@ -1169,29 +1176,29 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/session1] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@session1] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'session1' started",
-            '[testing-env/test_image:0/session1] shell: foo',
-            '[testing-env/test_image:0/session1] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0@session1] shell: foo',
+            '[testing-env/test_image:0@session1] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'session1' ended",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
-            '[testing-env/test_image:1] shell: "test_feature" setup',
+            '[testing-env/test_image:1@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:1/test_feature] feature setup',
             '[testing-env/test_image:1] sandbox started',
-            '[testing-env/test_image:1/test_feature-session-2291d8c] shell: "test_feature" setup session',
+            '[testing-env/test_image:1@test_feature-session-2291d8c] shell: "test_feature" setup session',
             "[testing-env/test_image:1] session 'test_feature-session-2291d8c' started",
-            '[testing-env/test_image:1/test_feature-session-2291d8c] shell: bar',
-            '[testing-env/test_image:1/test_feature-session-2291d8c] shell: "test_feature" teardown session',
+            '[testing-env/test_image:1@test_feature-session-2291d8c] shell: bar',
+            '[testing-env/test_image:1@test_feature-session-2291d8c] shell: "test_feature" teardown session',
             "[testing-env/test_image:1] session 'test_feature-session-2291d8c' ended",
-            '[testing-env/test_image:1] shell: "test_feature" teardown',
+            '[testing-env/test_image:1@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:1/test_feature] feature teardown',
             '[testing-env/test_image:1] sandbox shutdown',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )
@@ -1207,18 +1214,18 @@ class SandboxServiceTests(unittest.TestCase):
         [
             # pylint: disable=line-too-long
             '[testing-env] environment started',
-            '[testing-env/test_image:0] shell: "test_feature" setup',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" setup',
             '[testing-env/test_image:0/test_feature] feature setup',
             '[testing-env/test_image:0] sandbox started',
-            '[testing-env/test_image:0/test_feature-session-2291d8c] shell: "test_feature" setup session',
+            '[testing-env/test_image:0@test_feature-session-2291d8c] shell: "test_feature" setup session',
             "[testing-env/test_image:0] session 'test_feature-session-2291d8c' started",
-            '[testing-env/test_image:0/test_feature-session-2291d8c] shell: hello with SandboxStateError',
-            '[testing-env/test_image:0/test_feature-session-2291d8c] shell: "test_feature" teardown session',
+            '[testing-env/test_image:0@test_feature-session-2291d8c] shell: hello with SandboxStateError',
+            '[testing-env/test_image:0@test_feature-session-2291d8c] shell: "test_feature" teardown session',
             "[testing-env/test_image:0] session 'test_feature-session-2291d8c' ended with SandboxStateError",
-            '[testing-env/test_image:0] shell: "test_feature" teardown',
+            '[testing-env/test_image:0@<idle>] shell: "test_feature" teardown',
             '[testing-env/test_image:0/test_feature] feature teardown',
             '[testing-env/test_image:0] sandbox shutdown',
-            '[testing-env] environment shutdown'
+            '[testing-env] environment shutdown',
             # pylint: enable=line-too-long
         ]
     )

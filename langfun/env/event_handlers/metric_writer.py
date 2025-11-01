@@ -210,6 +210,41 @@ class MetricWriter(pg.Object, interface.EventHandler):
     )
 
     #
+    # Sandbox session metrics.
+    #
+
+    self._sandbox_session_start_duration_ms = self._get_distribution(
+        'sandbox_session_start_duration_ms',
+        description='Sandbox session start duration in milliseconds',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'image_id': str,
+            'error': str,
+        }
+    )
+    self._sandbox_session_end_duration_ms = self._get_distribution(
+        'sandbox_session_end_duration_ms',
+        description='Sandbox session end duration in milliseconds',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'image_id': str,
+            'error': str,
+        }
+    )
+    self._sandbox_session_lifetime_ms = self._get_distribution(
+        'sandbox_session_lifetime_ms',
+        description='Sandbox session lifetime in milliseconds',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'image_id': str,
+            'error': str,
+        }
+    )
+
+    #
     # Feature metrics.
     #
 
@@ -255,6 +290,17 @@ class MetricWriter(pg.Object, interface.EventHandler):
             'environment_id': str,
             'image_id': str,
             'feature_name': str,
+            'error': str,
+        }
+    )
+    self._feature_activity = self._get_counter(
+        'feature_activity',
+        description='Feature activity counter',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'image_id': str,
+            'activity': str,
             'error': str,
         }
     )
@@ -315,6 +361,17 @@ class MetricWriter(pg.Object, interface.EventHandler):
             'error': str,
         }
     )
+    self._feature_activity_duration_ms = self._get_distribution(
+        'feature_activity_duration_ms',
+        description='Feature activity duration in milliseconds',
+        parameters={
+            'app': str,
+            'environment_id': str,
+            'image_id': str,
+            'activity': str,
+            'error': str,
+        }
+    )
     self._feature_housekeep_duration_ms = self._get_distribution(
         'feature_housekeep_duration_ms',
         description='Feature housekeeping duration in milliseconds',
@@ -323,41 +380,6 @@ class MetricWriter(pg.Object, interface.EventHandler):
             'environment_id': str,
             'image_id': str,
             'feature_name': str,
-            'error': str,
-        }
-    )
-
-    #
-    # Session metrics.
-    #
-
-    self._session_start_duration_ms = self._get_distribution(
-        'session_start_duration_ms',
-        description='Session start duration in milliseconds',
-        parameters={
-            'app': str,
-            'environment_id': str,
-            'image_id': str,
-            'error': str,
-        }
-    )
-    self._session_end_duration_ms = self._get_distribution(
-        'session_end_duration_ms',
-        description='Session end duration in milliseconds',
-        parameters={
-            'app': str,
-            'environment_id': str,
-            'image_id': str,
-            'error': str,
-        }
-    )
-    self._session_lifetime_ms = self._get_distribution(
-        'session_lifetime_ms',
-        description='Session lifetime in milliseconds',
-        parameters={
-            'app': str,
-            'environment_id': str,
-            'image_id': str,
             'error': str,
         }
     )
@@ -387,28 +409,26 @@ class MetricWriter(pg.Object, interface.EventHandler):
 
   def on_sandbox_start(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       error: BaseException | None
   ) -> None:
     self._sandbox_start.increment(
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_start_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
   def on_sandbox_status_change(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       old_status: interface.Sandbox.Status,
       new_status: interface.Sandbox.Status,
@@ -417,7 +437,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
     self._sandbox_status_duration_ms.record(
         int(span * 1000),
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         status=old_status.value
     )
@@ -425,21 +445,20 @@ class MetricWriter(pg.Object, interface.EventHandler):
       self._sandbox_count.increment(
           delta=-1,
           app=self.app,
-          environment_id=str(environment.id),
+          environment_id=str(sandbox.environment.id),
           image_id=sandbox.image_id,
           status=old_status.value
       )
     if new_status != interface.Sandbox.Status.OFFLINE:
       self._sandbox_count.increment(
           app=self.app,
-          environment_id=str(environment.id),
+          environment_id=str(sandbox.environment.id),
           image_id=sandbox.image_id,
           status=new_status.value
       )
 
   def on_sandbox_shutdown(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
@@ -447,28 +466,93 @@ class MetricWriter(pg.Object, interface.EventHandler):
   ) -> None:
     self._sandbox_shutdown.increment(
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_shutdown_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_lifetime_ms.record(
         int(lifetime * 1000),
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
+        error=self._error_tag(error)
+    )
+
+  def on_sandbox_session_start(
+      self,
+      sandbox: interface.Sandbox,
+      session_id: str,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session starts."""
+    self._sandbox_session_start_duration_ms.record(
+        int(duration * 1000),
+        app=self.app,
+        environment_id=str(sandbox.environment.id),
+        image_id=sandbox.image_id,
+        error=self._error_tag(error)
+    )
+
+  def on_sandbox_session_end(
+      self,
+      sandbox: interface.Sandbox,
+      session_id: str,
+      duration: float,
+      lifetime: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session ends."""
+    self._sandbox_session_end_duration_ms.record(
+        int(duration * 1000),
+        app=self.app,
+        environment_id=str(sandbox.environment.id),
+        image_id=sandbox.image_id,
+        error=self._error_tag(error)
+    )
+    self._sandbox_session_lifetime_ms.record(
+        int(lifetime * 1000),
+        app=self.app,
+        environment_id=str(sandbox.environment.id),
+        image_id=sandbox.image_id,
+        error=self._error_tag(error)
+    )
+
+  def on_sandbox_activity(
+      self,
+      name: str,
+      sandbox: interface.Sandbox,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed."""
+    self._sandbox_activity.increment(
+        app=self.app,
+        environment_id=str(sandbox.environment.id),
+        image_id=sandbox.image_id,
+        activity=name,
+        error=self._error_tag(error)
+    )
+    self._sandbox_activity_duration_ms.record(
+        int(duration * 1000),
+        app=self.app,
+        environment_id=str(sandbox.environment.id),
+        image_id=sandbox.image_id,
+        activity=name,
         error=self._error_tag(error)
     )
 
   def on_sandbox_housekeep(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       counter: int,
       duration: float,
@@ -478,124 +562,145 @@ class MetricWriter(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is housekeeping."""
     self._sandbox_housekeep.increment(
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
     self._sandbox_housekeep_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
+        environment_id=str(sandbox.environment.id),
         image_id=sandbox.image_id,
         error=self._error_tag(error)
     )
 
   def on_feature_setup(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is setup."""
+    image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_setup.increment(
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
     self._feature_setup_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
 
   def on_feature_teardown(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is teardown."""
+    image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_teardown.increment(
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
     self._feature_teardown_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
 
   def on_feature_setup_session(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       session_id: str | None,
       duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is setup."""
+    image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_setup_session.increment(
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
     self._feature_setup_session_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
 
   def on_feature_teardown_session(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       session_id: str,
       duration: float,
       error: BaseException | None
   ) -> None:
     """Called when a sandbox feature is teardown."""
+    image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_teardown_session.increment(
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
     self._feature_teardown_session_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
+        error=self._error_tag(error)
+    )
+
+  def on_feature_activity(
+      self,
+      name: str,
+      feature: interface.Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a feature activity is performed."""
+    image_id = feature.sandbox.image_id if feature.sandbox else ''
+    self._feature_activity.increment(
+        app=self.app,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
+        activity=name,
+        error=self._error_tag(error)
+    )
+    self._feature_activity_duration_ms.record(
+        int(duration * 1000),
+        app=self.app,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
+        activity=name,
         error=self._error_tag(error)
     )
 
   def on_feature_housekeep(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       counter: int,
       duration: float,
@@ -603,88 +708,19 @@ class MetricWriter(pg.Object, interface.EventHandler):
       **kwargs
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
+    image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_housekeep.increment(
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error)
     )
     self._feature_housekeep_duration_ms.record(
         int(duration * 1000),
         app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
+        environment_id=str(feature.environment.id),
+        image_id=image_id,
         feature_name=feature.name,
-        error=self._error_tag(error)
-    )
-
-  def on_session_start(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session starts."""
-    self._session_start_duration_ms.record(
-        int(duration * 1000),
-        app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
-        error=self._error_tag(error)
-    )
-
-  def on_session_end(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      session_id: str,
-      duration: float,
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session ends."""
-    self._session_end_duration_ms.record(
-        int(duration * 1000),
-        app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
-        error=self._error_tag(error)
-    )
-    self._session_lifetime_ms.record(
-        int(lifetime * 1000),
-        app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
-        error=self._error_tag(error)
-    )
-
-  def on_sandbox_activity(
-      self,
-      name: str,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature | None,
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
-    self._sandbox_activity.increment(
-        app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
-        activity=name,
-        error=self._error_tag(error)
-    )
-    self._sandbox_activity_duration_ms.record(
-        int(duration * 1000),
-        app=self.app,
-        environment_id=str(environment.id),
-        image_id=sandbox.image_id,
-        activity=name,
         error=self._error_tag(error)
     )
