@@ -169,7 +169,176 @@ class SessionTeardownError(SandboxError):
 
 
 class Environment(pg.Object):
-  """Base class for an environment."""
+  """Base class for an environment.
+
+  An **Environment** is the central component for managing sandboxes and
+  **Features**. It acts as an abstraction layer, hiding the implementation
+  details of the underlying container/sandboxing system
+  (e.g., Docker, virtual machines).
+
+  The core goal is to enable the development of features that are **agnostic**
+  to how or where they are executed (sandboxed or not).
+
+  -----------------------------------------------------------------------------
+
+  ## Core Concepts
+
+  1.  **Sandbox-Based Features:** Features that require isolated execution
+      contexts (sandboxes). They become available as properties of the sandbox
+      object (e.g., `sandbox.feature1`). Applicability is determined by an image
+      ID regex.
+  2.  **Non-Sandbox-Based Features:** Features that run directly within the host
+      process or manage their own execution context outside of the Environment's
+      managed sandboxes. They are accessed directly via the Environment (e.g.,
+      `env.feature3()`).
+
+  How to Use:
+
+  The primary usage patterns are creating a **sandbox session** or directly
+  accessing a specific **Feature**, which transparently handles sandbox creation
+  if needed.
+
+  ```python
+  env = MyEnvironment(
+      image_ids=['image1', 'image2'],
+      features={
+          'feature1': Feature1(applicable_images=['image1.*']),
+          'feature2': Feature2(applicable_images=['image2.*']),
+          'feature3': Feature3(is_sandbox_based=False)
+      })
+
+  # Context manager for the Environment lifetime.
+  with env:
+
+    # 1. Access a specific sandbox directly.
+    # Upon exiting the context, the sandbox will be shutdown or returned to
+    # the pool for reuse.
+    with env.sandbox(image_id='image1') as sandbox:
+      # Execute a shell command inside the sandbox.
+      sandbox.shell('echo "hello world"')
+
+      # Access a sandbox-based feature (feature1 is applicable to image1).
+      sandbox.feature1.feature_method()
+
+      # Attempts to access inapplicable features will raise AttributeError:
+      # sandbox.feature2  # Not applicable to image1.
+      # sandbox.feature3  # Not sandbox-based.
+
+    # 2. Access a sandbox-based feature and let the Environment manage the
+    # sandbox. A suitable sandbox (e.g., one built from an image matching
+    # 'image1.*') will be provisioned, and the feature instance will be yielded.
+    with env.feature1() as feature1:
+      feature1.feature_method()
+
+    # 3. Access a non-sandbox-based feature.
+    with env.feature3() as feature3:
+      feature3.feature_method()
+  ```
+
+  -----------------------------------------------------------------------------
+
+  ## Multi-tenancy and Pooling
+
+  The Environment supports multi-tenancy (working with multiple image types) and
+  pooling (reusing sandboxes) to amortize setup costs across different user
+  requests. Pooling is configured via the pool_size parameter.
+
+  | pool_size Value           | Behavior                                       |
+  |---------------------------|------------------------------------------------|
+  | 0 or (0, 0)	              | No pooling. Sandboxes are created and shut down|
+  |                           | on demand (useful for local development).      |
+  |---------------------------|------------------------------------------------|
+  | (MIN, MAX) tuple          | Global Pool: Applies the same minimum and      |
+  |                           | maximum pool size to sandboxes created from all|
+  |                           | specified images.                              |
+  |---------------------------|------------------------------------------------|
+  | {image_regex: (MIN, MAX)} | Per-Image Pool: Allows customizing pool        |
+  |                           | settings based on image ID regular expressions.|
+  |                           | (e.g., 'image1.*': (64, 256), '.*': (0, 256)). |
+
+
+  **Example 1: No Pooling (pool_size=0)**
+  Sandboxes are created and shutdown immediately upon session end.
+
+  ```python
+  env = MyEnvironment(image_ids=['image1', 'image2'], pool_size=0)
+
+  # Sandbox created and shutdown on demand.
+  with env.sandbox(image_id='image1') as sandbox1:
+    ...
+  ```
+
+  **Exaxmple 2: Global Pooling (pool_size=(0, 256))**
+  Up to 256 sandboxes will be created and pooled across both images as needed.
+  None are created initially.
+
+  ```python
+  env = MyEnvironment(
+      image_ids=['image1', 'image2'],
+      pool_size=(0, 256)
+  )
+  ```
+
+  **Example 3: Per-Image Custom Pooling**:
+  For images matching 'image1.*': 64 sandboxes are pre-created (MIN=64) and
+  pooled, up to a MAX of 256.
+  For all other images ('.*'): Sandboxes are created and pooled on demand
+  (MIN=0), up to a MAX of 256.
+
+  ```python
+  env = MyEnvironment(
+      image_ids=['image1', 'image2'],
+      pool_size={
+          'image1.*': (64, 256),
+          '.*': (0, 256),
+      }
+  )
+  ```
+
+  ## Handling Sandbox Failures
+
+  Sandboxes often run in distributed, ephemeral environments and must be treated
+  as fault-tolerant. Langfun provides a protocol for handling unexpected sandbox
+  state issues.
+
+  ### Communicating Errors
+  If a feature encounters an unexpected state in its sandbox (e.g., a process
+  died), it should raise `lf.env.SandboxStateError`.
+
+  The sandbox will be automatically shut down when its context manager exits.
+  The Environment handles replacement and ensures future requests are routed to
+  healthy sandboxes.
+
+  For example:
+  ```
+  with env:
+    with env.sandbox() as sb:
+      # If SandboxStateError is raised within this block, the sandbox
+      # will be forcefully shut down upon block exit.
+      sb.shell('echo hi')
+  ```
+
+  ### Robust User Code
+  A simple strategy for robust user code is to wrap critical operations in a
+  retry loop:
+  ```
+  while True:
+    try:
+      result = do_something_that_involves_sandbox()
+      break  # Success!
+    except lf.env.SandboxStateError:
+      # The sandbox failed; a new, healthy one will be provisioned on the next
+      # iteration.
+      # Wait briefly to avoid resource thrashing.
+      time.sleep(1)
+    except lf.env.EnvironmentOutageError:
+      # If the Environment is down for too long
+      # (past BaseEnvironment.outage_grace_period)
+      # and cannot provision a healthy replacement, this error is raised.
+      # The retry loop should be broken or an outer failure reported.
+      raise
+  ```
+  """
 
   # Disable symbolic comparison and hashing for environment objects.
   use_symbolic_comparison = False
@@ -237,6 +406,12 @@ class Environment(pg.Object):
     raise ValueError(
         f'No image ID found for feature {feature.name} in {self.image_ids}.'
     )
+
+  def non_sandbox_based_features(self) -> Iterator['Feature']:
+    """Returns non-sandbox-based features."""
+    for feature in self.features.values():
+      if not feature.is_sandbox_based:
+        yield feature
 
   @property
   @abc.abstractmethod
@@ -324,11 +499,13 @@ class Environment(pg.Object):
 
   def sandbox(
       self,
-      image_id: str | None = None,
       session_id: str | None = None,
+      image_id: str | None = None,
   ) -> ContextManager['Sandbox']:
     """Gets a sandbox from the environment and starts a new user session."""
-    return self.acquire(image_id=image_id).new_session(session_id)
+    return self.acquire(image_id=image_id).new_session(
+        session_id or self.new_session_id()
+    )
 
   def __getattr__(self, name: str) -> Any:
     """Gets a feature session from a free sandbox from the environment.
@@ -356,13 +533,14 @@ class Environment(pg.Object):
 
 
 @contextlib.contextmanager
-def _session_for_feature(
+def _sandbox_session_for_feature(
     environment: Environment,
     feature: 'Feature',
     image_id: str | None = None,
     session_id: str | None = None,
 ) -> Iterator['Feature']:
   """Returns a context manager for a session for a feature."""
+  assert feature.is_sandbox_based
   if image_id is None:
     image_id = environment.image_id_for(feature)
   elif not feature.is_applicable(image_id):
@@ -370,14 +548,25 @@ def _session_for_feature(
         f'Feature {feature.name!r} is not applicable to image {image_id!r}.'
     )
   sandbox = environment.acquire(image_id=image_id)
-  with sandbox.new_session(session_id=session_id, feature_hint=feature.name):
+  with sandbox.new_session(
+      session_id=session_id or environment.new_session_id(feature.name)
+  ):
     yield sandbox.features[feature.name]
 
 
 def _feature_session_creator(environment: Environment, feature: 'Feature'):
   """Returns a callable that returns a context manager for a feature session."""
-  def fn(image_id: str | None = None, session_id: str | None = None):
-    return _session_for_feature(environment, feature, image_id, session_id)
+  def fn(session_id: str | None = None, image_id: str | None = None):
+    if feature.is_sandbox_based:
+      return _sandbox_session_for_feature(
+          environment, feature, image_id, session_id
+      )
+    assert image_id is None, (
+        'Non-sandbox based feature does not support image ID.'
+    )
+    return feature.new_session(
+        session_id or environment.new_session_id(feature.name)
+    )
   return fn
 
 
@@ -386,7 +575,12 @@ pg.typing.register_converter(str, Environment.Id, Environment.Id)
 
 
 class Sandbox(pg.Object):
-  """Interface for sandboxes."""
+  """Interface for sandboxes.
+
+  A sandbox is a container that runs a single image with a set of features.
+  It will be brought up by the environment, setup the features, fullfill user
+  requests, and then tear down features and finally the sandbox itself.
+  """
 
   # Disable symbolic comparison and hashing for sandbox objects.
   use_symbolic_comparison = False
@@ -695,14 +889,12 @@ class Sandbox(pg.Object):
   def track_activity(
       self,
       name: str,
-      feature: Optional['Feature'] = None,
       **kwargs: Any
   ) -> ContextManager[None]:
     """Context manager that tracks a sandbox activity.
 
     Args:
       name: The name of the activity.
-      feature: The feature that the activity is associated with.
       **kwargs: Additional keyword arguments to pass to the activity handler.
 
     Returns:
@@ -717,12 +909,7 @@ class Sandbox(pg.Object):
   #
 
   @contextlib.contextmanager
-  def new_session(
-      self,
-      session_id: str | None = None,
-      *,
-      feature_hint: str | None = None,
-  ) -> Iterator['Sandbox']:
+  def new_session(self, session_id: str) -> Iterator['Sandbox']:
     """Context manager for obtaining a sandbox for a user session.
 
     State transitions:
@@ -730,11 +917,7 @@ class Sandbox(pg.Object):
       ACQUIRED -> IN_SESSINO -> OFFLINE: When session setup or teardown fails.
 
     Args:
-      session_id: The identifier for the user session. If not provided, a random
-        ID will be generated.
-      feature_hint: A hint of which feature is the main user intent when
-        starting the session. This is used for generating the session id if
-        `session_id` is not provided.
+      session_id: The identifier for the user session.
 
     Yields:
       The sandbox for the user session.
@@ -744,8 +927,6 @@ class Sandbox(pg.Object):
       BaseException: If session setup or teardown failed with user-defined
         errors.
     """
-    if session_id is None:
-      session_id = self.environment.new_session_id(feature_hint)
     self.start_session(session_id)
     try:
       yield self
@@ -779,7 +960,61 @@ class Sandbox(pg.Object):
 
 
 class Feature(pg.Object):
-  """Interface for sandbox features."""
+  """Interface for features that run in a Langfun environment.
+
+  There are two type of features: sandbox-based and non-sandbox-based.
+  Sandbox-based features run in a sandbox, which is emulated in a separate
+  process. Non-sandbox-based features do not run in a sandbox.
+
+  Features can be directly accessed through the environment, for example:
+
+  ```python
+  env = MyEnvironment(
+      feature={
+          'feature1': SandboxBasedFeature(),
+          'feature2': NonSandboxBasedFeature(),
+      }
+  )
+  # Start the environment.
+  with env:
+    # Access feature1, which involves acquiring a sandbox and return the feature
+    # associated with the sandbox.
+    with env.feature1() as f1:
+      f1.feature_method()
+
+    # Access feature2, which does not involve acquiring a sandbox.
+    with env.feature2() as f2:
+      f2.feature_method()
+  ```
+
+  Sandbox-based features can also be accessed through the sandbox, for example:
+
+  ```python
+  with env.sandbox('session1') as sb:
+    # Access feature1 within the sandbox.
+    sb.feature1.feature_method()
+
+    # Attribute error.
+    sb.feature2
+  ```
+  """
+
+  @dataclasses.dataclass
+  class Id:
+    container_id: Environment.Id | Sandbox.Id
+    feature_name: str
+
+    def __str__(self) -> str:
+      return f'{self.container_id}/{self.feature_name}'
+
+    def working_dir(self, root_dir: str | None) -> str | None:
+      """Returns the working directory for the feature."""
+      if root_dir is None:
+        return None
+      return os.path.join(
+          self.container_id.working_dir(root_dir),
+          _make_path_compatible(self.feature_name)
+      )
 
   # Disable symbolic comparison and hashing for sandbox objects.
   allow_symbolic_comparison = False
@@ -789,6 +1024,13 @@ class Feature(pg.Object):
   def name(self) -> str:
     """Name of the feature, which will be used as key to access the feature."""
 
+  @functools.cached_property
+  def id(self) -> Id:
+    """Returns the identifier of the feature."""
+    if self.is_sandbox_based:
+      return Feature.Id(self.sandbox.id, self.name)
+    return Feature.Id(self.environment.id, self.name)
+
   @property
   @abc.abstractmethod
   def environment(self) -> Environment:
@@ -796,14 +1038,17 @@ class Feature(pg.Object):
 
   @property
   @abc.abstractmethod
-  def sandbox(self) -> Sandbox:
+  def is_sandbox_based(self) -> bool:
+    """Returns True if the feature is sandbox-based."""
+
+  @property
+  @abc.abstractmethod
+  def sandbox(self) -> Sandbox | None:
     """Returns the sandbox that the feature is running in.
 
     Returns:
-      The sandbox that the feature is running in.
-
-    Raises:
-      AssertError: If the feature is not set up with a sandbox yet.
+      The sandbox that the feature is running in. None if the feature is not
+      sandbox-based or not yet bound with a sandbox.
     """
 
   @abc.abstractmethod
@@ -811,8 +1056,17 @@ class Feature(pg.Object):
     """Returns True if the feature is applicable to the given image."""
 
   @abc.abstractmethod
-  def setup(self, sandbox: Sandbox) -> None:
-    """Sets up the feature, which is called once when the sandbox is up.
+  def setup(self, sandbox: Sandbox | None = None) -> None:
+    """Sets up the feature.
+
+    For sandbox-based features, the setup will be called when a sandbox is
+    started for the first time.
+
+    For non-sandbox-based features, the setup will be called when the
+    environment starts.
+
+    When a feature's `setup` is called, its `teardown` is guaranteed to be
+    called.
 
     State transitions:
       SETTING_UP -> READY: When setup succeeds.
@@ -915,17 +1169,54 @@ class Feature(pg.Object):
       will not be housekeeping.
     """
 
+  @abc.abstractmethod
+  def track_activity(
+      self,
+      name: str,
+      **kwargs: Any
+  ) -> ContextManager[None]:
+    """Context manager that tracks a feature activity.
+
+    Args:
+      name: The name of the activity.
+      **kwargs: Additional keyword arguments to pass to the activity handler.
+
+    Returns:
+      A context manager that tracks the activity, including duration and error.
+    """
+
   @property
   def session_id(self) -> str | None:
     """Returns the current user session identifier."""
-    assert self.sandbox is not None
-    return self.sandbox.session_id
+    if self.is_sandbox_based:
+      return self.sandbox.session_id
+    return self._non_sandbox_based_session_id
 
-  def track_activity(self, name: str, **kwargs: Any) -> ContextManager[None]:
-    """Context manager that tracks a feature activity."""
-    return self.sandbox.track_activity(
-        f'{self.name}.{name}', feature=self, **kwargs
+  @contextlib.contextmanager
+  def new_session(self, session_id: str) -> Iterator['Feature']:
+    """Context manager for obtaining a non-sandbox-based feature session."""
+    assert not self.is_sandbox_based, (
+        'Applicable only to non-sandbox-based features. '
+        'For sandbox-based features, use `Sandbox.new_session` instead.'
     )
+    try:
+      self._non_sandbox_based_session_id = session_id
+      self.setup_session()
+      yield self
+    finally:
+      try:
+        # Since the session is ended, we don't want to raise any errors during
+        # session teardown to the user. So we catch all exceptions here.
+        # However the event handler will still be notified and log the error.
+        self.teardown_session()
+      except BaseException:  # pylint: disable=broad-except
+        pass
+      self._non_sandbox_based_session_id = None
+
+  def _on_bound(self) -> None:
+    """Called when the feature is bound to a sandbox."""
+    super()._on_bound()
+    self._non_sandbox_based_session_id = None
 
 
 def _make_path_compatible(id_str: str) -> str:
@@ -982,8 +1273,8 @@ def treat_as_sandbox_state_error(
   return decorator
 
 
-def log_sandbox_activity(name: str | None = None):
-  """Decorator for Sandbox/Feature methods to log sandbox activity."""
+def log_activity(name: str | None = None):
+  """Decorator for Sandbox/Feature methods to log sandbox/feature activity."""
 
   def decorator(func):
     signature = pg.typing.get_signature(func)
@@ -1013,266 +1304,11 @@ def log_sandbox_activity(name: str | None = None):
 
 
 #
-# Interface for Environment event handlers.
+# Interface for event handlers.
 #
 
 
-class _SessionEventHandler:
-  """Base class for session event handlers."""
-
-  def on_session_start(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session starts.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      session_id: The session ID.
-      duration: The time spent on starting the session.
-      error: The error that caused the session to start. If None, the session
-        started normally.
-    """
-
-  def on_session_end(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      session_id: str,
-      duration: float,
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session ends.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      session_id: The session ID.
-      duration: The time spent on ending the session.
-      lifetime: The session lifetime in seconds.
-      error: The error that caused the session to end. If None, the session
-        ended normally.
-    """
-
-
-class _FeatureEventHandler:
-  """Base class for feature event handlers."""
-
-  def on_feature_setup(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      feature: Feature,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is setup.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature.
-      duration: The feature setup duration in seconds.
-      error: The error happened during the feature setup. If None,
-        the feature setup performed normally.
-    """
-
-  def on_feature_teardown(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      feature: Feature,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is teardown.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature.
-      duration: The feature teardown duration in seconds.
-      error: The error happened during the feature teardown. If None,
-        the feature teardown performed normally.
-    """
-
-  def on_feature_teardown_session(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      feature: Feature,
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a feature is teardown with a session.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature.
-      session_id: The session ID.
-      duration: The feature teardown session duration in seconds.
-      error: The error happened during the feature teardown session. If
-        None, the feature teardown session performed normally.
-    """
-
-  def on_feature_setup_session(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      feature: Feature,
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None,
-  ) -> None:
-    """Called when a feature is setup with a session.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature.
-      session_id: The session ID.
-      duration: The feature setup session duration in seconds.
-      error: The error happened during the feature setup session. If
-        None, the feature setup session performed normally.
-    """
-
-  def on_feature_housekeep(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      feature: Feature,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs,
-  ) -> None:
-    """Called when a sandbox feature is housekeeping.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature.
-      counter: Zero-based counter of the housekeeping round.
-      duration: The feature housekeeping duration in seconds.
-      error: The error happened during the feature housekeeping. If None, the
-        feature housekeeping normally.
-      **kwargs: Feature-specific properties computed during housekeeping.
-    """
-
-
-class _SandboxEventHandler(_FeatureEventHandler, _SessionEventHandler):
-  """Base class for sandbox event handlers."""
-
-  def on_sandbox_start(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox is started.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      duration: The time spent on starting the sandbox.
-      error: The error that caused the sandbox to start. If None, the sandbox
-        started normally.
-    """
-
-  def on_sandbox_status_change(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      old_status: 'Sandbox.Status',
-      new_status: 'Sandbox.Status',
-      span: float,
-  ) -> None:
-    """Called when a sandbox status changes.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      old_status: The old sandbox status.
-      new_status: The new sandbox status.
-      span: Time spent on the old status in seconds.
-    """
-
-  def on_sandbox_shutdown(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      duration: float,
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox is shutdown.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      duration: The time spent on shutting down the sandbox.
-      lifetime: The sandbox lifetime in seconds.
-      error: The error that caused the sandbox to shutdown. If None, the
-        sandbox shutdown normally.
-    """
-
-  def on_sandbox_activity(
-      self,
-      name: str,
-      environment: Environment,
-      sandbox: Sandbox,
-      feature: Feature | None,
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed.
-
-    Args:
-      name: The name of the sandbox activity.
-      environment: The environment.
-      sandbox: The sandbox.
-      feature: The feature that is associated with the sandbox activity.
-      session_id: The session ID.
-      duration: The sandbox activity duration in seconds.
-      error: The error that caused the sandbox activity to perform. If None,
-        the sandbox activity performed normally.
-      **kwargs: The keyword arguments of the sandbox activity.
-    """
-
-  def on_sandbox_housekeep(
-      self,
-      environment: Environment,
-      sandbox: Sandbox,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox finishes a round of housekeeping.
-
-    Args:
-      environment: The environment.
-      sandbox: The sandbox.
-      counter: Zero-based counter of the housekeeping round.
-      duration: The sandbox housekeeping duration in seconds.
-      error: The error that caused the sandbox to housekeeping. If None, the
-        sandbox housekeeping normally.
-      **kwargs: Sandbox-specific properties computed during housekeeping.
-    """
-
-
-class EventHandler(_SandboxEventHandler):
+class _EnvironmentEventHandler:
   """Base class for event handlers of an environment."""
 
   def on_environment_starting(self, environment: Environment) -> None:
@@ -1344,3 +1380,261 @@ class EventHandler(_SandboxEventHandler):
       error: The error that caused the environment to shutdown. If None, the
         environment shutdown normally.
     """
+
+
+class _SandboxEventHandler:
+  """Base class for sandbox event handlers."""
+
+  def on_sandbox_start(
+      self,
+      sandbox: Sandbox,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox is started.
+
+    Args:
+      sandbox: The sandbox.
+      duration: The time spent on starting the sandbox.
+      error: The error that caused the sandbox to start. If None, the sandbox
+        started normally.
+    """
+
+  def on_sandbox_status_change(
+      self,
+      sandbox: Sandbox,
+      old_status: 'Sandbox.Status',
+      new_status: 'Sandbox.Status',
+      span: float,
+  ) -> None:
+    """Called when a sandbox status changes.
+
+    Args:
+      sandbox: The sandbox.
+      old_status: The old sandbox status.
+      new_status: The new sandbox status.
+      span: Time spent on the old status in seconds.
+    """
+
+  def on_sandbox_shutdown(
+      self,
+      sandbox: Sandbox,
+      duration: float,
+      lifetime: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox is shutdown.
+
+    Args:
+      sandbox: The sandbox.
+      duration: The time spent on shutting down the sandbox.
+      lifetime: The sandbox lifetime in seconds.
+      error: The error that caused the sandbox to shutdown. If None, the
+        sandbox shutdown normally.
+    """
+
+  def on_sandbox_session_start(
+      self,
+      sandbox: Sandbox,
+      session_id: str,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session starts.
+
+    Args:
+      sandbox: The sandbox.
+      session_id: The session ID.
+      duration: The time spent on starting the session.
+      error: The error that caused the session to start. If None, the session
+        started normally.
+    """
+
+  def on_sandbox_session_end(
+      self,
+      sandbox: Sandbox,
+      session_id: str,
+      duration: float,
+      lifetime: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session ends.
+
+    Args:
+      sandbox: The sandbox.
+      session_id: The session ID.
+      duration: The time spent on ending the session.
+      lifetime: The session lifetime in seconds.
+      error: The error that caused the session to end. If None, the session
+        ended normally.
+    """
+
+  def on_sandbox_activity(
+      self,
+      name: str,
+      sandbox: Sandbox,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed.
+
+    Args:
+      name: The name of the sandbox activity.
+      sandbox: The sandbox.
+      session_id: The session ID.
+      duration: The sandbox activity duration in seconds.
+      error: The error that caused the sandbox activity to perform. If None,
+        the sandbox activity performed normally.
+      **kwargs: The keyword arguments of the sandbox activity.
+    """
+
+  def on_sandbox_housekeep(
+      self,
+      sandbox: Sandbox,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox finishes a round of housekeeping.
+
+    Args:
+      sandbox: The sandbox.
+      counter: Zero-based counter of the housekeeping round.
+      duration: The sandbox housekeeping duration in seconds.
+      error: The error that caused the sandbox to housekeeping. If None, the
+        sandbox housekeeping normally.
+      **kwargs: Sandbox-specific properties computed during housekeeping.
+    """
+
+
+class _FeatureEventHandler:
+  """Base class for feature event handlers."""
+
+  def on_feature_setup(
+      self,
+      feature: Feature,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is setup.
+
+    Applicable to both sandbox-based and non-sandbox-based features.
+
+    Args:
+      feature: The feature.
+      duration: The feature setup duration in seconds.
+      error: The error happened during the feature setup. If None,
+        the feature setup performed normally.
+    """
+
+  def on_feature_teardown(
+      self,
+      feature: Feature,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is teardown.
+
+    Applicable to both sandbox-based and non-sandbox-based features.
+
+    Args:
+      feature: The feature.
+      duration: The feature teardown duration in seconds.
+      error: The error happened during the feature teardown. If None,
+        the feature teardown performed normally.
+    """
+
+  def on_feature_teardown_session(
+      self,
+      feature: Feature,
+      session_id: str,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a feature is teardown with a session.
+
+    Applicable to both sandbox-based and non-sandbox-based features.
+
+    Args:
+      feature: The feature.
+      session_id: The session ID.
+      duration: The feature teardown session duration in seconds.
+      error: The error happened during the feature teardown session. If
+        None, the feature teardown session performed normally.
+    """
+
+  def on_feature_setup_session(
+      self,
+      feature: Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+  ) -> None:
+    """Called when a feature is setup with a session.
+
+    Applicable to both sandbox-based and non-sandbox-based features.
+
+    Args:
+      feature: The feature.
+      session_id: The session ID.
+      duration: The feature setup session duration in seconds.
+      error: The error happened during the feature setup session. If
+        None, the feature setup session performed normally.
+    """
+
+  def on_feature_activity(
+      self,
+      name: str,
+      feature: Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a feature activity is performed.
+
+    Applicable to both sandbox-based and non-sandbox-based features.
+
+    Args:
+      name: The name of the feature activity.
+      feature: The feature.
+      session_id: The session ID. Session ID could be None if a feature
+        activity is performed when setting up a session
+        (e.g. BaseEnvironment.proactive_session_setup is on)
+      duration: The feature activity duration in seconds.
+      error: The error happened during the feature activity. If None,
+        the feature activity performed normally.
+      **kwargs: The keyword arguments of the feature activity.
+    """
+
+  def on_feature_housekeep(
+      self,
+      feature: Feature,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs,
+  ) -> None:
+    """Called when a sandbox feature is housekeeping.
+
+    Applicable to both sandbox-based and non-sandbox-based features.
+
+    Args:
+      feature: The feature.
+      counter: Zero-based counter of the housekeeping round.
+      duration: The feature housekeeping duration in seconds.
+      error: The error happened during the feature housekeeping. If None, the
+        feature housekeeping normally.
+      **kwargs: Feature-specific properties computed during housekeeping.
+    """
+
+
+class EventHandler(
+    _EnvironmentEventHandler,
+    _SandboxEventHandler,
+    _FeatureEventHandler,
+):
+  """Base class for langfun/env handlers."""

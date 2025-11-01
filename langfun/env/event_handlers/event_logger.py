@@ -210,7 +210,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_sandbox_start(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       error: BaseException | None
@@ -226,7 +225,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_sandbox_status_change(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       old_status: interface.Sandbox.Status,
       new_status: interface.Sandbox.Status,
@@ -242,7 +240,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_sandbox_shutdown(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
@@ -258,9 +255,61 @@ class EventLogger(pg.Object, interface.EventHandler):
           styles=['bold'],
       )
 
+  def on_sandbox_session_start(
+      self,
+      sandbox: interface.Sandbox,
+      session_id: str,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session starts."""
+    if self.session_status:
+      self._print(
+          f'[{sandbox.id}@{session_id}] sandbox session started '
+          f'(duration={duration:.2f} seconds)',
+          error=error,
+          color='blue',
+      )
+
+  def on_sandbox_session_end(
+      self,
+      sandbox: interface.Sandbox,
+      session_id: str,
+      duration: float,
+      lifetime: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox session ends."""
+    if self.session_status:
+      self._print(
+          f'[{sandbox.id}@{session_id}] sandbox session ended '
+          f'(duration={duration:.2f} seconds), '
+          f'lifetime={lifetime:.2f} seconds)',
+          error=error,
+          color='blue',
+      )
+
+  def on_sandbox_activity(
+      self,
+      name: str,
+      sandbox: interface.Sandbox,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed."""
+    log_id = f'{sandbox.id}@{session_id or "<idle>"}'
+    color = 'yellow' if session_id is None else 'cyan'
+    self._print(
+        f'[{log_id}] sandbox call {name!r} '
+        f'(duration={duration:.2f} seconds, kwargs={kwargs}) ',
+        error,
+        color=color
+    )
+
   def on_sandbox_housekeep(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       counter: int,
       duration: float,
@@ -279,8 +328,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_feature_setup(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       duration: float,
       error: BaseException | None
@@ -288,7 +335,7 @@ class EventLogger(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is setup."""
     if self.feature_status:
       self._print(
-          f'[{sandbox.id}/<idle>/{feature.name}] feature setup complete '
+          f'[{feature.id}] feature setup complete '
           f'(duration={duration:.2f} seconds)',
           error=error,
           color='white',
@@ -296,8 +343,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_feature_teardown(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       duration: float,
       error: BaseException | None
@@ -305,7 +350,7 @@ class EventLogger(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is teardown."""
     if self.feature_status:
       self._print(
-          f'[{sandbox.id}/<idle>/{feature.name}] feature teardown complete '
+          f'[{feature.id}] feature teardown complete '
           f'(duration={duration:.2f} seconds)',
           error=error,
           color='white',
@@ -313,8 +358,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_feature_setup_session(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       session_id: str | None,
       duration: float,
@@ -323,7 +366,7 @@ class EventLogger(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is setup."""
     if self.feature_status:
       self._print(
-          f'[{sandbox.id}/{session_id or "<idle>"}/{feature.name}] '
+          f'[{feature.id}@{session_id or "<idle>"}] '
           f'feature setup complete (duration={duration:.2f} seconds)',
           error=error,
           color='yellow',
@@ -331,8 +374,6 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_feature_teardown_session(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       session_id: str,
       duration: float,
@@ -341,16 +382,33 @@ class EventLogger(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is teardown."""
     if self.feature_status:
       self._print(
-          f'[{sandbox.id}/{session_id}>/{feature.name}] '
+          f'[{feature.id}@{session_id}] '
           f'feature teardown complete (duration={duration:.2f} seconds)',
           error=error,
           color='yellow',
       )
 
+  def on_feature_activity(
+      self,
+      name: str,
+      feature: interface.Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a feature activity is performed."""
+    log_id = f'{feature.id}@{session_id or "<idle>"}'
+    color = 'yellow' if session_id is None else 'cyan'
+    self._print(
+        f'[{log_id}] feature call {name!r} '
+        f'(duration={duration:.2f} seconds, kwargs={kwargs}) ',
+        error,
+        color=color
+    )
+
   def on_feature_housekeep(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
       feature: interface.Feature,
       counter: int,
       duration: float,
@@ -360,73 +418,12 @@ class EventLogger(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is housekeeping."""
     if self.feature_status and self.housekeep_status:
       self._print(
-          f'[{sandbox.id}/<idle>/{feature.name}] feature housekeeping complete '
+          f'[{feature.id}] feature housekeeping complete '
           f'(counter={counter}, (duration={duration:.2f} seconds, '
           f'housekeep_info={kwargs})',
           error=error,
           color='white',
       )
-
-  def on_session_start(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session starts."""
-    if self.session_status:
-      self._print(
-          f'[{sandbox.id}/{session_id}] session started '
-          f'(duration={duration:.2f} seconds)',
-          error=error,
-          color='blue',
-      )
-
-  def on_session_end(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      session_id: str,
-      duration: float,
-      lifetime: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox session ends."""
-    if self.session_status:
-      self._print(
-          f'[{sandbox.id}/{session_id}] session ended '
-          f'(duration={duration:.2f} seconds), '
-          f'lifetime={lifetime:.2f} seconds)',
-          error=error,
-          color='blue',
-      )
-
-  def on_sandbox_activity(
-      self,
-      name: str,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature | None,
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox activity is performed."""
-    del environment
-    log_id = f'{sandbox.id}/{session_id or "<idle>"}'
-    if feature is not None:
-      log_id = f'{log_id}/{feature.name}'
-
-    color = 'yellow' if session_id is None else 'cyan'
-    self._print(
-        f'[{log_id}] call {name!r} '
-        f'(duration={duration:.2f} seconds, kwargs={kwargs}) ',
-        error,
-        color=color
-    )
 
   def _print(
       self,

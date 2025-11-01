@@ -41,6 +41,35 @@ class IdTest(unittest.TestCase):
     )
     self.assertIsNone(sandbox_id.working_dir(root_dir=None))
 
+  def test_feature_id(self):
+    # For non-sandboxed feature.
+    feature_id = interface.Feature.Id(
+        container_id=interface.Environment.Id('env'),
+        feature_name='feature'
+    )
+    self.assertEqual(str(feature_id), 'env/feature')
+    self.assertEqual(
+        feature_id.working_dir(root_dir='/tmp'),
+        '/tmp/env/feature'
+    )
+    self.assertIsNone(feature_id.working_dir(root_dir=None))
+
+    # For sandboxed feature.
+    feature_id = interface.Feature.Id(
+        container_id=interface.Sandbox.Id(
+            environment_id=interface.Environment.Id('env'),
+            image_id='image1',
+            sandbox_id='0'
+        ),
+        feature_name='feature'
+    )
+    self.assertEqual(str(feature_id), 'env/image1:0/feature')
+    self.assertEqual(
+        feature_id.working_dir(root_dir='/tmp'),
+        '/tmp/env/image1/0/feature'
+    )
+    self.assertIsNone(feature_id.working_dir(root_dir=None))
+
 
 class TestingSandbox(interface.Sandbox):
 
@@ -109,7 +138,7 @@ class DecoratorTest(unittest.TestCase):
 
     class SandboxB(TestingSandbox):
 
-      @interface.log_sandbox_activity()
+      @interface.log_activity()
       def bar(self, x: str) -> None:
         pass
 

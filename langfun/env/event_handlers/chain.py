@@ -84,132 +84,35 @@ class EventHandlerChain(interface.EventHandler):
 
   def on_sandbox_start(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       error: BaseException | None
   ) -> None:
     for handler in self._handlers:
-      handler.on_sandbox_start(environment, sandbox, duration, error)
+      handler.on_sandbox_start(sandbox, duration, error)
 
   def on_sandbox_status_change(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       old_status: interface.Sandbox.Status,
       new_status: interface.Sandbox.Status,
       span: float
   ) -> None:
     for handler in self._handlers:
-      handler.on_sandbox_status_change(
-          environment, sandbox, old_status, new_status, span
-      )
+      handler.on_sandbox_status_change(sandbox, old_status, new_status, span)
 
   def on_sandbox_shutdown(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
       error: BaseException | None
   ) -> None:
     for handler in self._handlers:
-      handler.on_sandbox_shutdown(
-          environment, sandbox, duration, lifetime, error
-      )
+      handler.on_sandbox_shutdown(sandbox, duration, lifetime, error)
 
-  def on_sandbox_housekeep(
+  def on_sandbox_session_start(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox feature is housekeeping."""
-    for handler in self._handlers:
-      handler.on_sandbox_housekeep(
-          environment, sandbox, counter, duration, error, **kwargs
-      )
-
-  def on_feature_setup(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-    for handler in self._handlers:
-      handler.on_feature_setup(
-          environment, sandbox, feature, duration, error
-      )
-
-  def on_feature_teardown(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-    for handler in self._handlers:
-      handler.on_feature_teardown(
-          environment, sandbox, feature, duration, error
-      )
-
-  def on_feature_setup_session(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-    for handler in self._handlers:
-      handler.on_feature_setup_session(
-          environment, sandbox, feature, session_id, duration, error
-      )
-
-  def on_feature_teardown_session(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-    for handler in self._handlers:
-      handler.on_feature_teardown_session(
-          environment, sandbox, feature, session_id, duration, error
-      )
-
-  def on_feature_housekeep(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox feature is housekeeping."""
-    for handler in self._handlers:
-      handler.on_feature_housekeep(
-          environment, sandbox, feature, counter, duration, error, **kwargs
-      )
-
-  def on_session_start(
-      self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
@@ -217,13 +120,10 @@ class EventHandlerChain(interface.EventHandler):
   ) -> None:
     """Called when a sandbox session starts."""
     for handler in self._handlers:
-      handler.on_session_start(
-          environment, sandbox, session_id, duration, error
-      )
+      handler.on_sandbox_session_start(sandbox, session_id, duration, error)
 
-  def on_session_end(
+  def on_sandbox_session_end(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
@@ -232,16 +132,14 @@ class EventHandlerChain(interface.EventHandler):
   ) -> None:
     """Called when a sandbox session ends."""
     for handler in self._handlers:
-      handler.on_session_end(
-          environment, sandbox, session_id, duration, lifetime, error
+      handler.on_sandbox_session_end(
+          sandbox, session_id, duration, lifetime, error
       )
 
   def on_sandbox_activity(
       self,
       name: str,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
-      feature: interface.Feature | None,
       session_id: str | None,
       duration: float,
       error: BaseException | None,
@@ -250,6 +148,86 @@ class EventHandlerChain(interface.EventHandler):
     """Called when a sandbox activity is performed."""
     for handler in self._handlers:
       handler.on_sandbox_activity(
-          name, environment, sandbox, feature, session_id, duration, error,
-          **kwargs
+          name, sandbox, session_id, duration, error, **kwargs
       )
+
+  def on_sandbox_housekeep(
+      self,
+      sandbox: interface.Sandbox,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox feature is housekeeping."""
+    for handler in self._handlers:
+      handler.on_sandbox_housekeep(sandbox, counter, duration, error, **kwargs)
+
+  def on_feature_setup(
+      self,
+      feature: interface.Feature,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is setup."""
+    for handler in self._handlers:
+      handler.on_feature_setup(feature, duration, error)
+
+  def on_feature_teardown(
+      self,
+      feature: interface.Feature,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is teardown."""
+    for handler in self._handlers:
+      handler.on_feature_teardown(feature, duration, error)
+
+  def on_feature_setup_session(
+      self,
+      feature: interface.Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is setup."""
+    for handler in self._handlers:
+      handler.on_feature_setup_session(feature, session_id, duration, error)
+
+  def on_feature_teardown_session(
+      self,
+      feature: interface.Feature,
+      session_id: str,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is teardown."""
+    for handler in self._handlers:
+      handler.on_feature_teardown_session(feature, session_id, duration, error)
+
+  def on_feature_activity(
+      self,
+      name: str,
+      feature: interface.Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a feature activity is performed."""
+    for handler in self._handlers:
+      handler.on_feature_activity(
+          name, feature, session_id, duration, error, **kwargs
+      )
+
+  def on_feature_housekeep(
+      self,
+      feature: interface.Feature,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox feature is housekeeping."""
+    for handler in self._handlers:
+      handler.on_feature_housekeep(feature, counter, duration, error, **kwargs)

@@ -179,6 +179,7 @@ class BaseEnvironment(interface.Environment):
     )
     self._housekeep_thread = None
     self._offline_start_time = None
+    self._non_sandbox_based_features_with_setup_called = set()
 
     # Check image IDs and feature requirements.
     self._check_image_ids()
@@ -192,7 +193,9 @@ class BaseEnvironment(interface.Environment):
     if self.supports_dynamic_image_loading:
       return
     for name, feature in self.features.items():
-      if any(feature.is_applicable(image_id) for image_id in self.image_ids):
+      if not feature.is_sandbox_based or any(
+          feature.is_applicable(image_id) for image_id in self.image_ids
+      ):
         continue
       raise ValueError(
           f'Feature {name!r} is not applicable to all available images: '
@@ -267,6 +270,13 @@ class BaseEnvironment(interface.Environment):
   def _start(self) -> None:
     """Implementation of starting the environment."""
     sandbox_startup_infos = []
+    self._non_sandbox_based_features_with_setup_called.clear()
+    # Setup all non-sandbox-based features.
+    for feature in self.non_sandbox_based_features():
+      self._non_sandbox_based_features_with_setup_called.add(feature.name)
+      feature.setup(sandbox=None)
+
+    # Setup sandbox pools.
     for image_id in self.image_ids:
       next_sandbox_id = 0
       if self.enable_pooling(image_id):
@@ -312,10 +322,15 @@ class BaseEnvironment(interface.Environment):
       self._housekeep_thread.join()
       self._housekeep_thread = None
 
-    def _shutdown_sandbox(sandbox: base_sandbox.BaseSandbox) -> None:
-      if sandbox is not None:
-        sandbox.shutdown()
+    # Teardown all non-sandbox-based features.
+    for feature in self.non_sandbox_based_features():
+      if feature.name in self._non_sandbox_based_features_with_setup_called:
+        try:
+          feature.teardown()
+        except BaseException:   # pylint: disable=broad-except
+          pass
 
+    # Shutdown sandbox pools.
     if self._sandbox_pool:
       sandboxes = []
       for sandbox in self._sandbox_pool.values():
@@ -323,6 +338,10 @@ class BaseEnvironment(interface.Environment):
       self._sandbox_pool = {}
 
       if sandboxes:
+        def _shutdown_sandbox(sandbox: base_sandbox.BaseSandbox) -> None:
+          if sandbox is not None:
+            sandbox.shutdown()
+
         _ = list(
             lf.concurrent_map(
                 _shutdown_sandbox,
@@ -635,9 +654,45 @@ class BaseEnvironment(interface.Environment):
         indices_by_image_id[image_id].append(i)
       return indices_by_image_id
 
+    last_housekeep_time = {
+        f.name: time.time() for f in self.non_sandbox_based_features()
+    }
+
     while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
       housekeep_start_time = time.time()
+      feature_housekeep_successes = []
+      feature_housekeep_failures = []
 
+      # Housekeeping non-sandbox-based features.
+      for feature in self.non_sandbox_based_features():
+        if feature.housekeep_interval is None:
+          continue
+        if (last_housekeep_time[feature.name]
+            + feature.housekeep_interval < time.time()):
+          try:
+            feature.housekeep()
+            last_housekeep_time[feature.name] = time.time()
+            feature_housekeep_successes.append(feature.name)
+          except BaseException as e:  # pylint: disable=broad-except
+            pg.logging.error(
+                '[%s/%s]: Feature housekeeping failed with error: %s.'
+                'Shutting down environment...',
+                self.id,
+                feature.name,
+                e,
+            )
+            feature_housekeep_failures.append(feature.name)
+            self._housekeep_counter += 1
+            self.on_housekeep(
+                duration=time.time() - housekeep_start_time,
+                error=e,
+                feature_housekeep_successes=feature_housekeep_successes,
+                feature_housekeep_failures=feature_housekeep_failures,
+            )
+            self.shutdown()
+            return
+
+      # Replace dead sandboxes.
       is_online = True
       dead_sandbox_entries = []
       for image_id, sandboxes in self._sandbox_pool.items():
@@ -658,6 +713,8 @@ class BaseEnvironment(interface.Environment):
       duration = time.time() - housekeep_start_time
 
       kwargs = dict(
+          feature_housekeep_successes=feature_housekeep_successes,
+          feature_housekeep_failures=feature_housekeep_failures,
           dead_sandboxes=_indices_by_image_id(dead_sandbox_entries),
           replaced_sandboxes=replaced_indices_by_image_id,
           offline_duration=self.offline_duration,
@@ -666,7 +723,6 @@ class BaseEnvironment(interface.Environment):
         self.on_housekeep(duration, **kwargs)
         time.sleep(self.housekeep_interval)
       else:
-        self.shutdown()
         self.on_housekeep(
             duration,
             interface.EnvironmentOutageError(
@@ -674,6 +730,7 @@ class BaseEnvironment(interface.Environment):
             ),
             **kwargs
         )
+        self.shutdown()
 
   def _replace_dead_sandboxes(
       self,

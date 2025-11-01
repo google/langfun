@@ -11,9 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Common base class for sandbox-based features.
+"""Common base class for environment features.
 
-This module provides an base class `BaseFeature` for sandbox-based features,
+This module provides an base class `BaseFeature` for environment features,
 which provides event handlers for the feature lifecycle events, which can be
 overridden by subclasses to provide custom behaviors. Please note that this base
 class is intended to provide a convenient way to implement features, and not
@@ -22,18 +22,24 @@ coupled with `BaseEnvironment` and `BaseSandbox`, and is expected to work with
 the `Environment` and `Sandbox` interfaces directly.
 """
 
+import contextlib
 import functools
 import os
 import re
 import time
-from typing import Annotated, Callable
+from typing import Annotated, Any, Callable, Iterator
 
 from langfun.env import interface
 import pyglove as pg
 
 
 class BaseFeature(interface.Feature):
-  """Common base class for sandbox-based features."""
+  """Common base class for environment features."""
+
+  is_sandbox_based: Annotated[
+      bool,
+      'Whether the feature is sandbox-based.'
+  ] = True
 
   applicable_images: Annotated[
       list[str],
@@ -120,9 +126,11 @@ class BaseFeature(interface.Feature):
     return env
 
   @property
-  def sandbox(self) -> interface.Sandbox:
+  def sandbox(self) -> interface.Sandbox | None:
     """Returns the sandbox that the feature is running in."""
-    assert self._sandbox is not None, 'Feature has not been set up yet.'
+    assert self._sandbox is not None or not self.is_sandbox_based, (
+        'Feature has not been set up yet.'
+    )
     return self._sandbox
 
   @property
@@ -159,7 +167,7 @@ class BaseFeature(interface.Feature):
     finally:
       event_handler(duration=time.time() - start_time, error=error)
 
-  def setup(self, sandbox: interface.Sandbox) -> None:
+  def setup(self, sandbox: interface.Sandbox | None = None) -> None:
     """Sets up the feature."""
     self._sandbox = sandbox
     self._do(self._setup, self.on_setup)
@@ -198,8 +206,6 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Called when the feature is setup."""
     self.environment.event_handler.on_feature_setup(
-        environment=self.environment,
-        sandbox=self.sandbox,
         feature=self,
         duration=duration,
         error=error
@@ -212,8 +218,6 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Called when the feature is teardown."""
     self.environment.event_handler.on_feature_teardown(
-        environment=self.environment,
-        sandbox=self.sandbox,
         feature=self,
         duration=duration,
         error=error
@@ -227,8 +231,6 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Called when the feature has done housekeeping."""
     self.environment.event_handler.on_feature_housekeep(
-        environment=self.environment,
-        sandbox=self.sandbox,
         feature=self,
         counter=self._housekeep_counter,
         duration=duration,
@@ -243,8 +245,6 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Called when the feature is setup for a user session."""
     self.environment.event_handler.on_feature_setup_session(
-        environment=self.environment,
-        sandbox=self.sandbox,
         feature=self,
         session_id=self.session_id,
         duration=duration,
@@ -258,8 +258,6 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Called when the feature is teardown for a user session."""
     self.environment.event_handler.on_feature_teardown_session(
-        environment=self.environment,
-        sandbox=self.sandbox,
         feature=self,
         session_id=self.session_id,
         duration=duration,
@@ -274,13 +272,33 @@ class BaseFeature(interface.Feature):
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
-    self.environment.event_handler.on_sandbox_activity(
+    self.environment.event_handler.on_feature_activity(
         name=f'{self.name}.{name}',
-        environment=self.environment,
-        sandbox=self.sandbox,
         feature=self,
         session_id=self.session_id,
         duration=duration,
         error=error,
         **kwargs
     )
+
+  @contextlib.contextmanager
+  def track_activity(
+      self,
+      name: str,
+      **kwargs: Any
+  ) -> Iterator[None]:
+    """Context manager that tracks a feature activity."""
+    start_time = time.time()
+    error = None
+    try:
+      yield None
+    except BaseException as e:  # pylint: disable=broad-except
+      error = e
+      raise
+    finally:
+      self.on_activity(
+          name=name,
+          duration=time.time() - start_time,
+          error=error,
+          **kwargs
+      )

@@ -112,7 +112,7 @@ class TestingSandbox(base_sandbox.BaseSandbox):
     super()._shutdown()
 
   @interface.treat_as_sandbox_state_error(errors=(RuntimeError,))
-  @interface.log_sandbox_activity()
+  @interface.log_activity()
   def shell(
       self,
       code: str,
@@ -184,19 +184,19 @@ class TestingFeature(base_feature.BaseFeature):
     if self.call_end_session_on_teardown_session:
       self.sandbox.end_session()
 
-  @interface.log_sandbox_activity()
+  @interface.log_activity()
   def num_shell_calls(self) -> int:
     return len(self.sandbox._shell_history)  # pylint: disable=protected-access
 
-  @interface.log_sandbox_activity()
+  @interface.log_activity()
   def bad_shell_call(self) -> None:
     self.sandbox.shell('bad command', raise_error=RuntimeError)
 
-  @interface.log_sandbox_activity()
+  @interface.log_activity()
   def show_session_id(self):
     return self.session_id
 
-  @interface.log_sandbox_activity()
+  @interface.log_activity()
   def call_with_varargs(self, code: str, *args, **kwargs):
     del code, args, kwargs
     return 0
@@ -218,6 +218,43 @@ class TestingFeature(base_feature.BaseFeature):
       raise interface.SandboxStateError(
           'House keeping error', sandbox=self.sandbox
       )
+
+
+class TestingNonSandboxBasedFeature(base_feature.BaseFeature):
+  """Testing non-sandbox based feature for unit tests."""
+  is_sandbox_based: bool = False
+  simulate_setup_error: Type[BaseException] | None = None
+  simulate_teardown_error: Type[BaseException] | None = None
+  simulate_setup_session_error: Type[BaseException] | None = None
+  simulate_teardown_session_error: Type[BaseException] | None = None
+  simulate_housekeep_error: Type[BaseException] | None = None
+
+  def _setup(self) -> None:
+    if self.simulate_setup_error:
+      raise self.simulate_setup_error('Feature setup error')
+
+  def _teardown(self) -> None:
+    if self.simulate_teardown_error:
+      raise self.simulate_teardown_error('Feature teardown error')
+
+  def _setup_session(self) -> None:
+    if self.simulate_setup_session_error:
+      raise self.simulate_setup_session_error('Feature session setup error')
+
+  def _teardown_session(self) -> None:
+    if self.simulate_teardown_session_error:
+      raise self.simulate_teardown_session_error(
+          'Feature session teardown error'
+      )
+
+  def _housekeep(self) -> None:
+    if self.simulate_housekeep_error:
+      raise self.simulate_housekeep_error('Feature housekeeping error')
+    _ = self.foo(1)
+
+  @interface.log_activity()
+  def foo(self, x: int) -> int:
+    return x + 1
 
 
 class TestingEventHandler(pg.Object, interface.EventHandler):
@@ -281,7 +318,6 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
 
   def on_sandbox_start(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       error: BaseException | None
@@ -291,7 +327,6 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
 
   def on_sandbox_status_change(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       old_status: interface.Sandbox.Status,
       new_status: interface.Sandbox.Status,
@@ -306,7 +341,6 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
 
   def on_sandbox_shutdown(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
@@ -315,103 +349,8 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
     assert duration > 0 and lifetime is not None
     self._add_message(f'[{sandbox.id}] sandbox shutdown', error)
 
-  def on_sandbox_housekeep(
+  def on_sandbox_session_start(
       self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    assert duration > 0
-    if self.log_housekeep:
-      self._add_message(
-          f'[{sandbox.id}] sandbox housekeeping {counter}', error
-      )
-
-  def on_feature_setup(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-    assert duration > 0
-    if self.log_feature_setup:
-      self._add_message(
-          f'[{sandbox.id}/{feature.name}] feature setup', error
-      )
-
-  def on_feature_teardown(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-    assert duration > 0
-    if self.log_feature_setup:
-      self._add_message(
-          f'[{sandbox.id}/{feature.name}] feature teardown', error
-      )
-
-  def on_feature_setup_session(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      session_id: str | None,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is setup."""
-    assert duration > 0
-    if self.log_session_setup:
-      self._add_message(
-          f'[{sandbox.id}/{feature.name}] feature setup session', error
-      )
-
-  def on_feature_teardown_session(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      session_id: str,
-      duration: float,
-      error: BaseException | None
-  ) -> None:
-    """Called when a sandbox feature is teardown."""
-    assert duration > 0
-    if self.log_session_setup:
-      self._add_message(
-          f'[{sandbox.id}/{feature.name}] feature teardown session', error
-      )
-
-  def on_feature_housekeep(
-      self,
-      environment: interface.Environment,
-      sandbox: interface.Sandbox,
-      feature: interface.Feature,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
-  ) -> None:
-    """Called when a sandbox feature is housekeeping."""
-    assert duration > 0
-    if self.log_housekeep:
-      self._add_message(
-          f'[{sandbox.id}/{feature.name}] feature housekeeping {counter}', error
-      )
-
-  def on_session_start(
-      self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
@@ -423,9 +362,8 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
         f'[{sandbox.id}] session {session_id!r} started', error
     )
 
-  def on_session_end(
+  def on_sandbox_session_end(
       self,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
@@ -441,9 +379,7 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
   def on_sandbox_activity(
       self,
       name: str,
-      environment: interface.Environment,
       sandbox: interface.Sandbox,
-      feature: interface.Feature | None,
       session_id: str | None,
       duration: float,
       error: BaseException | None,
@@ -452,14 +388,110 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
       **kwargs
   ) -> None:
     """Called when a sandbox activity is performed."""
-    del environment, kwargs
-    if session_id is None:
-      log_id = sandbox.id
-    else:
-      log_id = f'{sandbox.id}/{session_id}'
-
-    if feature is not None:
-      log_id = f'{log_id}/{feature.name}'
+    del kwargs
+    log_id = f'{sandbox.id}@{session_id or "<idle>"}'
     self._add_message(
         f'[{log_id}] {name}: {code}', error
     )
+
+  def on_sandbox_housekeep(
+      self,
+      sandbox: interface.Sandbox,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    assert duration > 0
+    if self.log_housekeep:
+      self._add_message(
+          f'[{sandbox.id}] sandbox housekeeping {counter}', error
+      )
+
+  def on_feature_setup(
+      self,
+      feature: interface.Feature,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is setup."""
+    assert duration > 0
+    if self.log_feature_setup:
+      self._add_message(
+          f'[{feature.id}] feature setup', error
+      )
+
+  def on_feature_teardown(
+      self,
+      feature: interface.Feature,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is teardown."""
+    assert duration > 0
+    if self.log_feature_setup:
+      self._add_message(
+          f'[{feature.id}] feature teardown', error
+      )
+
+  def on_feature_setup_session(
+      self,
+      feature: interface.Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is setup."""
+    assert duration > 0
+    if self.log_session_setup:
+      self._add_message(
+          f'[{feature.id}@{session_id or "<idle>"}] feature setup session',
+          error
+      )
+
+  def on_feature_teardown_session(
+      self,
+      feature: interface.Feature,
+      session_id: str,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox feature is teardown."""
+    assert duration > 0
+    if self.log_session_setup:
+      self._add_message(
+          f'[{feature.id}@{session_id}] feature teardown session', error
+      )
+
+  def on_feature_activity(
+      self,
+      name: str,
+      feature: interface.Feature,
+      session_id: str | None,
+      duration: float,
+      error: BaseException | None,
+      *,
+      code: str | None = None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox activity is performed."""
+    del kwargs
+    log_id = f'{feature.id}@{session_id or "<idle>"}'
+    self._add_message(
+        f'[{log_id}] {name}: {code}', error
+    )
+
+  def on_feature_housekeep(
+      self,
+      feature: interface.Feature,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox feature is housekeeping."""
+    assert duration > 0
+    if self.log_housekeep:
+      self._add_message(
+          f'[{feature.id}] feature housekeeping {counter}', error
+      )

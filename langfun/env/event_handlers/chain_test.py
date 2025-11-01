@@ -49,15 +49,14 @@ class MockEventHandler(interface.EventHandler):
         'on_environment_shutdown', environment, duration, lifetime, error
     )
 
-  def on_sandbox_start(self, environment, sandbox, duration, error):
-    self._record_call('on_sandbox_start', environment, sandbox, duration, error)
+  def on_sandbox_start(self, sandbox, duration, error):
+    self._record_call('on_sandbox_start', sandbox, duration, error)
 
   def on_sandbox_status_change(
-      self, environment, sandbox, old_status, new_status, span
+      self, sandbox, old_status, new_status, span
   ):
     self._record_call(
         'on_sandbox_status_change',
-        environment,
         sandbox,
         old_status,
         new_status,
@@ -65,88 +64,20 @@ class MockEventHandler(interface.EventHandler):
     )
 
   def on_sandbox_shutdown(
-      self, environment, sandbox, duration, lifetime, error
+      self, sandbox, duration, lifetime, error
+  ):
+    self._record_call('on_sandbox_shutdown', sandbox, duration, lifetime, error)
+
+  def on_sandbox_session_start(self, sandbox, session_id, duration, error):
+    self._record_call(
+        'on_sandbox_session_start', sandbox, session_id, duration, error
+    )
+
+  def on_sandbox_session_end(
+      self, sandbox, session_id, duration, lifetime, error
   ):
     self._record_call(
-        'on_sandbox_shutdown', environment, sandbox, duration, lifetime, error
-    )
-
-  def on_sandbox_housekeep(
-      self, environment, sandbox, counter, duration, error, **kwargs
-  ):
-    self._record_call(
-        'on_sandbox_housekeep',
-        environment,
-        sandbox,
-        counter,
-        duration,
-        error,
-        **kwargs,
-    )
-
-  def on_feature_setup(self, environment, sandbox, feature, duration, error):
-    self._record_call(
-        'on_feature_setup', environment, sandbox, feature, duration, error
-    )
-
-  def on_feature_teardown(self, environment, sandbox, feature, duration, error):
-    self._record_call(
-        'on_feature_teardown', environment, sandbox, feature, duration, error
-    )
-
-  def on_feature_setup_session(
-      self, environment, sandbox, feature, session_id, duration, error
-  ):
-    self._record_call(
-        'on_feature_setup_session',
-        environment,
-        sandbox,
-        feature,
-        session_id,
-        duration,
-        error,
-    )
-
-  def on_feature_teardown_session(
-      self, environment, sandbox, feature, session_id, duration, error
-  ):
-    self._record_call(
-        'on_feature_teardown_session',
-        environment,
-        sandbox,
-        feature,
-        session_id,
-        duration,
-        error,
-    )
-
-  def on_feature_housekeep(
-      self, environment, sandbox, feature, counter, duration, error, **kwargs
-  ):
-    self._record_call(
-        'on_feature_housekeep',
-        environment,
-        sandbox,
-        feature,
-        counter,
-        duration,
-        error,
-        **kwargs,
-    )
-
-  def on_session_start(
-      self, environment, sandbox, session_id, duration, error
-  ):
-    self._record_call(
-        'on_session_start', environment, sandbox, session_id, duration, error
-    )
-
-  def on_session_end(
-      self, environment, sandbox, session_id, duration, lifetime, error
-  ):
-    self._record_call(
-        'on_session_end',
-        environment,
+        'on_sandbox_session_end',
         sandbox,
         session_id,
         duration,
@@ -157,9 +88,7 @@ class MockEventHandler(interface.EventHandler):
   def on_sandbox_activity(
       self,
       name,
-      environment,
       sandbox,
-      feature,
       session_id,
       duration,
       error,
@@ -168,10 +97,67 @@ class MockEventHandler(interface.EventHandler):
     self._record_call(
         'on_sandbox_activity',
         name,
-        environment,
         sandbox,
+        session_id,
+        duration,
+        error,
+        **kwargs,
+    )
+
+  def on_sandbox_housekeep(self, sandbox, counter, duration, error, **kwargs):
+    self._record_call(
+        'on_sandbox_housekeep',
+        sandbox,
+        counter,
+        duration,
+        error,
+        **kwargs,
+    )
+
+  def on_feature_setup(self, feature, duration, error):
+    self._record_call('on_feature_setup', feature, duration, error)
+
+  def on_feature_teardown(self, feature, duration, error):
+    self._record_call('on_feature_teardown', feature, duration, error)
+
+  def on_feature_setup_session(self, feature, session_id, duration, error):
+    self._record_call(
+        'on_feature_setup_session',
         feature,
         session_id,
+        duration,
+        error,
+    )
+
+  def on_feature_teardown_session(self, feature, session_id, duration, error):
+    self._record_call(
+        'on_feature_teardown_session',
+        feature,
+        session_id,
+        duration,
+        error,
+    )
+
+  def on_feature_activity(
+      self, name, feature, session_id, duration, error, **kwargs,
+  ):
+    self._record_call(
+        'on_feature_activity',
+        name,
+        feature,
+        session_id,
+        duration,
+        error,
+        **kwargs,
+    )
+
+  def on_feature_housekeep(
+      self, feature, counter, duration, error, **kwargs
+  ):
+    self._record_call(
+        'on_feature_housekeep',
+        feature,
+        counter,
         duration,
         error,
         **kwargs,
@@ -194,26 +180,19 @@ class EventHandlerChainTest(unittest.TestCase):
     chain_handler.on_environment_start(env, 2.0, None)
     chain_handler.on_environment_housekeep(env, 1, 3.0, None, a=1)
     chain_handler.on_environment_shutdown(env, 4.0, 5.0, None)
-    chain_handler.on_sandbox_start(env, sandbox, 6.0, None)
-    chain_handler.on_sandbox_status_change(env, sandbox, 'old', 'new', 7.0)
-    chain_handler.on_sandbox_shutdown(env, sandbox, 8.0, 9.0, None)
-    chain_handler.on_sandbox_housekeep(env, sandbox, 2, 10.0, None, b=2)
-    chain_handler.on_feature_setup(env, sandbox, feature, 11.0, None)
-    chain_handler.on_feature_teardown(env, sandbox, feature, 12.0, None)
-    chain_handler.on_feature_setup_session(
-        env, sandbox, feature, 's1', 13.0, None
-    )
-    chain_handler.on_feature_teardown_session(
-        env, sandbox, feature, 's1', 14.0, None
-    )
-    chain_handler.on_feature_housekeep(
-        env, sandbox, feature, 3, 15.0, None, c=3
-    )
-    chain_handler.on_session_start(env, sandbox, 's2', 16.0, None)
-    chain_handler.on_session_end(env, sandbox, 's2', 17.0, 18.0, None)
-    chain_handler.on_sandbox_activity(
-        'act', env, sandbox, feature, 's2', 19.0, None, d=4
-    )
+    chain_handler.on_sandbox_start(sandbox, 6.0, None)
+    chain_handler.on_sandbox_status_change(sandbox, 'old', 'new', 7.0)
+    chain_handler.on_sandbox_shutdown(sandbox, 8.0, 9.0, None)
+    chain_handler.on_sandbox_session_start(sandbox, 's2', 16.0, None)
+    chain_handler.on_sandbox_session_end(sandbox, 's2', 17.0, 18.0, None)
+    chain_handler.on_sandbox_activity('act', sandbox, 's2', 19.0, None, d=4)
+    chain_handler.on_sandbox_housekeep(sandbox, 2, 10.0, None, b=2)
+    chain_handler.on_feature_setup(feature, 11.0, None)
+    chain_handler.on_feature_teardown(feature, 12.0, None)
+    chain_handler.on_feature_setup_session(feature, 's1', 13.0, None)
+    chain_handler.on_feature_teardown_session(feature, 's1', 14.0, None)
+    chain_handler.on_feature_activity('act', feature, 's1', 16.0, None, d=5)
+    chain_handler.on_feature_housekeep(feature, 3, 15.0, None, c=3)
 
     self.assertEqual(handler1.calls, handler2.calls)
     self.assertEqual(
@@ -224,34 +203,27 @@ class EventHandlerChainTest(unittest.TestCase):
             ('on_environment_start', (env, 2.0, None), {}),
             ('on_environment_housekeep', (env, 1, 3.0, None), {'a': 1}),
             ('on_environment_shutdown', (env, 4.0, 5.0, None), {}),
-            ('on_sandbox_start', (env, sandbox, 6.0, None), {}),
-            ('on_sandbox_status_change', (env, sandbox, 'old', 'new', 7.0), {}),
-            ('on_sandbox_shutdown', (env, sandbox, 8.0, 9.0, None), {}),
-            ('on_sandbox_housekeep', (env, sandbox, 2, 10.0, None), {'b': 2}),
-            ('on_feature_setup', (env, sandbox, feature, 11.0, None), {}),
-            ('on_feature_teardown', (env, sandbox, feature, 12.0, None), {}),
-            (
-                'on_feature_setup_session',
-                (env, sandbox, feature, 's1', 13.0, None),
-                {},
-            ),
-            (
-                'on_feature_teardown_session',
-                (env, sandbox, feature, 's1', 14.0, None),
-                {},
-            ),
-            (
-                'on_feature_housekeep',
-                (env, sandbox, feature, 3, 15.0, None),
-                {'c': 3},
-            ),
-            ('on_session_start', (env, sandbox, 's2', 16.0, None), {}),
-            ('on_session_end', (env, sandbox, 's2', 17.0, 18.0, None), {}),
+            ('on_sandbox_start', (sandbox, 6.0, None), {}),
+            ('on_sandbox_status_change', (sandbox, 'old', 'new', 7.0), {}),
+            ('on_sandbox_shutdown', (sandbox, 8.0, 9.0, None), {}),
+            ('on_sandbox_session_start', (sandbox, 's2', 16.0, None), {}),
+            ('on_sandbox_session_end', (sandbox, 's2', 17.0, 18.0, None), {}),
             (
                 'on_sandbox_activity',
-                ('act', env, sandbox, feature, 's2', 19.0, None),
+                ('act', sandbox, 's2', 19.0, None),
                 {'d': 4},
             ),
+            ('on_sandbox_housekeep', (sandbox, 2, 10.0, None), {'b': 2}),
+            ('on_feature_setup', (feature, 11.0, None), {}),
+            ('on_feature_teardown', (feature, 12.0, None), {}),
+            ('on_feature_setup_session', (feature, 's1', 13.0, None), {}),
+            ('on_feature_teardown_session', (feature, 's1', 14.0, None), {}),
+            (
+                'on_feature_activity',
+                ('act', feature, 's1', 16.0, None),
+                {'d': 5}
+            ),
+            ('on_feature_housekeep', (feature, 3, 15.0, None), {'c': 3}),
         ],
     )
 

@@ -28,7 +28,7 @@ from langfun.env.interface import EventHandler
 
 # Decorators for sandbox/feature methods.
 from langfun.env.interface import treat_as_sandbox_state_error
-from langfun.env.interface import log_sandbox_activity
+from langfun.env.interface import log_activity
 
 from langfun.env.base_environment import BaseEnvironment
 from langfun.env.base_sandbox import BaseSandbox
