@@ -100,6 +100,9 @@ class RunnerTest(unittest.TestCase):
         print(i, pg.diff(x, y))
       self.assertIs(x, y)
 
+
+class SequentialRunnerTest(RunnerTest):
+
   def test_basic(self):
     plugin = TestPlugin()
     exp = eval_test_helper.test_experiment()
