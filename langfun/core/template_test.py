@@ -198,6 +198,24 @@ class FromValueTest(unittest.TestCase):
     )
     self.assertEqual(message.metadata, m.metadata)
 
+  def test_from_message_convertible(self):
+
+    class MyFormat(pg.Object):
+      text: str
+
+    class MyConverter(message_lib.MessageConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'int'
+      OUTPUT_TYPE = MyFormat
+
+      def to_value(self, m: message_lib.Message) -> MyFormat:
+        return MyFormat(text=m.text)
+
+      def from_value(self, value: MyFormat) -> message_lib.Message:
+        return message_lib.UserMessage(value.text)
+
+    t = Template.from_value(MyFormat(text='1'))
+    self.assertEqual(t.render(), '1')
+
   def test_from_same_template(self):
     t = Template('Hello {{x}}', x=1)
     t2 = Template.from_value(t)

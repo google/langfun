@@ -240,6 +240,11 @@ class Message(
     return MessageConverter.get(format_or_type, **kwargs).to_value(self)
 
   @classmethod
+  def is_convertible(cls, format_or_type: str | Type[Any]) -> bool:
+    """Returns True if the value can be converted to a message."""
+    return MessageConverter.is_convertible(format_or_type)
+
+  @classmethod
   def convertible_formats(cls) -> list[str]:
     """Returns supported format for message conversion."""
     return MessageConverter.convertible_formats()
@@ -938,6 +943,13 @@ class _MessageConverterRegistry:
     assert isinstance(format_or_type, type), format_or_type
     return self.get_by_type(format_or_type, **kwargs)
 
+  def is_convertible(self, format_or_type: str | Type[Any]) -> bool:
+    """Returns whether the message is convertible to the given format or type."""
+    if isinstance(format_or_type, str):
+      return format_or_type in self._name_to_converter
+    assert isinstance(format_or_type, type), format_or_type
+    return format_or_type in self._type_to_converters
+
   def convertible_formats(self) -> list[str]:
     """Returns a list of converter names."""
     return sorted(list(self._name_to_converter.keys()))
@@ -1028,6 +1040,11 @@ class MessageConverter(pg.Object):
   def get_by_type(cls, t: Type[Any], **kwargs) -> 'MessageConverter':
     """Returns a message converter for the given type."""
     return cls._REGISTRY.get_by_type(t, **kwargs)
+
+  @classmethod
+  def is_convertible(cls, format_or_type: str | Type[Any]) -> bool:
+    """Returns whether the message is convertible to the given format or type."""
+    return cls._REGISTRY.is_convertible(format_or_type)
 
   @classmethod
   def convertible_formats(cls) -> list[str]:

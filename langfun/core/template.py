@@ -540,17 +540,19 @@ class Template(
       return value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter
     if isinstance(value, str):
       return cls(template_str=value, **kwargs)
+    if isinstance(value, Template):
+      lfun = cls(template_str=value.template_str, **kwargs)  # pylint: disable=attribute-error
+      # So lfun could acccess all attributes from value.
+      lfun.sym_setparent(value)
+      return lfun
+    if message_lib.Message.is_convertible(type(value)):
+      value = message_lib.Message.from_value(value)
     if isinstance(value, message_lib.Message):
       for k, v in value.metadata.sym_items():  # pylint: disable=attribute-error
         kwargs[_ADDITIONAL_METADATA_PREFIX + k] = v
       t = cls(template_str=value.text, **kwargs)
       t._referred_modalities = value.referred_modalities
       return t
-    if isinstance(value, Template):
-      lfun = cls(template_str=value.template_str, **kwargs)  # pylint: disable=attribute-error
-      # So lfun could acccess all attributes from value.
-      lfun.sym_setparent(value)
-      return lfun
     return cls(template_str='{{input}}', input=value, **kwargs)
 
   def _html_tree_view_content(

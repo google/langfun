@@ -500,6 +500,12 @@ class MessageConverterTest(unittest.TestCase):
     self.assertIn('test_format2', message.Message.convertible_formats())
     self.assertIn('test_format3', message.Message.convertible_formats())
 
+    self.assertTrue(message.Message.is_convertible(int))
+    self.assertFalse(message.Message.is_convertible(dict))
+    self.assertTrue(message.Message.is_convertible('test_format1'))
+    self.assertTrue(message.Message.is_convertible('test_format2'))
+    self.assertTrue(message.Message.is_convertible('test_format3'))
+    self.assertFalse(message.Message.is_convertible('test_format4'))
     self.assertIn(int, message.Message.convertible_types())
     self.assertIn(tuple, message.Message.convertible_types())
     self.assertEqual(

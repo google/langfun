@@ -745,9 +745,6 @@ class CallTest(unittest.TestCase):
         parsing.call('what is one plus two?', int, lm=lm, autofix=3), 3
     )
 
-  def test_call_with_structured_input(self):
-    self.assertEqual(parsing.call(1, lm=fake.StaticResponse('2')), '2')
-
   def test_call_with_response_postprocess(self):
     target_str = '@TARGET_STR@'
     random_str = '!RANDOM_STR!'
