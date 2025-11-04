@@ -310,6 +310,17 @@ class Template(
                       f'The value for template variable {var_name!r} is not '
                       f'provided. Template: {self.template_str!r}'
                   )
+              # Short-circuit common types that do not need conversions.
+              elif not isinstance(
+                  var_value, (
+                      bool, int, float, str, list, dict,
+                      Template, message_lib.Message, modality.Modality
+                  )
+              ) and message_lib.Message.is_convertible(type(var_value)):
+                # Automatically convert the value to a message if it is
+                # convertible. This allows users to drop message convertible
+                # objects into template for nested rendering.
+                var_value = message_lib.Message.from_value(var_value)
               inputs[var_name] = var_value
 
             # Enable Python format for builtin types during template rendering,

@@ -913,6 +913,12 @@ class _MessageConverterRegistry:
     if converter.OUTPUT_TYPE is not None:
       self._type_to_converters[converter.OUTPUT_TYPE].append(converter)
 
+  def unregister(self, converter: Type['MessageConverter']) -> None:
+    """Unregisters a message converter."""
+    self._name_to_converter.pop(converter.FORMAT_ID, None)
+    if converter.OUTPUT_TYPE is not None:
+      self._type_to_converters[converter.OUTPUT_TYPE].remove(converter)
+
   def get_by_type(self, t: Type[Any], **kwargs) -> 'MessageConverter':
     """Returns a message converter for the given type."""
     t = self._type_to_converters[t]
@@ -948,7 +954,7 @@ class _MessageConverterRegistry:
     if isinstance(format_or_type, str):
       return format_or_type in self._name_to_converter
     assert isinstance(format_or_type, type), format_or_type
-    return format_or_type in self._type_to_converters
+    return bool(self._type_to_converters.get(format_or_type))
 
   def convertible_formats(self) -> list[str]:
     """Returns a list of converter names."""

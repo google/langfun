@@ -602,6 +602,28 @@ class RenderTest(unittest.TestCase):
           )
       )
 
+  def test_render_with_message_convertible_type(self):
+    class MyFormat(pg.Object):
+      text: str
+
+    class MyConverter(message_lib.MessageConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'another-format'
+      OUTPUT_TYPE = MyFormat
+
+      def to_value(self, m: message_lib.Message) -> MyFormat:
+        return MyFormat(text=m.text)
+
+      def from_value(self, value: MyFormat) -> message_lib.Message:
+        return message_lib.UserMessage(value.text)
+
+    t = Template('Hello {{x}}', x=MyFormat(text='world'))
+    rendered_message = t.render()
+    self.assertEqual(rendered_message, 'Hello world')
+    self.assertIsInstance(
+        rendered_message.__template_input__['x'], message_lib.UserMessage
+    )
+    self.assertEqual(rendered_message.__template_input__['x'].text, 'world')
+
 
 class TemplateRenderEventTest(unittest.TestCase):
 

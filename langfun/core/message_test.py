@@ -546,6 +546,9 @@ class MessageConverterTest(unittest.TestCase):
         message.Message.from_value((1, 2, 3)),
         message.UserMessage('1,2,3')
     )
+    message.MessageConverter._REGISTRY.unregister(TestConverter)
+    message.MessageConverter._REGISTRY.unregister(TestConverter2)
+    message.MessageConverter._REGISTRY.unregister(TestConverter3)
 
   def test_get_role(self):
     self.assertEqual(
