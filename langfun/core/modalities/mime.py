@@ -49,6 +49,10 @@ class Mime(lf.Modality):
       Union[str, bytes, None], 'The raw content of the MIME type.'
   ] = None
 
+  metadata: Annotated[
+      dict[str, Any], 'Additional metadata attached to this object.'
+  ] = {}
+
   @functools.cached_property
   def mime_type(self) -> str:
     """Returns the MIME type."""
@@ -94,7 +98,10 @@ class Mime(lf.Modality):
     # Hash the URI to avoid downloading the content.
     if self.uri is not None:
       return hashlib.md5(self.uri.encode()).hexdigest()[:8]
-    return super().hash
+    if self.content is not None:
+      return super().hash
+    assert self.metadata
+    return hashlib.md5(str(self.metadata).encode()).hexdigest()[:8]
 
   def to_text(self) -> str:
     """Returns the text content of the MIME type."""
@@ -141,7 +148,7 @@ class Mime(lf.Modality):
 
   def _on_bound(self):
     super()._on_bound()
-    if self.uri is None and self.content is None:
+    if self.uri is None and self.content is None and not self.metadata:
       raise ValueError('Either uri or content must be provided.')
 
   def to_bytes(self) -> bytes:
