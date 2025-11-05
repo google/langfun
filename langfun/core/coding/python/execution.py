@@ -45,17 +45,17 @@ def evaluate(
     global_vars: An optional dict as the globals that could be referenced by the
       code.
     permission: Permission for the Python code to run.
-    returns_stdout: If True, the stdout (a str) will be returned.
+    returns_stdout: If True, the stdout (a string) will be returned.
     outputs_intermediate: Applicable when returns_stdout is False. If True,
-      intermediate output will be outputted as a dict, with the last line's
-      value accessible by key '__result__' and the std output accessible by
+      intermediate output will be output as a dict, with the last line's
+      value accessible by key '__result__' and the stdout accessible by
       key '__stdout__'. Otherwise the value of the last line will be returned.
 
   Returns:
     The value of the last line of the code block. Or a dict of variable
     names of all locals to their evaluated values as the output of the code to
     run. The value for the last line can be accessed by key '__result__'. Or the
-    stdout as a str.
+    stdout as a string.
   """
   return pg.coding.evaluate(
       parsing.clean(code),
@@ -85,28 +85,30 @@ def run(
 
   Args:
     code: Python code to run.
-    global_vars: An optional dict of
+    global_vars: An optional dict as the globals that could be referenced by the
+      code.
     permission: Permission for the Python code to run.
-    returns_stdout: If True, the stdout (a str) will be returned.
+    returns_stdout: If True, the stdout (a string) will be returned.
     outputs_intermediate: Applicable when returns_stdout is False. If True,
-      intermediate output will be outputted as a dict, with the last line's
-      value accessible by key '__result__' and the std output accessible by
+      intermediate output will be output as a dict, with the last line's
+      value accessible by key '__result__' and the stdout accessible by
       key '__stdout__'. Otherwise the value of the last line will be returned.
     sandbox: If True, run code in sandbox; If False, run code in current
       process. If None, run in sandbox first, if the output could not be
-      serialized and pass to current process, run the code again in current
+      serialized and passed to current process, run the code again in current
       process.
-    timeout: Execution timeout in seconds. If None, wait the code the complete.
+    timeout: Execution timeout in seconds. If None, wait for the code to
+      complete.
 
   Returns:
     The value of the last line of the code block. Or a dict of variable
     names of all locals to their evaluated values as the output of the code to
     run. The value for the last line can be accessed by key '__result__'. Or the
-    stdout as a str.
+    stdout as a string.
 
   Raises:
     TimeoutError: If the execution time exceeds the timeout.
-    Exception: Exception  that are raised from the code.
+    Exception: Exceptions that are raised from the code.
   """
   return pg.coding.run(
       parsing.clean(code),

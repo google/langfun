@@ -26,10 +26,37 @@ from mcp.shared import memory
 
 
 class McpSession:
-  """Langfun's MCP session.
+  """Represents a session for interacting with an MCP server.
 
-  Compared to the standard mcp.ClientSession, Langfun's MCP session could be
-  used both synchronously and asynchronously.
+  `McpSession` provides the context for making calls to tools hosted on an
+  MCP server. It wraps the standard `mcp.ClientSession` to offer both
+  synchronous and asynchronous usage patterns.
+
+  Sessions are created using `lf.mcp.McpClient.session()` and should be used
+  as context managers (either sync or async) to ensure proper initialization
+  and teardown of the connection to the server.
+
+  **Example Sync Usage:**
+
+  ```python
+  import langfun as lf
+
+  client = lf.mcp.McpClient.from_command(...)
+  with client.session() as session:
+    tools = session.list_tools()
+    result = tools['my_tool'](x=1)(session)
+  ```
+
+  **Example Async Usage:**
+
+  ```python
+  import langfun as lf
+
+  client = lf.mcp.McpClient.from_url(...)
+  async with client.session() as session:
+    tools = await session.alist_tools()
+    result = await tools['my_tool'](x=1).acall(session)
+  ```
   """
 
   def __init__(self, stream) -> None:
@@ -74,11 +101,19 @@ class McpSession:
     self._session = None
 
   def list_tools(self) -> dict[str, Type[mcp_tool.McpTool]]:
-    """Lists all MCP tools synchronously."""
+    """Lists all available tools on the MCP server synchronously.
+
+    Returns:
+      A dictionary mapping tool names to their corresponding `McpTool` classes.
+    """
     return async_support.invoke_sync(self.alist_tools)
 
   async def alist_tools(self) -> dict[str, Type[mcp_tool.McpTool]]:
-    """Lists all MCP tools asynchronously."""
+    """Lists all available tools on the MCP server asynchronously.
+
+    Returns:
+      A dictionary mapping tool names to their corresponding `McpTool` classes.
+    """
     assert self._session is not None, 'MCP session is not entered.'
     return {
         t.name: mcp_tool.McpTool.make_class(t)
@@ -91,7 +126,16 @@ class McpSession:
       *,
       returns_message: bool = False
   ) -> Any:
-    """Calls a MCP tool synchronously."""
+    """Calls an MCP tool synchronously.
+
+    Args:
+      tool: The `McpTool` instance to call.
+      returns_message: If True, the tool call will return an `mcp.Message`
+        object; otherwise, it returns the tool's direct result.
+
+    Returns:
+      The result of the tool call.
+    """
     return tool(self, returns_message=returns_message)
 
   async def acall_tool(
@@ -100,7 +144,16 @@ class McpSession:
       *,
       returns_message: bool = False
   ) -> Any:
-    """Calls a MCP tool asynchronously."""
+    """Calls an MCP tool asynchronously.
+
+    Args:
+      tool: The `McpTool` instance to call.
+      returns_message: If True, the tool call will return an `mcp.Message`
+        object; otherwise, it returns the tool's direct result.
+
+    Returns:
+      The result of the tool call.
+    """
     return await tool.acall(self, returns_message=returns_message)
 
   @classmethod
@@ -109,7 +162,15 @@ class McpSession:
       command: str,
       args: list[str] | None = None
   ) -> 'McpSession':
-    """Creates a MCP session from a command."""
+    """Creates an MCP session from a command-line executable.
+
+    Args:
+      command: The command to execute.
+      args: An optional list of arguments to pass to the command.
+
+    Returns:
+      An `McpSession` instance.
+    """
     return cls(
         mcp.stdio_client(
             mcp.StdioServerParameters(command=command, args=args or [])
@@ -122,7 +183,18 @@ class McpSession:
       url: str,
       headers: dict[str, str] | None = None
   ) -> 'McpSession':
-    """Creates a MCP session from a URL."""
+    """Creates an MCP session from an HTTP URL.
+
+    The transport protocol (e.g., 'mcp' or 'sse') is inferred from the
+    last part of the URL path.
+
+    Args:
+      url: The URL of the MCP server.
+      headers: An optional dictionary of HTTP headers to include in requests.
+
+    Returns:
+      An `McpSession` instance.
+    """
     transport = url.removesuffix('/').split('/')[-1].lower()
     if transport == 'mcp':
       return cls(streamable_http.streamablehttp_client(url, headers or {}))
@@ -136,12 +208,20 @@ class McpSession:
       cls,
       fastmcp: fastmcp_lib.FastMCP
   ):
+    """Creates an MCP session from an in-memory FastMCP instance.
+
+    Args:
+      fastmcp: An instance of `fastmcp_lib.FastMCP`.
+
+    Returns:
+      An `McpSession` instance.
+    """
     return cls(_client_streams_from_fastmcp(fastmcp))
 
 
 @contextlib.asynccontextmanager
 async def _client_streams_from_fastmcp(fastmcp: fastmcp_lib.FastMCP):
-  """Creates client streams from a MCP server."""
+  """Creates client streams from an in-memory FastMCP instance."""
   server = fastmcp._mcp_server  # pylint: disable=protected-access
   async with memory.create_client_server_memory_streams(
       ) as (client_streams, server_streams):

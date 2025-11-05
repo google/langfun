@@ -22,7 +22,16 @@ import pyglove as pg
 
 
 class MappingError(Exception):  # pylint: disable=g-bad-exception-name
-  """Mapping error."""
+  """Error raised during a structured mapping task.
+
+  `MappingError` is raised when a language model's response cannot be
+  successfully parsed or transformed into the target structure defined by
+  the schema in structured mapping operations like `lf.query` and `lf.parse`.
+
+  This error encapsulates both the original exception that occurred during
+  parsing (`cause`) and the language model response (`lm_response`) that led
+  to the failure, allowing for easier debugging of mapping issues.
+  """
 
   def __init__(self, lm_response: lf.Message, cause: Exception):
     self._lm_response = lm_response
@@ -62,7 +71,53 @@ class MappingError(Exception):  # pylint: disable=g-bad-exception-name
 class MappingExample(lf.NaturalLanguageFormattable,
                      lf.Component,
                      pg.views.HtmlTreeView.Extension):
-  """Mapping example between text, schema and structured value."""
+  """Represents an example for a structured mapping task.
+
+  A `MappingExample` defines a single instance of a mapping between an input
+  value and an output value, optionally guided by a schema and/or a natural
+  language context. It is primarily used to provide few-shot examples to
+  structured mapping operations (e.g., `lf.query`, `lf.complete`,
+  and `lf.describe`), helping to guide the LLM in performing the desired mapping
+  task. If `output` is not provided, the example represents a request to perform
+  mapping on the `input`.
+
+  **Key Attributes:**
+
+  *   `input`: The source value for the mapping (e.g., text, an object).
+  *   `output`: The target value for the mapping (e.g., a structured object,
+      text). If not provided, this example represents a request to perform
+      the mapping.
+  *   `schema`: An optional `lf.structured.Schema` that defines or constrains
+      the structure of the `output`. If provided, the LLM will be instructed
+      to produce an output conforming to this schema.
+  *   `context`: Optional natural language context that provides additional
+      information relevant to the mapping task.
+  *   `metadata`: Optional dictionary for additional metadata.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+  import pyglove as pg
+
+  # Example for translating English to French
+  lf.MappingExample(
+      input="Hello",
+      output="Bonjour"
+  )
+
+  # Example for extracting structured data
+  class Flight(pg.Object):
+    airline: str
+    flight_number: str
+
+  lf.MappingExample(
+      input="I want to book flight AA123.",
+      output=Flight(airline="AA", flight_number="123"),
+      schema=Flight
+  )
+  ```
+  """
 
   input: pg.typing.Annotated[
       pg.typing.Any(transform=schema_lib.mark_missing),
@@ -84,7 +139,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
       # Automatic conversion from annotation to schema.
       schema_lib.schema_spec(noneable=True),
       (
-          'A `lf.structured.Schema` object that constrains target value '
+          'A `lf.structured.Schema` object that constrains target value. '
           'If None, the target is expected to be a natural language-based '
           'response returned from LMs.'
       ),
@@ -99,7 +154,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
       dict[str, Any],
       (
           'The metadata associated with the mapping example, '
-          'which chould carry structured data, such as tool function input. '
+          'which could carry structured data, such as tool function input. '
           'It is a `pg.Dict` object whose keys can be accessed by attributes.'
       ),
   ] = pg.Dict()
@@ -242,7 +297,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
 
 
 class Mapping(lf.LangFunc):
-  """Base class for mapping.
+  """Base class for LLM-based mapping operations.
 
   {{ preamble }}
 
@@ -263,19 +318,19 @@ class Mapping(lf.LangFunc):
       pg.Symbolic,
       (
           'The mapping input. It could be `lf.Message` (a pg.Symbolic '
-          'subclass) as natural language input, or other symbolic object '
+          'subclass) as natural language input, or other symbolic objects '
           'as structured input.'
       ),
   ]
 
   context: Annotated[
-      str | None, 'The mapping context. A string as natural language '
+      str | None, 'The mapping context as a natural language string.'
   ] = None
 
   schema: pg.typing.Annotated[
       # Automatic conversion from annotation to schema.
       schema_lib.schema_spec(noneable=True),
-      'A `lf.structured.Schema` object that constrains mapping output ',
+      'A `lf.structured.Schema` object that constrains mapping output.',
   ] = None
 
   permission: Annotated[
@@ -378,16 +433,16 @@ class Mapping(lf.LangFunc):
   default: Annotated[
       Any,
       (
-          'The default value to use if the LM response is not a valid code '
-          'based on the schema (after autofix). '
-          'If unspecified, error will be raisen.'
+          'The default value to use if parsing fails (after autofix). '
+          'If `lf.RAISE_IF_HAS_ERROR` is used (default), an error will be '
+          'raised instead.'
       ),
   ] = lf.RAISE_IF_HAS_ERROR
 
   response_postprocess: Annotated[
       Callable[[str], str] | None,
       (
-          'A callable object that post process the raw LLM response before '
+          'A callable object that post-processes the raw LLM response before '
           'parsing it into the output Python object.'
       )
   ] = None
@@ -420,7 +475,7 @@ class Mapping(lf.LangFunc):
     return lm_output
 
   def parse_result(self, lm_output: lf.Message) -> Any:
-    """Parse result from LLM response."""
+    """Parses result from LLM response."""
     schema = self.mapping_request.schema
     if schema is None:
       return None
@@ -444,7 +499,7 @@ class Mapping(lf.LangFunc):
     )
 
   def postprocess_response(self, response: lf.Message) -> lf.Message:
-    """Post process LLM response."""
+    """Post-processes LLM response."""
     if self.response_postprocess is not None:
       postprocessed_text = self.response_postprocess(response.text)
       if postprocessed_text != response.text:
@@ -452,7 +507,7 @@ class Mapping(lf.LangFunc):
     return response
 
   def postprocess_result(self, result: Any) -> Any:
-    """Post process structured output."""
+    """Post-processes structured output."""
     return result
 
   def globals(self) -> dict[str, Any]:

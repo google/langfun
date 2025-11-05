@@ -29,7 +29,15 @@ Average = metric_values.Average
 
 
 class Metric(pg.Object, pg.views.HtmlTreeView.Extension):
-  """Interface for an evaluation metric."""
+  """Interface for an evaluation metric.
+
+  A metric is used to evaluate the quality of the outputs produced by an
+  evaluation. It works by auditing each processed example via its `audit`
+  method, which in turn calls the user-overridable `_audit` method to perform
+  metric-specific logic and update metric values. Metrics can compute multiple
+  values (e.g., precision, recall, F1 score) which are exposed via the
+  `values` method.
+  """
 
   name: Annotated[
       str,
@@ -169,7 +177,15 @@ class Metric(pg.Object, pg.views.HtmlTreeView.Extension):
 
 
 class MetricBase(Metric):
-  """Base class for common metrics."""
+  """Base class for common metrics.
+
+  `MetricBase` provides common functionalities for metrics, such as automatic
+  error counting based on whether an example has an error during evaluation.
+  It distinguishes between Object-Oriented Programming (OOP) errors
+  (e.g. `MappingError` during structured output generation) and other errors.
+  Subclasses should implement `_audit_processed` for metric computation on
+  successfully processed examples.
+  """
 
   oop_errors: Rate | None = Rate()
   non_oop_errors: Rate | None = Rate()
@@ -229,7 +245,13 @@ class MetricBase(Metric):
 
 
 class Match(MetricBase):
-  """Metric for matching outputs against groundtruth."""
+  """Metric for matching outputs against ground truth.
+
+  This metric computes match and mismatch rates by comparing the output of
+  an example with its ground truth. By default, it looks for a `groundtruth`
+  attribute in `example.input` for comparison. Users can customize this behavior
+  by subclassing `Match` and overriding the `match` method.
+  """
 
   name = 'match'
   matches: Rate = Rate()
@@ -302,7 +324,14 @@ class Match(MetricBase):
 
 
 class Score(MetricBase):
-  """Base class for scoring."""
+  """Base class for scoring metrics.
+
+  `Score` is a base class for metrics that assign a numerical score to each
+  example's output (e.g., evaluating quality on a scale of 1-5).
+  It automatically computes the average score across all examples.
+  Subclasses must implement the `score` method to define how an example
+  should be scored.
+  """
 
   name = 'score'
   average_score: Average = Average()

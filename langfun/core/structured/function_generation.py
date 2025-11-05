@@ -26,10 +26,10 @@ import pyglove as pg
 
 
 def unittest_gen(signature, lm, num_retries=1):
-  """Generates unit tests for a python function signature."""
+  """Generates unit tests for a Python function signature."""
 
   class UnitTest(pg.Object):
-    """A valid unit test for a python function."""
+    """A valid unit test for a Python function."""
 
     input: dict[str, Any]
     expected_output: Any
@@ -55,7 +55,7 @@ def unittest_gen(signature, lm, num_retries=1):
 
 
 def unittest_with_test_cases(f, unittests):
-  """Applies unit tests to a python function to be tested."""
+  """Applies unit tests to a Python function to be tested."""
   if not unittests:
     raise ValueError(f"No unit tests provided: {unittests}")
 
@@ -87,10 +87,10 @@ def _function_gen(
     ] = None,
     unittest_num_retries: int = 1,
 ):
-  """Generates a python function with LLM and verify its quality with unit testing."""
+  """Generates a Python function with LLM and verifies it with unit testing."""
 
   class PythonFunctionPrompt(template.Template):
-    r"""A template for a python function generation.
+    r"""A template for a Python function generation.
 
     Please reply to the last PYTHON_FUNCTION_SIGNATURE with a self-sufficient,
     error-free, and efficiently coded PYTHON_FUNCTION, crafted to the standards
@@ -195,11 +195,28 @@ def function_gen(
     ] = None,
     unittest_num_retries: int = 1,
 ):
-  """A decorator for automating function generation using a language model.
+  r"""Decorator for generating function implementations using an LLM.
 
-  This decorator should be applied to functions that are not yet implemented. It
-  facilitates the implementation via the specified LLM, ensuring
-  quality through unit tests.
+  `lf.function_gen` is a decorator that automatically generates the
+  implementation of a Python function based on its signature and docstring,
+  using the specified language model. This is useful for quickly prototyping
+  functions or generating boilerplate code.
+
+  The decorator can also automatically generate and run unit tests to verify
+  the correctness of the generated implementation.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  @lf.function_gen(lm=lf.llms.Gemini25Flash())
+  def product(a: int, b: int) -> int:
+    \"\"\"Returns product of a and b.\"\"\"
+
+  print(product(2, 3))
+  # Output: 6
+  ```
 
   Args:
       lm (lf.LanguageModel): The language model used for generating function
@@ -212,10 +229,10 @@ def function_gen(
         tests. You can either provide a list of test cases as tuples of inputs
         and outputs, or a function that throws an error if a test fails, or let
         LLM automatically create the unit test cases. If a generated function is
-        and returned, it should pass all the unittests.
+        returned, it should pass all the unit tests.
       unittest_num_retries: If unittest is set to "auto", this parameter
-        specifies the number of times the LLM's attempts to generate unit test
-        cases.
+        specifies the number of times the LLM should attempt to generate unit
+        test cases.
 
   Returns:
       The implemented function object.

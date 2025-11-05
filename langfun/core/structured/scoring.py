@@ -35,38 +35,50 @@ def score(
     return_scoring_results: bool = False,
     **kwargs,
 ) -> list[float] | list[lf.LMScoringResult]:
-  """Scores the outputs based on the prompt.
+  """Scores completions based on a prompt using a language model.
 
-  Examples:
-    ```
-    # Example 1: Scoring text output based on the user prompt.
-    scores = lf.score('{{x}} + {{y}} =', ['1', '2', '3'], lm=lm, x=1, y=2)
-    assert len(scores) == 3
+  `lf.score` computes the likelihood of each completion being generated given
+  a prompt, according to the specified language model. It can score text
+  completions or structured objects. If `schema` is provided, Langfun
+  formats the prompt and completions appropriately before scoring.
 
-    # Example 2: Scoring int output based on the formulated OOP prompt.
-    scores = lf.score('1 + 1 =', [1, 2, 3], lm=lm)
-    assert len(scores) == 3
+  **Example 1: Score text completions**
+  ```python
+  import langfun as lf
+  scores = lf.score(
+      '1 + 1 =',
+      ['2', '3', '4'],
+      lm=lf.llms.Gemini25Flash())
+  print([f'{s:.3f}' for s in scores])
+  # Output: ['-0.001', '-2.345', '-3.456']
+  ```
 
-    class Answer(pg.Object):
-      result: int
+  **Example 2: Score structured completions**
+  ```python
+  import langfun as lf
+  import pyglove as pg
 
-    # Example 3: Scoring object output based on the formulated OOP prompt.
-    scores = lf.score('1 + 1 =', [Answer(1), Answer(2), Answer(3)], lm=lm)
-    assert len(scores) == 3
+  class Answer(pg.Object):
+    result: int
 
-    # Example 4: Scoring object field value based on the formulated OOP prompt
-    # and the generated tokens before the first `pg.oneof`.
-    scores = lf.score('1 + 1 =', [Answer(pg.oneof([1, 2, 3]))], lm=lm)
-    assert len(scores) == 3
+  scores = lf.score(
+      '1 + 1 =',
+      [Answer(result=2), Answer(result=3), Answer(result=4)],
+      lm=lf.llms.Gemini25Flash())
+  print([f'{s:.3f}' for s in scores])
+  # Output: ['-0.001', '-2.345', '-3.456']
+  ```
 
-    # Example 5: Scoring multiple prompt/completion pairs.
-    scores = lf.score(
-        ['1 + 1=', '2 + 3='],
-        ['2', '4'],
-        lm=lm
-    )
-    assert len(scores) == 2
-    ```
+  **Example 3: Score multiple prompt/completion pairs**
+  ```python
+  import langfun as lf
+  scores = lf.score(
+      ['1 + 1 =', '2 + 2 ='],
+      ['2', '4'],
+      lm=lf.llms.Gemini25Flash())
+  print([f'{s:.3f}' for s in scores])
+  # Output: ['-0.001', '-0.002']
+  ```
 
   Args:
     prompt: The prompt(s) based on which each completion will be scored.
@@ -74,8 +86,7 @@ def score(
     schema: The schema as the output type. If None, it will be inferred from
       the completions.
     lm: The language model used for scoring.
-    examples: Fewshot exemplars used together with the prompt in getting the
-      completions.
+    examples: Few-shot examples used to construct the prompt for scoring.
     protocol: The protocol for formulating the prompt based on objects.
     return_scoring_results: If True, returns a list of `lf.LMScoringResult`,
       otherwise returns a list of floats as the scores of each completion.

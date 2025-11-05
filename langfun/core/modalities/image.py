@@ -33,7 +33,25 @@ except ImportError:
 
 
 class Image(mime.Mime):
-  """Image."""
+  """Represents an image for communicating with language models.
+
+  `lf.Image` can be initialized from a URI (HTTP/HTTPS URL or local path)
+  using `lf.Image.from_uri()` or from raw bytes using `lf.Image.from_bytes()`.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Load image from path
+  image = lf.Image.from_path('/path/to/image.png')
+
+  # Use image in a prompt
+  prompt = lf.Template('Describe this image: {{image}}', image=image)
+  response = lf.query(prompt, lm=lf.llms.Gemini25Flash())
+  print(response)
+  ```
+  """
 
   MIME_PREFIX = 'image'
 

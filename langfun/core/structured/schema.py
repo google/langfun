@@ -33,12 +33,12 @@ def include_method_in_prompt(method):
 
 
 def should_include_method_in_prompt(method):
-  """Returns true if the method should be shown in the prompt."""
+  """Returns True if the method should be shown in the prompt."""
   return getattr(method, '__show_in_prompt__', False)
 
 
 def parse_value_spec(value) -> pg.typing.ValueSpec:
-  """Parses a PyGlove ValueSpec equivalence into a ValueSpec."""
+  """Parses a PyGlove ValueSpec equivalent into a ValueSpec."""
   if isinstance(value, pg.typing.ValueSpec):
     return value
 
@@ -121,7 +121,67 @@ class Schema(
     pg.Object,
     pg.views.HtmlTreeView.Extension
 ):
-  """Base class for structured data schema."""
+  """Schema for structured inputs and outputs.
+
+  `lf.Schema` provides a unified representation for defining the output schema
+  used in Langfun's structured operations like `lf.query`, `lf.parse`,
+  `lf.complete`, and `lf.describe`. It acts as an abstraction layer,
+  allowing schemas to be defined using Python type annotations, `pg.Object`
+  classes, or dictionaries, and then converting them into a format that
+  language models can understand.
+
+  `lf.Schema` can be created from various types using `lf.Schema.from_value`:
+  *   Built-in types: `int`, `str`, `bool`, `float`
+  *   Typing constructs: `list`, `dict`, `typing.Union`, `typing.Literal`,
+      `typing.Optional`
+  *   PyGlove classes: `pg.Object` subclasses
+
+  **1. Creating a Schema:**
+
+  ```python
+  import langfun as lf
+  import pyglove as pg
+  from typing import Literal, Union
+
+  # From a basic type
+  int_schema = lf.Schema.from_value(int)
+
+  # From a list type
+  list_schema = lf.Schema.from_value(list[int])
+
+  # From a dictionary
+  dict_schema = lf.Schema.from_value(dict(a=int, b=str))
+
+  # From pg.Object
+  class Point(pg.Object):
+    x: int
+    y: int
+  point_schema = lf.Schema.from_value(Point)
+
+  # From Union or Literal
+  union_schema = lf.Schema.from_value(Union[int, str])
+  literal_schema = lf.Schema.from_value(Literal['A', 'B'])
+  ```
+
+  **2. Schema Representation:**
+  Once created, a schema object can represent itself in different formats,
+  such as Python-like syntax or JSON, which is used in prompts to LLMs.
+
+  ```python
+  print(point_schema.repr('python'))
+  # Output:
+  # class Point:
+  #   x: int
+  #   y: int
+
+  print(dict_schema.repr('json'))
+  # Output:
+  # {
+  #   "a": "int",
+  #   "b": "str"
+  # }
+  ```
+  """
 
   spec: pg.typing.Annotated[
       pg.typing.Object(pg.typing.ValueSpec, transform=parse_value_spec),
@@ -144,7 +204,7 @@ class Schema(
   def parse(
       self, text: str, protocol: SchemaProtocol = 'json', **kwargs
   ) -> Any:
-    """Parse a LM generated text into a structured value."""
+    """Parses a LM generated text into a structured value."""
     value = value_repr(protocol).parse(text, self, **kwargs)
 
     # TODO(daiyip): support autofix for schema error.
@@ -157,7 +217,7 @@ class Schema(
     return self.schema_str()
 
   def schema_dict(self) -> dict[str, Any]:
-    """Returns the dict representation of the schema."""
+    """Returns the dictionary representation of the schema."""
 
     def _node(vs: pg.typing.ValueSpec) -> Any:
       if isinstance(vs, pg.typing.PrimitiveType):
@@ -406,7 +466,7 @@ def class_definitions(
     strict: bool = False,
     markdown: bool = False,
 ) -> str | None:
-  """Returns a str for class definitions."""
+  """Returns a string for class definitions."""
   if not classes:
     return None
   def_str = io.StringIO()
@@ -683,7 +743,7 @@ class ValueRepr(metaclass=abc.ABCMeta):
 
   @abc.abstractmethod
   def parse(self, text: str, schema: Schema | None = None, **kwargs) -> Any:
-    """Parse a LM generated text into a structured value."""
+    """Parses a LM generated text into a structured value."""
 
 
 class ValuePythonRepr(ValueRepr):
@@ -739,7 +799,7 @@ class ValuePythonRepr(ValueRepr):
       autofix_lm: lf.LanguageModel = lf.contextual(),
       **kwargs,
   ) -> Any:
-    """Parse a Python string into a structured object."""
+    """Parses a Python string into a structured object."""
     del kwargs
     global_vars = additional_context or {}
     if schema is not None:
@@ -820,7 +880,7 @@ class ValueJsonRepr(ValueRepr):
     return pg.to_json_str(dict(result=value))
 
   def parse(self, text: str, schema: Schema | None = None, **kwargs) -> Any:
-    """Parse a JSON string into a structured object."""
+    """Parses a JSON string into a structured object."""
     del schema
     try:
       text = cleanup_json(text)
@@ -837,7 +897,7 @@ class ValueJsonRepr(ValueRepr):
 
 
 def cleanup_json(json_str: str) -> str:
-  """Clean up the LM responded JSON string."""
+  """Cleans up the LM responded JSON string."""
   # Treatments:
   # 1. Extract the JSON string with a top-level dict from the response.
   #    This prevents the leading and trailing texts in the response to

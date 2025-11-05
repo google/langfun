@@ -59,18 +59,20 @@ class Evaluable(lf.Component):
   @property
   @abc.abstractmethod
   def id(self) -> str:
-    """Returns the ID of the task.
+    """Returns the ID of this evaluable node.
 
     Returns:
-      Evaluation task ID. Different evaluation task should have their unique
-      task IDs, for each task will be stored in sub-directoreis identified by
-      their IDs. For suites, the ID could be an empty string as they will not
-      produce sub-directories
+      A string as the ID of this evaluable node.
+      If an evaluable node acts as a container for other evaluable nodes
+      (e.g. `lf.Suite`), its ID could be empty.
+      Leaf evaluable nodes (e.g. `lf.Evaluation`) must have unique IDs
+      under the same container, as their IDs will be used as the directory
+      name for saving their results.
     """
 
   @property
   def dir(self) -> str | None:
-    """Returns the directory for saving results and details."""
+    """Returns the directory for saving results."""
     if self.root_dir is None:
       return None
     return os.path.join(self.root_dir, self.id)
@@ -82,18 +84,18 @@ class Evaluable(lf.Component):
 
   @property
   def index_link(self) -> str | None:
-    """Returns the index page."""
+    """Returns the link to the index page."""
     if self.dir is None:
       return None
     return self.link(os.path.join(self.dir, Evaluable.INDEX_HTML))
 
   def summary(self, pivot_field: str = 'lm') -> 'Summary':
-    """Returns a summary for all child evaluations.."""
+    """Returns a summary for all child evaluations."""
     return Summary([pg.Ref(x) for x in self.leaf_nodes], pivot_field)
 
   @property
   def summary_link(self) -> str | None:
-    """Returns the summary page."""
+    """Returns the link to the summary page."""
     if self.root_dir is None:
       return None
     return self.link(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
@@ -177,6 +179,7 @@ class Evaluable(lf.Component):
 
   @property
   def is_leaf(self) -> bool:
+    """Returns whether this node is a leaf node."""
     return isinstance(self, Evaluation) and not self.children
 
   @functools.cached_property
@@ -404,7 +407,7 @@ class Evaluable(lf.Component):
       timeout: int | None = None,
       **kwargs,
   ) -> None:
-    """Run the evaluate and fill `self.result`. Subclass to implement."""
+    """Run the evaluation and fill `self.result`. Subclass to implement."""
 
   @abc.abstractmethod
   def _completion_status(self, run_status: str) -> str:
@@ -545,6 +548,7 @@ class Evaluable(lf.Component):
   def from_dir(
       cls, maybe_dir: str, load_result: bool = True
   ) -> Optional['Evaluable']:
+    """Loads an evaluable object from a directory."""
     exp_json = os.path.join(maybe_dir, Evaluable.EXPERIMENT_JSON)
     if not pg.io.path_exists(exp_json):
       return None
@@ -558,7 +562,7 @@ class Evaluable(lf.Component):
     return experiment
 
   def try_load_result(self) -> bool:
-    """Try load result."""
+    """Try loads result from file if it's not loaded."""
     if self.result is None:
       result_json = os.path.join(self.dir, Evaluable.RESULT_JSON)
       if pg.io.path_exists(result_json):
@@ -604,6 +608,7 @@ class Suite(Evaluable):
 
   @functools.cached_property
   def hash(self) -> str:
+    """Returns the hash of this suite."""
     return hashlib.md5(
         ' '.join(sorted([c.hash for c in self.children])).encode()
     ).hexdigest()[:8]
@@ -619,14 +624,14 @@ class Suite(Evaluable):
 
 
 class Evaluation(Evaluable):
-  """Base class for evaluation set."""
+  """Base class for evaluation sets."""
 
   inputs: pg.typing.Annotated[
       pg.typing.Functor(),
       (
           'A functor that returns a list of user-defined objects as the input '
-          'examples. It could be inputs loaded from a JSON file via '
-          '`lf.eval.inputs_from(path)`, from a Python coded list via '
+          'examples. It can be inputs loaded from a JSON file via '
+          '`lf.eval.inputs_from(path)`, from a Python-coded list via '
           '`lf.eval.as_inputs(values)` or a user-defined functor that '
           'generates input objects at runtime.'
       ),
@@ -648,12 +653,12 @@ class Evaluation(Evaluable):
       pg.typing.Functor().noneable(),
       (
           'A functor that returns a type annotation that will be converted to '
-          '`lf.Schema`, or a tuple of (annotation, fewshot examples). '
+          '`lf.Schema`, or a tuple of (annotation, few-shot examples). '
           'For "call" method, it could be None, indicating that the raw '
-          'response from the LM will be used as the output, and the fewshot '
-          'examples will be used for parsing. For "query" and "complete", it '
-          'must be provided, and the fewshot examples will be used directly '
-          'for prompting. Here are the example code on how the '
+          'response from the LM will be used as the output, and the few-shot '
+          'examples will be used for parsing. For "query" and "complete" '
+          'methods, it must be provided, and the few-shot examples will be '
+          'used directly for prompting. Here is example code on how the '
           'functors should be defined:'
           + inspect.cleandoc("""
               ```
@@ -693,7 +698,7 @@ class Evaluation(Evaluable):
   completion_prompt_field: Annotated[
       str | None,
       (
-          'A str field that will be automatically added to the class of the '
+          'A string field that will be automatically added to the class of the '
           'input object for `lf.complete`. If None, no field will be added to '
           'the class, instead the prompt will be passed as the first argument '
           'of the input object to complete. Applicable only when `method` is '
@@ -738,7 +743,7 @@ class Evaluation(Evaluable):
 
   @functools.cached_property
   def hash(self) -> str:
-    """Returns the semantic-based hash of the evaluation."""
+    """Returns the semantics-based hash of the evaluation."""
     if self.is_deterministic:
       identity = pg.format(self._identifiers(), compact=True)
     else:
@@ -784,7 +789,7 @@ class Evaluation(Evaluable):
 
   @property
   def complete_rate(self) -> float:
-    """Returns the complete rate."""
+    """Returns the completion rate of examples."""
     return self.num_completed / self.num_examples
 
   #
@@ -837,7 +842,7 @@ class Evaluation(Evaluable):
 
   @functools.cached_property
   def non_oop_failures(self) -> list[tuple[Any, Exception]]:
-    """Returns the OOP failures."""
+    """Returns the non-OOP failures."""
     return [item for item in self.failures
             if not isinstance(item[1], lf_structured.MappingError)]
 
@@ -883,7 +888,7 @@ class Evaluation(Evaluable):
 
   @functools.cached_property
   def schema(self) -> lf_structured.Schema | None:
-    """Schema."""
+    """Returns the schema for parsing LLM response."""
     if self.schema_fn is None:
       return None
 
@@ -897,7 +902,7 @@ class Evaluation(Evaluable):
 
   @functools.cached_property
   def fewshot_examples(self) -> list[lf.structured.MappingExample] | None:
-    """Fewshot examples."""
+    """Returns the few-shot examples for prompting or parsing."""
     if self.schema_fn is None:
       return None
 
@@ -973,7 +978,7 @@ class Evaluation(Evaluable):
 
   @functools.cached_property
   def children(self) -> list['Evaluation']:
-    """Returns the trials as child evaluations if this evaluation is a space."""
+    """Returns child evaluations if this evaluation has a parameter space."""
     if self.is_deterministic:
       return []
     children = []
@@ -1023,7 +1028,7 @@ class Evaluation(Evaluable):
 
   @property
   def non_oop_failures_link(self) -> str | None:
-    """Returns the link to then non-OOP failures page."""
+    """Returns the link to the non-OOP failures page."""
     if self.dir is None:
       return None
     return self.link(os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_HTML))
@@ -1208,10 +1213,10 @@ class Evaluation(Evaluable):
       )
 
   def process_output(self, example: Any, output: lf.Message) -> None:
-    """Process the output for an example.
+    """Processes the output for an example.
 
     Subclasses can override this method to generate and attach additional
-    metadata for debugging purpose. For example, draw bounding boxes on the
+    metadata for debugging purposes. For example, draw bounding boxes on the
     input image based on LLM predicted boxes and attach to output_message's
     metadata.
 
@@ -1219,8 +1224,8 @@ class Evaluation(Evaluable):
 
       class BoundingBoxEval(lf.eval.Matching):
         ...
-        def process_output(example, output):
-          output.metadata.image_with_bbox = draw_bboxes(
+        def process_output(self, example, output):
+          output.metadata.image_with_bbox = draw_bounding_box(
               example.image, output.result)
 
     Args:
@@ -1449,7 +1454,7 @@ class Evaluation(Evaluable):
         trace the LM input, response and parsed structure. If error is raised
         before LLM could return a response, None will be its value.
       error: The exception during processing the example.
-      dryrun: Whether or not audition takes place during dryrun.
+      dryrun: Whether or not auditing takes place during dryrun.
     """
     if error is not None:
       self._failures.append((example, error))
@@ -1674,7 +1679,7 @@ class Evaluation(Evaluable):
 
   @classmethod
   def visualize(cls, evaluations: list['Evaluation']) -> str | None:
-    """Visualize the a list of evaluations of this task in HTML."""
+    """Visualize a list of evaluations of this task in HTML."""
     del evaluations
     return None
 
@@ -1810,7 +1815,7 @@ class Summary(pg.Object):
     )
 
   class Table(pg.Object):
-    """A pivot table for view evaluations."""
+    """A pivot table for viewing evaluations."""
 
     class Row(pg.Object):
       descriptor: dict[str, Any]
@@ -2013,12 +2018,12 @@ class Summary(pg.Object):
       return self._context.completed
 
     def stop(self) -> 'Summary':
-      """Signal and wait the monitor thread to stop."""
+      """Signals and waits for the monitor thread to stop."""
       self._context.stopping = True
       return self.join()
 
     def join(self) -> 'Summary':
-      """Waits the monitor thread to complete."""
+      """Waits for the monitor thread to complete."""
       self._thread.join()
       summary = self.summary
       assert summary is not None
@@ -2035,7 +2040,7 @@ class Summary(pg.Object):
       scan_interval: int = 60,
       refresh_when_stop: bool = True,
   ) -> MonitorResult:
-    """Monitor one or more root directories and save summary in period."""
+    """Monitors one or more root directories and save summary periodically."""
     context = pg.Dict(stopping=False, completed=False, summary=None)
 
     def _monitor():
@@ -2187,7 +2192,7 @@ def monitor_async(
     scan_interval: int = 60,
     refresh_when_stop: bool = True,
 ) -> Summary.MonitorResult:
-  """Asynchronorsly monitor one or more root directories for summary."""
+  """Asynchronously monitors one or more root directories for summary."""
   return Summary.monitor_async(
       root_dir,
       save_as,
@@ -2365,10 +2370,9 @@ def run(
       a string (for string-based patcher), a `pg.patching.Patcher` object, or
       a rebind function (e.g. `pg.rebind`). See `lf.eval.patch_*` for more
       details.
-    mode: The mode to run the suite. "run" to run the suite, with reusing
-      existing results if available; "rerun" to rerun all evaluations even if
-      there are existing results; "dryrun" to dryrun the suite; and "noop"
-      to do nothing.
+    mode: The mode to run the suite: "run" to run with reuse of existing
+      results, "rerun" to force re-evaluation, "dryrun" for a dry run, and
+      "noop" to do nothing.
     debug: Whether to run in debug mode.
     print_definition: Whether to print the experiment definition.
     **kwargs: Additional arguments to be passed to dryrun/run the suite.

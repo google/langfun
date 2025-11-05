@@ -139,10 +139,10 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
 
   # Checkpointing
 
-  Experiments support checkpointing, which is enabled by default. It allows 
+  Experiments support checkpointing, which is enabled by default. It allows
   users to resume their experiments from a saved state. When an experiment runs,
-  it creates a new directory for that run and saves the current state to a
-  checkpoint file. If the experiment is interrupted or fails, users can resume
+  it creates a new directory for that run and saves its progress to checkpoint
+  files. If the experiment is interrupted or fails, users can resume
   it by specifying the 'id' or 'warm_start_from' argument (shown above) to
   seamlessly continue from previously saved state without starting over.
 
@@ -169,7 +169,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
 
   # Experiment Plugins
 
-  Experiment can be extended by plugins. Plugins can listen to the events of
+  Experiments can be extended by plugins. Plugins can listen to the events of
   experiment execution and produce additional outputs. For example, a plugin
   can be added to an experiment to generate additional metrics or to save
   additional data to a database. More details will be added in the future.
@@ -657,7 +657,30 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
 
 @pg.use_init_args(['children'])
 class Suite(Experiment):
-  """A suite of evaluations."""
+  """A suite of evaluations.
+
+  `lf.eval.Suite` groups multiple `lf.eval.Evaluation` or other `Suite`
+  objects into a single experiment, allowing them to be run, managed, and
+  reported together.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  suite = lf.eval.Suite([
+      MyEval(lm=lf.llms.Gpt4()),
+      MyEval(lm=lf.llms.Gemini()),
+      lf.eval.Suite([
+          AnotherEval(lm=lf.llms.Gpt4()),
+          AnotherEval(lm=lf.llms.Gemini())
+      ])
+  ])
+
+  # Run all evaluations in the suite
+  run_info = suite.run('/path/to/my/suite_run')
+  ```
+  """
 
   children: Annotated[
       list[Experiment], 'A list of child experiments.'
@@ -791,7 +814,14 @@ class RunId(pg.Object):
 
 
 class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
-  """A run of an experiment."""
+  """Represents a single run of an experiment.
+
+  A `Run` object holds all the configurations for executing an experiment,
+  such as the experiment definition, input/output directories, and flags
+  controlling the execution behavior (e.g., error handling, checkpointing).
+  It also provides utility methods for accessing run-specific paths and
+  filtering examples for evaluation.
+  """
 
   root_dir: Annotated[
       str,
@@ -971,7 +1001,13 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
 
 class Runner(pg.Object):
-  """Interface for experiment runner."""
+  """Interface for experiment runner.
+
+  A runner is responsible for executing the evaluations within an experiment
+  based on the configuration specified in a `Run` object. Different runners
+  can implement different execution strategies, such as sequential or parallel
+  processing of examples and evaluations.
+  """
 
   # Class-level variable for registering the runner.
   NAME = None
@@ -1010,7 +1046,14 @@ class Runner(pg.Object):
 
 
 class Plugin(lf.Component):
-  """Base class for experiment plugins."""
+  """Base class for experiment plugins.
+
+  Plugins provide a mechanism to extend the behavior of an experiment run
+  by hooking into various events during the lifecycle of experiment and
+  example execution, such as `on_run_start`, `on_experiment_complete`,
+  `on_example_start`, etc. They can be used for custom logging, monitoring,
+  or result processing.
+  """
 
   def on_run_start(
       self,

@@ -18,7 +18,27 @@ from langfun.core.modalities import mime
 
 
 class Audio(mime.Mime):
-  """Audio."""
+  """Represents audio for communicating with language models.
+
+  `lf.Audio` can be initialized from a URI (HTTP/HTTPS URL or local path)
+  using `lf.Audio.from_uri()` or from raw bytes using `lf.Audio.from_bytes()`.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Load audio from path
+  audio = lf.Audio.from_path('/path/to/audio.mp3')
+
+  # Use audio in a prompt
+  prompt = lf.Template(
+      'What is being said in this audio? {{audio}}', audio=audio
+  )
+  response = lf.query(prompt, lm=lf.llms.Gemini25Flash())
+  print(response)
+  ```
+  """
 
   MIME_PREFIX = 'audio'
 

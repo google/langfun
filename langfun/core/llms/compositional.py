@@ -21,7 +21,31 @@ import pyglove as pg
 
 @pg.use_init_args(['candidates', 'seed'])
 class RandomChoice(lf.LanguageModel):
-  """Random choice of a list of LLM models."""
+  """A composite language model that randomly selects from a list of candidates.
+
+  `RandomChoice` acts as a proxy that forwards each request (`sample`, `score`,
+  `tokenize`, or `__call__`) to one of the `candidates` selected randomly.
+  This can be useful for load balancing across multiple LLM endpoints,
+  for A/B testing different models, or for ensembling model outputs
+  by calling it multiple times.
+
+  The selection is determined by the provided `seed`, ensuring reproducibility
+  if needed.
+
+  Example:
+
+  ```python
+  import langfun as lf
+
+  lm = lf.llms.RandomChoice([
+      lf.llms.GeminiPro(),
+      lf.llms.GPT4(),
+  ])
+
+  # This call will be handled by either GeminiPro or GPT4, chosen randomly.
+  r = lm.sample('hello')
+  ```
+  """
 
   candidates: Annotated[
       list[lf.LanguageModel],

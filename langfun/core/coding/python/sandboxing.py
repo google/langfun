@@ -23,7 +23,14 @@ import pyglove as pg
 
 
 class SandboxOutput(pg.Object):
-  """Sandbox output."""
+  """A structure containing the output from a sandbox execution.
+
+  Attributes:
+    stdout: The standard output captured during execution.
+    stderr: The standard error captured during execution.
+    output_files: A dictionary of file names to their byte content for files
+      generated during execution.
+  """
 
   stdout: Annotated[
       str,
@@ -42,7 +49,14 @@ class SandboxOutput(pg.Object):
 
 
 class BaseSandbox(pg.Object):
-  """Interface and partial implementation for Python sandbox."""
+  """Base class for Python code sandboxing.
+
+  A sandbox provides an isolated environment for executing Python code,
+  typically with restrictions on file system access, network calls, or other
+  potentially harmful operations. This base class defines the interface for
+  sandboxes, including methods for running code (`run`), uploading files
+  (`upload`), and managing the sandbox lifecycle (`setup`, `cleanup`).
+  """
 
   def _on_bound(self):
     super()._on_bound()
@@ -111,7 +125,13 @@ class BaseSandbox(pg.Object):
 
 
 class MultiProcessingSandbox(BaseSandbox):
-  """Sandbox using multiprocessing."""
+  """A sandbox implementation using Python's `multiprocessing`.
+
+  This sandbox executes code in a separate process, providing isolation from
+  the main process. It uses a temporary directory for file operations,
+  which is cleaned up when the sandbox is closed. It relies on
+  `pg.coding.run` with `sandbox=True` for execution.
+  """
 
   def _on_bound(self):
     super()._on_bound()

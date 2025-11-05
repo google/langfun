@@ -38,7 +38,7 @@ class Matching(base.Evaluation):
 
   @abc.abstractmethod
   def answer(self, output: Any, example: Any) -> Any:
-    """Returns the answer from the structure output."""
+    """Returns the answer from the structured output."""
 
   @property
   def matches(self) -> list[tuple[int, Any, Any, lf.Message]]:
@@ -52,6 +52,7 @@ class Matching(base.Evaluation):
 
   @property
   def match_rate(self) -> float:
+    """Returns the match rate."""
     if self.num_completed == 0:
       return 0.0
     return self.num_matches / self.num_completed
@@ -68,17 +69,19 @@ class Matching(base.Evaluation):
 
   @property
   def mismatch_rate(self) -> float:
+    """Returns the mismatch rate."""
     if self.num_completed == 0:
       return 0.0
     return self.num_mismatches / self.num_completed
 
   @property
   def matches_link(self) -> str:
-    """Returns the matches page."""
+    """Returns the link to the matches page."""
     return self.link(os.path.join(self.dir, Matching.MATCHES_HTML))
 
   @property
   def mismatches_link(self) -> str:
+    """Returns the link to the mismatches page."""
     return self.link(os.path.join(self.dir, Matching.MISMATCHES_HTML))
 
   def _reset(self) -> None:

@@ -36,7 +36,12 @@ class ActionTimeoutError(ActionError):
 
 
 class Action(pg.Object):
-  """Base class for Langfun's agentic actions.
+  """Base class for agentic actions.
+
+  An `Action` represents a single, executable step or task that an agent can
+  perform, such as calling a tool, querying a language model, or returning a
+  final answer. Actions are designed to be composable and trackable within a
+  `Session`.
 
   # Developing Actions
 
@@ -149,7 +154,7 @@ class Action(pg.Object):
 
   # Explicitly create and pass a session.
   with lf.Session(id='my_agent_session') as session:
-    result = calc(session=session) # Pass the session explicitly
+    result = calc(session=session)  # Pass the session explicitly
     print(result)
   ```
 
@@ -320,7 +325,14 @@ TracedItem = Union[
 
 
 class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
-  """Trace of the execution of an action."""
+  """Trace of an execution, containing queries, logs, and sub-actions.
+
+  `ExecutionTrace` records the sequence of operations performed during an
+  action's execution or within a specific phase of execution (demarcated by
+  `session.track_phase`). It captures `lf.query` calls, log entries, and
+  nested `ActionInvocation` objects in the order they occurred. It also
+  aggregates LLM usage summaries from its child items.
+  """
 
   name: Annotated[
       str | None,
@@ -328,7 +340,7 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           'The name of the execution trace. If None, the trace is unnamed, '
           'which is the case for the top-level trace of an action. An '
           'execution trace could have sub-traces, called phases, which are '
-          'created and named by `session.phase()` context manager.'
+          'created and named by `session.track_phase()` context manager.'
       )
   ] = None
 
@@ -362,7 +374,7 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     self.__dict__.pop('id', None)
 
   def indexof(self, item: TracedItem, count_item_cls: Type[Any]) -> int:
-    """Returns the index of the child items of given type."""
+    """Returns the index of the child item of given type."""
     pos = 0
     for x in self._iter_children(count_item_cls):
       if x is item:
@@ -787,7 +799,12 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
 
 class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
-  """A class for encapsulating parallel execution traces."""
+  """A container for multiple parallel execution traces.
+
+  When `session.concurrent_map` is used, it creates a `ParallelExecutions`
+  object to hold an `ExecutionTrace` for each parallel branch of execution,
+  allowing inspection of parallel workflows.
+  """
 
   name: Annotated[
       str | None,
@@ -876,7 +893,14 @@ class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
 
 class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
-  """A class for capturing the invocation of an action."""
+  """An invocation of an action, capturing its execution and result.
+
+  `ActionInvocation` represents a single call to an `Action`. It contains
+  the `Action` object itself, its result or error, associated metadata,
+  and an `ExecutionTrace` detailing the steps taken during its execution
+  (queries, logs, sub-actions). Invocations form a tree structure within a
+  `Session`, reflecting the hierarchy of agentic operations.
+  """
 
   action: Annotated[
       Action,
@@ -1406,7 +1430,50 @@ class SessionLogging(SessionEventHandler):
 
 
 class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
-  """Session for performing an agentic task."""
+  """Manages the execution trajectory of agentic actions.
+
+  A `Session` tracks the execution of a root `Action` and all its
+  sub-actions, including LLM queries (`lf.query`), logging messages,
+  and nested actions. It provides a complete, hierarchical trace of an
+  agent's workflow, which is important for debugging, analysis, and
+  visualization.
+
+  Sessions can be created implicitly when an action is called without an
+  active session, or explicitly for more control.
+
+  **1. Implicit Session:**
+  When an action is called without a session, Langfun creates one automatically.
+
+  ```python
+  action = MyAction()
+  action()
+  session = action.session  # Access the implicit session
+  ```
+
+  **2. Explicit Session:**
+  Use a `with` statement to manage a session explicitly. This is useful for
+  setting session IDs or capturing the trajectory of multiple top-level actions.
+
+  ```python
+  with lf.Session(id='my-session') as session:
+    action1()
+    action2()
+  ```
+
+  **3. Accessing Trajectory:**
+  The `session.root` attribute provides access to the `ActionInvocation` tree.
+
+  ```python
+  with lf.Session() as session:
+    my_action()
+
+  # Get all queries in the session
+  print(session.all_queries)
+
+  # Get all top-level action calls in the session
+  print(session.root.actions)
+  ```
+  """
 
   root: Annotated[
       ActionInvocation,
@@ -1559,7 +1626,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
 
   def update_progress(self, title: str, **kwargs: Any) -> None:
-    """Update the progress of current action's execution.
+    """Updates the progress of current action's execution.
 
     Args:
       title: The title of the progress update.

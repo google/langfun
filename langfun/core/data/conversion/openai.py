@@ -20,9 +20,14 @@ from langfun.core import modalities as lf_modalities
 
 
 class OpenAIChatCompletionAPIMessageConverter(lf.MessageConverter):
-  """Converter to OpenAI ChatCompletion API.
+  """Converter for OpenAI Chat Completion API.
 
-  See https://platform.openai.com/docs/api-reference/chat
+  This converter translates `lf.Message` objects into the JSON format
+  required by the OpenAI Chat Completions API
+  (https://platform.openai.com/docs/api-reference/chat) and vice versa.
+  It handles text and image modalities, mapping Langfun roles to OpenAI
+  roles ('system', 'user', 'assistant'). An optional `chunk_preprocessor`
+  can be provided to modify or filter chunks before conversion.
   """
 
   FORMAT_ID = 'openai_chat_completion_api'
@@ -32,7 +37,7 @@ class OpenAIChatCompletionAPIMessageConverter(lf.MessageConverter):
       (
           'Chunk preprocessor for Langfun chunk to OpenAI chunk conversion. '
           'It will be applied before each Langfun chunk is converted. '
-          'If returns None, the chunk will be skipped.'
+          'If it returns None, the chunk will be skipped.'
       )
   ] = None
 
@@ -159,9 +164,14 @@ lf.Message.from_openai_chat_completion_api_format = (
 class OpenAIResponsesAPIMessageConverter(
     OpenAIChatCompletionAPIMessageConverter
 ):
-  """Converter to OpenAI Responses API.
+  """Converter for OpenAI Responses API.
 
-  See https://platform.openai.com/docs/api-reference/responses/create
+  This converter translates `lf.Message` objects into the JSON format
+  required by the OpenAI Responses API
+  (https://platform.openai.com/docs/api-reference/responses/create),
+  which is used for human-in-the-loop rating, and vice versa.
+  It extends `OpenAIChatCompletionAPIMessageConverter` but uses different
+  type names for content chunks (e.g., 'input_text', 'output_image').
   """
 
   FORMAT_ID = 'openai_responses_api'

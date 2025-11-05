@@ -32,15 +32,49 @@ class Message(
     pg.Object,
     pg.views.HtmlTreeView.Extension
 ):
-  """Message.
+  """Message between users, LLMs and tools.
 
-  ``Message`` is the protocol for users and the system to interact with
-  LLMs. It consists of a text in the form of natural language, 
-  an identifier of the sender, and a dictionary of Python values as structured
-  meta-data.
+  `lf.Message` is the fundamental unit of communication in Langfun. It
+  standardizes interactions with LLMs by encapsulating not only text but also
+  multi-modal content, as well as the sender's role and structured metadata.
 
-  The subclasses of ``Message`` represent messages sent from different roles.
-  Agents may use the roles to decide the orchastration logic.
+  **Key Components:**
+
+  *   **`text`**: The natural language content of the message.
+  *   **`sender`**: An identifier for the message originator (e.g., 'User',
+    'AI', 'System').
+  *   **`metadata`**: A dictionary for structured data, such as tool inputs/
+    outputs, scores, or other contextual information.
+  *   **`referred_modalities`**: A dictionary of modality objects (e.g.,
+    `lf.Image`, `lf.Audio`) referenced within the message text via placeholders
+    like `<<[[image_id]]>>`.
+
+  Subclasses like `lf.UserMessage`, `lf.AIMessage`, and `lf.ToolMessage`
+  represent messages from specific roles, enabling more complex conversational
+  flows and agentic behaviors.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Creating a user message with an image
+  image = lf.Image.from_path('/path/to/image.png')
+  user_message = lf.UserMessage(
+      f'What is in this image <<[[{image.id}]]>>?',
+      referred_modalities=[image])
+
+  # Creating an AI message with structured results
+  ai_message = lf.AIMessage(
+      'It is a cat.',
+      metadata=dict(result=dict(label='cat', confidence=0.9)))
+
+  print(user_message.chunk())
+  # Output: ['What is in this image', <lf.Image object>, '?']
+
+  print(ai_message.result)
+  # Output: {'label': 'cat', 'confidence': 0.9}
+  ```
   """
 
   #
@@ -417,7 +451,7 @@ class Message(
       var_name: str,
       default: Any = None
   ) -> modality.Modality | None:
-    """Gets the modality object referred in the message.
+    """Returns modality object referred in the message by its variable name.
 
     Args:
       var_name: The referred variable name for the modality object.
@@ -429,7 +463,14 @@ class Message(
     return self.referred_modalities.get(var_name, default)
 
   def chunk(self, text: str | None = None) -> list[str | modality.Modality]:
-    """Chunk a message into a list of str or modality objects."""
+    """Chunks message into a list of text and modality chunks.
+
+    Args:
+      text: The text to chunk. If None, use `self.text`.
+
+    Returns:
+      A list of text and modality chunks.
+    """
     chunks = []
 
     def add_text_chunk(text_piece: str) -> None:
@@ -469,7 +510,7 @@ class Message(
   def from_chunks(
       cls, chunks: list[str | modality.Modality], separator: str = ' '
   ) -> 'Message':
-    """Assembly a message from a list of string or modality objects."""
+    """Assembles a message from a list of string or modality objects."""
     fused_text = io.StringIO()
     metadata = dict()
     referred_modalities = dict()
@@ -559,7 +600,7 @@ class Message(
     return self.trace(Message.TAG_LM_OUTPUT)
 
   def last(self, tag: str) -> Optional['Message']:
-    """Return the last message wih certain tag."""
+    """Returns the last message with a given tag."""
     current = self
     while current is not None:
       if tag in current.tags:

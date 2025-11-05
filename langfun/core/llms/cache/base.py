@@ -22,13 +22,33 @@ import langfun.core as lf
 
 @dataclasses.dataclass(frozen=True)
 class LMCacheEntry:
-  """LM cache entry."""
+  """Represents a single entry in the language model cache.
+
+  An `LMCacheEntry` stores the result of a language model sampling operation
+  and an optional expiration timestamp.
+  """
   result: lf.LMSamplingResult
   expire: datetime.datetime | None = None
 
 
 class LMCacheBase(lf.LMCache):
-  """The common LMCache base."""
+  """Base class for language model cache implementations.
+
+  `LMCacheBase` provides the core logic for a key-value based cache,
+  handling key generation, expiration (TTL), and statistics tracking.
+  Subclasses must implement the abstract methods `_get`, `_put`, and `_delete`
+  to provide the specific storage mechanism (e.g., in-memory, file-based).
+
+  **Key Features:**
+
+  *   **Customizable Keying**: Allows specifying a custom function to generate
+      cache keys based on the language model, prompt, and seed. If not provided,
+      a default key based on prompt text, sampling options, and seed is used.
+  *   **Time-to-Live (TTL)**: Supports setting an expiration time for cache
+      entries, after which they are considered invalid and removed upon access.
+  *   **Cache Statistics**: Tracks metrics like hits, misses, updates,
+      deletions, and expired hits through the `stats` property.
+  """
 
   key: Annotated[
       Callable[[lf.LanguageModel, lf.Message, int], Any] | None,

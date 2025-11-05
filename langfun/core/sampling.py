@@ -38,10 +38,10 @@ def sweep(
         Union[message_lib.Message, BaseException, None],  # LM output.
     ],
 ]:
-  """Sweeps the input/output of this LangFunc concurrently.
+  """Sweeps the input/output of a LangFunc search space concurrently.
 
   Args:
-    lfun: An LangFunc object that contains `pg.oneof` as the search space 
+    lfun: An LangFunc object that contains `pg.oneof` as the search space
       for sampling.
     num_examples: Number of examples to sample.
     max_workers: Max number of concurrent workers to do sampling.
@@ -84,10 +84,10 @@ def random_sample(
         Union[message_lib.Message, BaseException, None],  # LM output.
     ],
 ]:
-  """Random samples the input/output of this LangFunc concurrently.
+  """Random samples the input/output of a LangFunc search space concurrently.
 
   Args:
-    lfun: An LangFunc object that contains `pg.oneof` as the search space 
+    lfun: An LangFunc object that contains `pg.oneof` as the search space
       for sampling.
     num_examples: Number of examples to sample.
     max_workers: Max number of concurrent workers to do sampling.

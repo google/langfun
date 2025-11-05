@@ -22,9 +22,13 @@ import pyglove as pg
 
 
 class PythonCode(pg.Object):
-  """Symbolic class for Python code.
+  """Represents a piece of Python code that can be executed.
 
-  The value of the last expression of the source will be the returned value.
+  When `PythonCode` is instantiated within a `PythonCode.auto_run()` context,
+  it automatically executes the code and returns the result of the last
+  expression. Otherwise, it acts as a container for the source code, which
+  can be executed by calling the instance. The class also supports automatic
+  error correction via `lf.coding.run_with_correction` when called.
   """
 
   source: Annotated[
@@ -56,7 +60,7 @@ class PythonCode(pg.Object):
         Otherwise, auto call will be disabled.
       sandbox: If True, run code in sandbox; If False, run code in current
         process. If None, run in sandbox first, if the output could not be
-        serialized and pass to current process, run the code again in current
+        serialized and passed to current process, run the code again in current
         process. Applicable when `enabled` is set to True.
       timeout: Timeout in seconds. Applicable when both `enabled` and `sandbox`
         are set to True.
@@ -98,17 +102,17 @@ class PythonCode(pg.Object):
     Args:
       sandbox: If True, run code in sandbox; If False, run code in current
         process. If None, run in sandbox first, if the output could not be
-        serialized and pass to current process, run the code again in current
+        serialized and passed to current process, run the code again in current
         process.
       timeout: Timeout in seconds. If None, there is no timeout. Applicable when
         sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
-      returns_stdout: If True, the stdout (a str) will be returned.
+      returns_stdout: If True, the stdout (a string) will be returned.
       outputs_intermediate: Applicable when returns_stdout is False. If True,
-        intermediate output will be outputted as a dict, with the last line's
-        value accessible by key '__result__' and the std output accessible by 
+        intermediate output will be output as a dict, with the last line's
+        value accessible by key '__result__' and the stdout accessible by
         key '__stdout__'. Otherwise the value of the last line will be returned.
-      autofix: Number of attempts to auto fix the generated code. If 0, autofix
+      autofix: Number of attempts to autofix the generated code. If 0, autofix
         is disabled.
       autofix_lm: Language model to be used. If not specified, it will try to
         use the `lm` under `lf.context`.
@@ -117,8 +121,8 @@ class PythonCode(pg.Object):
       The value of the last expression in the source code. Or a dict of local
       variable names defined in the source code to their values if
       `outputs_intermediate` is set to True. The value for the last line can be
-      accessed by key '__result__'. Or the stdout as a str if `returns_stdout`
-      is set to True.
+      accessed by key '__result__'. Or the stdout as a string if
+      `returns_stdout` is set to True.
 
     Raises:
       TimeoutError: If `sandbox` is True and timeout has reached.
@@ -152,12 +156,12 @@ class PythonCode(pg.Object):
     Args:
       sandbox: If True, run code in sandbox; If False, run code in current
         process. If None, run in sandbox first, if the output could not be
-        serialized and pass to current process, run the code again in current
+        serialized and passed to current process, run the code again in current
         process.
       timeout: Timeout in seconds. If None, there is no timeout. Applicable when
         sandbox is set to True.
       global_vars: Global variables that could be accessed from the source code.
-      autofix: Number of attempts to auto fix the generated code. If 0, autofix
+      autofix: Number of attempts to autofix the generated code. If 0, autofix
         is disabled. Auto-fix is not supported for 'json' protocol.
       autofix_lm: Language model to be used. If not specified, it will try to
         use the `lm` under `lf.context`.
@@ -182,10 +186,11 @@ class PythonCode(pg.Object):
 
 
 class PythonFunction(pg.Object):
-  """Generated Python function via source code.
+  """Represents a Python function defined by source code.
 
-  The source code will be directly passed into eval() for execution and the
-  output of the function will be returned.
+  This class takes Python source code that defines a function and makes it
+  callable. The source code is evaluated to create a function object, which
+  can then be invoked like a regular Python function.
   """
 
   name: str
@@ -214,7 +219,7 @@ class PythonFunction(pg.Object):
       *args: Positional arguments that will be passed to the implementation.
       sandbox: If True, run code in sandbox; If False, run code in current
         process. If None, run in sandbox first, if the output could not be
-        serialized and pass to current process, run the code again in current
+        serialized and passed to current process, run the code again in current
         process.
       timeout: Timeout in seconds. If None, there is no timeout. Applicable when
         sandbox is set to True.

@@ -20,7 +20,38 @@ import langfun.core as lf
 
 
 class Fake(lf.LanguageModel):
-  """The base class for all fake language models."""
+  """Base class for fake language models, used for testing.
+
+  Fake models simulate the behavior of real language models but return
+  pre-defined responses, making them useful for testing prompts,
+  data processing logic, and agent behavior without incurring API costs
+  or relying on external services.
+
+  Langfun provides several fake models:
+  * `lf.llms.Echo`: Echoes the prompt back as the response.
+  * `lf.llms.StaticResponse`: Returns a fixed, pre-defined response for
+    any prompt.
+  * `lf.llms.StaticMapping`: Returns responses based on a prompt-to-response
+    dictionary.
+  * `lf.llms.StaticSequence`: Returns responses from a pre-defined sequence
+    in order.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Use Echo model for testing
+  lm = lf.llms.Echo()
+  response = lm('hello')
+  assert response.text == 'hello'
+
+  # Use StaticResponse model
+  lm = lf.llms.StaticResponse('world')
+  response = lm('hello')
+  assert response.text == 'world'
+  ```
+  """
 
   def _score(self, prompt: lf.Message| list[lf.Message],
              completions: list[lf.Message]):

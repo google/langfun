@@ -94,7 +94,35 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 # Reference: https://api-docs.deepseek.com/
 @lf.use_init_args(['model'])
 class DeepSeek(openai_compatible.OpenAIChatCompletionAPI):
-  """DeepSeek model."""
+  """DeepSeek models.
+
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call DeepSeek-V3 using API key from environment variable
+  # 'DEEPSEEK_API_KEY'.
+  lm = lf.llms.DeepSeekV3()
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The DeepSeek API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.DeepSeekV3(api_key='MY_API_KEY')
+     ```
+  2. via environment variable `DEEPSEEK_API_KEY`.
+
+  **References:**
+
+  *   https://api-docs.deepseek.com/
+  """
 
   model: pg.typing.Annotated[
       pg.typing.Enum(

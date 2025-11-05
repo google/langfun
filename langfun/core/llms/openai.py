@@ -1032,7 +1032,35 @@ _SUPPORTED_MODELS_BY_MODEL_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 @lf.use_init_args(['model'])
 class OpenAI(openai_compatible.OpenAIResponsesAPI):
-  """OpenAI model."""
+  """OpenAI models.
+
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call GPT-4o using API key from environment variable 'OPENAI_API_KEY'.
+  lm = lf.llms.Gpt4o()
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The OpenAI API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.Gpt4o(api_key='MY_API_KEY')
+     ```
+  2. via environment variable `OPENAI_API_KEY`.
+
+  **References:**
+
+  *   https://platform.openai.com/docs/models
+  *   https://platform.openai.com/docs/api-reference
+  """
 
   model: pg.typing.Annotated[
       pg.typing.Enum(

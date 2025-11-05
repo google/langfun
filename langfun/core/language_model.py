@@ -478,7 +478,7 @@ class UsageNotAvailable(LMSamplingUsage):
 
 
 class LMSamplingResult(pg.Object):
-  """Language model response."""
+  """The result from a language model sampling."""
 
   samples: Annotated[
       list[LMSample],
@@ -681,13 +681,91 @@ class LMDebugMode(enum.IntFlag):
 
 
 class LanguageModel(component.Component):
-  """Interface of a language model.
+  """Interface for language model.
 
-  Language models are at the center of LLM-based agents. ``LanguageModel``
-  is the interface to interact with different language modles.
+  `lf.LanguageModel` is the cornerstone of Langfun, providing a consistent
+  interface for interacting with various language models, such as those from
+  Google, OpenAI, Anthropic, and more. It abstracts away provider-specific
+  details, allowing users to switch between models seamlessly.
 
-  In langfun, users can use different language models with the same agents,
-  allowing fast prototype, as well as side-by-side comparisons.
+  All language models in Langfun can be accessed via `lf.llms`. For example,
+  `lf.llms.Gpt4()` creates an instance for OpenAI's GPT-4, and
+  `lf.llms.GeminiPro()` creates an instance for Google's Gemini Pro.
+
+  **Key Features:**
+
+  *   **Unified API**: Provides `sample`, `score`, and `tokenize` methods
+      across all supported models.
+  *   **Sampling**: The `__call__` method and `sample` method allow generating
+      text completions or chat responses.
+  *   **Scoring**: The `score` method computes the likelihood of completions
+      given a prompt.
+  *   **Tokenization**: The `tokenize` method breaks text into tokens
+      according to the model's tokenizer.
+  *   **Caching**: Built-in support for caching LLM requests to save cost and
+      time via the `cache` attribute.
+  *   **Concurrency**: Manages concurrency to respect API rate limits via
+      `max_concurrency`.
+  *   **Retries**: Automatic retries with exponential backoff for transient
+      errors via `max_attempts` and `retry_interval`.
+
+  **1. Creating a Language Model:**
+  You can create a language model by instantiating its class or by using
+  `lf.LanguageModel.get`:
+
+  ```python
+  # Direct instantiation
+  gpt4 = lf.llms.Gpt4()
+  gemini = lf.llms.GeminiPro()
+
+  # Creation via lf.LanguageModel.get()
+  gpt4 = lf.LanguageModel.get('gpt-4')
+  ```
+
+  **2. Customizing Sampling Options:**
+  Sampling options like `temperature`, `max_tokens`, etc., can be customized
+  at model creation, or overridden at call time or via `lf.context`.
+
+  ```python
+  # Set temperature to 0 at model creation
+  lm = lf.llms.Gpt4(temperature=0.0)
+
+  # Override temperature to 0.5 for a single call
+  response = lm('1 + 1 =', temperature=0.5)
+
+  # Override temperature to 1.0 using lf.context
+  with lf.context(temperature=1.0):
+    response = lm('1 + 1 =')
+  ```
+
+  **3. Sampling:**
+  Use `lm()`, `lm.sample()`, or `lf.query()` to generate text:
+
+  ```python
+  lm = lf.llms.Gpt4()
+  response = lm('1 + 1 =')
+  print(response.text)
+  # Output: 2
+  ```
+
+  **4. Scoring:**
+  Use `lm.score()` to score completions:
+
+  ```python
+  lm = lf.llms.Gpt4()
+  results = lm.score('Weather in SF is', completions=['sunny', 'cloudy'])
+  print(results[0].score)
+  # Output: -1.0
+  ```
+
+  **5. Tokenization:**
+  Use `lm.tokenize()` to get tokens:
+  ```python
+  lm = lf.llms.Gpt4()
+  tokens = lm.tokenize('hello world')
+  print(tokens)
+  # Output: [('hello', 15339), (' world', 1917)]
+  ```
   """
 
   sampling_options: LMSamplingOptions = LMSamplingOptions()
@@ -1448,7 +1526,7 @@ class LanguageModel(component.Component):
       max_requests_per_minute: int | None,
       average_tokens_per_request: int = 250
   ) -> int | None:
-    """Estimates max concurrency concurrency based on the rate limits."""
+    """Estimates max concurrency based on the rate limits."""
     # NOTE(daiyip): max concurrency is estimated based on the rate limit.
     # We assume each request has approximately 250 tokens, and each request
     # takes 1 second to complete. This might not be accurate for all models.
@@ -1521,7 +1599,7 @@ class _ConcurrencyControl:
 
 
 class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
-  """Usage sumary."""
+  """Usage summary."""
 
   class AggregatedUsage(pg.Object):
     """Aggregated usage."""

@@ -29,7 +29,17 @@ Runner = experiment_lib.Runner
 
 
 class Checkpointer(experiment_lib.Plugin):
-  """Base class for checkpointing evaluation examples."""
+  """Base class for checkpointing evaluation examples.
+
+  `Checkpointer` is a plugin that saves the state of processed examples
+  incrementally during an experiment run, allowing the experiment to be resumed
+  later. When an experiment starts, the checkpointer loads any previously saved
+  examples from an earlier run (or a warm-start run) into `experiment.state`,
+  so the runner can skip processing them again.
+  Subclasses should implement `_list_checkpoint_filenames` to identify
+  checkpoint files to load, and `_save_example` to save a newly processed
+  example.
+  """
 
   checkpoint_filename: Annotated[
       str,
@@ -170,7 +180,12 @@ class Checkpointer(experiment_lib.Plugin):
 
 
 class PerExampleCheckpointer(Checkpointer):
-  """Checkpointer that saves each example to a separate file."""
+  """Checkpointer that saves each example to a separate file.
+
+  This checkpointer saves each processed example to its own checkpoint file,
+  named using the pattern `<checkpoint_filename_prefix>_<example_id>.<ext>`.
+  For example, `checkpoint_1.bagz`, `checkpoint_2.bagz`, etc.
+  """
 
   def _on_bound(self):
     super()._on_bound()
@@ -235,7 +250,13 @@ class PerExampleCheckpointer(Checkpointer):
 
 
 class BulkCheckpointer(Checkpointer):
-  """Checkpointer that saves all examples to a single file."""
+  """Checkpointer that saves all examples of an evaluation to a single file.
+
+  This checkpointer appends newly processed examples of an evaluation to a
+  single sequence file (e.g., `checkpoint.bagz`). This is often more efficient
+  than `PerExampleCheckpointer` when dealing with a large number of examples
+  or when file system overhead is a concern.
+  """
 
   def _on_bound(self):
     super()._on_bound()
@@ -341,7 +362,12 @@ class BulkCheckpointer(Checkpointer):
 
 
 class SequenceWriter:
-  """Thread safe sequence writer."""
+  """A thread-safe writer for sequence files (e.g., Bagz).
+
+  `SequenceWriter` wraps a `pg.io.SequenceWriter` to provide thread-safe
+  `add` and `close` operations, ensuring that examples can be written
+  concurrently from multiple threads without corrupting the sequence file.
+  """
 
   def __init__(self, path: str):
     self._lock = threading.Lock()

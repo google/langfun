@@ -24,7 +24,14 @@ import pyglove as pg
 
 
 class ActionEval(lf.eval.v2.Evaluation):
-  """Agent evaluation."""
+  """Evaluation for agentic actions.
+
+  `ActionEval` is a specialized evaluation class for executing and evaluating
+  agentic actions based on provided inputs. Each input example is expected to
+  contain an `action` attribute. The `process` method executes the action
+  within a dedicated `Session`, captures the final result, and returns it
+  along with the session details in the metadata.
+  """
 
   action_args: Annotated[
       dict[str, Any],
@@ -68,7 +75,7 @@ class ExampleView(pg.Object):
 class ActionEvalV1(lf_eval.Matching):
   """Base class for action evaluations.
 
-  The input function should returns a list of pg.Dict, with `action` and
+  The input function should return a list of pg.Dict, with `action` and
   `groundtruth` fields.
   """
   # We override the schema and prompt to dummy values since they are not used.

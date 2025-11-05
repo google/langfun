@@ -41,18 +41,19 @@ class Scoring(base.Evaluation):
 
   @property
   def score_rate(self) -> float:
-    """Returns the score rate."""
+    """Returns the rate of scored examples among the completed ones."""
     if self.num_completed == 0:
       return 0.0
     return self.num_scored / self.num_completed
 
   @property
   def scored_link(self) -> str:
-    """Returns the matches page."""
+    """Returns the scored examples page."""
     return self.link(os.path.join(self.dir, Scoring.SCORED_HTML))
 
   @property
   def avg_score(self) -> float:
+    """Returns the average score of scored examples."""
     if self.num_scored == 0:
       return 0
     return sum([i[2] for i in self._scored]) / self.num_scored
@@ -181,7 +182,7 @@ class Scoring(base.Evaluation):
     super()._render_summary_metrics(s)
 
   def _render_scored(self, s: io.StringIO) -> None:
-    """Formats the matched cases into html."""
+    """Formats the scored cases into html."""
     s.write('<h2> Scored </h2>')
     s.write('<div style="white-space:pre">\n')
     s.write(

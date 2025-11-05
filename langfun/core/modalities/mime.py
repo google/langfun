@@ -37,7 +37,33 @@ def _detect_mime_type(content: bytes) -> str:
 
 
 class Mime(lf.Modality):
-  """Base for MIME data."""
+  """Base class for representing modality data based on MIME types.
+
+  `lf.Mime` is a subclass of `lf.Modality` that serves as a base for
+  handling various data types like images, audio, video, and PDFs,
+  identified by their MIME types. It provides unified methods for
+  loading data from URIs or bytes (`.from_uri()`, `.from_bytes()`) and
+  for accessing content (`.to_bytes()`).
+
+  Subclasses like `lf.Image`, `lf.Audio`, `lf.Video`, and `lf.PDF`
+  specialize in handling specific MIME type prefixes (e.g., 'image/', 'audio/').
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Load an image from a path
+  image = lf.Image.from_path('/path/to/image.png')
+  print(image.mime_type)
+  # Output: image/png
+
+  # Create a text document
+  text = lf.Custom.from_bytes(b'hello world', mime='text/plain')
+  print(text.mime_type)
+  # Output: text/plain
+  ```
+  """
 
   # The regular expression that describes the MIME type str.
   # If None, the MIME type is dynamic. Subclass could override.
@@ -288,7 +314,24 @@ class Mime(lf.Modality):
 
 @pg.use_init_args(['mime', 'content', 'uri'])
 class Custom(Mime):
-  """Custom MIME data."""
+  """Represents content of a custom MIME type.
+
+  `lf.modalities.Custom` is useful for representing data with MIME types
+  that do not have dedicated classes like `lf.Image` or `lf.Audio`.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Create a custom MIME object for plain text
+  text_data = lf.Custom.from_bytes(
+      b'This is a text document.', mime='text/plain'
+  )
+  print(text_data.mime_type)
+  # Output: text/plain
+  ```
+  """
 
   mime: Annotated[
       str, 'The MIME type of the data. E.g. text/plain, or image/png. '

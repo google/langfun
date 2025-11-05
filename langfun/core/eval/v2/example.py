@@ -22,19 +22,30 @@ import pyglove as pg
 
 @dataclasses.dataclass
 class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
-  """An item for the evaluation.
+  """An example for evaluation.
+
+  An evaluation example contains the input and output of an evaluation task,
+  as well as metadata about the evaluation process, such as execution time,
+  LLM usage, and metric results.
 
   Attributes:
-    id: The 1-based ID of the item in the evaluation set.
-    input: An element returned from the `Evaluable.inputs` functor.
-    output: The output of the `process` method. If `pg.MISSING_VALUE`, it has
-      not been processed yet.
-    metadata: The metadata of the item produced by the `process` method.
-    metric_metadata: The dictionary returned from `Metric.audit`.
-    start_time: The start time of the evaluation item.
-    end_time: The end time of the evaluation item.
-    usage_summary: The summary of LLM usages of the evaluation item.
-    execution_status: The timeit status of the evaluation item.
+    id: The 1-based ID of the example in the evaluation set.
+    input: An element returned from the `Evaluable.inputs` functor, which serves
+      as the input for `lf.Evaluable.process`.
+    output: The output of `lf.Evaluable.process` method. If `pg.MISSING_VALUE`,
+      it indicates the example has not been processed yet.
+    error: The error encountered during `lf.Evaluable.process`. If None, it
+      indicates the process was successful.
+    metadata: The metadata of the example produced by `lf.Evaluable.process`.
+    metric_metadata: The dictionary returned from `Metric.audit`, which contains
+      metadata about metric computation for this example.
+    newly_processed: Whether this example is processed in the current run. If
+      False, it indicates the example was loaded from a checkpoint from previous
+      runs.
+    start_time: The start time of processing this example.
+    end_time: The end time of processing this example.
+    usage_summary: The summary of LLM usages for processing this example.
+    execution_status: The timeit status of processing this example.
   """
   id: int
   input: Any = pg.MISSING_VALUE

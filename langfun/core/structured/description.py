@@ -23,7 +23,7 @@ import pyglove as pg
 
 @pg.use_init_args(['examples'])
 class _DescribeStructure(mapping.Mapping):
-  """Describe a structured value in natural language."""
+  """Describes a structured value in natural language."""
 
   input_title = 'PYTHON_OBJECT'
   context_title = 'CONTEXT_FOR_DESCRIPTION'
@@ -47,64 +47,68 @@ def describe(
     cache_seed: int | None = 0,
     **kwargs,
 ) -> str:
-  """Describes a structured value using natural language.
+  """Describes a structured value in natural language using an LLM.
 
-  Examples:
+  `lf.describe` takes a Python object, often a `pg.Object` instance,
+  and uses a language model to generate a human-readable, natural language
+  description of its content. It is the inverse of `lf.parse`.
 
-    ```
-    class FlightDuration(pg.Object):
-      hours: int
-      minutes: int
+  **Example:**
 
-    class Flight(pg.Object):
-      airline: str
-      flight_number: str
-      departure_airport: str
-      arrival_airport: str
-      departure_time: str
-      arrival_time: str
-      duration: FlightDuration
-      stops: int
-      price: float
+  ```python
+  import langfun as lf
+  import pyglove as pg
 
-    text = lf.describe(
-        Flight(
-            airline='United Airlines',
-            flight_number='UA2631',
-            depature_airport: 'SFO',
-            arrival_airport: 'JFK',
-            depature_time: '2023-09-07T05:15:00',
-            arrival_time: '2023-09-07T12:12:00',
-            duration: FlightDuration(
-                hours=7,
-                minutes=57
-            ),
-            stops=1,
-            price=227,
-        ))
-    print(text)
+  class FlightDuration(pg.Object):
+    hours: int
+    minutes: int
 
-    >> The flight is operated by United Airlines, has the flight number UA2631,
-    >> departs from San Francisco International Airport (SFO), arrives at John
-    >> F. Kennedy International Airport (JFK), It departs at
-    >> 2023-09-07T05:15:00, arrives at 2023-09-07T12:12:00, has a duration of 7
-    >> hours and 57 minutes, makes 1 stop, and costs $227.
-    ```
+  class Flight(pg.Object):
+    airline: str
+    flight_number: str
+    departure_airport: str
+    arrival_airport: str
+    departure_time: str
+    arrival_time: str
+    duration: FlightDuration
+    stops: int
+    price: float
+
+  flight_info = Flight(
+      airline='United Airlines',
+      flight_number='UA2631',
+      departure_airport='SFO',
+      arrival_airport='JFK',
+      departure_time='2023-09-07T05:15:00',
+      arrival_time='2023-09-07T12:12:00',
+      duration=FlightDuration(hours=7, minutes=57),
+      stops=1,
+      price=227,
+  )
+
+  description = lf.describe(flight_info, lm=lf.llms.Gemini25Flash())
+  print(description)
+  # Possible output:
+  # The flight is operated by United Airlines, with the flight number UA2631,
+  # departing from SFO at 2023-09-07T05:15:00 and arriving at JFK at
+  # 2023-09-07T12:12:00. The flight duration is 7 hours and 57 minutes,
+  # with 1 stop, and costs $227.
+  ```
 
   Args:
     value: A structured value to be mapped.
     context: The context information for describing the structured value.
     lm: The language model to use. If not specified, the language model from
       `lf.context` context manager will be used.
-    examples: An optional list of fewshot examples for helping parsing. If None,
-      the default one-shot example will be added.
+    examples: An optional list of fewshot examples for guiding description.
+      If None, default examples will be used.
     cache_seed: Seed for computing cache key. The cache key is determined by a
       tuple of (lm, prompt, cache seed). If None, cache will be disabled for
       the query even cache is configured by the LM.
-    **kwargs: Keyword arguments passed to the `lf.structured.DescribeStructure`.
+    **kwargs: Keyword arguments passed to the `_DescribeStructure`.
 
   Returns:
-    The parsed result based on the schema.
+    A natural language description of the input value.
   """
   return _DescribeStructure(
       input=value,
@@ -115,10 +119,10 @@ def describe(
 
 
 def default_describe_examples() -> list[mapping.MappingExample]:
-  """Default describe examples."""
+  """Returns default examples for `lf.describe`."""
 
   class Country(pg.Object):
-    """A example dataclass for structured mapping."""
+    """An example dataclass for structured mapping."""
 
     name: str
     continents: list[

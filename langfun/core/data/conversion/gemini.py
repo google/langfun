@@ -21,7 +21,14 @@ from langfun.core import modalities as lf_modalities
 
 
 class GeminiMessageConverter(lf.MessageConverter):
-  """Converter to Gemini public API."""
+  """Converter between Langfun messages and Gemini API message format.
+
+  This converter translates `lf.Message` objects into the JSON format required
+  by the public Gemini API (e.g., via Vertex AI or Google AI Studio) and
+  vice versa. It handles text and modalities like images, extracting thought
+  chunks if present. An optional `chunk_preprocessor` can be provided to
+  modify or filter chunks before conversion.
+  """
 
   FORMAT_ID = 'gemini'
 
@@ -30,7 +37,7 @@ class GeminiMessageConverter(lf.MessageConverter):
       (
           'Chunk preprocessor for Langfun chunk to Gemini chunk conversion. '
           'It will be applied before each Langfun chunk is converted. '
-          'If returns None, the chunk will be skipped.'
+          'If it returns None, the chunk will be skipped.'
       ),
   ] = None
 

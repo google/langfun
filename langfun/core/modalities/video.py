@@ -18,7 +18,27 @@ from langfun.core.modalities import mime
 
 
 class Video(mime.Mime):
-  """Video."""
+  """Represents a video for communicating with language models.
+
+  `lf.Video` can be initialized from a URI (HTTP/HTTPS URL or local path)
+  using `lf.Video.from_uri()` or from raw bytes using `lf.Video.from_bytes()`.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Load video from path
+  video = lf.Video.from_path('/path/to/video.mp4')
+
+  # Use video in a prompt
+  prompt = lf.Template(
+      'What is happening in this video? {{video}}', video=video
+  )
+  response = lf.query(prompt, lm=lf.llms.Gemini25Flash())
+  print(response)
+  ```
+  """
 
   MIME_PREFIX = 'video'
 

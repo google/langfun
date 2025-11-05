@@ -274,7 +274,7 @@ class _LfQueryPythonV2(LfQuery):
 
 
 def query(
-    prompt: Union[str, lf.Template, Any],
+    prompt: Union[str, lf.Template, lf.Message, Any],
     schema: schema_lib.SchemaType |  None = None,
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
@@ -298,119 +298,124 @@ def query(
   supporting natural language prompts, structured inputs, and multiple advanced
   features.
 
-  Key Features:
+  **Key Features:**
 
-    - **Input**: Accepts natural language strings, structured inputs (e.g.,
-      `pg.Object`), and templates (`lf.Template`) with modality objects.
+  *   **Input**: Accepts natural language strings, structured inputs (e.g.,
+    `pg.Object`), templates (`lf.Template`) with modality objects, messages (
+    `lf.Message`) with modality objects, or objects that can be converted to
+    `lf.Message` (see `lf.Message.from_value` for details).
+  *   **Output**: Returns structured outputs when `schema` is specified;
+    otherwise, outputs raw natural language (as a string).
+  *   **Few-shot examples**: Supports structured few-shot examples with the
+    `examples` argument.
+  *   **Multi-LM fan-out**: Sends queries to multiple language models for
+    multiple samples in parallel, returning a list of outputs.
 
-    - **Output**: Returns structured outputs when `schema` is specified;
-      otherwise, outputs raw natural language (as a string).
+  **Basic Usage:**
 
-    - **Few-shot examples**: Supports structured few-shot examples with the
-      `examples` argument.
+  1.  **Natural Language Query**:
+      If `schema` is not provided, `lf.query` returns a natural language
+      response:
+      ```python
+      r = lf.query('1 + 1 = ?', lm=lf.llms.Gemini25Flash())
+      print(r)
+      # Output: 2
+      ```
 
-    - **Multi-LM fan-out**: Sends queries to multiple language models with in
-      multiple samples in parallel,  returning a list of outputs.
+  2.  **Structured Output**:
+      If `schema` is provided, `lf.query` guides LLM to directly generate
+      response according to the specified schema, it then parses the response
+      into a Python object:
+      ```python
+      r = lf.query('1 + 1 = ?', int, lm=lf.llms.Gemini25Flash())
+      print(r)
+      # Output: 2
+      ```
 
-  Examples:
+  **Advanced Usage:**
 
-    Case 1: Regular natural language-based LLM query:
+  1.  **Structured Input**:
+      Besides natural language, `prompt` can be a `pg.Object`, whose symbolic
+      representation will be sent to the LLM:
+      ```python
+      class Sum(pg.Object):
+        a: int
+        b: int
+      r = lf.query(Sum(1, 1), int, lm=lf.llms.Gemini25Flash())
+      print(r)
+      # Output: 2
+      ```
 
-    ```
-    lf.query('1 + 1 = ?', lm=lf.llms.Gpt4Turbo())
+  2.  **Multi-Modal Input**:
+      `lf.query` supports prompts containing multi-modal inputs, such as images
+      or audio, by embedding modality objects within a template string:
+      ```python
+      image = lf.Image.from_path('/path/to/image.png')
+      r = lf.query(
+          'what is in the {{image}}?',
+          str,
+          image=image,
+          lm=lf.llms.Gemini25Flash()
+      )
+      print(r)
+      # Output: A cat sitting on a sofa.
+      ```
 
-    # Outptut: '2'
-    ```
+  3.  **Few-Shot Examples**:
+      You can provide few-shot examples to guide model behavior using the
+      `examples` argument. Each example is an `lf.MappingExample` containing
+      `input`, `output`, and, if needed, `schema`.
+      ```python
+      class Sentiment(pg.Object):
+        sentiment: Literal['positive', 'negative', 'neutral']
+        reason: str
 
-    Case 2: Query with structured output.
+      r = lf.query(
+          'I love this movie!',
+          Sentiment,
+          examples=[
+              lf.MappingExample(
+                  'This movie is terrible.',
+                  Sentiment(sentiment='negative', reason='The plot is boring.')
+              ),
+              lf.MappingExample(
+                  'It is okay.',
+                  Sentiment(sentiment='neutral', reason='The movie is average.')
+              ),
+          ],
+          lm=lf.llms.Gemini25Flash())
+      print(r)
+      # Output:
+      # Sentiment(
+      #     sentiment='positive',
+      #     reason='The user expresses positive feedback.')
+      # )
+      ```
 
-    ```
-    lf.query('1 + 1 = ?', int, lm=lf.llms.Gpt4Turbo())
-
-    # Output: 2
-    ```
-
-    Case 3: Query with structured input.
-
-    ```
-    class Sum(pg.Object):
-      a: int
-      b: int
-
-    lf.query(Sum(1, 1), int, lm=lf.llms.Gpt4Turbo())
-
-    # Output: 2
-    ```
-
-    Case 4: Query with input of mixed modalities.
-
-    ```
-    class Animal(pg.Object):
-      pass
-
-    class Dog(Animal):
-      pass
-
-    class Entity(pg.Object):
-      name: str
-
-    lf.query(
-        'What is in this {{image}} and {{objects}}?'
-        list[Entity],
-        lm=lf.llms.Gpt4Turbo()
-        image=lf.Image(path='/path/to/a/airplane.png'),
-        objects=[Dog()],
-    )
-
-    # Output: [Entity(name='airplane'), Entity(name='dog')]
-    ```
-
-    Case 5: Query with structured few-shot examples.
-    ```
-    lf.query(
-        'What is in this {{image}} and {{objects}}?'
-        list[Entity],
-        lm=lf.llms.Gpt4Turbo()
-        image=lf.Image(path='/path/to/a/dinasaur.png'),
-        objects=[Dog()],
-        examples=[
-            lf.MappingExample(
-                input=lf.Template(
-                    'What is the object near the house in this {{image}}?',
-                    image=lf.Image(path='/path/to/image.png'),
-                ),
-                schema=Entity,
-                output=Entity('cat'),
-            ),
-        ],
-    )
-
-    # Output: [Entity(name='dinasaur'), Entity(name='dog')]
-    ```
-
-    Case 6: Multiple queries to multiple models.
-    ```
-    lf.query(
-        '1 + 1 = ?',
-        int,
-        lm=[
-            lf.llms.Gpt4Turbo(),
-            lf.llms.Gemini1_5Pro(),
-        ],
-        num_samples=[1, 2],
-    )
-    # Output: [2, 2, 2]
-    ```
+  4.  **Multi-LM Fan-Out**:
+      `lf.query` can concurrently query multiple language models by providing
+      a list of LMs to the `lm` argument and specifying the number of samples
+      for each with `num_samples`.
+      ```python
+      r = lf.query(
+          '1 + 1 = ?',
+          int,
+          lm=[lf.llms.Gemini25Flash(), lf.llms.Gemini()],
+          num_samples=[1, 2])
+      print(r)
+      # Output: [2, 2, 2]
+      ```
 
   Args:
     prompt: The input query. Can be:
       - A natural language string (supports templating with `{{}}`),
-      - A `pg.Object` object for structured input,
+      - A `pg.Object` for structured input,
       - An `lf.Template` for mixed or template-based inputs.
-    schema: Type annotation or `lf.Schema` object for the expected output. 
+    schema: Type annotation or `lf.Schema` object for the expected output.
       If `None` (default), the response will be a natural language string.
-    default: Default value to return if parsing fails. If not specified, an
-      error will be raised.
+    default: The default value to return if parsing fails. If
+      `lf.RAISE_IF_HAS_ERROR` is used (default), an error will be raised
+      instead.
     lm: The language model(s) to query. Can be:
       - A single `LanguageModel`,
       - A list of `LanguageModel`s for multi-model fan-out.
@@ -430,18 +435,18 @@ def query(
       from `lf.context` or the main `lm`.
     protocol: Format for schema representation. Builtin choices are `'json'` or
       `'python'`, users could extend with their own protocols by subclassing
-      `lf.structured.LfQuery'. Also protocol could be specified with a version
+      `lf.structured.LfQuery`. Also protocol could be specified with a version
       in the format of 'protocol:version', e.g., 'python:1.0', so users could
       use a specific version of the prompt based on the protocol. Please see the
       documentation of `LfQuery` for more details. If None, the protocol from
       context manager `lf.query_protocol` will be used, or 'python' if not
       specified.
-    returns_message:  If `True`, returns an `lf.Message` object instead of
+    returns_message: If `True`, returns an `lf.Message` object instead of
       the final parsed result.
-    skip_lm: If `True`, skips the LLM call and returns the rendered 
+    skip_lm: If `True`, skips the LLM call and returns the rendered
       prompt as a `UserMessage` object.
     invocation_id: The ID of the query invocation, which will be passed to
-      `lf.QueryInvocation` when `lf.trackIf `None`, a unique ID will
+      `lf.QueryInvocation`. If `None`, a unique ID will
       be generated.
     **kwargs: Additional keyword arguments for:
       - Rendering templates (e.g., `template_str`, `preamble`),
@@ -453,7 +458,7 @@ def query(
   Returns:
     The result of the query:
     - A single output or a list of outputs if multiple models/samples are used.
-    - Each output is a parsed object matching `schema`, an `lf.Message` (if 
+    - Each output is a parsed object matching `schema`, an `lf.Message` (if
       `returns_message=True`), or a natural language string (default).
   """
     # Internal usage logging.
@@ -671,7 +676,7 @@ def query(
 
 
 async def aquery(
-    prompt: Union[str, lf.Template, Any],
+    prompt: Union[str, lf.Template, lf.Message, Any],
     schema: schema_lib.SchemaType |  None = None,
     default: Any = lf.RAISE_IF_HAS_ERROR,
     *,
@@ -727,7 +732,7 @@ def query_protocol(protocol: str) -> Iterator[None]:
 
 
 def query_and_reduce(
-    prompt: Union[str, lf.Template, Any],
+    prompt: Union[str, lf.Template, lf.Message, Any],
     schema: schema_lib.SchemaType | None = None,
     *,
     reduce: Callable[[list[Any]], Any],
@@ -736,12 +741,12 @@ def query_and_reduce(
     **kwargs,
 ) -> Any:
   """Issues multiple `lf.query` calls in parallel and reduce the outputs.
-  
+
   Args:
     prompt: A str (may contain {{}} as template) as natural language input, or a
       `pg.Symbolic` object as structured input as prompt to LLM.
-    schema: A type annotation as the schema for output object. If str (default),
-      the response will be a str in natural language.
+    schema: A type annotation as the schema for output object. If None
+      (default), the response will be a str in natural language.
     reduce: A function to reduce the outputs of multiple `lf.query` calls. It
       takes a list of outputs and returns the final object.
     lm: The language model to use. If not specified, the language model from
@@ -765,11 +770,34 @@ def query_and_reduce(
 
 
 def query_prompt(
-    prompt: Union[str, lf.Template, Any],
+    prompt: Union[str, lf.Template, lf.Message, Any],
     schema: schema_lib.SchemaType | None = None,
     **kwargs,
 ) -> lf.Message:
-  """Returns the final prompt sent to LLM for `lf.query`."""
+  """Renders the prompt message for `lf.query` without calling the LLM.
+
+  This function simulates the prompt generation step of `lf.query`,
+  producing the `lf.Message` object that would be sent to the language model.
+  It is useful for debugging prompts or inspecting how inputs are formatted.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  prompt_message = lf.query_prompt('1 + 1 = ?', schema=int)
+  print(prompt_message.text)
+  ```
+
+  Args:
+    prompt: The user prompt, which can be a string, `lf.Template`, or any
+      serializable object.
+    schema: The target schema for the query, used for prompt formatting.
+    **kwargs: Additional keyword arguments to pass to `lf.query`.
+
+  Returns:
+    The rendered `lf.Message` object.
+  """
   # Delay import to avoid circular dependency in Colab.
   # llms > data/conversion > structured > querying
   from langfun.core.llms import fake  # pylint: disable=g-import-not-at-top
@@ -791,7 +819,39 @@ def query_output(
     schema: schema_lib.SchemaType | None = None,
     **kwargs,
 ) -> Any:
-  """Returns the final output of `lf.query` from a provided LLM response."""
+  """Parses a raw LLM response based on a schema, as `lf.query` would.
+
+  This function simulates the output processing part of `lf.query`, taking
+  a raw response from a language model and parsing it into the desired schema.
+  It is useful for reprocessing LLM responses or for testing parsing and
+  auto-fixing logic independently of LLM calls.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Output when schema is provided.
+  structured_output = lf.query_output('2', schema=int)
+  print(structured_output)
+  # Output: 2
+
+  # Output when no schema is provided.
+  raw_output = lf.query_output('The answer is 2.')
+  print(raw_output)
+  # Output: The answer is 2.
+  ```
+
+  Args:
+    response: The raw response from an LLM, as a string or `lf.Message`.
+    schema: The target schema to parse the response into. If `None`, the
+      response text is returned.
+    **kwargs: Additional keyword arguments to pass to `lf.query` for parsing
+      (e.g., `autofix`, `default`).
+
+  Returns:
+    The parsed object if schema is provided, or the response text otherwise.
+  """
   # Delay import to avoid circular dependency in Colab.
   # llms > data/conversion > structured > querying
   from langfun.core.llms import fake  # pylint: disable=g-import-not-at-top
@@ -812,7 +872,7 @@ def query_reward(
     mapping_example: Union[str, mapping.MappingExample],
     response: Union[str, lf.Message],
 ) -> float | None:
-  """Returns the reward of an LLM response based on an mapping example."""
+  """Returns the reward of an LLM response based on a mapping example."""
   if isinstance(mapping_example, str):
     mapping_example = pg.from_json_str(mapping_example)
     assert isinstance(mapping_example, mapping.MappingExample), mapping_example
@@ -1250,17 +1310,28 @@ def track_queries(
     start_callback: Callable[[QueryInvocation], None] | None = None,
     end_callback: Callable[[QueryInvocation], None] | None = None,
 ) -> Iterator[list[QueryInvocation]]:
-  """Track all queries made during the context.
+  """Tracks all `lf.query` calls made within a `with` block.
 
-  Example:
+  `lf.track_queries` is useful for inspecting LLM inputs and outputs,
+  debugging, and analyzing model behavior. It returns a list of
+  `lf.QueryInvocation` objects, each containing detailed information about
+  a query, such as the input prompt, schema, LLM request/response,
+  and any errors encountered.
 
-    ```
-    with lf.track_queries() as queries:
-      lf.query('hi', lm=lm)
-      lf.query('What is this {{image}}?', lm=lm, image=image)
+  **Example:**
 
-    print(queries)
-    ```
+  ```python
+  import langfun as lf
+
+  with lf.track_queries() as queries:
+    lf.query('1 + 1 = ?', lm=lf.llms.Gemini25Flash())
+    lf.query('Hello!', lm=lf.llms.Gemini25Flash())
+
+  # Print recorded queries
+  for query in queries:
+    print(query.lm_request)
+    print(query.lm_response)
+  ```
 
   Args:
     include_child_scopes: If True, the queries made in child scopes will be

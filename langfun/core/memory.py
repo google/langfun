@@ -43,6 +43,7 @@ class Memory(NaturalLanguageFormattable, Component):
       value: Any,
       **kwargs
   ) -> None:
+    """Remembers a value."""
     self._remember(value, **kwargs)
 
   def reset(self, **kwargs) -> None:

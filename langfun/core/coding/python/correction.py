@@ -19,13 +19,23 @@ import pyglove as pg
 
 
 class CodeWithError(pg.Object):
-  """Python code with error."""
+  """A structure representing Python code along with an execution error.
+
+  This is used as input to a language model for error correction, providing
+  the model with the code that failed and the error message it produced.
+  """
 
   code: str
   error: str
 
 
 class CorrectedCode(pg.Object):
+  """A structure containing corrected Python code.
+
+  This is used as the output schema when asking a language model to correct
+  code, expecting the model to return the fixed code in the `corrected_code`
+  field.
+  """
   corrected_code: str
 
 
@@ -49,7 +59,7 @@ def run_with_correction(
     code: The source code that may or may not be problematic.
     error: An optional initial error for `code` when it's problematic, usually
       caught from elsewhere when it ran. If None, code will be executed once to
-      verify if its good and obtain a feedback error message.
+      verify if it's good and obtain a feedback error message.
     global_vars: A dict of str to value as the global variables that could be
       accessed within the corrected code.
     lm: Language model to be used. If not specified, it will try to use the `lm`
@@ -57,15 +67,15 @@ def run_with_correction(
     max_attempts: Max number of attempts for the correction.
     sandbox: If True, run code in sandbox; If False, run code in current
       process. If None, run in sandbox first, if the output could not be
-      serialized and pass to current process, run the code again in current
+      serialized and passed to current process, run the code again in current
       process.
     permission: The permission to run the code.
     timeout: The timeout for running the corrected code. If None, there is no
       timeout. Applicable only when sandbox is set to True.
     returns_code: If True, the return value is a tuple of (result, final code).
       Otherwise the return value is the result only.
-    returns_stdout: If True, the stdout (a str) will be returned.
-    outputs_intermediate: If True, intermediate output will be outputted as a
+    returns_stdout: If True, the stdout (a string) will be returned.
+    outputs_intermediate: If True, intermediate output will be output as a
       dict, with the last line's value accessible by key '__result__'. Otherwise
       the value of the last line will be returned.
 
@@ -161,7 +171,7 @@ def correct(
     code: The source code that may or may not be problematic.
     error: An optional initial error for `code` when it's problematic, usually
       caught from elsewhere when it ran. If None, code will be executed once to
-      verify if its good and obtain a feedback error message.
+      verify if it's good and obtain a feedback error message.
     global_vars: A dict of str to value as the global variables that could be
       accessed within the corrected code.
     lm: Language model to be used. If not specified, it will try to use the `lm`
@@ -169,7 +179,7 @@ def correct(
     max_attempts: Max number of attempts for the correction.
     sandbox: If True, run code in sandbox; If False, run code in current
       process. If None, run in sandbox first, if the output could not be
-      serialized and pass to current process, run the code again in current
+      serialized and passed to current process, run the code again in current
       process.
     timeout: The timeout for running the corrected code. If None, there is no
       timeout. Applicable only when sandbox is set to True.
@@ -193,7 +203,7 @@ def correct(
 
 
 def _error_feedback_str(error: Exception) -> str:
-  """Returns the error str for feedback."""
+  """Returns the error string for feedback."""
   if isinstance(error, pg.coding.CodeError):
     return pg.decolor(error.format(include_complete_code=False))
   else:
@@ -201,7 +211,7 @@ def _error_feedback_str(error: Exception) -> str:
 
 
 def _maybe_custom_validate(result: Any) -> Any:
-  """Apply custom validation through __validate_generation__ method."""
+  """Applies custom validation through __validate__ method."""
   if isinstance(result, dict) and "__result__" in result:
     r = result["__result__"]
   else:

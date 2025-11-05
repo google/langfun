@@ -22,7 +22,18 @@ import requests
 
 
 class REST(lf.LanguageModel):
-  """REST-based language model."""
+  """Base class for language models accessed via REST APIs.
+
+  The `REST` class provides a foundation for implementing language models
+  that are accessed through RESTful endpoints. It handles the details of
+  making HTTP requests, managing sessions, and handling common errors like
+  timeouts and connection issues.
+
+  Subclasses need to implement the `request` and `result` methods to
+  convert Langfun messages to API-specific request formats and to parse
+  API responses back into `LMSamplingResult` objects. They also need to
+  provide the `api_endpoint` and can override `headers` for authentication.
+  """
 
   api_endpoint: Annotated[
       str,

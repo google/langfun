@@ -116,7 +116,7 @@ class _CompleteStructure(mapping.Mapping):
     )
 
   def postprocess_result(self, result: Any) -> Any:
-    """Postprocess result."""
+    """Postprocesses result."""
     # Try restore modality objects from the input value to output value.
     if modalities := self.modalities(self.input):
       result = lf.ModalityRef.restore(result, modalities)
@@ -151,7 +151,7 @@ class _CompleteStructure(mapping.Mapping):
   #
 
   def has_modality_refs(self, value: Any) -> bool:
-    """Returns true if the value has modalities."""
+    """Returns True if the value has modalities."""
     return not isinstance(value, lf.Modality) and pg.contains(
         value, type=lf.Modality
     )
@@ -181,41 +181,36 @@ def complete(
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
-  """Complete a symbolic value by filling its missing fields.
+  """Completes a symbolic value by filling its missing fields using an LLM.
 
-  Examples:
+  `lf.complete` is used to fill in missing information in structured
+  data. It takes a partially defined `pg.Object` instance where some fields
+  are marked as `lf.MISSING`, and uses a language model to infer and
+  populate those fields based on the provided values.
 
-    ```
-    class FlightDuration:
-      hours: int
-      minutes: int
+  **Example:**
 
-    class Flight(pg.Object):
-      airline: str
-      flight_number: str
-      departure_airport_code: str
-      arrival_airport_code: str
-      departure_time: str
-      arrival_time: str
-      duration: FlightDuration
-      stops: int
-      price: float
+  ```python
+  import langfun as lf
+  import pyglove as pg
 
-    prompt = '''
-      Information about flight UA2631.
-      '''
+  class Country(pg.Object):
+    name: str
+    capital: str = lf.MISSING
+    population: int = lf.MISSING
 
-    r = lf.query(prompt, Flight)
-    assert isinstance(r, Flight)
-    assert r.airline == 'United Airlines'
-    assert r.departure_airport_code == 'SFO'
-    assert r.duration.hour = 7
-    ```
+  # Filling missing fields of Country(name='France')
+  country = lf.complete(Country(name='France'), lm=lf.llms.Gemini25Flash())
+  print(country)
+  # Output: Country(name='France', capital='Paris', population=67000000)
+  ```
 
   Args:
-    input_value: A symbolic value that may contain missing values.
-    default: The default value if parsing failed. If not specified, error will
-      be raised.
+    input_value: A symbolic value that may contain missing values marked
+      by `lf.MISSING`.
+    default: The default value to return if parsing fails. If
+      `lf.RAISE_IF_HAS_ERROR` is used (default), an error will be raised
+      instead.
     lm: The language model to use. If not specified, the language model from
       `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping parsing. If None,
@@ -231,10 +226,10 @@ def complete(
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the
-      `lf.structured.NaturalLanguageToStructureed` transform.
+      `lf.structured.Mapping` transform.
 
   Returns:
-    The result based on the schema.
+    The input object with missing fields completed by LLM.
   """
   t = _CompleteStructure(
       input=schema_lib.mark_missing(input_value),

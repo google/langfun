@@ -33,7 +33,21 @@ _EVALULATION_DETAIL_FILE = 'index.html'
 
 
 class HtmlReporter(experiment_lib.Plugin):
-  """Plugin for periodically generating HTML reports for the experiment."""
+  """Plugin for periodically generating HTML reports for the experiment.
+
+  The `HtmlReporter` plugin generates several HTML files during an experiment
+  run:
+    - A `summary.html` at the root of the run directory, summarizing all
+      evaluations in the experiment.
+    - An `index.html` for each leaf evaluation, detailing the evaluation
+      definition, metrics, and logs.
+    - An HTML file for each example (e.g., `1.html`, `2.html`, ...) within
+      each leaf evaluation's directory, showing the input, output, metadata,
+      and any errors for that example.
+
+  These reports are updated periodically in the background during the run,
+  allowing users to monitor progress in near real-time.
+  """
 
   summary_interval: Annotated[
       int,

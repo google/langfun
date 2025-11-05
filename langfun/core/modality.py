@@ -24,7 +24,35 @@ import pyglove as pg
 
 
 class Modality(component.Component, pg.views.HtmlTreeView.Extension):
-  """Base class for multimodal object."""
+  """Base class for representing non-text content in prompts.
+
+  `lf.Modality` is the base class for multimodal objects such as `lf.Image`,
+  `lf.Audio`, and `lf.Video`. It allows these non-text inputs to be
+  seamlessly embedded within text prompts for processing by multimodal
+  language models.
+
+  When a `Modality` object is rendered within an `lf.Template`, it is
+  replaced by a text marker (e.g., `<<[[image:b10a8db1]]>>`), and the
+  modality object itself is stored in the `referred_modalities` field of
+  the resulting `lf.Message`. This allows language models to associate
+  the placeholder with its content during processing.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  image = lf.Image.from_path('/path/to/image.png')
+  prompt = lf.Template('What is in this image? {{image}}', image=image)
+
+  message = prompt.render()
+  print(message.text)
+  # Output: What is in this image? <<[[image:b10a8db1]]>>
+
+  print(message.modalities())
+  # Output: [<Image object>]
+  ```
+  """
 
   REF_START = '<<[['
   REF_END = ']]>>'
@@ -87,11 +115,44 @@ class Modality(component.Component, pg.views.HtmlTreeView.Extension):
 
 
 class ModalityRef(pg.Object, pg.typing.CustomTyping):
-  """References of modality objects in a symbolic tree.
+  """Lightweight placeholder for a `lf.Modality` object in a symbolic tree.
 
-  `ModalityRef` was introduced to placehold modality objects in a symbolic
-  tree, to prevent message from being chunked in the middle of a Python
-  structure.
+  `ModalityRef` acts as a reference to a `Modality` object (like `lf.Image`
+  or `lf.Audio`) within a structured object hierarchy (e.g., a `pg.Object`).
+  Instead of embedding potentially large modality data directly, `ModalityRef`
+  stores only the ID of the modality object.
+
+  This is useful in scenarios where structured objects are serialized or
+  manipulated, and it's more efficient to refer to modalities by ID rather
+  than copying their content. The `lf.ModalityRef.placehold()` class method
+  can be used to replace `Modality` instances in a symbolic object with
+  `ModalityRef` placeholders, while `lf.ModalityRef.restore()` can reinstate
+  the original `Modality` objects using a lookup table.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+  import pyglove as pg
+
+  class ImagePair(pg.Object):
+    image1: lf.Image
+    image2: lf.Image
+
+  pair = ImagePair(
+      image1=lf.Image(content=b'abc'), image2=lf.Image(content=b'def')
+  )
+  modalities = lf.Modality.from_value(pair)
+
+  # Replace Image objects with ModalityRef placeholders
+  pair_with_refs = lf.ModalityRef.placehold(pair)
+  print(pair_with_refs.image1)
+  # Output: ModalityRef(id='image:d81e5a68')
+
+  # Restore Image objects from ModalityRef placeholders
+  pair_restored = lf.ModalityRef.restore(pair_with_refs, modalities)
+  assert pair_restored.image1.content == b'abc'
+  ```
   """
 
   id: str

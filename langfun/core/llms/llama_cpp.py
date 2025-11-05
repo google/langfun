@@ -21,10 +21,29 @@ import pyglove as pg
 @pg.use_init_args(['url', 'model'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class LlamaCppRemote(openai_compatible.OpenAIChatCompletionAPI):
-  """The remote LLaMA C++ model.
+  """LLaMA C++ models served via a remote server.
 
-  The Remote LLaMA C++ models can be launched via
-  https://github.com/ggerganov/llama.cpp/tree/master/examples/server
+  This class provides an interface to interact with language models
+  hosted on a LLaMA C++ server, which is compatible with the OpenAI
+  Chat Completions API format.
+
+  **Quick Start:**
+
+  Assuming a LLaMA C++ server is running at `http://localhost:8080`,
+  you can interact with it as follows:
+
+  ```python
+  import langfun as lf
+
+  # If model name is not specified, it will use server's default.
+  lm = lf.llms.LlamaCppRemote(url='http://localhost:8080')
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **References:**
+
+  *   https://github.com/ggerganov/llama.cpp/tree/master/examples/server
   """
   url: Annotated[
       str,

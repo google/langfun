@@ -24,11 +24,16 @@ import pyglove as pg
 
 @lf.use_init_args(['api_endpoint', 'model'])
 class OpenAIChatCompletionAPI(rest.REST):
-  """Base for OpenAI compatible models based on ChatCompletion API.
+  """Base class for models compatible with OpenAI's Chat Completion API.
 
-  See https://platform.openai.com/docs/api-reference/chat
-  As of 2025-10-23, OpenAI is migrating from ChatCompletion API to Responses
-  API.
+  This class provides a common interface for language models that adhere to
+  the OpenAI Chat Completion API format, which is used by providers like
+  Groq, DeepSeek, and others. It standardizes request formatting and
+  response parsing for these models.
+
+  **References:**
+
+  *   https://platform.openai.com/docs/api-reference/chat
   """
 
   model: Annotated[
@@ -196,9 +201,16 @@ class OpenAIChatCompletionAPI(rest.REST):
 
 
 class OpenAIResponsesAPI(OpenAIChatCompletionAPI):
-  """Base for OpenAI compatible models based on Responses API.
+  """Base class for models compatible with OpenAI's Responses API.
 
-  https://platform.openai.com/docs/api-reference/responses/create
+  This class provides a common interface for language models that adhere to
+  the new OpenAI Responses API format. It standardizes request formatting
+  and response parsing for these models, including handling instructions
+  (system messages) and structured outputs.
+
+  **References:**
+
+  *   https://platform.openai.com/docs/api-reference/responses
   """
 
   def _request_args(

@@ -24,7 +24,7 @@ import pyglove as pg
 
 @lf.use_init_args(['schema', 'default', 'examples'])
 class _ParseStructure(mapping.Mapping):
-  """Parse an object out from a natural language text."""
+  """Parses an object out from a natural language text."""
 
   context_title = 'USER_REQUEST'
   input_title = 'LM_RESPONSE'
@@ -39,7 +39,7 @@ class _ParseStructure(mapping.Mapping):
 
 
 class _ParseStructureJson(_ParseStructure):
-  """Parse an object out from a NL text using JSON as the protocol."""
+  """Parses an object out from a NL text using JSON as the protocol."""
 
   preamble = """
       Please help translate the last LM response into JSON based on the request and the schema:
@@ -55,7 +55,7 @@ class _ParseStructureJson(_ParseStructure):
 
 
 class _ParseStructurePython(_ParseStructure):
-  """Parse an object out from a NL text using Python as the protocol."""
+  """Parses an object out from a NL text using Python as the protocol."""
 
   preamble = """
       Please help translate the last {{ input_title }} into {{ output_title}} based on {{ schema_title }}.
@@ -88,55 +88,55 @@ def parse(
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
-  """Parse a natural language message based on schema.
+  """Parses a natural language message into a structured object using an LLM.
 
-  Examples:
+  `lf.parse` extracts structured information from a natural language string
+  or message according to a provided schema. It is the inverse of
+  `lf.describe`.
 
-    ```
-    class FlightDuration(pg.Object):
-      hours: int
-      minutes: int
+  **Example:**
 
-    class Flight(pg.Object):
-      airline: str
-      flight_number: str
-      departure_airport_code: str
-      arrival_airport_code: str
-      departure_time: str
-      arrival_time: str
-      duration: FlightDuration
-      stops: int
-      price: float
+  ```python
+  import langfun as lf
+  import pyglove as pg
 
-    input = '''
-      The flight is operated by United Airlines, has the flight number UA2631,
-      departs from San Francisco International Airport (SFO), arrives at John
-      F. Kennedy International Airport (JFK), It departs at 2023-09-07T05:15:00,
-      arrives at 2023-09-07T12:12:00, has a duration of 7 hours and 57 minutes,
-      makes 1 stop, and costs $227.
-      '''
+  class FlightDuration(pg.Object):
+    hours: int
+    minutes: int
 
-    r = lf.parse(input, Flight)
-    assert isinstance(r, Flight)
-    assert r.airline == 'United Airlines'
-    assert r.departure_airport_code == 'SFO'
-    assert r.duration.hour = 7
-    ```
+  class Flight(pg.Object):
+    airline: str
+    flight_number: str
+    departure_airport_code: str
+    arrival_airport_code: str
+    duration: FlightDuration
+    price: float
+
+  text = '''
+  The flight is UA2631 of United Airlines, from SFO to JFK,
+  duration is 7 hours and 57 minutes, costing $227.
+  '''
+
+  flight = lf.parse(text, Flight, lm=lf.llms.Gemini25Flash())
+  assert flight.airline == 'United Airlines'
+  assert flight.duration.hours == 7
+  ```
 
   Args:
     message: A `lf.Message` object  or a string as the natural language input.
       It provides the complete context for the parsing.
-    schema: A `lf.transforms.ParsingSchema` object or equivalent annotations.
-    default: The default value if parsing failed. If not specified, error will
-      be raised.
+    schema: A `lf.Schema` object or equivalent annotations.
+    default: The default value to return if parsing fails. If
+      `lf.RAISE_IF_HAS_ERROR` is used (default), an error will be raised
+      instead.
     user_prompt: An optional user prompt as the description or ask for the
-      message, which provide more context for parsing.
+      message, which provides more context for parsing.
     lm: The language model to use. If not specified, the language model from
       `lf.context` context manager will be used.
-    examples: An optional list of fewshot examples for helping parsing. If None,
-      the default one-shot example will be added.
+    examples: An optional list of fewshot examples for guiding parsing. If None,
+      default examples will be used.
     include_context: If True, include the request sent to LLM for obtaining the
-      response to pares. Otherwise include only the response.
+      response to parse. Otherwise include only the response.
     cache_seed: Seed for computing cache key. The cache key is determined by a
       tuple of (lm, prompt, cache seed). If None, cache will be disabled for
       the query even cache is configured by the LM.
@@ -146,10 +146,10 @@ def parse(
       `autofix_lm` from `lf.context` context manager will be used. Otherwise it
       will use `lm`.
     protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default 'python' will be used.`
+      are 'json' and 'python'. By default 'python' will be used.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
-    **kwargs: Keyword arguments passed to the `lf.structured.ParseStructure`
+    **kwargs: Keyword arguments passed to the `_ParseStructure`
       transform.
 
   Returns:
@@ -223,7 +223,7 @@ async def aparse(
 
 
 def call(
-    prompt: str | lf.Template,
+    prompt: Union[str, lf.Template, lf.Message],
     schema: Union[
         None, schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any]
     ] = None,
@@ -240,27 +240,43 @@ def call(
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
-  """Call a language model with prompt and formulate response in return type.
+  """Calls a language model and parses the response according to a schema.
 
-  Examples::
+  `lf.call` first calls a language model with a prompt to obtain a natural
+  language response, then calls the language model again to parse this
+  response into a structured format defined by `schema`. If `schema` is not
+  provided, it returns the raw natural language response.
 
-    # Call with constant string-type prompt.
-    lf.call('Compute one plus one', lm=lf.llms.Gpt35())
-    >> "two"
+  **Example:**
 
-    # Call with returning a structured (int) type.
-    lf.call('Compute one plus one', int, lm=lf.llms.Gpt35())
-    >> 2
+  1.  **Call with a Natural Language Prompt**:
+      By default, `lf.call` with a string prompt returns a natural language
+      response:
+      ```python
+      r = lf.call('Compute one plus one', lm=lf.llms.Gpt4())
+      print(r)
+      # Output: 2
+      ```
 
-    # Call with a template string with variables.
-    lf.call('Compute {{x}} plus {{y}}', int,
-            x='one', y='one', lm=lf.llms.Gpt35())
-    >> 2
+  2.  **Call with Structured Output**:
+      If `schema` is provided, `lf.call` parses the LLM response into the
+      specified schema using a second LM call:
+      ```python
+      r = lf.call('Compute one plus one', int, lm=lf.llms.Gpt4())
+      print(r)
+      # Output: 2
+      ```
 
-    # Call with an `lf.Template` object with variables.
-    lf.call(lf.Template('Compute {{x}} plus {{y}}', x=1), int,
-            y=1, lm=lf.llms.Gpt35())
-    >> 2
+  3.  **Call with Templated Prompt**:
+      The prompt can be a template string with placeholders (e.g., `{{x}}`,
+      `{{y}}`), whose values are provided as keyword arguments:
+      ```python
+      r = lf.call(
+          'Compute {{x}} plus {{y}}',
+          int, x='one', y='one', lm=lf.llms.Gpt4())
+      print(r)
+      # Output: 2
+      ```
 
   Args:
     prompt: User prompt that will be sent to LM, which could be a string or a
@@ -272,10 +288,10 @@ def call(
       If not specified, `lm` from `lf.context` context manager will be used.
     parsing_lm: Language model that will be used for parsing. If None, the `lm`
       for prompting the LM will be used.
-    parsing_examples: Examples for parsing the output. If None,
-      `lf.structured.DEFAULT_PARSE_EXAMPLES` will be used.
+    parsing_examples: Examples for parsing the output. If None, no examples
+      will be used for parsing.
     parsing_include_context: If True, include the request sent to LLM for
-      obtaining the response to pares. Otherwise include only the response.
+      obtaining the response to parse. Otherwise include only the response.
     cache_seed: Seed for computing cache key. The cache key is determined by a
       tuple of (lm, prompt, cache seed). If None, cache will be disabled for
       the query even cache is configured by the LM.
@@ -284,10 +300,10 @@ def call(
     autofix_lm: The language model to use for autofix. If not specified, the
       `autofix_lm` from `lf.context` context manager will be used. Otherwise it
       will use `parsing_lm`.
-    response_postprocess: A callback function to post process the text response
+    response_postprocess: A callback function to post-process the text response
       before sending for parsing.
     protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default 'python' will be used.`
+      are 'json' and 'python'. By default 'python' will be used.
     returns_message: If True, return a `lf.Message` object instead of its text
       or result.
     **kwargs: Keyword arguments. Including options that control the calling
@@ -387,7 +403,7 @@ def _parse_structure_cls(
 
 
 def default_parse_examples() -> list[mapping.MappingExample]:
-  """Default parsing examples."""
+  """Returns default parsing examples."""
 
   class AdditionResults(pg.Object):
     one_plus_one_equals: int | None

@@ -21,7 +21,14 @@ from langfun.core import modalities as lf_modalities
 
 
 class AnthropicMessageConverter(lf.MessageConverter):
-  """Converter to Anthropic public API."""
+  """Converter between Langfun messages and Anthropic API message format.
+
+  This converter translates `lf.Message` objects into the JSON format required
+  by the Anthropic API and vice versa. It handles text and modalities like
+  images and PDFs by encoding them in base64 format as expected by Anthropic.
+  An optional `chunk_preprocessor` can be provided to modify or filter
+  chunks before conversion.
+  """
 
   FORMAT_ID = 'anthropic'
 
@@ -30,12 +37,12 @@ class AnthropicMessageConverter(lf.MessageConverter):
       (
           'Chunk preprocessor for Langfun chunk to Anthropic chunk conversion. '
           'It will be applied before each Langfun chunk is converted. '
-          'If returns None, the chunk will be skipped.'
+          'If it returns None, the chunk will be skipped.'
       )
   ] = None
 
   def to_value(self, message: lf.Message) -> dict[str, Any]:
-    """Converts a Langfun message to Gemini API."""
+    """Converts a Langfun message to Anthropic API."""
     content = []
     for chunk in message.chunk():
       if self.chunk_preprocessor:

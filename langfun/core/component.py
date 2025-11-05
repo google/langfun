@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""langfun Component."""
+"""Base component for Langfun."""
 
 from typing import ContextManager
 import pyglove as pg
@@ -22,7 +22,37 @@ RAISE_IF_HAS_ERROR = (pg.MISSING_VALUE,)
 
 
 class Component(pg.ContextualObject):
-  """Base class for langfun components."""
+  """Base class for Langfun components.
+
+  Langfun components are context-aware symbolic objects powered by PyGlove.
+  (See [PyGlove basics](https://pyglove.readthedocs.io/en/latest/basics.html)
+  for more details).
+
+  **Context-awareness**
+
+  Langfun components can have contextual attributes using `lf.contextual`,
+  whose values can be provided or overridden via `lf.context` or
+  `lf.use_settings`.
+
+  Example:
+  ```python
+  import langfun as lf
+
+  class Bar(lf.Component):
+    y = lf.contextual(1)
+
+  class Foo(lf.Component):
+    x = lf.contextual(0)
+    bar = Bar()
+
+  f = Foo()
+  assert f.x == 0 and f.bar.y == 1
+
+  # `lf.context` overrides `lf.contextual` attributes.
+  with lf.context(x=10, y=20):
+    assert f.x == 10 and f.bar.y == 20
+  ```
+  """
 
   # Allow symbolic assignment, which invalidates the object and recomputes
   # states upon update.
@@ -78,6 +108,15 @@ def use_settings(
 ) -> ContextManager[dict[str, pg.utils.ContextualOverride]]:
   """Shortcut method for overriding component attributes.
 
+  Example:
+
+  ```
+  with lf.use_settings(
+      lm=lf.llms.Gpt35(),
+      temperature=0.0):
+    lf.query('who are you?')
+  ```
+
   Args:
     cascade: If True, this override will apply to both current scope and nested
       scope, meaning that this `lf.context` will take precedence over all
@@ -85,6 +124,6 @@ def use_settings(
     **settings: Key/values as override for component attributes.
 
   Returns:
-    A dict of attribute names to their contextual overrides.
+    A context manager for overriding settings.
   """
   return context(cascade=cascade, override_attrs=True, **settings)

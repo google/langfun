@@ -17,6 +17,24 @@ from langfun.core.modalities import mime
 
 
 class PDF(mime.Mime):
-  """PDF document."""
+  """Represents a PDF document for communicating with language models.
+
+  `lf.PDF` can be initialized from a URI (HTTP/HTTPS URL or local path)
+  using `lf.PDF.from_uri()` or from raw bytes using `lf.PDF.from_bytes()`.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  # Load PDF from path
+  pdf = lf.PDF.from_path('/path/to/document.pdf')
+
+  # Use PDF in a prompt
+  prompt = lf.Template('Summarize this document: {{pdf}}', pdf=pdf)
+  response = lf.query(prompt, lm=lf.llms.Gemini25Flash())
+  print(response)
+  ```
+  """
 
   MIME_PREFIX = 'application/pdf'

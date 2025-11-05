@@ -24,7 +24,32 @@ import pyglove as pg
 
 @pg.use_init_args(['filename', 'ttl', 'key'])
 class InMemory(base.LMCacheBase):
-  """In memory cache."""
+  """An in-memory cache for language model lookups.
+
+  `InMemory` stores LM prompts and their corresponding responses in memory,
+  providing a simple and fast caching mechanism for a single session.
+  Optionally, it can persist the cache to a JSON file on disk, allowing
+  results to be reused across sessions.
+
+  When a filename is provided, the cache will be loaded from the file upon
+  initialization and saved to the file when `save()` is called. This is
+  useful for caching results in interactive environments like Colab or
+  when running batch jobs.
+
+  Example:
+
+  ```python
+  import langfun as lf
+  # Using in-memory cache without persistence
+  lm = lf.llms.GeminiPro(cache=lf.llms.cache.InMemory())
+  r = lm.query('hello')
+
+  # Using in-memory cache with persistence
+  lm = lf.llms.GeminiPro(cache=lf.llms.cache.InMemory('cache.json'))
+  r = lm.query('hello')
+  lm.cache.save()
+  ```
+  """
 
   filename: Annotated[
       str | None,
@@ -144,17 +169,33 @@ class InMemory(base.LMCacheBase):
 
 @contextlib.contextmanager
 def lm_cache(filename: str | None = None) -> Iterator[InMemory]:
-  """Context manager to enable cache for LMs under the context.
+  """Context manager to enable in-memory cache for LMs in the current context.
 
-  If LMs under the context manager have explicitly specified cache, they will
-  use their own cache. Otherwise they will use the cache created by the context
-  manager.
+  This context manager sets an `InMemory` cache as the default cache for
+  any Langfun language model instantiated within its scope, unless a model
+  is explicitly configured with a different cache.
+
+  If a `filename` is provided, the cache will be loaded from the specified
+  file at the beginning of the context and automatically saved back to the
+  file upon exiting the context. This is a convenient way to manage
+  persistent caching for a block of code.
+
+  Example:
+
+  ```python
+  import langfun as lf
+  with lf.lm_cache('my_cache.json'):
+    # LMs created here will use 'my_cache.json' for caching.
+    lm = lf.llms.GeminiPro()
+    print(lm.query('hello'))
+  ```
 
   Args:
-    filename: If not None, JSON file to load and save the cache.
+    filename: If provided, specifies the JSON file for loading and saving
+      the cache.
 
   Yields:
-    A cache object created.
+    The `InMemory` cache instance created for this context.
   """
   cache = InMemory(filename)
   try:

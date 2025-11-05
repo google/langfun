@@ -49,20 +49,94 @@ class Template(
     pg.typing.CustomTyping,
     pg.views.HtmlTreeView.Extension
 ):
-  """Langfun string template.
+  r"""Langfun string template.
 
-  Langfun uses jinja2 as its template engine. Pleaes check out
-  https://jinja.palletsprojects.com/en/3.1.x/templates/ for detailed
-  explanation on the template language.
+  `lf.Template` provides a flexible way to define and render prompts using
+  the Jinja2 templating engine. It supports variable substitution, composition
+  of templates, multi-modal content, and easy reuse through subclassing.
+
+  **Key Features:**
+
+  *   **Jinja2 Syntax**: Leverages the full power of Jinja2 for
+      expressions, loops, and conditional logic within templates.
+      (See [Jinja2 documentation](
+      https://jinja.palletsprojects.com/en/3.1.x/templates/))
+  *   **Composition**: Templates can include other `lf.Template`, `lf.Message`
+      and message-convertible objects, allowing complex prompts to be built from
+      reusable components.
+  *   **Multi-Modal Support**: Seamlessly integrates multi-modal objects
+      (like `lf.Image`, `lf.Audio`) into templates.
+  *   **Subclassing**: Define reusable prompt structures by subclassing
+      `lf.Template` and setting defaults.
+  *   **Context Awareness**: Variables can be resolved from `render()`
+      arguments, template attributes, or the surrounding `lf.context`.
+
+  **1. Basic Usage:**
+  Variables are indicated by `{{variable_name}}`.
+
+  ```python
+  t = lf.Template("Hello, {{name}}!", name="World")
+  print(t.render())
+  # Output: Hello, World!
+  ```
+
+  **2. Providing Variables at Render Time:**
+  Variables can be provided when calling `render()`:
+
+  ```python
+  t = lf.Template("Hello, {{name}}!")
+  print(t.render(name="Alice"))
+  # Output: Hello, Alice!
+  ```
+
+  **3. Composition:**
+  Embed templates within other templates for modularity:
+
+  ```python
+  t = lf.Template(
+      "{{greeting}}, {{question}}",
+      greeting=lf.Template("Hello {{user}}", user="Bob"),
+      question=lf.UserMessage("How are you?")
+  )
+  print(t.render())
+  # Output: Hello Bob, How are you?
+  ```
+
+  **4. Multi-Modal Content:**
+  Reference modality objects in the template string:
+
+  ```python
+  image = lf.Image.from_path(...)
+  t = lf.Template("Describe this image: <<[[{{image.id}}]]>>", image=image)
+  # When rendered, 't' can be passed to a multi-modal model.
+  ```
+
+  **5. Subclassing for Reusability:**
+  Define a reusable template via subclassing. The docstring can serve as the
+  default template string if it doesn't contain "THIS IS NOT A TEMPLATE".
+
+  ```python
+  class Greeting(lf.Template):
+    '''Greeting prompt.
+
+    Hello, {{user}}!
+    '''
+    user: str = 'guest'
+
+  print(Greeting().render())
+  # Output: Hello, guest!
+  print(Greeting(user='Admin').render())
+  # Output: Hello, Admin!
+  ```
   """
 
   template_str: Annotated[
       str,
       (
-          'A template string in jinja2 syntax. During `render`, the variables '
-          'will be resolved from 1) the `kwargs` dict passed to the `render` '
-          'method; 2) the attributes of this object; and 3) the attributes of '
-          'its containing objects.'
+          'A template string in jinja2 syntax. During `render`, variables '
+          'will be resolved from: 1) keyword arguments passed to `render`; '
+          '2) attributes of this object; and 3) attributes of its containing '
+          'objects.'
       ),
   ]
 
@@ -70,16 +144,16 @@ class Template(
       bool,
       (
           'If True, `inspect.cleandoc` will be applied on `template_str` to '
-          'additional indention, etc. Otherwise, the original form of the '
-          'template string will be used.'
+          'remove leading/trailing spaces and fix indentation. Otherwise, '
+          'the `template_str` will be used as is.'
       ),
   ] = True
 
   __kwargs__: Annotated[
       Any,
       (
-          'Wildcard keyword arguments for `__init__` that can be referred in '
-          'the template string. This allows modularization of prompt with '
+          'Wildcard keyword arguments for `__init__` that can be referred to '
+          'in the template string. This allows modularizing prompts with '
           'fully or partially bound variables.'
       ),
   ]
@@ -196,12 +270,14 @@ class Template(
     """Returns referred variables.
 
     Args:
-      specified: If True, include only variables that are specified. If False,
-        include only variables that are not specified. If None, include both.
-      closure: If True, include variables from referred LangFuncs recursively.
-        Otherwise, include the immediate used variables.
-      leaf: If True, include only the non-LangFunc variables. If False, include
-        LangFunc variables. If None, include both.
+      specified: If True, include only variables specified with a value.
+        If False, include only variables that are not specified.
+        If None, include both specified and unspecified variables.
+      closure: If True, include variables from referred `lf.Template` objects
+        recursively. Otherwise, only include variables used in this template.
+      leaf: If True, include only variables that are not `lf.Template` objects.
+        If False, include only variables that are `lf.Template` objects.
+        If None, include both.
 
     Returns:
       A list of variable names that match the criteria.
@@ -230,17 +306,17 @@ class Template(
 
   @property
   def missing_vars(self) -> Set[str]:
-    """Returns the missing variable names."""
+    """Returns missing variable names from this and referred templates."""
     return self.vars(closure=True, specified=False)
 
   @classmethod
   def raw_str(cls, text: str) -> str:
-    """Returns a template string that preserve the text as original."""
+    """Returns a template string that preserves the text as original."""
     return '{% raw %}' + text + '{% endraw %}'
 
   @classmethod
   def from_raw_str(cls, text: str) -> 'Template':
-    """Returns a template that preserve the text as original."""
+    """Returns a template that preserves the text as original."""
     return cls(cls.raw_str(text), clean=False)
 
   def render(
@@ -254,18 +330,20 @@ class Template(
     """Renders the template with variables from the context.
 
     Args:
-      allow_partial: Allow partial rendering, this means that unresolved
-        variables are allowed and remain in the output text.
-      implicit: If True, reuse the rendering output if a parent LangFunc
-        is rendering current LangFunc multiple times. This is important
-        for making sure all references to the same LangFunc within a single
+      allow_partial: If True, allows partial rendering, which leaves unresolved
+        variables in place in the output text. Otherwise, raises error when
+        there are unresolved variables.
+      implicit: If True, reuse the rendering output if a parent `lf.Template`
+        is rendering current `lf.Template` multiple times. This is important
+        for making sure all references to the same `lf.Template` within a single
         top-level rendering would return the same result. If False, every call
         to `render` will trigger the actual rendering process.
       message_cls: The message class used for creating the return value.
-      **kwargs: Values for template variables.
+      **kwargs: Values for template variables, which override values from
+        member attributes or context.
 
     Returns:
-      An Message object as the rendered result.
+      A Message object containing the rendered result.
     """
     try:
       pg.object_utils.thread_local_push(_TLS_RENDER_STACK, self)
@@ -400,7 +478,14 @@ class Template(
       assert top is self, (top, self)
 
   def additional_metadata(self) -> dict[str, Any]:
-    """Returns additional metadta to be carried in the rendered message."""
+    """Returns additional metadata to be carried in the rendered message.
+
+    Subclasses can override this method to inject additional metadata based on
+    their own logic.
+
+    Returns:
+      A dict of metadata to be added to the output message.
+    """
     metadata = {}
     # Carry metadata from `lf.context`.
     for k, v in component.all_contextual_values().items():
@@ -425,7 +510,7 @@ class Template(
       child_transform: Callable[[pg.KeyPath, pg.typing.Field, Any], Any]
       | None = None,
   ) -> Tuple[bool, Any]:
-    """Makes it applicable to pg.typing.Str()."""
+    """Makes template applicable to `pg.typing.Str()`."""
     del allow_partial
     del child_transform
 
@@ -459,10 +544,11 @@ class Template(
 
   @property
   def DEFAULT(self) -> 'Template':
-    """Referring to the default value used for this template.
+    """Refers to the default value used for this template.
 
-    This method is intended to be used in template for referring to the default
-    value of current template. There are two scenarios:
+    This property is intended to be used in template string for referring to
+    the default value of current template, useful for wrapping the default
+    template. For example:
 
     Scenario 1: Use instance-level template_str to override the class default.
 
@@ -546,7 +632,7 @@ class Template(
       value: Union[str, message_lib.Message, 'Template'],
       **kwargs
   ) -> 'Template':
-    """Create a template object from a string or template."""
+    """Creates a template object from a value."""
     if isinstance(value, cls):
       return value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter
     if isinstance(value, str):

@@ -20,7 +20,15 @@ import pyglove as pg
 
 
 class MetricValue(pg.Object):
-  """Base class for metric values."""
+  """Base class for metric values.
+
+  `MetricValue` is the base class for representing aggregated metric values
+  in an evaluation. It accumulates data points from individual examples,
+  each consisting of a value and an optional weight, associated with an example
+  ID. Subclasses must implement `reduce` method to compute a single float value
+  from accumulated data points, and `scalar_repr` to provide a string
+  representation of the reduced value.
+  """
 
   class DataPoint(pg.Object):
     """A data point for a metric value."""
@@ -133,7 +141,13 @@ class MetricValue(pg.Object):
 
 
 class Rate(MetricValue):
-  """Representing a rate in range [0, 1]."""
+  """Metric value representing a rate in range [0, 1].
+
+  `Rate` is used for metrics that compute a rate, such as accuracy or error
+  rate. The final value is computed as the weighted sum of accumulated values
+  divided by the total number of examples. It's displayed as a percentage
+  (e.g., 90.0%).
+  """
 
   def reduce(self) -> float:
     return self._weighted_sum / self.total
@@ -145,7 +159,13 @@ class Rate(MetricValue):
 
 
 class Average(MetricValue):
-  """Average of a aggregated values."""
+  """Metric value representing an average of accumulated values.
+
+  `Average` is used for metrics that compute an average score across examples
+  (e.g., average quality score). The final value is computed as the weighted
+  sum of accumulated values divided by the number of data points.
+  It's displayed as a float with 3 decimal places (e.g., 4.750).
+  """
 
   def reduce(self) -> float:
     if not self.data_points:

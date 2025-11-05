@@ -90,16 +90,35 @@ def generate_class(
     skip_lm: bool = False,
     **kwargs,
 ) -> Type[Any] | lf.Message:
-  """Generate a class with specified name based on the prompt.
+  """Generates a Python class dynamically from a prompt using an LLM.
 
-  Example:
-    ```
-    trip_cls = lf.classgen(
-        'Trip',
-        'A trip plan to visit {{ city }}, city='San Francisco',
-        lm=lf.llms.GeminiPro()
-    )
-    ```
+  `lf.structured.generate_class` takes a class name and a natural language
+  description (prompt) and uses a language model to generate a Python class
+  (inheriting from `pg.Object`) that matches the description.
+  This is useful for creating structured data types on-the-fly based on
+  dynamic requirements.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+  import pyglove as pg
+
+  trip_plan_cls = lf.structured.generate_class(
+      'TripPlan',
+      'A trip plan to visit San Francisco, including a list of destinations,'
+      'start date, end date, and total budget.',
+      lm=lf.llms.Gemini25Flash())
+
+  # This might generate a class like:
+  # class TripPlan(pg.Object):
+  #   destinations: list[str]
+  #   start_date: str
+  #   end_date: str
+  #   total_budget: float
+
+  print(lf.Schema.from_value(trip_plan_cls).schema_str('python'))
+  ```
 
   Args:
     name: Class name to be generated.
@@ -108,17 +127,17 @@ def generate_class(
     lm: The language model to use. If not specified, the language model from
       `lf.context` context manager will be used.
     examples: An optional list of fewshot examples for helping class generation.
-      If None, a default single shot example will be used. Use
-      `lf.structured.classgen_example` to generate example.
+      If None, a default single-shot example will be used. Use
+      `lf.structured.classgen_example` to generate examples.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     skip_lm: If True, returns the rendered prompt as a UserMessage object.
-      otherwise return the LLM response based on the rendered prompt.
+      otherwise returns the LLM response based on the rendered prompt.
     **kwargs: Template variables passed to `prompt` and keyword arguments passed
       to `lf.structured.GenerateClass`.
 
   Returns:
-    Generated class.
+    The generated Python class, or `lf.Message` if `returns_message` is True.
 
   Raises:
     CodeError: if generation failed.

@@ -31,7 +31,31 @@ class _McpToolMeta(pg.symbolic.ObjectMeta):
 
 
 class McpTool(pg.Object, metaclass=_McpToolMeta):
-  """Base class for MCP tools."""
+  """Represents a tool available on an MCP server.
+
+  `McpTool` is the base class for all tool proxies generated from an MCP
+  server's tool definitions. Users do not typically subclass `McpTool` directly.
+  Instead, tool classes are obtained by calling `lf.mcp.McpClient.list_tools()`
+  or `lf.mcp.McpSession.list_tools()`.
+
+  Once a tool class is obtained, it can be instantiated with input parameters
+  and called via an `McpSession` to execute the tool on the server.
+
+  **Example Usage:**
+
+  ```python
+  import langfun as lf
+
+  client = lf.mcp.McpClient.from_command(...)
+  with client.session() as session:
+    # List tools and get the 'math' tool class.
+    math_tool_cls = session.list_tools()['math']
+
+    # Instantiate the tool with parameters and call it.
+    result = math_tool_cls(x=1, y=2, op='+')(session)
+    print(result)
+  ```
+  """
 
   TOOL_NAME: Annotated[
       ClassVar[str],
@@ -40,7 +64,17 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
 
   @classmethod
   def python_definition(cls, markdown: bool = True) -> str:
-    """Returns the Python definition of the tool."""
+    """Returns the Python definition of this tool's input schema.
+
+    This is useful for generating prompts that instruct a language model
+    on how to use the tool.
+
+    Args:
+      markdown: If True, formats the output as a Markdown code block.
+
+    Returns:
+      A string containing the Python definition of the tool's input schema.
+    """
     return lf_schema.Schema.from_value(cls).schema_str(
         protocol='python', markdown=markdown
     )
@@ -49,16 +83,17 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
   def result_to_message(
       cls, result: mcp.types.CallToolResult
   ) -> lf_message.ToolMessage:
-    """Converts a tool call result to a message.
+    """Converts an `mcp.types.CallToolResult` to an `lf.ToolMessage`.
 
-    This method allows users to convert an existing mcp.CallToolResult to a
-    Langfun ToolMessage.
+    This method translates results from the MCP protocol, including text,
+    image, and audio content, into a Langfun `ToolMessage`, making it easy
+    to integrate tool results into Langfun workflows.
 
     Args:
-      result: The MCP tool call result.
+      result: The `mcp.types.CallToolResult` object to convert.
 
     Returns:
-      A ToolMessage object.
+      An `lf.ToolMessage` instance representing the tool result.
     """
     chunks = []
     for item in result.content:
@@ -81,16 +116,18 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
       session,
       *,
       returns_message: bool = False) -> Any:
-    """Calls a MCP tool synchronously.
+    """Calls the MCP tool synchronously within a given session.
 
     Args:
-      session: A MCP session.
-      returns_message: If True, always returns a ToolMessage. Otherwise,
-        return structured content (result) if available, otherwise return
-        ToolMessage if there is multi-modal content, otherwise return text.
+      session: An `McpSession` object.
+      returns_message: If True, the raw `lf.ToolMessage` is returned.
+        If False(default), the method attempts to return a more specific result:
+          - The `result` field of the `ToolMessage` if it's populated.
+          - The `ToolMessage` itself if it contains multi-modal content.
+          - The `text` field of the `ToolMessage` otherwise.
 
     Returns:
-      The call result, or the result from structured content, or content.
+      The result of the tool call, processed according to `returns_message`.
     """
     return async_support.invoke_sync(
         self.acall,
@@ -104,16 +141,18 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
       *,
       returns_message: bool = False
   ) -> Any:
-    """Calls a MCP tool asynchronously.
+    """Calls the MCP tool asynchronously within a given session.
 
     Args:
-      session: McpSession or mcp.ClientSession.
-      returns_message: If True, always returns a ToolMessage. Otherwise,
-        return structured content (result) if available, otherwise return
-        ToolMessage if there is multi-modal content, otherwise return text.
+      session: An `McpSession` object or an `mcp.ClientSession`.
+      returns_message: If True, the raw `lf.ToolMessage` is returned.
+        If False(default), the method attempts to return a more specific result:
+          - The `result` field of the `ToolMessage` if it's populated.
+          - The `ToolMessage` itself if it contains multi-modal content.
+          - The `text` field of the `ToolMessage` otherwise.
 
     Returns:
-      The call result, or the result from structured content, or content.
+      The result of the tool call, processed according to `returns_message`.
     """
     if not isinstance(session, mcp.ClientSession):
       session = getattr(session, '_session', None)
@@ -131,7 +170,12 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
     return message.text
 
   def input_parameters(self) -> dict[str, Any]:
-    """Returns the input parameters of the tool."""
+    """Returns the input parameters for the tool call.
+
+    Returns:
+      A dictionary containing the input parameters, formatted for an
+      MCP `call_tool` request.
+    """
     # Optional fields are represented as fields with default values. Therefore,
     # we need to remove the default values from the JSON representation of the
     # tool.
@@ -147,7 +191,15 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
 
   @classmethod
   def make_class(cls, tool_definition: mcp.Tool) -> type['McpTool']:
-    """Makes a MCP tool class from tool definition."""
+    """Creates an `McpTool` subclass from an MCP tool definition.
+
+    Args:
+      tool_definition: An `mcp.Tool` object containing the tool's metadata.
+
+    Returns:
+      A dynamically generated class that inherits from `McpTool` and
+      represents the defined tool.
+    """
 
     class _McpTool(cls):
       auto_schema = False
@@ -170,11 +222,19 @@ class _McpToolInputMeta(pg.symbolic.ObjectMeta):
 
 
 class McpToolInput(pg.Object, metaclass=_McpToolInputMeta):
-  """Base class for MCP tool inputs."""
+  """Base class for generated MCP tool input schemas."""
 
   @classmethod
   def make_class(cls, name: str, schema: pg.Schema):
-    """Converts a schema to an input class."""
+    """Creates an `McpToolInput` subclass from a schema.
+
+    Args:
+      name: The name of the input class to generate.
+      schema: A `pg.Schema` object defining the input fields.
+
+    Returns:
+      A dynamically generated class that inherits from `McpToolInput`.
+    """
 
     class _McpToolInput(cls):
       pass

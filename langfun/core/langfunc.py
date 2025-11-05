@@ -32,146 +32,43 @@ _TLS_LFUN_CALL_STACK = '_langfunc_callstack'
 # NOTE(daiyip): Only the template string belongs to the positional arguments,
 # all others are keyword-only for clarity.
 @pg.use_init_args(['template_str'])
-class LangFunc(
-    template_lib.Template,
-):
-  r"""Base class for natural-language driven component.
+class LangFunc(template_lib.Template):
+  r"""Base class for Language-based functions.
 
-  ``LangFunc`` is a language-driven component that enables users to
-  seamlessly interact with Language Models (LLMs) using a blend of natural
-  language and code. It empowers users to easily modularize prompt/execution
-  logics, compose them, and simplify the creation of Language Model (LLM)-based
-  components and applications.
+  LangFunc represents a function powered by a language model. It is a subclass
+  of `lf.Template` and can be thought of as a `lf.Template` augmented with an LM
+  and an output transformation. Calling a `lf.LangFunc` is equivalent to calling
+  the LM with the rendered prompt and transforming the output.
 
-  LangFunc can be conceptualized as a string template with embeddable code,
-  but it distinguishes itself from traditional template systems in four key
-  ways.
+  LangFunc can be directly constructed and used.
 
-  Firstly, it enables easy modularization of templates along with the required
-  values with OO principles, providing a reusable way for LLM-based content
-  generation. For example:
+  ```python
+  import langfun as lf
 
-    ```
-    class FewshotExamples(lf.LangFunc):
-      '''Base for fewshot prompt.
+  func = lf.LangFunc("Hello, {{name}}!")
+  print(func(name="Gemini", lm=lf.llms.Gemini25Flash()))
+  # Output: Hello, how are you today?
+  ```
 
-      {% for example in examples %}
-      {{ example }}
-      {% endfor %}
-      '''
+  Or it can be subclassed:
 
-    # Usage 1: __init__ time binding.
-    assert FewshotPrompt(examples=['foo', 'bar'])() == 'foo\nbar'
+  ```python
+  import langfun as lf
 
-    # Usage 2: __call__ time binding.
-    assert FewshotPrompt()(examples=['foo', 'bar']) == 'foo\nbar'
+  class Compute(lf.LangFunc):
+    '''Compute a simple arithmetic expression.
 
-    class ToolDescription(lf.LangFunc):
-      '''Tool descriptions.
+    {{expression}} = ?
+    '''
+    expression: str
 
-      {% for tool in tools %}
-      {{ tool.description }}
-      {% endfor %}
-      '''
-      # We want to constrain tools to be a list of `Tool` objects.
-      tools: list[Tool]
+    def transform_output(self, lm_output: lf.Message) -> lf.Message:
+      lm_output.metadata.result = float(lm_output.text)
+      return lm_output
 
-    # Raises: runtime type checking will fail on [1, 2, 3].
-    ToolDescription(tools=[1, 2, 3])
-    ```
-
-  Secondly, it has the capability to compose multiple LangFuncs together,
-  enabling the accomplishment of complex language tasks with maximum reuse.
-  It allows users to provide program inputs to all the LangFuncs within a
-  composition at the top level, significantly simplifying the process of
-  providing context for users. For example:
-
-    ```
-    class ReAct(lf.LangFunc):
-      '''ReAct prompt for tool-use.
-
-      {{ preamble }}
-      {{ tool_description }}
-      {{ tool_examples }}
-      {{ user_input }}
-      '''
-      # Default preamble, which could be overriden from subclass
-      # or parsed from the `__init__` argument.
-      preamble = 'Please help me on my task based on the following tools.',
-
-    react = ReAct(
-        tool_description=ToolDescription()
-        tool_examples=FewshotExamples(),
-        # Partially bind `tools` and `examples`.
-        tools=my_tools,
-        examples=[t.examples for t in my_tools]
-        )
-
-    # Late bind `user_input` at __call__ time.
-    react(user_input='Help me get a lunch to go, veggie please.' )
-    ```
-
-  Thirdly, it allows the flexibility to encapsulate complex compositions to
-  reusable classes and modify them. For example:
-
-    ```
-    # The compound decorator converts a function into a LangFunc.
-    @lf.compound
-    def react_with_tools(preamble, tools: list[Tool]):
-      return ReAct(
-          preamble=preamble,
-          tool_description=ToolDescription()
-          tool_examples=FewshotExamples(),
-          # Partially bind `tools` and `examples`.
-          tools=my_tools,
-          examples=[t.examples for t in my_tools]
-      )
-
-    # Actually, the entire chat application is a LangFunc.
-    class Chat(lt.LangFunc):
-      '''LLM-based Chat application.
-
-      llm({{ prompt }})
-      '''
-
-    chat = Chat(
-        llm=Bard24B(),
-        prompt=react_with_tools(
-            preamble=(
-                f'Please help me solve my problem using tools. '
-                f'Current time is {{datetime.datetime.now()}}'),
-            tools=my_tools))
-
-    chat(user_input='Help me get a lunch to go, veggie please.')
-    ```
-
-  Fourthly, LangFunc is built on top of PyGlove symbolic programming power,
-  it could be manipulated programmatically, turned into a space for data
-  sampling, or even tuned by AutoML. For example:
-
-    ```
-    import pyglove as pg
-
-    prompt_space = react_with_tools(
-        preamble=pg.oneof([
-            'Help me solve my problem using the following tools:',
-            'Help me with the tools below:',
-            ...
-        ])
-        # Choose any two of the tools for generating data.
-        tools=pg.manyof(2, [
-            google_search(...),
-            doordash(...),
-            ...
-        ])
-
-    for prompt in pg.random_sample(prompt_space):
-      print(prompt(user_input='Help me book a conf room please.'))
-
-    ```
-
-  For more capabilities on symbolic programming with PyGlove, please checkout
-  https://pyglove.readthedocs.io/en/latest/.
+  r = Compute(expression="1 + 1")(lm=lf.llms.Gemini25Flash())
+  print(r.result)
+  # Output: 2.0
 
   Final note: always include these capitalized words if you don't want to treat
   the docstr as the template str: THIS IS NOT A TEMPLATE. So as a result, this
@@ -305,6 +202,24 @@ class LangFunc(
       message_cls: Type[message_lib.Message] = message_lib.UserMessage,
       **kwargs,
   ) -> message_lib.Message:
+    """Renders the template and transforms it as LM input message.
+
+    Args:
+      allow_partial: If True, allows partial rendering, which leaves unresolved
+        variables in place in the output text. Otherwise, raises error when
+        there are unresolved variables.
+      implicit: If True, reuse the rendering output if a parent `lf.Template`
+        is rendering current `lf.Template` multiple times. This is important
+        for making sure all references to the same `lf.Template` within a single
+        top-level rendering would return the same result. If False, every call
+        to `render` will trigger the actual rendering process.
+      message_cls: The message class used for creating the return value.
+      **kwargs: Values for template variables, which override values from
+        member attributes or context.
+
+    Returns:
+      A Message object containing the rendered result.
+    """
     lm_input = super().render(
         allow_partial=allow_partial,
         implicit=implicit,

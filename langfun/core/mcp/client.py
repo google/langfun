@@ -23,33 +23,53 @@ import pyglove as pg
 
 
 class McpClient(pg.Object):
-  """Base class for MCP client.
+  """Interface for Model Context Protocol (MCP) client.
 
-  Usage:
+  An MCP client serves as a bridge to an MCP server, enabling users to interact
+  with tools hosted on the server. It provides methods for listing available
+  tools and creating sessions for tool interaction.
+
+  There are three types of MCP clients:
+
+  * **Stdio-based client**: Ideal for interacting with tools exposed as
+    command-line executables through stdin/stdout.
+    Created by `lf.mcp.McpClient.from_command`.
+  * **HTTP-based client**: Designed for tools accessible via HTTP,
+    supporting Server-Sent Events (SSE) for streaming.
+    Created by `lf.mcp.McpClient.from_url`.
+  * **In-memory client**: Useful for testing or embedding MCP servers
+    within the same process.
+    Created by `lf.mcp.McpClient.from_fastmcp`.
+
+  **Example Usage:**
 
   ```python
+  import langfun as lf
 
-  def tool_use():
-    client = lf.mcp.McpClient.from_command('<MCP_CMD>', ['<ARG1>', 'ARG2'])
-    tools = client.list_tools()
-    tool_cls = tools['<TOOL_NAME>']
+  # Example 1: Stdio-based client
+  client = lf.mcp.McpClient.from_command('<MCP_CMD>', ['<ARG1>', 'ARG2'])
+  tools = client.list_tools()
+  tool_cls = tools['<TOOL_NAME>']
 
-    # Print the python definition of the tool.
-    print(tool_cls.python_definition())
+  # Print the Python definition of the tool.
+  print(tool_cls.python_definition())
 
-    with client.session() as session:
-      return tool_cls(x=1, y=2)(session)
+  with client.session() as session:
+    result = tool_cls(x=1, y=2)(session)
+    print(result)
 
-  async def tool_use_async_version():
+  # Example 2: HTTP-based client (async)
+  async def main():
     client = lf.mcp.McpClient.from_url('http://localhost:8000/mcp')
     tools = client.list_tools()
     tool_cls = tools['<TOOL_NAME>']
 
-    # Print the python definition of the tool.
+    # Print the Python definition of the tool.
     print(tool_cls.python_definition())
 
     async with client.session() as session:
-      return await tool_cls(x=1, y=2).acall(session)
+      result = await tool_cls(x=1, y=2).acall(session)
+      print(result)
   ```
   """
 
@@ -60,7 +80,15 @@ class McpClient(pg.Object):
   def list_tools(
       self, refresh: bool = False
   ) -> dict[str, Type[mcp_tool.McpTool]]:
-    """Lists all MCP tools."""
+    """Lists all available tools on the MCP server.
+
+    Args:
+      refresh: If True, forces a refresh of the tool list from the server.
+        Otherwise, a cached list may be returned.
+
+    Returns:
+      A dictionary mapping tool names to their corresponding `McpTool` classes.
+    """
     if self._tools is None or refresh:
       with self.session() as session:
         self._tools = session.list_tools()
@@ -68,11 +96,23 @@ class McpClient(pg.Object):
 
   @abc.abstractmethod
   def session(self) -> mcp_session.McpSession:
-    """Creates a MCP session."""
+    """Creates a new session for interacting with MCP tools.
+
+    Returns:
+      An `McpSession` object.
+    """
 
   @classmethod
   def from_command(cls, command: str, args: list[str]) -> 'McpClient':
-    """Creates a MCP client from a tool."""
+    """Creates an MCP client from a command-line executable.
+
+    Args:
+      command: The command to execute.
+      args: A list of arguments to pass to the command.
+
+    Returns:
+      A `McpClient` instance that communicates via stdin/stdout.
+    """
     return _StdioMcpClient(command=command, args=args)
 
   @classmethod
@@ -81,12 +121,27 @@ class McpClient(pg.Object):
       url: str,
       headers: dict[str, str] | None = None
   ) -> 'McpClient':
-    """Creates a MCP client from a URL."""
+    """Creates an MCP client from an HTTP URL.
+
+    Args:
+      url: The URL of the MCP server.
+      headers: An optional dictionary of HTTP headers to include in requests.
+
+    Returns:
+      A `McpClient` instance that communicates via HTTP.
+    """
     return _HttpMcpClient(url=url, headers=headers or {})
 
   @classmethod
   def from_fastmcp(cls, fastmcp: fastmcp_lib.FastMCP) -> 'McpClient':
-    """Creates a MCP client from a MCP server."""
+    """Creates an MCP client from an in-memory FastMCP instance.
+
+    Args:
+      fastmcp: An instance of `fastmcp_lib.FastMCP`.
+
+    Returns:
+      A `McpClient` instance that communicates with the in-memory server.
+    """
     return _InMemoryFastMcpClient(fastmcp=fastmcp)
 
 
@@ -97,18 +152,18 @@ class _StdioMcpClient(McpClient):
   args: Annotated[list[str], 'Arguments to pass to the command.']
 
   def session(self) -> mcp_session.McpSession:
-    """Creates a MCP session."""
+    """Creates an McpSession from command."""
     return mcp_session.McpSession.from_command(self.command, self.args)
 
 
 class _HttpMcpClient(McpClient):
-  """Server-Sent Events (SSE)/Streamable HTTP-based MCP client."""
+  """HTTP-based MCP client."""
 
   url: Annotated[str, 'URL to connect to.']
   headers: Annotated[dict[str, str], 'Headers to send with the request.'] = {}
 
   def session(self) -> mcp_session.McpSession:
-    """Creates a MCP session."""
+    """Creates an McpSession from URL."""
     return mcp_session.McpSession.from_url(self.url, self.headers)
 
 
@@ -118,5 +173,5 @@ class _InMemoryFastMcpClient(McpClient):
   fastmcp: Annotated[fastmcp_lib.FastMCP, 'MCP server to connect to.']
 
   def session(self) -> mcp_session.McpSession:
-    """Creates a MCP session."""
+    """Creates an McpSession from an in-memory FastMCP instance."""
     return mcp_session.McpSession.from_fastmcp(self.fastmcp)

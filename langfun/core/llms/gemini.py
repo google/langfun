@@ -696,7 +696,15 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 @pg.use_init_args(['model'])
 class Gemini(rest.REST):
-  """Language models provided by Google GenAI."""
+  """Base class for Gemini models served on Google GenAI and Vertex AI.
+
+  This class implements the Gemini API protocol, shared by
+  `lf.llms.GoogleGenAI` and `lf.llms.VertexAI`, providing common request
+  formatting and response parsing for Gemini models.
+
+  It is not intended to be used directly. Please use `lf.llms.GoogleGenAI` or
+  `lf.llms.VertexAI` instead.
+  """
 
   model: pg.typing.Annotated[
       pg.typing.Enum(

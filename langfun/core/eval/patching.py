@@ -114,17 +114,17 @@ def model_by_name(name: str) -> lf.LanguageModel:
 
 @pg.patcher(auto_typing=True)
 def lm(unused_eval, models: list[str]):
-  """Patch the LM used for benchmarking."""
+  """Patches the LM used for benchmarking."""
   return patch_lm(pg.oneof([model_by_name(name) for name in models]))
 
 
 @pg.patcher(auto_typing=True)
 def temperature(unused_eval, value: float):
-  """Patch the temperature used for benchmarking."""
+  """Patches the temperature used for benchmarking."""
   return patch_member(lf.LMSamplingOptions, "temperature", value)
 
 
 @pg.patcher(auto_typing=True)
 def max_tokens(unused_eval, value: int | None):
-  """Patch the temperature used for benchmarking."""
+  """Patches the max_tokens used for benchmarking."""
   return patch_member(lf.LMSamplingOptions, "max_tokens", value)

@@ -23,7 +23,7 @@ import pyglove as pg
 
 
 def tokenize(
-    prompt: Union[str, pg.Symbolic] | list[str | pg.Symbolic],
+    prompt: Union[str, pg.Symbolic, list[str | pg.Symbolic]],
     schema: Union[
         schema_lib.Schema, Type[Any], list[Type[Any]], dict[str, Any], None
     ] = None,
@@ -33,20 +33,35 @@ def tokenize(
     protocol: schema_lib.SchemaProtocol = 'python',
     **kwargs,
 ) -> list[tuple[str | bytes, int]]:
-  """Tokenize the prompt for `lf.query`.
+  """Renders a prompt and tokenizes it using a language model.
+
+  `lf.tokenize` first renders a prompt based on the provided `prompt`,
+  `schema`, and `examples`, similar to `lf.query`, and then uses the
+  specified language model (`lm`) to tokenize the resulting message.
+  This is useful for understanding how a prompt is seen by the model or
+  for estimating token counts before sending requests.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+  tokens = lf.tokenize('Hello world!', lm=lf.llms.Gpt4())
+  print(tokens)
+  # Output might look like: [('Hello', 15339), (' world', 1917), ('!', 0)]
+  ```
 
   Args:
-    prompt: The prompt(s) based on which each completion will be scored.
-    schema: The schema as the output type. If None, it will be inferred from
-      the completions.
-    lm: The language model used for scoring.
-    examples: Fewshot exemplars used together with the prompt in getting the
-      completions.
+    prompt: The prompt to render and tokenize. Can be a string, `pg.Symbolic`,
+      or `lf.Template`.
+    schema: The schema for formatting the prompt, if `prompt` is structured or
+      if schema-based formatting is needed.
+    lm: The language model to use for tokenization.
+    examples: Few-shot examples to include in the rendered prompt.
     protocol: The protocol for formulating the prompt based on objects.
     **kwargs: Keyword arguments that are referred by the prompt.
 
   Returns:
-    A list of (text, token_id) tuples.
+    A list of (token_str, token_id) tuples representing the tokenized prompt.
   """
   input_message = querying.query_prompt(
       prompt,

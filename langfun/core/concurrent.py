@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Utility library for handling concurrency in langfun."""
+"""Utilities for concurrency in Langfun."""
 
 import abc
 import collections
@@ -97,7 +97,7 @@ class RetryError(RuntimeError):
 
 
 def with_retry(
-    func: Callable[[Any], Any],
+    func: Callable[..., Any],
     retry_on_errors: Union[
         Union[Type[BaseException], Tuple[Type[BaseException], str]],
         Sequence[Union[Type[BaseException], Tuple[Type[BaseException], str]]],
@@ -108,10 +108,25 @@ def with_retry(
     max_retry_interval: int = 300,
     seed: int | None = None,
 ) -> Callable[..., Any]:
-  """Derives a user function with retry on error.
+  """Decorator-like function to add retry mechanism to a function.
+
+  Example:
+
+  ```
+  def flaky_function():
+    if random.random() < 0.5:
+      raise ValueError('error')
+    return 1
+
+  reliable_function = lf.with_retry(
+      flaky_function,
+      retry_on_errors=ValueError,
+      max_attempts=3)
+  reliable_function()
+  ```
 
   Args:
-    func: A user function.
+    func: The function to add retry mechanism.
     retry_on_errors: A sequence of exception types or tuples of exception type
       and error messages (described in regular expression) as the desired
       exception types to retry.
@@ -128,8 +143,7 @@ def with_retry(
       determined based on current time.
 
   Returns:
-    A function with the same signature of the input function, with the retry
-    capability.
+    A function with the same signature of `func`, but with retry capability.
   """
 
   def _func(*args, **kwargs):
@@ -178,6 +192,24 @@ def concurrent_execute(
     return_jobs: bool = False,
 ) -> list[Any]:
   """Executes a function concurrently under current component context.
+
+  `lf.concurrent_execute` applies a function to each item in an iterable of
+  inputs in parallel and returns a list of results in the same order as the
+  inputs. It is a convenient wrapper around `lf.concurrent_map` for synchronous
+  bulk processing.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+
+  def square(x):
+    return x ** 2
+
+  results = lf.concurrent_execute(square, [1, 2, 3, 4], max_workers=2)
+  print(results)
+  # Output: [1, 4, 9, 16]
+  ```
 
   Args:
     func: A user function.
@@ -648,6 +680,38 @@ def concurrent_map(
     return_jobs: bool = False,
 ) -> Iterator[Any]:
   """Maps inputs to outptus via func concurrently under current context.
+
+  `lf.concurrent_map` applies a function to each item in an iterable of
+  inputs in parallel and yields `(input, output, error)` tuples as they are
+  completed. It supports features like ordered/unordered results, progress
+  bars, timeouts, and automatic retries for transient errors.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+  import time
+  import random
+
+  def flaky_square(x):
+    time.sleep(random.random())
+    if random.random() < 0.3:
+      raise ValueError("Flaky error")
+    return x ** 2
+
+  # Unordered execution with progress bar and retries
+  for input, output, error in lf.concurrent_map(
+      flaky_square,
+      range(10),
+      max_workers=3,
+      show_progress=True,
+      retry_on_errors=ValueError,
+      max_attempts=3):
+    if error:
+      print(f"Input {input} failed with error: {error}")
+    else:
+      print(f"Input {input} succeeded with output: {output}")
+  ```
 
   Args:
     func: A user function.

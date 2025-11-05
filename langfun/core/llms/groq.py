@@ -260,9 +260,34 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 @lf.use_init_args(['model'])
 class Groq(openai_compatible.OpenAIChatCompletionAPI):
-  """Groq LLMs through REST APIs (OpenAI compatible).
+  """Groq models.
 
-  See https://platform.openai.com/docs/api-reference/chat
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call Llama 3.3 70B on Groq using API key from environment variable
+  # 'GROQ_API_KEY'.
+  lm = lf.llms.GroqLlama33_70B_Versatile()
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The Groq API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.GroqLlama33_70B_Versatile(api_key='MY_API_KEY')
+     ```
+  2. via environment variable `GROQ_API_KEY`.
+
+  **References:**
+
+  *   https://console.groq.com/docs
   """
 
   model: pg.typing.Annotated[

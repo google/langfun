@@ -44,13 +44,32 @@ except ImportError:
 
 @pg.use_init_args(['api_endpoint'])
 class VertexAI(rest.REST):
-  """Base class for VertexAI models.
+  """Base class for models served on Vertex AI.
 
-  This class handles the authentication of vertex AI models. Subclasses
-  should implement `request` and `result` methods, as well as the `api_endpoint`
-  property. Or let users to provide them as __init__ arguments.
+  This class handles authentication for Vertex AI models. Subclasses,
+  such as `VertexAIGemini`, `VertexAIAnthropic`, and `VertexAILlama`,
+  provide specific implementations for different model families hosted
+  on Vertex AI.
 
-  Please check out VertexAIGemini in `gemini.py` as an example.
+  **Quick Start:**
+
+  If you are using Langfun from a Google Cloud environment (e.g., GCE, GKE)
+  that has service account credentials, authentication is handled automatically.
+  Otherwise, you might need to set up credentials:
+
+  ```bash
+  gcloud auth application-default login
+  ```
+
+  Then you can use a Vertex AI model:
+
+  ```python
+  import langfun as lf
+
+  lm = lf.llms.VertexAIGemini25Flash(project='my-project', location='global')
+  r = lm('Who are you?')
+  print(r)
+  ```
   """
 
   model: pg.typing.Annotated[
@@ -158,7 +177,21 @@ class VertexAI(rest.REST):
 @pg.use_init_args(['model'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class VertexAIGemini(VertexAI, gemini.Gemini):
-  """Gemini models served by Vertex AI.."""
+  """Gemini models served on Vertex AI.
+
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call Gemini 1.5 Flash on Vertex AI.
+  # If project and location are not specified, they will be read from
+  # environment variables 'VERTEXAI_PROJECT' and 'VERTEXAI_LOCATION'.
+  lm = lf.llms.VertexAIGemini25Flash(project='my-project', location='global')
+  r = lm('Who are you?')
+  print(r)
+  ```
+  """
 
   # Set default location to us-central1.
   location = 'us-central1'

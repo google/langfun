@@ -32,17 +32,63 @@ import pyglove as pg
 
 
 class Evaluation(experiment_lib.Experiment):
-  """Evaluation.
+  """Base class for Langfun evaluations.
 
-  An evaluation can be a leaf node or a container of other evaluations,
-  depending on whether the current evaluation object is configured with
-  any `pg.oneof`.
+  `lf.eval.Evaluation` is the base class for defining evaluation tasks in
+  Langfun. Users typically subclass it to implement custom evaluation logic by
+  overriding `inputs` and `process` methods.
 
-  For example, `MyEval(lm=pg.oneof([lf.llms.Gpt4(), lf.llms.Gemini1_5Pro()]))`
-  is a container of two sub-experiments, one for each LLM. In such case, the
-  evaluation object with `pg.oneof` is called a hyper evaluation, which
-  represents a search space of evaluations, and each sub-evaluation is called
-  a leaf evaluation, which will perform the actual evaluation.
+  An `Evaluation` object encapsulates:
+
+  *   **`inputs`**: A callable that returns an iterable of input examples to be
+      processed. This is usually provided by implementing an `inputs(self)`
+      method in the subclass, which yields input items for evaluation one by
+      one.
+  *   **`process(self, example)`**: An abstract method that processes one
+      example and returns the output, or a tuple of (output, metadata).
+      The output will be used for computing metrics.
+  *   **`metrics`**: A list of metrics (e.g., `lf.metrics.Accuracy`) to compute
+      based on the outputs from `process`. Some metrics may require users to
+      implement a `ground_truth(self, example)` method in the subclass to
+      compute metrics against ground truth.
+  *   **Hyperparameters**: Any other attributes of the class serve as
+      hyperparameters for the evaluation (e.g., the language model to use).
+
+  **Running Evaluations:**
+
+  Evaluations are executed via `lf.eval.Suite` or by calling the `.run()`
+  method on an `Evaluation` instance, which returns a `Run` object
+  containing the evaluation run information and results. If an evaluation
+  contains sweeable parameters (using `pg.oneof`), `.run()` will expand it
+  into multiple evaluation sub-tasks -- one for each combination of
+  hyperparameters -- all managed within the same `Run`.
+
+  **Example:**
+
+  ```python
+  import langfun as lf
+  import pyglove as pg
+
+  class MyEval(lf.eval.Evaluation):
+    lm: lf.LanguageModel
+    prompt: str = '1 + 1 = '
+
+    def inputs(self):
+      yield 2
+
+    def process(self, example: lf.eval.Example):
+      return int(lf.query(self.prompt, lm=self.lm))
+
+    def ground_truth(self, example: lf.eval.Example) -> int:
+      return example.input
+
+  # Run evaluation using two different LMs
+  evaluation = MyEval(
+      lm=pg.oneof([lf.llms.Gpt4(), lf.llms.Gemini()]),
+      metrics=[lf.metrics.Accuracy()]
+  )
+  run_info = evaluation.run()
+  ```
   """
 
   inputs: Annotated[
@@ -137,7 +183,7 @@ class Evaluation(experiment_lib.Experiment):
 
     Args:
       example: An example object to process. `example.input` is an object
-        returned from `Evaluable.inputs`.
+        yielded from `inputs()` method.
 
     Returns:
       A processed output. Or a tuple of (output, metadata).
@@ -760,7 +806,7 @@ class Evaluation(experiment_lib.Experiment):
 
 
 class EvaluationState:
-  """Evaluation state."""
+  """In-memory state of an evaluation."""
 
   class ExampleStatus(pg.Object):
     """Example state."""

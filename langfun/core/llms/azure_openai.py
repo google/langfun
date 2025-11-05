@@ -23,23 +23,35 @@ import pyglove as pg
 @lf.use_init_args(['model', 'deployment_name'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class AzureOpenAI(openai.OpenAI):
-  """Azure OpenAI model service.
+  """Azure OpenAI models.
 
-  This service interacts with the Azure OpenAI API to generate chat completions.
-  It uses the deployment_name and API version to construct the endpoint, and
-  authenticates using an API key provided via parameter or the
-  AZURE_OPENAI_API_KEY environment variable.
+  **Quick Start:**
 
-  Example:
-      lm = AzureOpenAI(
-          model='gpt-4o',
-          deployment_name='gpt-4o',
-          api_version='2024-08-01-preview',
-          azure_endpoint='https://trackname.openai.azure.com/',
-          api_key='token'
-      )
-      response = lf.query(prompt="what the capital of France", lm=lm)
-      print(response)
+  ```python
+  import langfun as lf
+
+  # Call GPT-4o on Azure using API key from environment variable
+  # 'AZURE_OPENAI_API_KEY'.
+  lm = lf.llms.AzureOpenAI(
+      model='gpt-4o',
+      deployment_name='my-gpt4o-deployment',
+      api_version='2024-08-01-preview',
+      azure_endpoint='https://my-resource.openai.azure.com/',
+  )
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The Azure OpenAI API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.AzureOpenAI(..., api_key='MY_API_KEY')
+     ```
+  2. via environment variable `AZURE_OPENAI_API_KEY`.
   """
 
   deployment_name: Annotated[

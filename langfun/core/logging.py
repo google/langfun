@@ -310,7 +310,7 @@ def warning(
     console: bool = False,
     **kwargs
 ) -> LogEntry:
-  """Logs an info message to the session."""
+  """Logs a warning message to the session."""
   return log('warning', message, indent=indent, console=console, **kwargs)
 
 

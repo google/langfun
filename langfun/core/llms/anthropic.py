@@ -650,9 +650,34 @@ _SUPPORTED_MODELS_BY_MODEL_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 @lf.use_init_args(['model'])
 class Anthropic(rest.REST):
-  """Anthropic LLMs (Claude) through REST APIs.
+  """Anthropic Claude models.
 
-  See https://docs.anthropic.com/claude/reference/messages_post
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call Claude 3.5 Sonnet using API key from environment variable
+  # 'ANTHROPIC_API_KEY'.
+  lm = lf.llms.Claude35Sonnet()
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The Anthropic API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.Claude35Sonnet(api_key='MY_API_KEY')
+
+  2. via environment variable `ANTHROPIC_API_KEY`.
+
+  **References:**
+
+  *   https://docs.anthropic.com/claude/reference/messages_post
   """
 
   model: pg.typing.Annotated[

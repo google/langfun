@@ -25,7 +25,35 @@ import pyglove as pg
 @lf.use_init_args(['model'])
 @pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
 class GenAI(gemini.Gemini):
-  """Language models provided by Google GenAI."""
+  """Google GenAI models.
+
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call Gemini 1.5 Flash using API key from environment variable
+  # 'GOOGLE_API_KEY'.
+  lm = lf.llms.Gemini15Flash()
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The Google API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.Gemini15Flash(api_key='MY_API_KEY')
+     ```
+  2. via environment variable `GOOGLE_API_KEY`.
+
+  **References:**
+
+  *   https://ai.google.dev/docs
+  """
 
   model: pg.typing.Annotated[
       pg.typing.Enum(

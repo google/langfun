@@ -21,7 +21,15 @@ import pyglove as pg
 
 
 class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
-  """Evaluation progress."""
+  """Represents and tracks the progress of an evaluation.
+
+  The `Progress` class maintains counts of processed, failed, and skipped
+  items in an evaluation, along with timing information (start time, stop time,
+  duration) and an execution summary. It provides properties to check the
+  status of the evaluation (e.g., `is_started`, `is_completed`) and methods
+  to update progress as items are evaluated.
+  It also supports HTML rendering as a progress bar for visualization.
+  """
 
   num_total: Annotated[
       int | None,

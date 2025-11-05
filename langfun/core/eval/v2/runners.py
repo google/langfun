@@ -42,7 +42,14 @@ _RUN_MANIFEST = 'run.json'
 
 
 class RunnerBase(Runner):
-  """A simple runner that runs evaluations and their examples sequentially."""
+  """Base class for runners with plugin support and IO pooling.
+
+  `RunnerBase` provides the basic runner functionalities such as plugin
+  integration for checkpointing, reporting and progress tracking.
+  It also manages a thread pool for background IO operations.
+  Subclasses should implement `_run` and `_evaluate_items` for different
+  execution strategies.
+  """
 
   tqdm: Annotated[
       bool,
@@ -397,11 +404,12 @@ class RunnerBase(Runner):
 
 
 class SequentialRunner(RunnerBase):
-  """Sequential runner.
+  """A runner that executes evaluations and examples sequentially.
 
-  Sequential runner runs all evaluations and their examples in sequence,
-  as well as the background tasks, it allows the developer to catch all
-  exceptions thrown from the background tasks, making it easier to debug.
+  The sequential runner executes all evaluations and their examples in the
+  calling thread. Background tasks are also run sequentially, which makes it
+  easier to debug as exceptions from background tasks will be raised
+  immediately.
   """
 
   NAME = 'sequential'
@@ -426,7 +434,13 @@ class SequentialRunner(RunnerBase):
 
 
 class DebugRunner(SequentialRunner):
-  """Debug runner."""
+  """A runner for debugging evaluations.
+
+  The debug runner is a sequential runner that only runs the first example
+  of each evaluation, with `raise_if_has_error` enabled. This is useful for
+  quickly identifying issues in evaluation logic during development.
+  Checkpointers are disabled for this runner.
+  """
 
   NAME = 'debug'
 
@@ -444,7 +458,13 @@ class DebugRunner(SequentialRunner):
 
 
 class ParallelRunner(RunnerBase):
-  """Parallel runner."""
+  """A runner that executes evaluations and examples in parallel.
+
+  The parallel runner groups evaluations by their required resources
+  (e.g., specific LLMs) and runs evaluations that do not share resources in
+  parallel. Within each evaluation, examples are also processed in parallel
+  using threads, up to `Evaluation.max_workers`.
+  """
 
   NAME = 'parallel'
 

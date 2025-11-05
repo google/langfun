@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Utility for async IO in Langfun."""
+"""Utilities for asynchronous programming in Langfun."""
 
 import asyncio
 import contextlib
@@ -23,7 +23,20 @@ import pyglove as pg
 async def invoke_async(
     sync_callable: Callable[..., Any], *args, **kwargs
 ) -> Any:
-  """Invokes a callable asynchronously with `lf.context` manager enabled."""
+  """Invokes a sync callable asynchronously in a separate thread.
+
+  This is useful for wrapping a sync function into an async function,
+  allowing multiple calls of the sync function to run concurrently.
+  `lf.context` will be propagated to the thread that runs the sync callable.
+
+  Args:
+    sync_callable: The sync callable to invoke.
+    *args: Positional arguments to pass to the callable.
+    **kwargs: Keyword arguments to pass to the callable.
+
+  Returns:
+    An awaitable that resolves to the return value of the sync_callable.
+  """
   return await asyncio.to_thread(
       # Enable `lf.context` manager for async calls.
       pg.with_contextual_override(sync_callable), *args, **kwargs
@@ -35,7 +48,23 @@ def invoke_sync(
     *args,
     **kwargs
 ) -> Any:
-  """Invokes a async callable synchronously."""
+  """Invokes an async callable synchronously.
+
+  This is useful for calling an async function from a sync context.
+  If there is an existing async event loop in current thread managed by
+  `lf.sync_context_manager`, it will be used for running the async callable.
+  Otherwise, `anyio.run` will be used to run the async callable in a new
+  event loop.
+  `lf.context` will be propagated to the async callable.
+
+  Args:
+    async_callable: The async callable to invoke.
+    *args: Positional arguments to pass to the callable.
+    **kwargs: Keyword arguments to pass to the callable.
+
+  Returns:
+    The return value of the async_callable.
+  """
   async def _invoke():
     return await async_callable(*args, **kwargs)
   invoke_fn = pg.with_contextual_override(_invoke)
