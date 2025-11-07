@@ -513,7 +513,7 @@ class BaseEnvironment(interface.Environment):
       raise ValueError(
           f'Environment {self.id} does not serve image ID {image_id!r}. '
           f'Please use one of the following image IDs: {self.image_ids!r} or '
-          f'set `{self.__class__.__name__}.supports_dynamic_image_ids` '
+          f'set `{self.__class__.__name__}.supports_dynamic_image_loading` '
           'to True if dynamic image loading is supported.'
       )
     return self._acquire(image_id)
