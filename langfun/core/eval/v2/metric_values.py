@@ -96,6 +96,14 @@ class MetricValue(pg.Object):
         self.increment_total()
     return self
 
+  def merge_from(self, other: 'MetricValue') -> 'MetricValue':
+    """Merges the values from another metric value."""
+    self._weighted_sum += other._weighted_sum  # pylint: disable=protected-access
+    with pg.notify_on_change(False), pg.allow_writable_accessors(True):
+      self.data_points.extend(other.data_points)
+      self.increment_total(other.total)
+    return self
+
   def __gt__(self, other: Union['MetricValue', float]) -> bool:
     if isinstance(other, self.__class__):
       return float(self) > float(other)

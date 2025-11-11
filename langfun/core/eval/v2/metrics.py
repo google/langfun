@@ -79,6 +79,12 @@ class Metric(pg.Object, pg.views.HtmlTreeView.Extension):
     for v in self.values():
       v.reset()
 
+  def merge_from(self, other: 'Metric') -> 'Metric':
+    """Merges the values from another metric."""
+    for v1, v2 in zip(self.values(), other.values()):
+      v1.merge_from(v2)
+    return self
+
   def _update_view(self):
     """Refreshes the metric values."""
     if self._label_group is None:

@@ -224,6 +224,27 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
     """Overrides nondefault values so volatile values are not included."""
     return dict()
 
+  def merge_from(self, other: 'Progress') -> None:
+    """Merges the progress from another progress."""
+    with pg.notify_on_change(False), pg.allow_writable_accessors(True):
+      if other.start_time is not None and (
+          self.start_time is None or self.start_time > other.start_time):
+        self.start_time = other.start_time
+
+      if other.stop_time is not None and (
+          self.stop_time is None or self.stop_time < other.stop_time):
+        self.stop_time = other.stop_time
+
+      if other.num_total is not None:
+        if self.num_total is None:
+          self.num_total = other.num_total
+        else:
+          assert self.num_total == other.num_total, (self, other)
+      self.num_processed += other.num_processed
+      self.num_failed += other.num_failed
+      self.num_skipped += other.num_skipped
+      self.execution_summary.aggregate(other.execution_summary.breakdown)
+
   #
   # HTML view.
   #

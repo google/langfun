@@ -77,6 +77,33 @@ class ProgressTest(unittest.TestCase):
     self.assertTrue(p.is_stopped)
     self.assertIsNotNone(p.stop_time_str)
 
+  def test_merge_from(self):
+    p1 = Progress()
+    p1.start(10)
+    p1.increment_processed()
+    p1.increment_failed()
+    p1.stop()
+
+    p2 = Progress()
+    p2.start(10)
+    p2.increment_skipped()
+    p2.stop()
+
+    with pg.allow_writable_accessors(True):
+      p1.start_time = 2.0
+      p1.stop_time = 4.0
+      p2.start_time = 1.0
+      p2.stop_time = 5.0
+
+    p1.merge_from(p2)
+    self.assertEqual(p1.num_total, 10)
+    self.assertEqual(p1.num_processed, 1)
+    self.assertEqual(p1.num_failed, 1)
+    self.assertEqual(p1.num_skipped, 1)
+    self.assertEqual(p1.num_completed, 3)
+    self.assertEqual(p1.start_time, 1.0)
+    self.assertEqual(p1.stop_time, 5.0)
+
 
 if __name__ == '__main__':
   unittest.main()

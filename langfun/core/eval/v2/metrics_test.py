@@ -106,6 +106,20 @@ class MatchTest(unittest.TestCase):
       m.audit(Example(id=2, input=pg.Dict(groundtruth=1), output=2))
       self.assertEqual(len(scripts), 12)
 
+  def test_merge_from(self):
+    m1 = metrics.Match()
+    m1.audit(Example(id=1, input=pg.Dict(groundtruth=1), output=1))
+    m2 = metrics.Match()
+    m2.audit(Example(id=2, input=pg.Dict(groundtruth=1), output=2))
+    m1.merge_from(m2)
+    self.assertEqual(m1.matches, 0.5)
+    self.assertEqual(m1.mismatches, 0.5)
+    self.assertEqual(m1.oop_errors, 0.0)
+    self.assertEqual(m1.non_oop_errors, 0.0)
+    self.assertEqual(m1.matches.total, 2)
+    self.assertEqual(len(m1.matches.data_points), 1)
+    self.assertEqual(len(m1.mismatches.data_points), 1)
+
 
 class ScoreTest(unittest.TestCase):
 

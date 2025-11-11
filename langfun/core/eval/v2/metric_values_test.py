@@ -51,6 +51,22 @@ class RateTest(unittest.TestCase):
     self.assertEqual(rate.total, 0)
     self.assertTrue(math.isnan(float(rate)))
 
+  def test_merge_from(self):
+    rate1 = metric_values.Rate()
+    rate1.add(1, 1.0, 1.0, increment_total=True)
+    rate2 = metric_values.Rate()
+    rate2.add(2, 0.0, 1.0, increment_total=True)
+    rate1.merge_from(rate2)
+    self.assertEqual(rate1.total, 2)
+    self.assertEqual(float(rate1), 0.5)
+    self.assertEqual(
+        rate1.data_points,
+        [
+            metric_values.MetricValue.DataPoint(1, 1.0, 1.0),
+            metric_values.MetricValue.DataPoint(2, 0.0, 1.0),
+        ],
+    )
+
 
 class AverageTest(unittest.TestCase):
 
@@ -74,6 +90,22 @@ class AverageTest(unittest.TestCase):
     )
     average.reset()
     self.assertEqual(average.total, 0)
+
+  def test_merge_from(self):
+    avg1 = metric_values.Average()
+    avg1.add(1, 1.0, 0.5, increment_total=True)
+    avg2 = metric_values.Average()
+    avg2.add(2, 0.0, 1.0, increment_total=True)
+    avg1.merge_from(avg2)
+    self.assertEqual(avg1.total, 2)
+    self.assertEqual(float(avg1), 0.25)
+    self.assertEqual(
+        avg1.data_points,
+        [
+            metric_values.MetricValue.DataPoint(1, 1.0, 0.5),
+            metric_values.MetricValue.DataPoint(2, 0.0, 1.0),
+        ],
+    )
 
 
 if __name__ == '__main__':
