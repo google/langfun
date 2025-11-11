@@ -73,7 +73,7 @@ class RunnerBase(Runner):
       self.plugins.append(progress_tracking.progress_tracker(self.tqdm))
 
     self._io_pool_lock = threading.Lock()
-    self._io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+    self._io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=128)
     # TODO(daiyip): render background errors.
     self._background_last_error = None
 
