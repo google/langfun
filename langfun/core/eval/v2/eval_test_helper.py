@@ -13,6 +13,9 @@
 # limitations under the License.
 """Helper classes and functions for evaluation tests."""
 
+import threading
+import time
+
 from langfun.core import language_model
 from langfun.core import llms
 from langfun.core import message as message_lib
@@ -135,3 +138,84 @@ def test_experiment_with_example_html_generation_error():
 def test_experiment_with_index_html_generation_error():
   """Returns a test experiment with bad index HTML."""
   return TestEvaluationWithIndexHtmlGenerationError()
+
+
+class TestPlugin(experiment_lib.Plugin):
+  """Plugin for testing."""
+
+  started_experiments: list[experiment_lib.Experiment] = []
+  completed_experiments: list[experiment_lib.Experiment] = []
+  skipped_experiments: list[experiment_lib.Experiment] = []
+  started_example_ids: list[int] = []
+  completed_example_ids: list[int] = []
+  start_time: float | None = None
+  complete_time: float | None = None
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._lock = threading.Lock()
+
+  def on_run_start(
+      self,
+      runner: experiment_lib.Runner,
+      root: experiment_lib.Experiment
+  ) -> None:
+    del root
+    with pg.notify_on_change(False), pg.allow_writable_accessors(True):
+      self.start_time = time.time()
+
+  def on_run_complete(
+      self,
+      runner: experiment_lib.Runner,
+      root: experiment_lib.Experiment
+  ) -> None:
+    del root
+    with pg.notify_on_change(False), pg.allow_writable_accessors(True):
+      self.complete_time = time.time()
+
+  def on_experiment_start(
+      self,
+      runner: experiment_lib.Runner,
+      experiment: experiment_lib.Experiment
+  ) -> None:
+    del runner
+    with pg.notify_on_change(False), self._lock:
+      self.started_experiments.append(pg.Ref(experiment))
+
+  def on_experiment_skipped(
+      self,
+      runner: experiment_lib.Runner,
+      experiment: experiment_lib.Experiment
+  ) -> None:
+    del runner
+    with pg.notify_on_change(False), self._lock:
+      self.skipped_experiments.append(pg.Ref(experiment))
+
+  def on_experiment_complete(
+      self,
+      runner: experiment_lib.Runner,
+      experiment: experiment_lib.Experiment
+  ) -> None:
+    del runner
+    with pg.notify_on_change(False), self._lock:
+      self.completed_experiments.append(pg.Ref(experiment))
+
+  def on_example_start(
+      self,
+      runner: experiment_lib.Runner,
+      experiment: experiment_lib.Experiment,
+      example: Example
+  ) -> None:
+    del runner, experiment
+    with pg.notify_on_change(False), self._lock:
+      self.started_example_ids.append(example.id)
+
+  def on_example_complete(
+      self,
+      runner: experiment_lib.Runner,
+      experiment: experiment_lib.Experiment,
+      example: Example
+  ) -> None:
+    del runner, experiment
+    with pg.notify_on_change(False), self._lock:
+      self.completed_example_ids.append(example.id)

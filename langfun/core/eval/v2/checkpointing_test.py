@@ -65,7 +65,7 @@ class ExampleCollector(experiment_lib.Plugin):
     return self._examples
 
   def on_example_complete(
-      self, runner: runners_lib.Runner,
+      self, runner: experiment_lib.Runner,
       experiment: experiment_lib.Experiment,
       example: example_lib.Example,
   ):

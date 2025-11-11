@@ -11,13 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Evaluation experiment runners."""
+"""Base experiment runner."""
+
 import abc
-import collections
 import concurrent.futures
 import random
 import threading
-import time
 import traceback
 from typing import Any, Annotated, Callable, Iterator
 
@@ -401,134 +400,3 @@ class RunnerBase(Runner):
     return in_memory.InMemory(
         self.current_run.output_path_for(experiment, 'cache.json')
     )
-
-
-class SequentialRunner(RunnerBase):
-  """A runner that executes evaluations and examples sequentially.
-
-  The sequential runner executes all evaluations and their examples in the
-  calling thread. Background tasks are also run sequentially, which makes it
-  easier to debug as exceptions from background tasks will be raised
-  immediately.
-  """
-
-  NAME = 'sequential'
-
-  def background_run(
-      self, func: Callable[..., Any], *args: Any, **kwargs: Any
-  ) -> None:
-    """Runs the function with the IO pool."""
-    func(*args, **kwargs)
-
-  def _run(self, evaluations: list[Evaluation]) -> None:
-    """Runs the experiment in sequence."""
-    for e in evaluations:
-      self.run_evaluation(e)
-
-  def _evaluate_items(
-      self, evaluation: Evaluation, items: Iterator[Example]
-  ) -> None:
-    """Runs the evaluation items in sequence."""
-    for item in items:
-      self.evaluate_item(evaluation, item)
-
-
-class DebugRunner(SequentialRunner):
-  """A runner for debugging evaluations.
-
-  The debug runner is a sequential runner that only runs the first example
-  of each evaluation, with `raise_if_has_error` enabled. This is useful for
-  quickly identifying issues in evaluation logic during development.
-  Checkpointers are disabled for this runner.
-  """
-
-  NAME = 'debug'
-
-  # Do not use the checkpointer for debug runner.
-  plugins = []
-
-  def _on_bound(self):
-    super()._on_bound()
-    if self.current_run.example_ids is None:
-      self.current_run.rebind(example_ids=[1], skip_notification=True)
-    self.current_run.rebind(raise_if_has_error=True, skip_notification=True)
-
-  def _save_run_manifest(self) -> None:
-    """Do nothing to avoid overriden existing runs."""
-
-
-class ParallelRunner(RunnerBase):
-  """A runner that executes evaluations and examples in parallel.
-
-  The parallel runner groups evaluations by their required resources
-  (e.g., specific LLMs) and runs evaluations that do not share resources in
-  parallel. Within each evaluation, examples are also processed in parallel
-  using threads, up to `Evaluation.max_workers`.
-  """
-
-  NAME = 'parallel'
-
-  timeout: Annotated[
-      int | None,
-      'Timeout for each evaluation example.'
-  ] = None
-
-  concurrent_startup_delay: Annotated[
-      tuple[int, int] | None,
-      (
-          'A range of seconds to delay the initial evaluation of each thread '
-          'in the thread pool, helping to prevent a burst in LLM QPS at '
-          'startup. If set to None, no delay will be applied.'
-      )
-  ] = None
-
-  def _run(self, evaluations: list[Evaluation]) -> None:
-    """Runs the evaluations in parallel."""
-    def _run_group(evaluation_group: list[Evaluation]):
-      for e in evaluation_group:
-        self.run_evaluation(e)
-
-    # Run evaluations in parallel groupped by resource key.
-    groups: dict[str, list[Evaluation]] = collections.defaultdict(list)
-    for e in evaluations:
-      resource_ids = e.resource_ids()
-      if not resource_ids:
-        group_id = e.id
-      else:
-        # TODO(daiyip): support group that requires multiple resources.
-        group_id = resource_ids.pop()
-      groups[group_id].append(e)
-
-    for _, _, _ in lf.concurrent_map(
-        _run_group,
-        groups.values(),
-        max_workers=max(64, len(groups)),
-        timeout=self.timeout,
-        silence_on_errors=None,
-    ):
-      pass
-
-  def _evaluate_items(
-      self, evaluation: Evaluation, items: Iterator[Example]
-  ) -> None:
-    """Override run items to run in parallel."""
-    if self.concurrent_startup_delay is not None:
-      thread_delayed = {}
-      def _evaluate_item(item: Example):
-        thread_id = threading.current_thread().ident
-        if thread_id not in thread_delayed:
-          thread_delayed[thread_id] = True
-          time.sleep(random.randint(*self.concurrent_startup_delay))
-        return self.evaluate_item(evaluation, item)
-    else:
-      def _evaluate_item(item: Example):
-        return self.evaluate_item(evaluation, item)
-
-    for _, _, _ in lf.concurrent_map(
-        _evaluate_item,
-        items,
-        max_workers=evaluation.max_workers,
-        timeout=self.timeout,
-        silence_on_errors=None,
-    ):
-      pass
