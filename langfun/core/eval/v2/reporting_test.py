@@ -29,7 +29,12 @@ class ReportingTest(unittest.TestCase):
     experiment = eval_test_helper.test_experiment()
     checkpointer = checkpointing.BulkCheckpointer('checkpoint.jsonl')
     reporter = reporting.HtmlReporter()
-    run = experiment.run(root_dir, 'new', plugins=[checkpointer, reporter])
+    example_html_generator = reporting.ExampleHtmlGenerator()
+    run = experiment.run(
+        root_dir,
+        'new',
+        plugins=[checkpointer, reporter, example_html_generator]
+    )
     self.assertTrue(
         pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
@@ -52,8 +57,10 @@ class ReportingTest(unittest.TestCase):
     root_dir = os.path.join(tempfile.mkdtemp(), 'test_reporting2')
     experiment = eval_test_helper.test_experiment()
     run = experiment.run(
-        root_dir, 'new', plugins=[checkpointer, reporter],
-        warm_start_from=run.output_root
+        root_dir,
+        'new',
+        plugins=[checkpointer, reporter, example_html_generator],
+        warm_start_from=run.output_root,
     )
     self.assertTrue(
         pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
@@ -105,7 +112,12 @@ class ReportingTest(unittest.TestCase):
                   .test_experiment_with_example_html_generation_error())
     checkpointer = checkpointing.BulkCheckpointer('checkpoint.jsonl')
     reporter = reporting.HtmlReporter()
-    run = experiment.run(root_dir, 'new', plugins=[checkpointer, reporter])
+    example_html_generator = reporting.ExampleHtmlGenerator()
+    run = experiment.run(
+        root_dir,
+        'new',
+        plugins=[checkpointer, reporter, example_html_generator]
+    )
     self.assertTrue(
         pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))
     )
@@ -132,8 +144,10 @@ class ReportingTest(unittest.TestCase):
     experiment = (eval_test_helper
                   .test_experiment_with_example_html_generation_error())
     run = experiment.run(
-        root_dir, 'new', plugins=[checkpointer, reporter],
-        warm_start_from=run.output_root
+        root_dir,
+        'new',
+        plugins=[checkpointer, reporter, example_html_generator],
+        warm_start_from=run.output_root,
     )
     self.assertTrue(
         pg.io.path_exists(os.path.join(run.output_root, 'summary.html'))

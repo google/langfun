@@ -38,6 +38,7 @@ from langfun.core.eval.v2 import runners
 from langfun.core.eval.v2.checkpointing import BulkCheckpointer
 from langfun.core.eval.v2.checkpointing import PerExampleCheckpointer
 from langfun.core.eval.v2.reporting import HtmlReporter
+from langfun.core.eval.v2.reporting import ExampleHtmlGenerator
 
 
 # pylint: enable=g-bad-import-order
