@@ -159,7 +159,7 @@ class Checkpointer(experiment_lib.Plugin):
 
     _ = list(
         lf.concurrent_map(
-            _load_state, ckpt_files, max_workers=16, silence_on_errors=None
+            _load_state, ckpt_files, max_workers=128, silence_on_errors=None
         )
     )
 
