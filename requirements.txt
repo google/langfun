@@ -14,3 +14,6 @@ pillow>=10.0.0
 # extras:ui
 termcolor==1.1.0
 tqdm>=4.64.1
+
+# extras:beam
+apache-beam>=2.60.0

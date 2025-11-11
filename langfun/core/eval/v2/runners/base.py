@@ -269,7 +269,7 @@ class RunnerBase(Runner):
         experiment.progress.increment_failed()
         experiment.error(
             (
-                f'Failed to evaluate example {example.id} in'
+                f'Failed to evaluate example {example.id} in '
                 f'{example.elapse:.2f} seconds.'
             ),
             error=example.error
