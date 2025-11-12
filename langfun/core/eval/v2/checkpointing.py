@@ -46,6 +46,11 @@ class Checkpointer(experiment_lib.Plugin):
       'Checkpoint file pattern.'
   ] = 'checkpoint.bagz'
 
+  max_ckpt_loading_threads: Annotated[
+      int,
+      'Max number of workers for loading checkpoint files at startup.'
+  ] = 128
+
   def on_experiment_start(
       self,
       runner: Runner,
@@ -159,7 +164,10 @@ class Checkpointer(experiment_lib.Plugin):
 
     _ = list(
         lf.concurrent_map(
-            _load_state, ckpt_files, max_workers=16, silence_on_errors=None
+            _load_state,
+            ckpt_files,
+            max_workers=self.max_ckpt_loading_threads,
+            silence_on_errors=None
         )
     )
 

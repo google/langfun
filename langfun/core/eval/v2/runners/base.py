@@ -64,6 +64,11 @@ class RunnerBase(Runner):
       reporting.HtmlReporter(),
   ]
 
+  max_background_threads: Annotated[
+      int,
+      'Max number of background threads for IO operations.'
+  ] = 128
+
   def _on_bound(self):
     super()._on_bound()
 
@@ -72,7 +77,9 @@ class RunnerBase(Runner):
       self.plugins.append(progress_tracking.progress_tracker(self.tqdm))
 
     self._io_pool_lock = threading.Lock()
-    self._io_pool = concurrent.futures.ThreadPoolExecutor(max_workers=16)
+    self._io_pool = concurrent.futures.ThreadPoolExecutor(
+        max_workers=self.max_background_threads
+    )
     # TODO(daiyip): render background errors.
     self._background_last_error = None
 
@@ -226,7 +233,7 @@ class RunnerBase(Runner):
       else:
         # A evaluation could be considered as done if it has processed all the
         # examples specified by `example_ids`.
-        assert progress.is_completed
+        assert progress.is_completed, progress
         parent_progress.increment_processed()
 
       if parent_progress.is_completed:
