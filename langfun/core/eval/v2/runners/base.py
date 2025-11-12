@@ -348,6 +348,7 @@ class RunnerBase(Runner):
   def run_evaluation(self, evaluation: Evaluation) -> None:
     """Runs the evaluation."""
     try:
+      evaluation.setup()
       self.on_experiment_start(evaluation)
 
       per_evaluation_settings = {}
@@ -380,6 +381,8 @@ class RunnerBase(Runner):
     except BaseException as e:  # pylint: disable=broad-except
       self.on_experiment_abort(evaluation, e)
       raise e
+    finally:
+      evaluation.teardown()
 
   @abc.abstractmethod
   def _evaluate_items(

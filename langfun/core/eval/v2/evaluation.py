@@ -172,6 +172,20 @@ class Evaluation(experiment_lib.Experiment):
   # Evaluation logics.
   #
 
+  def setup(self) -> None:
+    """Sets up resources required by the evaluation.
+
+    Subclasses should always call the super().setup() method to ensure the
+    proper initialization of the evaluation.
+    """
+
+  def teardown(self) -> None:
+    """Tears down resources used by the evaluation.
+
+    Subclasses should always call the super().teardown() method to ensure the
+    proper cleanup of the evaluation.
+    """
+
   @abc.abstractmethod
   def process(
       self,
