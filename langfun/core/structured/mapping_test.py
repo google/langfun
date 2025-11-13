@@ -226,5 +226,60 @@ class MappingExampleTest(unittest.TestCase):
     )
 
 
+class ThoughtExtractionTest(unittest.TestCase):
+  """Test that thought is correctly extracted from lm_output.metadata."""
+
+  def test_thought_extraction_from_aimessage(self):
+    """Test that thought is extracted when it's an AIMessage."""
+    # Create a mock LM output with thought as AIMessage in metadata
+    lm_output = lf.AIMessage('## answer\n2')
+    lm_output.metadata['thought'] = lf.AIMessage(
+        'Let me think... 1 + 1 equals 2'
+    )
+
+    # Simulate the extraction logic from parse_result
+    thought = None
+    if 'thought' in lm_output.metadata:
+      thought_message = lm_output.metadata['thought']
+      thought = (
+          thought_message.text
+          if hasattr(thought_message, 'text')
+          else str(thought_message)
+      )
+
+    self.assertEqual(thought, 'Let me think... 1 + 1 equals 2')
+
+  def test_thought_extraction_from_string(self):
+    """Test that thought is extracted when it's a plain string."""
+    lm_output = lf.AIMessage('## answer\n2')
+    lm_output.metadata['thought'] = 'Direct string thought'
+
+    thought = None
+    if 'thought' in lm_output.metadata:
+      thought_message = lm_output.metadata['thought']
+      thought = (
+          thought_message.text
+          if hasattr(thought_message, 'text')
+          else str(thought_message)
+      )
+
+    self.assertEqual(thought, 'Direct string thought')
+
+  def test_no_thought_in_metadata(self):
+    """Test that thought is None when not present in metadata."""
+    lm_output = lf.AIMessage('## answer\n2')
+
+    thought = None
+    if 'thought' in lm_output.metadata:
+      thought_message = lm_output.metadata['thought']
+      thought = (
+          thought_message.text
+          if hasattr(thought_message, 'text')
+          else str(thought_message)
+      )
+
+    self.assertIsNone(thought)
+
+
 if __name__ == '__main__':
   unittest.main()

@@ -1747,5 +1747,80 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(len(queries), 2)
 
 
+class LfQueryMarkdownV1Test(unittest.TestCase):
+
+  def test_from_protocol(self):
+    """Test that markdown protocol is registered correctly."""
+    self.assertIs(
+        querying.LfQuery.from_protocol('markdown'), querying._LfQueryMarkdownV1
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('markdown:1.0'),
+        querying._LfQueryMarkdownV1,
+    )
+
+  def test_render_no_examples(self):
+    """Test markdown protocol rendering without examples."""
+
+    class Answer(pg.Object):
+      reasoning: str
+      result: int
+
+    l = querying.LfQuery.from_protocol('markdown:1.0')(
+        input=lf.AIMessage('Solve 1 + 1'), schema=Answer
+    )
+    rendered = l.render().text
+    # Check that the markdown format is used
+    self.assertIn('REQUEST:', rendered)
+    self.assertIn('OUTPUT SCHEMA:', rendered)
+    self.assertIn('OUTPUT:', rendered)
+    # Check preamble example
+    self.assertIn('## reasoning', rendered)
+    self.assertIn('## result', rendered)
+
+  def test_render_with_examples(self):
+    """Test markdown protocol rendering with examples."""
+
+    class Answer(pg.Object):
+      reasoning: str
+      result: int
+
+    l = querying.LfQuery.from_protocol('markdown:1.0')(
+        input=lf.AIMessage('Solve 2 + 2'),
+        schema=Answer,
+        examples=[
+            mapping.MappingExample(
+                input='Solve 1 + 1',
+                output=Answer(reasoning='Adding 1 and 1', result=2),
+            ),
+        ],
+    )
+    rendered = l.render().text
+    # Check that examples are included
+    self.assertIn('Solve 1 + 1', rendered)
+    self.assertIn('Adding 1 and 1', rendered)
+    self.assertIn('Solve 2 + 2', rendered)
+
+  def test_query_with_markdown_protocol(self):
+    """Test end-to-end query with markdown protocol."""
+
+    class Answer(pg.Object):
+      reasoning: str
+      result: int
+
+    lm = fake.StaticResponse("""
+## reasoning
+Adding 1 and 1 gives us 2
+
+## result
+2
+""")
+
+    result = querying.query('Solve 1 + 1', Answer, lm=lm, protocol='markdown')
+
+    self.assertEqual(result.reasoning, 'Adding 1 and 1 gives us 2')
+    self.assertEqual(result.result, 2)
+
+
 if __name__ == '__main__':
   unittest.main()

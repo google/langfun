@@ -966,6 +966,260 @@ class MissingTest(unittest.TestCase):
     )
 
 
+class SchemaMarkdownReprTest(unittest.TestCase):
+
+  def test_repr_simple(self):
+    """Test markdown schema representation for simple types."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      code: str
+
+    schema = schema_lib.Schema(Solution)
+    markdown_repr = schema_lib.SchemaMarkdownRepr().repr(schema)
+
+    self.assertIn('## reasoning', markdown_repr)
+    self.assertIn('## code', markdown_repr)
+    self.assertIn(
+        '```', markdown_repr
+    )  # Should suggest code block for 'code' field
+
+  def test_repr_with_code_fields(self):
+    """Test automatic code block detection for *_code fields."""
+
+    class SolutionWithTests(pg.Object):
+      cpp_code: str
+      terminal_code: str
+      bash_code: str
+
+    schema = schema_lib.Schema(SolutionWithTests)
+    markdown_repr = schema_lib.SchemaMarkdownRepr().repr(schema)
+
+    # Should detect language from field name
+    self.assertIn('```cpp', markdown_repr)
+    self.assertIn('```bash', markdown_repr)
+
+  def test_repr_nested_object(self):
+    """Test markdown schema with nested objects."""
+
+    class Inner(pg.Object):
+      value: int
+
+    class Outer(pg.Object):
+      inner: Inner
+      name: str
+
+    schema = schema_lib.Schema(Outer)
+    markdown_repr = schema_lib.SchemaMarkdownRepr().repr(schema)
+
+    self.assertIn('## inner', markdown_repr)
+    self.assertIn('### value', markdown_repr)  # Nested field uses ###
+
+
+class ValueMarkdownReprTest(unittest.TestCase):
+
+  def test_repr(self):
+    """Test markdown value representation."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      cpp_code: str
+
+    solution = Solution(
+        reasoning='Use dynamic programming',
+        cpp_code='#include <iostream>\nint main() { return 0; }',
+    )
+
+    markdown_repr = schema_lib.ValueMarkdownRepr().repr(solution)
+
+    self.assertIn('## reasoning', markdown_repr)
+    self.assertIn('Use dynamic programming', markdown_repr)
+    self.assertIn('## cpp_code', markdown_repr)
+    self.assertIn('```cpp', markdown_repr)  # Should detect C++ code
+    self.assertIn('#include <iostream>', markdown_repr)
+
+  def test_parse_simple(self):
+    """Test parsing markdown text into structured object."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      code: str
+
+    markdown_text = """
+## reasoning
+This is my reasoning
+
+## code
+```python
+def foo():
+  pass
+```
+"""
+
+    schema = schema_lib.Schema(Solution)
+    result = schema_lib.ValueMarkdownRepr().parse(markdown_text, schema)
+
+    self.assertEqual(result.reasoning, 'This is my reasoning')
+    self.assertEqual(result.code, 'def foo():\n  pass')
+
+  def test_parse_with_code_blocks(self):
+    """Test parsing code blocks from markdown."""
+
+    class SolutionWithTests(pg.Object):
+      cpp_code: str
+      terminal_code: str
+
+    markdown_text = """
+## cpp_code
+```cpp
+#include <iostream>
+int main() { return 0; }
+```
+
+## terminal_code
+```bash
+g++ -o solution solution.cpp
+./solution
+```
+"""
+
+    schema = schema_lib.Schema(SolutionWithTests)
+    result = schema_lib.ValueMarkdownRepr().parse(markdown_text, schema)
+
+    self.assertIn('#include <iostream>', result.cpp_code)
+    self.assertIn('g++ -o solution', result.terminal_code)
+
+  def test_parse_missing_required_field(self):
+    """Test that missing required fields raise ValueError."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      code: str
+
+    markdown_text = """
+## reasoning
+This is my reasoning
+"""
+
+    schema = schema_lib.Schema(Solution)
+    with self.assertRaisesRegex(ValueError, 'Required field "code" not found'):
+      schema_lib.ValueMarkdownRepr().parse(markdown_text, schema)
+
+  def test_parse_optional_field(self):
+    """Test parsing with optional fields."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      code: str | None
+
+    markdown_text = """
+## reasoning
+This is my reasoning
+"""
+
+    schema = schema_lib.Schema(Solution)
+    result = schema_lib.ValueMarkdownRepr().parse(markdown_text, schema)
+
+    self.assertEqual(result.reasoning, 'This is my reasoning')
+    self.assertIsNone(result.code)
+
+  def test_extract_section(self):
+    """Test section extraction helper method."""
+    markdown_text = """
+## section1
+Content 1
+
+## section2
+Content 2
+"""
+
+    repr_obj = schema_lib.ValueMarkdownRepr()
+    section1 = repr_obj._extract_section(markdown_text, 'section1')
+    section2 = repr_obj._extract_section(markdown_text, 'section2')
+
+    self.assertEqual(section1, 'Content 1')
+    self.assertEqual(section2, 'Content 2')
+
+  def test_extract_code_block(self):
+    """Test code block extraction helper method."""
+    section_content = """
+Some text
+```python
+def foo():
+  pass
+```
+More text
+"""
+
+    repr_obj = schema_lib.ValueMarkdownRepr()
+    code = repr_obj._extract_code_block(section_content)
+
+    self.assertEqual(code, 'def foo():\n  pass')
+
+  def test_autofix_with_missing_field(self):
+    """Test that autofix is triggered when a required field is missing."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      code: str
+
+    # Markdown missing the 'code' field
+    markdown_text = """
+## reasoning
+This is my reasoning
+"""
+
+    # Create a fake LLM that will provide the missing field
+    corrected_markdown = """
+## reasoning
+This is my reasoning
+
+## code
+```python
+def solution():
+  pass
+```
+"""
+
+    fix_lm = fake.StaticResponse(corrected_markdown)
+
+    schema = schema_lib.Schema(Solution)
+
+    # With autofix=1, should call fix_lm and succeed
+    result = schema_lib.ValueMarkdownRepr().parse(
+        markdown_text,
+        schema,
+        autofix=1,
+        autofix_lm=fix_lm,
+    )
+
+    self.assertEqual(result.reasoning, 'This is my reasoning')
+    self.assertEqual(result.code, 'def solution():\n  pass')
+
+  def test_autofix_not_triggered_when_disabled(self):
+    """Test that autofix is not triggered when autofix=0."""
+
+    class Solution(pg.Object):
+      reasoning: str
+      code: str
+
+    # Markdown missing the 'code' field
+    markdown_text = """
+## reasoning
+This is my reasoning
+"""
+
+    schema = schema_lib.Schema(Solution)
+
+    # With autofix=0, should raise ValueError
+    with self.assertRaisesRegex(ValueError, 'Required field "code" not found'):
+      schema_lib.ValueMarkdownRepr().parse(
+          markdown_text,
+          schema,
+          autofix=0,
+      )
+
+
 class UnknownTest(unittest.TestCase):
 
   def test_basics(self):

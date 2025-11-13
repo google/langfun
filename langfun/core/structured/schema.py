@@ -73,7 +73,7 @@ def parse_value_spec(value) -> pg.typing.ValueSpec:
   return _parse_node(value)
 
 
-SchemaProtocol = Literal['json', 'python']
+SchemaProtocol = Literal['json', 'python', 'markdown']
 
 
 class SchemaError(Exception):   # pylint: disable=g-bad-exception-name
@@ -729,6 +729,57 @@ class SchemaJsonRepr(SchemaRepr):
     return out.getvalue()
 
 
+class SchemaMarkdownRepr(SchemaRepr):
+  """Markdown-representation for a schema."""
+
+  def repr(self, schema: Schema, **kwargs) -> str:
+    """Generate markdown schema description."""
+    del kwargs
+    out = io.StringIO()
+    out.write('Provide your response in the following markdown format:\n\n')
+
+    def _visit_field(
+        field_name: str, field_spec: pg.typing.ValueSpec, level: int = 2
+    ) -> None:
+      """Visit a field and generate markdown section."""
+      header = '#' * level
+      out.write(f'{header} {field_name}\n')
+
+      # Add field description/type hint
+      if isinstance(field_spec, pg.typing.Str):
+        # Check if this looks like a code field
+        if field_name.endswith('_code') or 'code' in field_name.lower():
+          # Suggest code block format
+          if 'cpp' in field_name:
+            lang = 'cpp'
+          elif 'bash' in field_name or 'terminal' in field_name:
+            lang = 'bash'
+          else:
+            lang = 'python'
+          out.write(f'```{lang}\n<your {field_name} here>\n```\n\n')
+        else:
+          out.write(f'<{field_spec.value_type.__name__}>\n\n')
+      elif isinstance(field_spec, pg.typing.Object):
+        # Nested object - recurse with deeper level
+        for k, f in field_spec.cls.__schema__.items():
+          if isinstance(k, pg.typing.ConstStrKey):
+            _visit_field(str(k), f.value, level + 1)
+      elif isinstance(field_spec, pg.typing.List):
+        out.write(
+            f'<list of {field_spec.element.value.value_type.__name__}>\n\n'
+        )
+      else:
+        out.write(f'<{field_spec.value_type.__name__}>\n\n')
+
+    # Process schema fields
+    if isinstance(schema.spec, pg.typing.Object):
+      for key, field in schema.spec.cls.__schema__.items():
+        if isinstance(key, pg.typing.ConstStrKey):
+          _visit_field(str(key), field.value)
+
+    return out.getvalue()
+
+
 #
 # Value representations.
 #
@@ -896,6 +947,170 @@ class ValueJsonRepr(ValueRepr):
     return v['result']
 
 
+class ValueMarkdownRepr(ValueRepr):
+  """Markdown-representation for value."""
+
+  def repr(self, value: Any, schema: Schema | None = None, **kwargs) -> str:
+    """Convert value to markdown format."""
+    del schema, kwargs
+    out = io.StringIO()
+
+    if isinstance(value, pg.Object):
+      for key, val in value.sym_items():
+        out.write(f'## {key}\n')
+        if isinstance(val, str):
+          # Check if it looks like code
+          if '\n' in val and (key.endswith('_code') or 'code' in key.lower()):
+            # Detect language
+            if '#include' in val:
+              lang = 'cpp'
+            elif '#!/bin/bash' in val or 'cat >' in val:
+              lang = 'bash'
+            else:
+              lang = 'python'
+            out.write(f'```{lang}\n{val}\n```\n\n')
+          else:
+            out.write(f'{val}\n\n')
+        else:
+          out.write(f'{val}\n\n')
+
+    return out.getvalue()
+
+  def parse(
+      self,
+      text: str,
+      schema: Schema | None = None,
+      autofix: int = 0,
+      autofix_lm: lf.LanguageModel = lf.contextual(),
+      **kwargs,
+  ) -> Any:
+    """Parse markdown text into structured object."""
+    del kwargs
+    if schema is None or not isinstance(schema.spec, pg.typing.Object):
+      raise ValueError('Markdown protocol requires a pg.Object schema')
+
+    # Try to parse, with autofix if enabled
+    if autofix == 0:
+      return self._parse_markdown(text, schema)
+
+    # With autofix: use correction mechanism
+    error = None
+    for attempt in range(autofix + 1):
+      try:
+        return self._parse_markdown(text, schema)
+      except Exception as e:  # pylint: disable=broad-exception-caught
+        error = e
+        if attempt < autofix:
+          # Try to fix the markdown using LLM
+          text = self._fix_markdown(text, schema, error, autofix_lm)
+        else:
+          raise
+
+    # Should not reach here, but just in case
+    raise error  # type: ignore
+
+  def _parse_markdown(self, text: str, schema: Schema) -> Any:
+    """Internal method to parse markdown text."""
+    result = {}
+
+    # Extract sections for each field
+    for key, field in schema.spec.cls.__schema__.items():
+      if not isinstance(key, pg.typing.ConstStrKey):
+        continue
+
+      field_name = str(key)
+      section_content = self._extract_section(text, field_name)
+
+      if section_content is None:
+        # Field not found - check if it's required
+        if not field.value.is_noneable:
+          raise ValueError(
+              f'Required field "{field_name}" not found in markdown'
+          )
+        result[field_name] = None
+        continue
+
+      # Parse based on field type
+      if isinstance(field.value, pg.typing.Str):
+        # Try to extract code block first
+        code = self._extract_code_block(section_content)
+        result[field_name] = code if code else section_content.strip()
+      elif isinstance(field.value, (pg.typing.Int, pg.typing.Float)):
+        result[field_name] = field.value.value_type(section_content.strip())
+      elif isinstance(field.value, pg.typing.Bool):
+        result[field_name] = section_content.strip().lower() in (
+            'true',
+            'yes',
+            '1',
+        )
+      else:
+        result[field_name] = section_content.strip()
+
+    # Create object instance
+    return schema.spec.cls(**result)
+
+  def _fix_markdown(
+      self,
+      text: str,
+      schema: Schema,
+      error: Exception,
+      lm: lf.LanguageModel,
+  ) -> str:
+    """Fix malformed markdown using LLM."""
+    # Delay import at runtime to avoid circular dependency.
+    # pylint: disable=g-import-not-at-top
+    # pytype: disable=import-error
+    from langfun.core.structured import querying
+    # pytype: enable=import-error
+    # pylint: enable=g-import-not-at-top
+
+    # Build schema description
+    schema_desc = schema.schema_str('markdown')
+
+    # Build correction prompt
+    correction_prompt = f"""The following markdown output has an error:
+
+```markdown
+{text}
+```
+
+Error: {error}
+
+Expected schema:
+{schema_desc}
+
+
+Please provide the corrected markdown output that matches the expected schema."""
+
+    # Query LLM for correction (disable autofix to avoid recursion)
+    corrected = querying.query(
+        correction_prompt,
+        str,
+        lm=lm,
+        autofix=0,
+    )
+
+    return corrected
+
+  def _extract_section(self, text: str, section_name: str) -> str | None:
+    """Extract content from a markdown section."""
+    # Match: ## section_name\n<content> (until next ## or end)
+    pattern = rf'##\s+{re.escape(section_name)}\s*\n(.*?)(?=\n##|\Z)'
+    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    if match:
+      return match.group(1).strip()
+    return None
+
+  def _extract_code_block(self, section_content: str) -> str | None:
+    """Extract code from markdown code block."""
+    # Match: ```language\n<code>\n```
+    pattern = r'```[\w]*\s*\n(.*?)\n```'
+    match = re.search(pattern, section_content, re.DOTALL)
+    if match:
+      return match.group(1)
+    return None
+
+
 def cleanup_json(json_str: str) -> str:
   """Cleans up the LM responded JSON string."""
   # Treatments:
@@ -953,6 +1168,8 @@ def schema_repr(protocol: SchemaProtocol) -> SchemaRepr:
     return SchemaJsonRepr()
   elif protocol == 'python':
     return SchemaPythonRepr()
+  elif protocol == 'markdown':
+    return SchemaMarkdownRepr()
   raise ValueError(f'Unsupported protocol: {protocol}.')
 
 
@@ -961,6 +1178,8 @@ def value_repr(protocol: SchemaProtocol) -> ValueRepr:
     return ValueJsonRepr()
   elif protocol == 'python':
     return ValuePythonRepr()
+  elif protocol == 'markdown':
+    return ValueMarkdownRepr()
   raise ValueError(f'Unsupported protocol: {protocol}.')
 
 

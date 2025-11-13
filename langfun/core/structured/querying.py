@@ -85,6 +85,7 @@ class LfQuery(mapping.Mapping):
   _DEFAULT_PROTOCOL_VERSIONS: ClassVar[dict[str, str]] = {
       'python': '2.0',
       'json': '1.0',
+      'markdown': '1.0',
   }
 
   def __init_subclass__(cls) -> Any:
@@ -271,6 +272,53 @@ class _LfQueryPythonV2(LfQuery):
       {% endif -%}
       """
   )
+
+
+class _LfQueryMarkdownV1(LfQuery):
+  """Query a structured value using Markdown as the protocol."""
+
+  preamble = """
+      Please respond to the last {{ input_title }} with {{ output_title }} in markdown format according to {{ schema_title }}.
+
+      {{ input_title }}:
+        Write a solution for 1 + 1
+
+      {{ schema_title }}:
+        Answer with fields: reasoning (str), result (int)
+
+      {{ output_title }}:
+        ## reasoning
+        Adding 1 and 1 gives us 2
+
+        ## result
+        2
+      """
+  version = '1.0'
+  protocol = 'markdown'
+  input_title = 'REQUEST'
+  schema_title = 'OUTPUT SCHEMA'
+  output_title = 'OUTPUT'
+  mapping_template = lf.Template("""
+      {%- if example.context -%}
+      {{ context_title}}:
+      {{ example.context | indent(2, True)}}
+
+      {% endif -%}
+
+      {{ input_title }}:
+      {{ example.input_repr(protocol, compact=False) | indent(2, True) }}
+
+      {% if example.schema -%}
+      {{ schema_title }}:
+      {{ example.schema_repr(protocol) | indent(2, True) }}
+
+      {% endif -%}
+
+      {{ output_title }}:
+      {%- if example.has_output %}
+      {{ example.output_repr(protocol, compact=False) | indent(2, True) }}
+      {% endif -%}
+      """)
 
 
 def query(
