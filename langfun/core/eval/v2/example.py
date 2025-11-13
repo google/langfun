@@ -34,7 +34,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       as the input for `lf.Evaluable.process`.
     output: The output of `lf.Evaluable.process` method. If `pg.MISSING_VALUE`,
       it indicates the example has not been processed yet.
-    error: The error encountered during `lf.Evaluable.process`. If None, it
+    error: The error raised from `lf.Evaluable.process`. If None, it
       indicates the process was successful.
     metadata: The metadata of the example produced by `lf.Evaluable.process`.
     metric_metadata: The dictionary returned from `Metric.audit`, which contains
@@ -59,14 +59,6 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
   end_time: float | None = None
   usage_summary: lf.UsageSummary | None = None
   execution_status: dict[str, pg.utils.TimeIt.Status] | None = None
-
-  def __post_init__(self):
-    if self.execution_status is not None:
-      for status in self.execution_status.values():
-        if status.has_error:
-          assert isinstance(status.error, pg.ErrorInfo)
-          self.error = status.error
-          break
 
   @property
   def is_processed(self) -> bool:

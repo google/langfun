@@ -32,9 +32,9 @@ class ExampleTest(unittest.TestCase):
             name='evaluation', elapse=1.0, error=error
         )
     })
-    self.assertEqual(ex.error, error)
+    self.assertIsNone(ex.error)
     self.assertFalse(ex.is_processed)
-    self.assertTrue(ex.has_error)
+    self.assertFalse(ex.has_error)
     self.assertEqual(ex.elapse, 1.0)
 
     ex = Example(id=2, output=1)
