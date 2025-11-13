@@ -489,6 +489,17 @@ class Mapping(lf.LangFunc):
       response_text = '\n'.join(
           tc.text for tc in lm_output.metadata['tool_calls']
       )
+
+    # Extract thought from metadata if present (for thought-aware autofix)
+    thought = None
+    if 'thought' in lm_output.metadata:
+      thought_message = lm_output.metadata['thought']
+      thought = (
+          thought_message.text
+          if hasattr(thought_message, 'text')
+          else str(thought_message)
+      )
+
     return schema.parse(
         response_text,
         protocol=self.protocol,
@@ -496,6 +507,7 @@ class Mapping(lf.LangFunc):
         autofix=self.autofix,
         autofix_lm=self.autofix_lm or self.lm,
         permission=self.permission,
+        thought=thought,
     )
 
   def postprocess_response(self, response: lf.Message) -> lf.Message:
@@ -513,4 +525,3 @@ class Mapping(lf.LangFunc):
   def globals(self) -> dict[str, Any]:
     """Gets additional symbol definitions besides schema as globals."""
     return {'ModalityRef': lf.modality.ModalityRef}
-
