@@ -83,6 +83,8 @@ class TestingSandbox(interface.Sandbox):
   status: interface.Sandbox.Status = interface.Sandbox.Status.READY
   session_id: str | None = None
 
+  __test__ = False
+
   def environment(self) -> interface.Environment:
     pass
 

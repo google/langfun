@@ -50,6 +50,8 @@ class TestLLM(llms.Fake):
 
   offset: int = 0
 
+  __test__ = False
+
   def _response_from(self, prompt: message_lib.Message) -> message_lib.Message:
     return message_lib.AIMessage(
         str(prompt.metadata.x + prompt.metadata.y + self.offset)
@@ -65,6 +67,8 @@ class TestEvaluation(Evaluation):
   inputs = test_inputs()
   metrics = [metrics_lib.Match()]
   lm: language_model.LanguageModel = TestLLM()
+
+  __test__ = False
 
   def process(self, example):
     v = example.input
@@ -87,6 +91,8 @@ class TestEvaluationWithExampleCheckpointingError(TestEvaluation):
   inputs = test_inputs()
   metrics = [metrics_lib.Match()]
 
+  __test__ = False
+
   def process(self, example):
     return 1, dict(
         x=BadJsonConvertible()
@@ -104,6 +110,8 @@ class TestEvaluationWithExampleHtmlGenerationError(Evaluation):
   inputs = test_inputs()
   metrics = [metrics_lib.Match()]
 
+  __test__ = False
+
   def process(self, example):
     return 1, dict(
         x=BadHtmlConvertible()
@@ -112,6 +120,8 @@ class TestEvaluationWithExampleHtmlGenerationError(Evaluation):
 
 class TestEvaluationWithIndexHtmlGenerationError(TestEvaluation):
   """Test evaluation class with bad index HTML generation."""
+
+  __test__ = False
 
   def _html_tree_view(self, *args, **kwargs):
     raise ValueError('Cannot render HTML.')
@@ -150,6 +160,8 @@ class TestPlugin(experiment_lib.Plugin):
   completed_example_ids: list[int] = []
   start_time: float | None = None
   complete_time: float | None = None
+
+  __test__ = False
 
   def _on_bound(self):
     super()._on_bound()

@@ -32,7 +32,7 @@ jobs:
         pip install -r requirements.txt
     - name: Test with pytest and generate coverage report
       run: |
-        pytest -n auto --cov=langfun --cov-report=xml -vv
+        pytest -n auto -p no:threadexception --cov=langfun --cov-report=xml -vv
       timeout-minutes: 10
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v2

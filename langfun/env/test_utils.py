@@ -33,6 +33,8 @@ class TestingEnvironment(base_environment.BaseEnvironment):
   simulate_ping_error: Type[BaseException] | None = None
   offline: bool = False
 
+  __test__ = False
+
   @property
   def id(self) -> interface.Environment.Id:
     return interface.Environment.Id('testing-env')
@@ -73,6 +75,8 @@ class TestingSandbox(base_sandbox.BaseSandbox):
   simulate_start_error: Type[BaseException] | None = None
   simulate_shutdown_error: Type[BaseException] | None = None
   simulate_ping_error: Type[BaseException] | None = None
+
+  __test__ = False
 
   def _on_bound(self) -> None:
     super()._on_bound()
@@ -140,6 +144,8 @@ class TestingFeature(base_feature.BaseFeature):
   simulate_setup_session_error: Type[BaseException] | None = None
   simulate_teardown_session_error: Type[BaseException] | None = None
   call_end_session_on_teardown_session: bool = False
+
+  __test__ = False
 
   class Service:
     """Sandbox."""
@@ -229,6 +235,8 @@ class TestingNonSandboxBasedFeature(base_feature.BaseFeature):
   simulate_teardown_session_error: Type[BaseException] | None = None
   simulate_housekeep_error: Type[BaseException] | None = None
 
+  __test__ = False
+
   def _setup(self) -> None:
     if self.simulate_setup_error:
       raise self.simulate_setup_error('Feature setup error')
@@ -264,6 +272,8 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
   log_feature_setup: bool = True
   log_session_setup: bool = False
   log_housekeep: bool = False
+
+  __test__ = False
 
   def _on_bound(self) -> None:
     super()._on_bound()

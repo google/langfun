@@ -26,6 +26,8 @@ class TestingSandbox(interface.Sandbox):
   status: interface.Sandbox.Status = interface.Sandbox.Status.READY
   image_id: str = 'test_image'
 
+  __test__ = False
+
   def _on_bound(self) -> None:
     super()._on_bound()
     self._session_id = None
