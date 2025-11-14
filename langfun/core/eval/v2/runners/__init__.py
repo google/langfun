@@ -13,13 +13,17 @@
 # limitations under the License.
 """Langfun evaluation runners."""
 
+# pylint: disable=g-importing-member
 from langfun.core.eval.v2.runners.base import RunnerBase
+from langfun.core.eval.v2.runners.beam import BeamRunner
 from langfun.core.eval.v2.runners.debug import DebugRunner
 from langfun.core.eval.v2.runners.parallel import ParallelRunner
 from langfun.core.eval.v2.runners.sequential import SequentialRunner
+# pylint: enable=g-importing-member
 
 __all__ = [
     'RunnerBase',
+    'BeamRunner',
     'DebugRunner',
     'ParallelRunner',
     'SequentialRunner',

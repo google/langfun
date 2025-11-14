@@ -44,7 +44,7 @@ class Checkpointer(experiment_lib.Plugin):
   checkpoint_filename: Annotated[
       str,
       'Checkpoint file pattern.'
-  ] = 'checkpoint.bagz'
+  ] = 'checkpoint.jsonl'
 
   max_ckpt_loading_threads: Annotated[
       int,
