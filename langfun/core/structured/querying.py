@@ -23,7 +23,7 @@ import uuid
 
 import langfun.core as lf
 from langfun.core.structured import mapping
-from langfun.core.structured import schema as schema_lib
+from langfun.core.structured.schema import base as schema_lib
 import pyglove as pg
 
 

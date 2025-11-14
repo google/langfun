@@ -159,13 +159,11 @@ class MappingExample(lf.NaturalLanguageFormattable,
       ),
   ] = pg.Dict()
 
-  def schema_repr(
-      self, protocol: schema_lib.SchemaProtocol = 'python', **kwargs
-  ) -> str:
+  def schema_repr(self, protocol: str = 'python', **kwargs) -> str:
     """Returns the string representation of schema based on protocol."""
     if self.schema is None:
       return ''
-    return self.schema.schema_str(protocol, **kwargs)
+    return schema_lib.schema_repr(self.schema, protocol=protocol, **kwargs)
 
   @property
   def has_output(self) -> bool:
@@ -176,7 +174,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
   def value_repr(
       cls,
       value: Any,
-      protocol: schema_lib.SchemaProtocol = 'python',
+      protocol: str = 'python',
       use_modality_ref: bool = False,
       **kwargs
   ) -> str:
@@ -191,11 +189,11 @@ class MappingExample(lf.NaturalLanguageFormattable,
     # Placehold modalities if they are present.
     if use_modality_ref and pg.contains(value, type=lf.Modality):
       value = lf.ModalityRef.placehold(value)
-    return schema_lib.value_repr(protocol).repr(value, **kwargs)
+    return schema_lib.value_repr(value, protocol=protocol, **kwargs)
 
   def input_repr(
       self,
-      protocol: schema_lib.SchemaProtocol = 'python',
+      protocol: str = 'python',
       compact: bool = False,
       verbose: bool = True,
       **kwargs
@@ -207,7 +205,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
 
   def output_repr(
       self,
-      protocol: schema_lib.SchemaProtocol = 'python',
+      protocol: str = 'python',
       compact: bool = False,
       verbose: bool = True,
       **kwargs
@@ -489,7 +487,7 @@ class Mapping(lf.LangFunc):
       response_text = '\n'.join(
           tc.text for tc in lm_output.metadata['tool_calls']
       )
-    return schema.parse(
+    return schema.parse_value(
         response_text,
         protocol=self.protocol,
         additional_context=self.globals(),

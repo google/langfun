@@ -30,7 +30,7 @@ def tokenize(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     **kwargs,
 ) -> list[tuple[str | bytes, int]]:
   """Renders a prompt and tokenizes it using a language model.
@@ -87,7 +87,7 @@ async def atokenize(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     **kwargs,
 ) -> list[tuple[str | bytes, int]]:
   """Async version of `lf.tokenize`."""
