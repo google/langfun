@@ -75,9 +75,7 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
     Returns:
       A string containing the Python definition of the tool's input schema.
     """
-    return lf_schema.Schema.from_value(cls).schema_str(
-        protocol='python', markdown=markdown
-    )
+    return lf_schema.Schema.from_value(cls).schema_repr(markdown=markdown)
 
   @classmethod
   def result_to_message(
