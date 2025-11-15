@@ -185,15 +185,23 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
     extra_flags = extra_flags or {}
     num_examples = extra_flags.get('num_examples', None)
 
-    def _metric_metadata_badge(key, value):
-      if isinstance(value, bool) and bool:
-        text = key
-      else:
-        text = f'{key}:{value}'
-      return pg.views.html.controls.Badge(
-          text,
-          css_classes=[pg.utils.camel_to_snake(key, '-')],
-      )
+    def _metric_label_group(metric_metadata: dict[str, Any] | None):
+      """Renders a label group for metric metadata."""
+      badges = []
+      if metric_metadata:
+        for metric_name, metadata in metric_metadata.items():
+          assert isinstance(metadata, dict), (metric_name, metadata)
+          for k, v in metadata.items():
+            css_class = k
+            if isinstance(v, bool):
+              css_class += '_true' if v else '_false'
+            badge = pg.views.html.controls.Badge(
+                f'{k}:{v}',
+                tooltip=f'{metric_name}: {k}',
+                css_classes=[css_class],
+            )
+            badges.append(badge)
+      return pg.views.html.controls.LabelGroup(badges)
 
     def _render_header():
       return pg.Html.element(
@@ -232,12 +240,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
                           extra_flags=dict(as_badge=True)
                       ) if self.usage_summary is not None else None,
                       # Metric metadata.
-                      pg.views.html.controls.LabelGroup(
-                          [   # pylint: disable=g-long-ternary
-                              _metric_metadata_badge(k, v)
-                              for k, v in self.metric_metadata.items()
-                          ] if self.metric_metadata else []
-                      ),
+                      _metric_label_group(self.metric_metadata)
                   ],
                   css_classes=['example-container'],
               )
@@ -308,17 +311,17 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
           color: black;
         }
         /* Badge styles. */
-        .eval-example .badge.match {
+        .eval-example .badge.is_correct_true {
           color: green;
           background-color: #dcefbe;
+        }
+        .eval-example .badge.is_correct_false {
+          color: orange;
+          background-color: #ffefc4;
         }
         .eval-example .badge.error {
           color: red;
           background-color: #fdcccc;
-        }
-        .eval-example .badge.mismatch {
-          color: orange;
-          background-color: #ffefc4;
         }
         .eval-example .badge.score {
           color: blue;

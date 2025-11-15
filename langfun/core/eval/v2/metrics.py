@@ -52,23 +52,42 @@ class Metric(pg.Object, pg.views.HtmlTreeView.Extension):
     self._label_group = None
     self._lock = threading.Lock()
 
-  def audit(self, example: example_lib.Example) -> dict[str, Any]:
-    """Audits a processed example and returns metric metadata for it."""
-    # NOTE(daiyip): the metric values are being updated concurrently, so we
-    # uses a lock to avoid race condition. We might consider relaxing the lock
-    # later if metric auditing becomes a bottleneck.
-    with self._lock:
-      for v in self.values():
-        v.increment_total()
+  def update(
+      self,
+      example: example_lib.Example,
+      force_recompute: bool = False
+  ) -> dict[str, Any]:
+    """Updates metric values with a processed example.
 
-      metadata = self._audit(example)
+    Args:
+      example: The processed example.
+      force_recompute: Whether to force recompute the metric metadata even if
+        they are already present.
 
-      self._update_view()
-      return metadata
+    Returns:
+      A dict of metric metadata.
+    """
+    if (force_recompute
+        or example.metric_metadata is None
+        or self.name not in example.metric_metadata):
+      metadata = self.compute_metric_metadata(example)
+    else:
+      metadata = example.metric_metadata[self.name]
+    self.update_metric_values(example.id, metadata)
+    self._update_view()
+    return metadata
 
   @abc.abstractmethod
-  def _audit(self, example: example_lib.Example) -> dict[str, Any]:
+  def compute_metric_metadata(
+      self, example: example_lib.Example
+  ) -> dict[str, Any]:
     """Subclasses should override this method to implement the metric logic."""
+
+  @abc.abstractmethod
+  def update_metric_values(
+      self, example_id: int, metric_metadata: dict[str, Any]
+  ) -> None:
+    """Update metric values based on metric metadata."""
 
   @abc.abstractmethod
   def values(self) -> list[metric_values.MetricValue]:
@@ -205,27 +224,67 @@ class MetricBase(Metric):
     super().reset()
     self._error_breakdown = collections.defaultdict(list)
 
-  def _audit(self, example: example_lib.Example) -> dict[str, Any]:
-    """Audits the evaluation example after processing."""
+  def compute_metric_metadata(
+      self, example: example_lib.Example
+  ) -> dict[str, Any]:
+    """Computes the metric metadata for the example."""
     if example.error is None:
-      return self._audit_processed(example)
-    else:
-      return self._audit_error(example)
+      return self._compute_metric_metadata(example)
+    return self._compute_metric_metadata_with_processing_error(example)
 
-  def _audit_error(self, example: example_lib.Example) -> dict[str, Any]:
-    """Audits the evaluation example after processing."""
-    assert example.error is not None
-    tag = example.error.tag
-    if tag.startswith('MappingError'):
-      self.oop_errors.add(example.id, 1)
+  def update_metric_values(
+      self,
+      example_id: int,
+      metric_metadata: dict[str, Any]
+  ) -> None:
+    """Collects the metric metadata."""
+    # NOTE(daiyip): the metric values are being updated concurrently, so we
+    # uses a lock to avoid race condition. We might consider relaxing the lock
+    # later if metric auditing becomes a bottleneck.
+    with self._lock:
+      for v in self.values():
+        v.increment_total()
+
+    if 'error' in metric_metadata:
+      self._update_metric_values_with_processing_error(
+          example_id, metric_metadata
+      )
     else:
-      self.non_oop_errors.add(example.id, 1)
-    self._error_breakdown[tag].append(example.id)
-    return dict(error=tag)
+      self._update_metric_values(example_id, metric_metadata)
 
   @abc.abstractmethod
-  def _audit_processed(self, example: example_lib.Example) -> dict[str, Any]:
+  def _compute_metric_metadata(
+      self,
+      example: example_lib.Example
+  ) -> dict[str, Any]:
+    """Computes the metric metadata for the example."""
+
+  def _compute_metric_metadata_with_processing_error(
+      self,
+      example: example_lib.Example
+  ) -> dict[str, Any]:
     """Audits the evaluation example after processing."""
+    assert example.error is not None
+    return dict(error=example.error.tag)
+
+  @abc.abstractmethod
+  def _update_metric_values(self, metadata: dict[str, Any]) -> None:
+    """Update metric values based metric metadata."""
+
+  def _update_metric_values_with_processing_error(
+      self,
+      example_id: int,
+      metric_metadata: dict[str, Any]
+  ) -> None:
+    """Updates metric values with processing error."""
+    error_tag = metric_metadata.get('error')
+    assert error_tag is not None, (example_id, metric_metadata)
+    self._error_breakdown[error_tag].append(example_id)
+    if error_tag.startswith('MappingError'):
+      self.oop_errors.add(example_id, 1)
+    else:
+      self.non_oop_errors.add(example_id, 1)
+    self._error_breakdown[error_tag].append(example_id)
 
   def _oop_errors_breakdown(self) -> str | None:
     """Returns the OOP error breakdown as a string."""
@@ -285,19 +344,29 @@ class Match(MetricBase):
       )
     return pg.eq(output, groundtruth)
 
-  def _audit_processed(self, example: example_lib.Example) -> dict[str, Any]:
-    """Audits the evaluation example after processing."""
+  def _compute_metric_metadata(
+      self, example: example_lib.Example
+  ) -> dict[str, Any]:
+    """Computes the metric metadata for the example."""
     metadata = {}
-    is_match = self.match(example.input, example.output)
-    if isinstance(is_match, tuple):
-      is_match, metadata = is_match
-    if is_match:
-      self.matches.add(example.id, 1)
-      metadata['match'] = True
-    else:
-      self.mismatches.add(example.id, 1)
-      metadata['mismatch'] = True
+    is_correct = self.match(example.input, example.output)
+    if isinstance(is_correct, tuple):
+      is_correct, metadata = is_correct
+
+    metadata['is_correct'] = is_correct
     return metadata
+
+  def _update_metric_values(
+      self, example_id: int, metadata: dict[str, Any]
+  ) -> None:
+    """Update metric values based metric metadata."""
+    is_correct = metadata.get('is_correct')
+    assert is_correct is not None, (example_id, metadata)
+    if is_correct:
+      self.matches.add(example_id, 1)
+    else:
+      assert not is_correct
+      self.mismatches.add(example_id, 1)
 
   def values(self) -> list[metric_values.MetricValue]:
     """Returns all the values computed by this metric."""
@@ -357,15 +426,24 @@ class Score(MetricBase):
       A float score. Or a tuple of (score, metadata).
     """
 
-  def _audit_processed(self, example: example_lib.Example) -> dict[str, Any]:
-    """Audits the evaluation example after processing."""
+  def _compute_metric_metadata(
+      self, example: example_lib.Example
+  ) -> dict[str, Any]:
+    """Computes the metric metadata for the example."""
     metadata = {}
     score = self.score(example.input, example.output)
     if isinstance(score, tuple):
       score, metadata = score
-    self.average_score.add(example.id, score)
     metadata['score'] = score
     return metadata
+
+  def _update_metric_values(
+      self, example_id: int, metadata: dict[str, Any]
+  ) -> None:
+    """Update metric values based metric metadata."""
+    score = metadata.get('score')
+    assert score is not None, (example_id, metadata)
+    self.average_score.add(example_id, score)
 
   def values(self) -> list[metric_values.MetricValue]:
     """Returns all the values computed by this metric."""
