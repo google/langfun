@@ -25,15 +25,22 @@ class MatchTest(unittest.TestCase):
   def test_basic(self):
     m = metrics.Match()  # pylint: disable=invalid-name
     self.assertEqual(
-        m.audit(Example(id=1, input=pg.Dict(groundtruth=1), output=1)),
-        dict(match=True)
+        m.update(Example(id=1, input=pg.Dict(groundtruth=1), output=1)),
+        dict(is_correct=True)
     )
     self.assertEqual(
-        m.audit(Example(id=2, input=pg.Dict(groundtruth=1), output=2)),
-        dict(mismatch=True)
+        m.update(
+            Example(
+                id=2,
+                input=pg.Dict(groundtruth=1),
+                output=2,
+                metric_metadata=dict(match=dict(is_correct=False, x=1))
+            )
+        ),
+        dict(is_correct=False, x=1)
     )
     self.assertEqual(
-        m.audit(
+        m.update(
             Example(
                 id=3,
                 input=pg.Dict(groundtruth=1),
@@ -47,7 +54,7 @@ class MatchTest(unittest.TestCase):
         dict(error='ValueError')
     )
     self.assertEqual(
-        m.audit(
+        m.update(
             Example(
                 id=3,
                 input=pg.Dict(groundtruth=1),
@@ -80,7 +87,7 @@ class MatchTest(unittest.TestCase):
   def test_bad_case(self):
     m = metrics.Match()  # pylint: disable=invalid-name
     with self.assertRaisesRegex(ValueError, '`groundtruth` is not present'):
-      m.audit(Example(id=1, input=pg.Dict(x=1), output=1))
+      m.update(Example(id=1, input=pg.Dict(x=1), output=1))
 
   def test_custom_metadata(self):
 
@@ -90,27 +97,27 @@ class MatchTest(unittest.TestCase):
 
     m = MyMatch()  # pylint: disable=invalid-name
     self.assertEqual(
-        m.audit(Example(id=1, input=pg.Dict(x=1), output=1)),
-        dict(match=True, x=1)
+        m.update(Example(id=1, input=pg.Dict(x=1), output=1)),
+        dict(is_correct=True, x=1)
     )
     self.assertEqual(m.matches, 1.0)
 
   def test_html_view(self):
     m = metrics.Match()  # pylint: disable=invalid-name
-    m.audit(Example(id=1, input=pg.Dict(groundtruth=1), output=1))
+    m.update(Example(id=1, input=pg.Dict(groundtruth=1), output=1))
     self.assertIn(
         '100.0%',
         m.to_html().content,
     )
     with pg.views.html.controls.HtmlControl.track_scripts() as scripts:
-      m.audit(Example(id=2, input=pg.Dict(groundtruth=1), output=2))
+      m.update(Example(id=2, input=pg.Dict(groundtruth=1), output=2))
       self.assertEqual(len(scripts), 12)
 
   def test_merge_from(self):
     m1 = metrics.Match()
-    m1.audit(Example(id=1, input=pg.Dict(groundtruth=1), output=1))
+    m1.update(Example(id=1, input=pg.Dict(groundtruth=1), output=1))
     m2 = metrics.Match()
-    m2.audit(Example(id=2, input=pg.Dict(groundtruth=1), output=2))
+    m2.update(Example(id=2, input=pg.Dict(groundtruth=1), output=2))
     m1.merge_from(m2)
     self.assertEqual(m1.matches, 0.5)
     self.assertEqual(m1.mismatches, 0.5)
@@ -132,15 +139,15 @@ class ScoreTest(unittest.TestCase):
 
     m = MyScore()  # pylint: disable=invalid-name
     self.assertEqual(
-        m.audit(Example(id=1, input=pg.Dict(x=1), output=1)),
+        m.update(Example(id=1, input=pg.Dict(x=1), output=1)),
         dict(score=1 * 1)
     )
     self.assertEqual(
-        m.audit(Example(id=2, input=pg.Dict(x=2), output=2)),
+        m.update(Example(id=2, input=pg.Dict(x=2), output=2)),
         dict(score=2 * 2)
     )
     self.assertEqual(
-        m.audit(
+        m.update(
             Example(
                 id=3,
                 input=pg.Dict(x=1),
@@ -154,7 +161,7 @@ class ScoreTest(unittest.TestCase):
         dict(error='ValueError')
     )
     self.assertEqual(
-        m.audit(
+        m.update(
             Example(
                 id=3,
                 input=pg.Dict(x=1),
@@ -190,7 +197,7 @@ class ScoreTest(unittest.TestCase):
 
     m = MyScore()  # pylint: disable=invalid-name
     self.assertEqual(
-        m.audit(Example(id=1, input=pg.Dict(x=1), output=1)),
+        m.update(Example(id=1, input=pg.Dict(x=1), output=1)),
         dict(score=1 * 1, x=1)
     )
     self.assertEqual(m.average_score, 1.0)
@@ -203,13 +210,13 @@ class ScoreTest(unittest.TestCase):
         return example_input.x * output
 
     m = MyScore()  # pylint: disable=invalid-name
-    m.audit(Example(id=1, input=pg.Dict(x=1), output=2))
+    m.update(Example(id=1, input=pg.Dict(x=1), output=2))
     self.assertIn(
         '2.000',
         m.to_html().content,
     )
     with pg.views.html.controls.HtmlControl.track_scripts() as scripts:
-      m.audit(Example(id=2, input=pg.Dict(x=1), output=2))
+      m.update(Example(id=2, input=pg.Dict(x=1), output=2))
       self.assertEqual(len(scripts), 9)
 
 

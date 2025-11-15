@@ -116,7 +116,7 @@ class ExampleTest(unittest.TestCase):
         input=pg.Dict(a=1, b=2),
         output=3,
         metadata=dict(sum=3),
-        metric_metadata=dict(match=True),
+        metric_metadata=dict(match=dict(match=True)),
     )
     self.assertNotIn(
         'next',

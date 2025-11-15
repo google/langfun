@@ -210,6 +210,7 @@ class Evaluation(experiment_lib.Experiment):
       example: example_lib.Example | int,
       raise_if_has_error: bool = False,
       reevaluate_upon_previous_errors: bool = True,
+      force_recompute_metrics: bool = False
   ) -> example_lib.Example:
     """Evaluates a single example input.
 
@@ -218,6 +219,8 @@ class Evaluation(experiment_lib.Experiment):
       raise_if_has_error: Whether to raise an error if the example has error.
       reevaluate_upon_previous_errors: Whether to reevaluate the example if
         the previous checkpointed run has error.
+      force_recompute_metrics: If True, force recompute the metrics even if
+        metric metadata is already present from previous checkpoint.
 
     Returns:
       The evaluated example with the output and metric metadata populated.
@@ -266,6 +269,7 @@ class Evaluation(experiment_lib.Experiment):
         # Use the output and metadata obtained from the previous processing.
         example.output = checkpointed.output
         example.metadata = checkpointed.metadata
+        example.metric_metadata = checkpointed.metric_metadata
         example.error = checkpointed.error
         example.newly_processed = False
         example.execution_status = checkpointed.execution_status
@@ -285,8 +289,16 @@ class Evaluation(experiment_lib.Experiment):
         self.info(f'Starting metric computation for example {example.id}.')
         metric_metadata = {}
         for metric in self.metrics:
-          metric_metadata.update(metric.audit(example))
-        example.metric_metadata = metric_metadata
+          metric_metadata[metric.name] = metric.update(
+              example, force_recompute=force_recompute_metrics
+          )
+
+        if example.metric_metadata is None:
+          example.metric_metadata = metric_metadata
+        else:
+          # Accumulate the metric metadata as there might be existing metadata
+          # from previous metric computation runs.
+          example.metric_metadata.update(metric_metadata)
         self.info(f'Completed metric computation for example {example.id}.')
 
     # For previously processed examples, we keep the execution status for the

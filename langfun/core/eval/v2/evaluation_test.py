@@ -88,7 +88,7 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.output, 6)
     self.assertIsNone(example.error)
     self.assertEqual(example.metadata, {})
-    self.assertEqual(example.metric_metadata, dict(match=True))
+    self.assertEqual(example.metric_metadata, dict(match=dict(is_correct=True)))
     self.assertIsNotNone(example.usage_summary)
     self.assertGreater(example.usage_summary.total.total_tokens, 0)
     self.assertEqual(example.usage_summary.total.num_requests, 1)
@@ -103,7 +103,10 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(example.output, 7)
     self.assertIsNone(example.error)
     self.assertEqual(example.metadata, {})
-    self.assertEqual(example.metric_metadata, dict(mismatch=True))
+    self.assertEqual(
+        example.metric_metadata,
+        dict(match=dict(is_correct=False))
+    )
 
     with self.assertRaisesRegex(ValueError, 'x should not be 5'):
       _ = exp.evaluate(6, raise_if_has_error=True)
@@ -113,7 +116,10 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(pg.MISSING_VALUE, example.output)
     self.assertEqual(example.error.tag, 'ValueError')
     self.assertEqual(example.metadata, {})
-    self.assertEqual(example.metric_metadata, dict(error='ValueError'))
+    self.assertEqual(
+        example.metric_metadata,
+        dict(match=dict(error='ValueError'))
+    )
 
   def test_evaluate_withstate(self):
     eval_dir = os.path.join(tempfile.mkdtemp(), 'test_eval')
