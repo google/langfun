@@ -14,9 +14,11 @@
 """Base classes for agentic actions."""
 
 import abc
+import collections
 import contextlib
 import dataclasses
 import functools
+import itertools
 import threading
 import time
 import typing
@@ -313,12 +315,176 @@ class Action(pg.Object):
     """
 
 
+#
+# Execution tracking.
+#
+
+
+class ExecutionUnit(pg.Object):
+  """Base class for execution units in an agentic trajectory.
+
+  An `ExecutionUnit` represents a logical step or container in the agent's
+  execution flow. It serves as the common interface for top-level executable
+  items.
+
+  The concrete subclasses of `ExecutionUnit` are typically:
+  * **`ActionInvocation`**: Represents a single, specific action executed by
+    the agent.
+  * **`ParallelExecutions`**: Represents a container for a group of
+    `ExecutionUnits` that were executed concurrently.
+
+  Users can retrieve the immediate child execution units from an `ExecutionUnit`
+  object. To access the leaf nodes of the execution tree, use `all_actions`,
+  `all_queries`, and `all_logs` instead.
+
+  Each unit exposes a **`position`** property to reveal its specific location
+  within the execution hierarchy (e.g., '1.2.3').
+
+  Users could use **`parent_execution_unit`** to get the parent execution unit
+  of the current execution unit.
+  """
+
+  @dataclasses.dataclass
+  class Position:
+    """The position of an executed unit under current session."""
+
+    parent: Optional['ExecutionUnit.Position'] = None
+    index: int = 0
+
+    def indices(self) -> tuple[int, ...]:
+      """Returns the indices from root to current execution unit."""
+      # A deque is efficient for adding items to the front.
+      path = collections.deque()
+      current_pos = self
+
+      # Traverse up from the current position to the root.
+      while current_pos.parent is not None:
+        path.appendleft(current_pos.index)
+        current_pos = current_pos.parent
+
+      path.appendleft(current_pos.index)
+      return tuple(path)
+
+    def to_str(
+        self,
+        *,
+        index_base: int = 1,
+        separator: str = '.',
+        **kwargs
+    ) -> str:
+      """Returns a string description of the position."""
+      # For root action, we return empty string as it's position descriptor.
+      if self.parent is None:
+        return ''
+      parent_descriptor = self.parent.to_str(
+          index_base=index_base,
+          separator=separator,
+          **kwargs
+      )
+      if not parent_descriptor:
+        return f'{self.index + index_base}'
+      return parent_descriptor + separator + f'{self.index + index_base}'
+
+    def __repr__(self) -> str:
+      return f'Position({", ".join(str(x) for x in self.indices())})'
+
+    def __str__(self) -> str:
+      return self.to_str()
+
+    def __eq__(self, other: 'ExecutionUnit.Position') -> bool:
+      if isinstance(other, ExecutionUnit.Position):
+        return self.indices() == other.indices()
+      if isinstance(other, tuple):
+        return self.indices() == other
+      if isinstance(other, str):
+        return str(self) == other
+      return False
+
+    def __ne__(self, other: 'ExecutionUnit.Position') -> bool:
+      return not self == other
+
+    def __hash__(self) -> int:
+      return hash(self.indices())
+
+    def __lt__(self, other: 'ExecutionUnit.Position') -> bool:
+      return self.indices() < other.indices()
+
+    def __gt__(self, other: 'ExecutionUnit.Position') -> bool:
+      return self.indices() > other.indices()
+
+  def _on_parent_change(self, *args, **kwargs):
+    super()._on_parent_change(*args, **kwargs)
+    self.__dict__.pop('parent_execution_unit', None)
+    self.__dict__.pop('position', None)
+
+  @functools.cached_property
+  def parent_execution_unit(self) -> Optional['ExecutionUnit']:
+    """Returns the parent execution unit of the current execution unit."""
+    parent_trace = self.sym_ancestor(lambda x: isinstance(x, ExecutionTrace))
+    assert isinstance(parent_trace, ExecutionTrace), (
+        'Execution unit is not associated with any `ExecutionTrace`: '
+        f'{self}'
+    )
+    return parent_trace.parent_execution_unit
+
+  @functools.cached_property
+  def position(self) -> Position:
+    """Returns the execution position of the action."""
+    parent_trace = self.sym_ancestor(lambda x: isinstance(x, ExecutionTrace))
+    while parent_trace is not None:
+      parent_position = parent_trace.position
+      if parent_position is not None:
+        return ExecutionUnit.Position(
+            parent_position, parent_trace.indexof(self, ExecutionUnit)
+        )
+      parent_trace = parent_trace.sym_ancestor(
+          lambda x: isinstance(x, ExecutionTrace)
+      )
+    return ExecutionUnit.Position(None, 0)
+
+  @property
+  @abc.abstractmethod
+  def execution_units(
+      self,
+  ) -> list['ExecutionUnit']:
+    """Returns immediate child execution items."""
+
+  @property
+  @abc.abstractmethod
+  def queries(self) -> list[lf_structured.QueryInvocation]:
+    """Returns queries issued by the execution item."""
+
+  @property
+  @abc.abstractmethod
+  def actions(self) -> list['ActionInvocation']:
+    """Returns immediate child action invocations."""
+
+  @property
+  @abc.abstractmethod
+  def logs(self) -> list[lf.logging.LogEntry]:
+    """Returns immediate logs under current execution item."""
+
+  @property
+  @abc.abstractmethod
+  def all_queries(self) -> list[lf_structured.QueryInvocation]:
+    """Returns all queries from the subtree."""
+
+  @property
+  @abc.abstractmethod
+  def all_actions(self) -> list['ActionInvocation']:
+    """Returns all action invocations from the subtree."""
+
+  @property
+  @abc.abstractmethod
+  def all_logs(self) -> list[lf.logging.LogEntry]:
+    """Returns all logs from the subtree."""
+
+
 # Type definition for traced item during execution.
 TracedItem = Union[
+    ExecutionUnit,
     lf_structured.QueryInvocation,
-    'ActionInvocation',
     'ExecutionTrace',
-    'ParallelExecutions',
     # NOTE(daiyip): Consider remove log entry once we migrate existing agents.
     lf.logging.LogEntry,
 ]
@@ -372,8 +538,14 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def _on_parent_change(self, *args, **kwargs):
     super()._on_parent_change(*args, **kwargs)
     self.__dict__.pop('id', None)
+    self.__dict__.pop('parent_execution_unit', None)
+    self.__dict__.pop('position', None)
 
-  def indexof(self, item: TracedItem, count_item_cls: Type[Any]) -> int:
+  def indexof(
+      self,
+      item: TracedItem,
+      count_item_cls: Type[Any] | tuple[Type[Any], ...]
+  ) -> int:
     """Returns the index of the child item of given type."""
     pos = 0
     for x in self._iter_children(count_item_cls):
@@ -381,6 +553,52 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
         return pos
       pos += 1
     return -1
+
+  @functools.cached_property
+  def parent_execution_unit(self) -> ExecutionUnit:
+    """Returns the parent execution unit of the current execution trace."""
+    parent = self.sym_parent
+    if isinstance(parent, ActionInvocation):
+      # Current execution trace is the body of an action.
+      return parent
+    elif isinstance(parent, pg.List):
+      container = parent.sym_parent
+      if isinstance(container, ParallelExecutions):
+        return container
+      elif isinstance(container, ExecutionTrace):
+        return container.parent_execution_unit
+    assert False, (
+        'Execution trace is not associated with any `ActionInvocation` or '
+        f'`ParallelExecutions`: {self}'
+    )
+
+  @functools.cached_property
+  def position(self) -> ExecutionUnit.Position | None:
+    """Returns the execution position of the execution trace.
+
+    Returns:
+      The execution position of the execution trace, or None if the execution
+      trace is either not associated with an execution unit or the execution
+      trace is a phase under another execution trace.
+    """
+    parent = self.sym_parent
+    if isinstance(parent, ActionInvocation):
+      # Current execution trace is the body of an action.
+      return parent.position
+    elif isinstance(parent, pg.List):
+      container = parent.sym_parent
+      if isinstance(container, ParallelExecutions):
+        return ExecutionUnit.Position(
+            container.position, self.sym_path.key
+        )
+      elif isinstance(container, ExecutionTrace):
+        # When execution trace is a phase under another execution trace,
+        # we return None as the position.
+        return None
+    assert False, (
+        'Execution trace is not associated with any `ActionInvocation` or '
+        f'`ParallelExecutions`: {self}'
+    )
 
   @functools.cached_property
   def id(self) -> str:
@@ -454,6 +672,11 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     return list(self._iter_children(ActionInvocation))
 
   @property
+  def execution_units(self) -> list[ExecutionUnit]:
+    """Returns parallel executions from the sequence."""
+    return list(self._iter_children(ExecutionUnit))
+
+  @property
   def logs(self) -> list[lf.logging.LogEntry]:
     """Returns logs from the sequence."""
     return list(self._iter_children(lf.logging.LogEntry))
@@ -473,7 +696,9 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     """Returns all logs from current trace and its child execution items."""
     return list(self._iter_subtree(lf.logging.LogEntry))
 
-  def _iter_children(self, item_cls: Type[Any]) -> Iterator[TracedItem]:
+  def _iter_children(
+      self, item_cls: Type[Any] | tuple[Type[Any], ...]
+  ) -> Iterator[TracedItem]:
     for item in self.items:
       if isinstance(item, item_cls):
         yield item
@@ -485,7 +710,10 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
           for x in branch._iter_children(item_cls):  # pylint: disable=protected-access
             yield x
 
-  def _iter_subtree(self, item_cls: Type[Any]) -> Iterator[TracedItem]:
+  def _iter_subtree(
+      self,
+      item_cls: Type[Any] | tuple[Type[Any], ...]
+  ) -> Iterator[TracedItem]:
     for item in self.items:
       if isinstance(item, item_cls):
         yield item
@@ -798,7 +1026,7 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
     ]
 
 
-class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
+class ParallelExecutions(ExecutionUnit, pg.views.html.HtmlTreeView.Extension):
   """A container for multiple parallel execution traces.
 
   When `session.concurrent_map` is used, it creates a `ParallelExecutions`
@@ -850,7 +1078,63 @@ class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
       self.branches.append(branch)
       if self._tab_control is not None:
         self._tab_control.append(self._branch_tab(branch))
+
+      # Invalidate cached properties.
+      self.__dict__.pop('all_queries', None)
+      self.__dict__.pop('all_actions', None)
+      self.__dict__.pop('all_logs', None)
       return branch
+
+  #
+  # ExecutionUnit interface.
+  #
+
+  @property
+  def execution_units(self) -> list[ExecutionUnit]:
+    """Returns immediate child execution items from execution sequence."""
+    return []
+
+  @property
+  def queries(self) -> list[lf_structured.QueryInvocation]:
+    """Returns immediate queries made by the parallel execution."""
+    return []
+
+  @property
+  def actions(self) -> list['ActionInvocation']:
+    """Returns immediate child action invocations."""
+    return []
+
+  @property
+  def logs(self) -> list[lf.logging.LogEntry]:
+    """Returns immediate child logs from execution sequence."""
+    return []
+
+  @functools.cached_property
+  def all_queries(self) -> list[lf_structured.QueryInvocation]:
+    """Returns all queries made by the action and its child execution items."""
+    return list(
+        itertools.chain.from_iterable(
+            branch.all_queries for branch in self.branches
+        )
+    )
+
+  @functools.cached_property
+  def all_actions(self) -> list['ActionInvocation']:
+    """Returns all actions made by the action and its child execution items."""
+    return list(
+        itertools.chain.from_iterable(
+            branch.all_actions for branch in self.branches
+        )
+    )
+
+  @property
+  def all_logs(self) -> list[lf.logging.LogEntry]:
+    """Returns all logs made by the action and its child execution items."""
+    return list(
+        itertools.chain.from_iterable(
+            branch.all_logs for branch in self.branches
+        )
+    )
 
   #
   # HTML views.
@@ -892,7 +1176,7 @@ class ParallelExecutions(pg.Object, pg.views.html.HtmlTreeView.Extension):
     )
 
 
-class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
+class ActionInvocation(ExecutionUnit, pg.views.html.HtmlTreeView.Extension):
   """An invocation of an action, capturing its execution and result.
 
   `ActionInvocation` represents a single call to an `Action`. It contains
@@ -953,6 +1237,7 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def _on_parent_change(self, *args, **kwargs):
     super()._on_parent_change(*args, **kwargs)
     self.__dict__.pop('id', None)
+    self.__dict__.pop('position', None)
 
   @property
   def parent_action(self) -> Optional['ActionInvocation']:
@@ -988,6 +1273,15 @@ class ActionInvocation(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def state(self) -> Any:
     """Returns the state of the action."""
     return self.action.state
+
+  #
+  # Implement `ExecutionUnit` interface.
+  #
+
+  @property
+  def execution_units(self) -> list[ExecutionUnit]:
+    """Returns immediate child execution items from execution sequence."""
+    return self.execution.execution_units
 
   @property
   def logs(self) -> list[lf.logging.LogEntry]:

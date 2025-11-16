@@ -52,6 +52,7 @@ class Foo(action_lib.Action):
     with session.track_phase('prepare'):
       session.info('Begin Foo', x=1)
       time.sleep(self.simulate_execution_time[0])
+      Bar()(session, lm=lm)
       session.query(
           'foo',
           schema=int if self.simulate_query_error else None,
@@ -65,6 +66,7 @@ class Foo(action_lib.Action):
     def _sub_task(i):
       session.add_metadata(**{f'subtask_{i}': i})
       time.sleep(self.simulate_execution_time[2])
+      Bar()(session, lm=lm)
       return lf_structured.query(f'subtask_{i}', lm=lm)
 
     self._state = []
@@ -88,6 +90,50 @@ class Foo(action_lib.Action):
     lf_structured.query('additional query', lm=lm)
 
 
+class ExecutionUnitPositionTest(unittest.TestCase):
+
+  def test_basics(self):
+    pos1 = action_lib.ExecutionUnit.Position(None, 0)
+    self.assertEqual(repr(pos1), 'Position(0)')
+    self.assertEqual(str(pos1), '')
+    self.assertIsNone(pos1.parent)
+    self.assertEqual(pos1.index, 0)
+    self.assertEqual(pos1.indices(), (0,))
+    self.assertEqual(pos1, (0,))
+    self.assertEqual(pos1, '')
+    self.assertEqual(pos1, action_lib.ExecutionUnit.Position(None, 0))
+    self.assertNotEqual(pos1, 1)
+    self.assertNotEqual(pos1, (1,))
+    self.assertNotEqual(pos1, action_lib.ExecutionUnit.Position(None, 1))
+
+    pos2 = action_lib.ExecutionUnit.Position(pos1, 0)
+    self.assertEqual(repr(pos2), 'Position(0, 0)')
+    self.assertEqual(str(pos2), '1')
+    self.assertEqual(pos2, '1')
+    self.assertEqual(pos2.parent, pos1)
+    self.assertEqual(pos2.index, 0)
+    self.assertEqual(pos2.indices(), (0, 0))
+    self.assertNotEqual(pos1, pos2)
+    self.assertLess(pos1, pos2)
+    self.assertGreater(pos2, pos1)
+    self.assertEqual(
+        hash(pos2),
+        hash(
+            action_lib.ExecutionUnit.Position(
+                action_lib.ExecutionUnit.Position(None, 0), 0
+            )
+        )
+    )
+
+    pos3 = action_lib.ExecutionUnit.Position(pos2, 0)
+    self.assertEqual(str(pos3), '1.1')
+    self.assertEqual(pos3, '1.1')
+    self.assertEqual(pos3.parent, pos2)
+    self.assertEqual(pos3.index, 0)
+    self.assertEqual(pos3.indices(), (0, 0, 0))
+    self.assertEqual(pos3.to_str(separator='>'), '1>1')
+
+
 class ActionInvocationTest(unittest.TestCase):
 
   def test_basics(self):
@@ -108,9 +154,7 @@ class ExecutionTraceTest(unittest.TestCase):
     self.assertEqual(execution.id, '')
 
     root = action_lib.ActionInvocation(action=action_lib.RootAction())
-    action_invocation = action_lib.ActionInvocation(
-        action=Foo(1)
-    )
+    action_invocation = action_lib.ActionInvocation(action=Foo(1))
     root.execution.append(action_invocation)
     self.assertEqual(action_invocation.execution.id, '/a1')
 
@@ -175,20 +219,25 @@ class SessionTest(unittest.TestCase):
     )
 
     # The root space should have one action (foo), no queries, and no logs.
+    self.assertEqual(len(root.execution_units), 1)
     self.assertEqual(len(root.actions), 1)
     self.assertEqual(len(root.queries), 0)
     self.assertEqual(len(root.logs), 0)
-    # 1 query from Bar, 2 from Foo and 3 from parallel executions.
-    self.assertEqual(len(session.all_queries), 6)
-    self.assertEqual(len(root.all_queries), 6)
-    # 2 actions: Foo and Bar.
-    self.assertEqual(len(session.all_actions), 2)
-    self.assertEqual(len(root.all_actions), 2)
-    # 1 log from Bar and 1 from Foo.
-    self.assertEqual(len(session.all_logs), 2)
-    self.assertEqual(len(root.all_logs), 2)
+    # 2 query from Bar, 2 from Foo and 2 * 3 from parallel executions.
+    self.assertEqual(len(session.all_queries), 10)
+    self.assertEqual(len(root.all_queries), 10)
+    # 6 actions: Foo and 2 Bar, and 3 Bar from parallel executions.
+    self.assertEqual(len(session.all_actions), 6)
+    self.assertEqual(
+        [str(a.position) for a in session.all_actions],
+        ['1', '1.1', '1.2.1.1', '1.2.2.1', '1.2.3.1', '1.3']
+    )
+    self.assertEqual(len(root.all_actions), 6)
+    # 1 log from Bar and 1 from Foo and 3 from Bar in parallel executions.
+    self.assertEqual(len(session.all_logs), 6)
+    self.assertEqual(len(root.all_logs), 6)
     self.assertIs(session.usage_summary, root.usage_summary)
-    self.assertEqual(root.usage_summary.total.num_requests, 6)
+    self.assertEqual(root.usage_summary.total.num_requests, 10)
 
     # Inspecting the top-level action (Foo)
     foo_invocation = root.execution[0]
@@ -200,15 +249,19 @@ class SessionTest(unittest.TestCase):
 
     # Prepare phase.
     prepare_phase = foo_invocation.execution[0]
+    self.assertIsNone(prepare_phase.position)
     self.assertIsInstance(prepare_phase, action_lib.ExecutionTrace)
     self.assertEqual(prepare_phase.id, 'agent@1:/a1/prepare')
-    self.assertEqual(len(prepare_phase.items), 2)
+    self.assertEqual(len(prepare_phase.items), 3)
     self.assertTrue(prepare_phase.has_started)
     self.assertTrue(prepare_phase.has_stopped)
-    self.assertEqual(prepare_phase.usage_summary.total.num_requests, 1)
+    self.assertEqual(prepare_phase.usage_summary.total.num_requests, 2)
     self.assertIsInstance(prepare_phase.items[0], lf.logging.LogEntry)
-    self.assertIsInstance(prepare_phase.items[1], lf_structured.QueryInvocation)
-    self.assertEqual(prepare_phase.items[1].id, 'agent@1:/a1/prepare/q1')
+    self.assertIsInstance(prepare_phase.items[1], action_lib.ActionInvocation)
+    self.assertIs(prepare_phase.items[1].parent_execution_unit, foo_invocation)
+    self.assertEqual(prepare_phase.items[1].id, 'agent@1:/a1/prepare/a1')
+    self.assertIsInstance(prepare_phase.items[2], lf_structured.QueryInvocation)
+    self.assertEqual(prepare_phase.items[2].id, 'agent@1:/a1/prepare/q1')
 
     # Tracked queries.
     query_invocation = foo_invocation.execution[1]
@@ -230,20 +283,44 @@ class SessionTest(unittest.TestCase):
 
     # Tracked parallel executions.
     parallel_executions = foo_invocation.execution[2]
+    # root (0) > foo (0) > parallel executions (1)
+    self.assertEqual(parallel_executions.position, (0, 0, 1))
     self.assertEqual(parallel_executions.id, 'agent@1:/a1/p1')
     self.assertIsInstance(parallel_executions, action_lib.ParallelExecutions)
+    self.assertIs(
+        parallel_executions.all_actions[0].parent_execution_unit,
+        parallel_executions
+    )
+    self.assertIs(
+        parallel_executions.all_actions[0].parent_action,
+        foo_invocation
+    )
     self.assertEqual(len(parallel_executions), 3)
     self.assertEqual(parallel_executions[0].id, 'agent@1:/a1/p1/b1')
     self.assertEqual(parallel_executions[1].id, 'agent@1:/a1/p1/b2')
     self.assertEqual(parallel_executions[2].id, 'agent@1:/a1/p1/b3')
+    self.assertEqual(len(parallel_executions[0].execution_units), 1)
+    self.assertEqual(len(parallel_executions[1].execution_units), 1)
+    self.assertEqual(len(parallel_executions[2].execution_units), 1)
     self.assertEqual(len(parallel_executions[0].queries), 1)
+    self.assertEqual(len(parallel_executions[0].all_queries), 2)
     self.assertEqual(len(parallel_executions[1].queries), 1)
+    self.assertEqual(len(parallel_executions[1].all_queries), 2)
     self.assertEqual(len(parallel_executions[2].queries), 1)
+    self.assertEqual(len(parallel_executions[2].all_queries), 2)
+    self.assertEqual(len(parallel_executions.execution_units), 0)
+    self.assertEqual(len(parallel_executions.actions), 0)
+    self.assertEqual(len(parallel_executions.queries), 0)
+    self.assertEqual(len(parallel_executions.logs), 0)
+    self.assertEqual(len(parallel_executions.all_actions), 3)
+    self.assertEqual(len(parallel_executions.all_queries), 6)
+    self.assertEqual(len(parallel_executions.all_logs), 3)
 
     # Invocation to Bar.
     bar_invocation = foo_invocation.execution[3]
     self.assertIs(bar_invocation.parent_action, foo_invocation)
-    self.assertEqual(bar_invocation.id, 'agent@1:/a1/a1')
+    self.assertIs(bar_invocation.parent_execution_unit, foo_invocation)
+    self.assertEqual(bar_invocation.id, 'agent@1:/a1/a5')
     self.assertIsInstance(bar_invocation, action_lib.ActionInvocation)
     self.assertIsInstance(bar_invocation.action, Bar)
     self.assertEqual(bar_invocation.result, 2)
