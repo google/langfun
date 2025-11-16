@@ -1,4 +1,4 @@
-# Copyright 2023 The Langfun Authors
+# Copyright 2025 The Langfun Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,29 +16,7 @@
 # pylint: disable=g-bad-import-order
 # pylint: disable=g-importing-member
 
-from langfun.core.structured.schema import include_method_in_prompt
-
-from langfun.core.structured.schema import Missing
-from langfun.core.structured.schema import MISSING
-from langfun.core.structured.schema import Unknown
-from langfun.core.structured.schema import UNKNOWN
-
-from langfun.core.structured.schema import Schema
-from langfun.core.structured.schema import SchemaProtocol
-from langfun.core.structured.schema import schema_spec
-
-from langfun.core.structured.schema import SchemaError
-from langfun.core.structured.schema import JsonError
-
-from langfun.core.structured.schema import class_dependencies
-from langfun.core.structured.schema import class_definition
-from langfun.core.structured.schema import class_definitions
-from langfun.core.structured.schema import annotation
-from langfun.core.structured.schema import structure_from_python
-
-from langfun.core.structured.schema import schema_repr
-from langfun.core.structured.schema import source_form
-from langfun.core.structured.schema import value_repr
+from langfun.core.structured.schema import *
 
 from langfun.core.structured.schema_generation import generate_class
 from langfun.core.structured.schema_generation import classgen_example

@@ -1562,7 +1562,7 @@ class Evaluation(Evaluable):
         f'style="color:darkgray">{_html_repr(self.prompt)}</td>'
     )
     # Schema.
-    schema_title = self.schema.schema_str('python') if self.schema else None
+    schema_title = self.schema.schema_repr('python') if self.schema else None
     s.write(
         '<td style="color:purple" '
         f'title="{schema_title}">'

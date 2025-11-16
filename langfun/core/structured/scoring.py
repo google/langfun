@@ -31,7 +31,7 @@ def score(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     return_scoring_results: bool = False,
     **kwargs,
 ) -> list[float] | list[lf.LMScoringResult]:
@@ -201,7 +201,7 @@ async def ascore(
     *,
     lm: lf.LanguageModel | None = None,
     examples: list[mapping.MappingExample] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     return_scoring_results: bool = False,
     **kwargs,
 ) -> list[float] | list[lf.LMScoringResult]:

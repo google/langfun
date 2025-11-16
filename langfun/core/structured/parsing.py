@@ -84,7 +84,7 @@ def parse(
     cache_seed: int | None = 0,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -198,7 +198,7 @@ async def aparse(
     cache_seed: int | None = 0,
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -236,7 +236,7 @@ def call(
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     response_postprocess: Callable[[str], str] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -367,7 +367,7 @@ async def acall(
     autofix: int = 0,
     autofix_lm: lf.LanguageModel | None = None,
     response_postprocess: Callable[[str], str] | None = None,
-    protocol: schema_lib.SchemaProtocol = 'python',
+    protocol: str = 'python',
     returns_message: bool = False,
     **kwargs,
 ) -> Any:
@@ -392,7 +392,7 @@ async def acall(
 
 
 def _parse_structure_cls(
-    protocol: schema_lib.SchemaProtocol,
+    protocol: str,
 ) -> Type[_ParseStructure]:
   if protocol == 'json':
     return _ParseStructureJson
