@@ -17,6 +17,7 @@
 # pylint: disable=g-importing-member
 from langfun.core.structured.schema.base import Schema
 from langfun.core.structured.schema.base import SchemaError
+from langfun.core.structured.schema.base import SchemaType
 
 from langfun.core.structured.schema.base import class_dependencies
 from langfun.core.structured.schema.base import schema_spec
