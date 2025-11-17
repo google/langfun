@@ -880,8 +880,9 @@ class EvaluationState:
       load_example_metadata: bool | Callable[
           [example_lib.Example], bool] = True,
       filter: Callable[[example_lib.Example], bool] | None = None,  # pylint: disable=redefined-builtin
-  ) -> None:
+  ) -> list[example_lib.Example]:
     """Loads the state from the example sequence file."""
+    examples = []
     for example in example_lib.Example.iter_ckpts(
         state_file,
         example_input_by_id=example_input_by_id,
@@ -891,6 +892,8 @@ class EvaluationState:
         continue
       example.newly_processed = False
       self._ckpt_examples[example.id] = example
+      examples.append(example)
+    return examples
 
   @property
   def evaluation_status(self) -> dict[int, ExampleStatus]:

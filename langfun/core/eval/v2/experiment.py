@@ -1055,6 +1055,29 @@ class Plugin(lf.Component):
   or result processing.
   """
 
+  @classmethod
+  def is_per_example(cls) -> bool:
+    """Returns whether the plugin is per example only.
+
+    Per-example plugins can be installed on individual workers when examples
+    are evaluated by multiple processes in parallel.
+    """
+
+    def same_code(method1, method2):
+      return method1.__code__ == method2.__code__
+    return all(
+        same_code(method1, method2)
+        for method1, method2 in [
+            (Plugin.on_run_start, cls.on_run_start),
+            (Plugin.on_run_complete, cls.on_run_complete),
+            (Plugin.on_run_abort, cls.on_run_abort),
+            (Plugin.on_experiment_start, cls.on_experiment_start),
+            (Plugin.on_experiment_skipped, cls.on_experiment_skipped),
+            (Plugin.on_experiment_complete, cls.on_experiment_complete),
+            (Plugin.on_experiment_abort, cls.on_experiment_abort),
+        ]
+    )
+
   def on_run_start(
       self,
       runner: Runner,

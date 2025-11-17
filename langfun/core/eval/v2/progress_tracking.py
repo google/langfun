@@ -14,6 +14,7 @@
 """Tracking evaluation run progress."""
 
 import os
+from typing import Literal
 import langfun.core as lf
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import experiment as experiment_lib
@@ -24,16 +25,24 @@ Experiment = experiment_lib.Experiment
 Example = example_lib.Example
 
 
-def progress_tracker(tqdm: bool = False) -> experiment_lib.Plugin:
+def progress_tracker(
+    tracker_type: Literal['tqdm', 'html', 'auto'] = 'auto'
+) -> experiment_lib.Plugin:
   """Creates a progress tracker as a plugin.
 
   Args:
-    tqdm: If True, force using tqdm for progress update.
+    tracker_type: The type of progress tracker to use.
+      If `tqdm`, force using tqdm for progress update.
+      If `html`, force using html for progress update.
+      If `auto`, determine it automatically based on the running
+        environment (console vs. notebook)
 
   Returns:
     The progress tracker plugin.
   """
-  if tqdm or not lf.console.under_notebook():
+  if tracker_type == 'tqdm' or (
+      tracker_type == 'auto' and not lf.console.under_notebook()
+  ):
     return _TqdmProgressTracker()
   else:
     return _HtmlProgressTracker()

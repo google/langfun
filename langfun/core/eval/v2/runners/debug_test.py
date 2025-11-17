@@ -23,7 +23,7 @@ from langfun.core.eval.v2.runners import debug  # pylint: disable=unused-import
 import pyglove as pg
 
 
-class RunnerTest(unittest.TestCase):
+class DebugRunnerTest(unittest.TestCase):
 
   def assert_same_list(self, actual: list[Any], expected: list[Any]):
     self.assertEqual(len(actual), len(expected))
@@ -31,9 +31,6 @@ class RunnerTest(unittest.TestCase):
       if x is not y:
         print(i, pg.diff(x, y))
       self.assertIs(x, y)
-
-
-class DebugRunnerTest(RunnerTest):
 
   def test_debug_runner(self):
     plugin = eval_test_helper.TestPlugin()

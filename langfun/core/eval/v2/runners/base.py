@@ -18,7 +18,7 @@ import concurrent.futures
 import random
 import threading
 import traceback
-from typing import Any, Annotated, Callable, Iterator
+from typing import Any, Annotated, Callable, Iterator, Literal
 
 from langfun import core as lf
 from langfun.core.eval.v2 import checkpointing
@@ -50,14 +50,16 @@ class RunnerBase(Runner):
   execution strategies.
   """
 
-  tqdm: Annotated[
-      bool,
+  progress_tracker: Annotated[
+      Literal['tqdm', 'html', 'auto', None],
       (
-          'If True, force using tqdm for progress update. Otherwise, determine '
-          'it automatically based on the running environment (console vs. '
-          'notebook)'
+          'If `tqdm`, force using tqdm for progress update. '
+          'If `html`, force using html for progress update. '
+          'If `auto`, determine it automatically based on the running '
+          'environment (console vs. notebook)'
+          'If `none`, disable progress update.'
       )
-  ] = False
+  ] = 'auto'
 
   plugins = [
       checkpointing.BulkCheckpointer(),
@@ -73,13 +75,21 @@ class RunnerBase(Runner):
     super()._on_bound()
 
     # Install the tqdm plugin if needed.
-    with pg.notify_on_change(False):
-      self.plugins.append(progress_tracking.progress_tracker(self.tqdm))
+    if self.progress_tracker is not None:
+      with pg.notify_on_change(False):
+        self.plugins.append(
+            progress_tracking.progress_tracker(self.progress_tracker)
+        )
 
-    self._io_pool_lock = threading.Lock()
-    self._io_pool = concurrent.futures.ThreadPoolExecutor(
-        max_workers=self.max_background_threads
-    )
+    if self.max_background_threads > 0:
+      self._io_pool_lock = threading.Lock()
+      self._io_pool = concurrent.futures.ThreadPoolExecutor(
+          max_workers=self.max_background_threads
+      )
+    else:
+      self._io_pool_lock = None
+      self._io_pool = None
+
     # TODO(daiyip): render background errors.
     self._background_last_error = None
 
@@ -91,9 +101,12 @@ class RunnerBase(Runner):
       except Exception as e:  # pylint: disable=broad-except
         self._background_last_error = e
 
-    with self._io_pool_lock:
-      if self._io_pool is not None:
-        self._io_pool.submit(_background_run, *args, **kwargs)
+    if self.max_background_threads > 0:
+      with self._io_pool_lock:
+        if self._io_pool is not None:
+          self._io_pool.submit(_background_run, *args, **kwargs)
+    else:
+      _background_run(*args, **kwargs)
 
   def _all_plugins(self, experiment: Experiment) -> Iterator[Plugin]:
     """Returns all plugins for the experiment."""
@@ -269,7 +282,7 @@ class RunnerBase(Runner):
         experiment.progress.increment_failed()
         experiment.error(
             (
-                f'Failed to evaluate example {example.id} in'
+                f'Failed to evaluate example {example.id} in '
                 f'{example.elapse:.2f} seconds.'
             ),
             error=example.error
@@ -337,9 +350,10 @@ class RunnerBase(Runner):
         self.background_run(cache.save)
 
       # Wait for the background tasks to finish.
-      with self._io_pool_lock:
-        self._io_pool, io_pool = None, self._io_pool
-      io_pool.shutdown(wait=True)
+      if self.max_background_threads > 0:
+        with self._io_pool_lock:
+          self._io_pool, io_pool = None, self._io_pool
+        io_pool.shutdown(wait=True)
 
   @abc.abstractmethod
   def _run(self, evaluations: list[Evaluation]) -> None:

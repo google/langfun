@@ -21,7 +21,7 @@ import unittest
 from langfun.core import concurrent as lf_concurrent
 from langfun.core import console as lf_console
 from langfun.core.eval.v2 import eval_test_helper
-from langfun.core.eval.v2 import progress_tracking    # pylint: disable=unused-import
+from langfun.core.eval.v2 import progress_tracking
 from langfun.core.eval.v2 import runners as runners_lib  # pylint: disable=unused-import
 import pyglove as pg
 
@@ -33,6 +33,7 @@ class HtmlProgressTrackerTest(unittest.TestCase):
     def display(x):
       result['view'] = x.to_html()
 
+    self.assertFalse(progress_tracking._HtmlProgressTracker.is_per_example())
     lf_console._notebook = pg.Dict(
         display=display
     )
@@ -46,6 +47,7 @@ class HtmlProgressTrackerTest(unittest.TestCase):
 class TqdmProgressTrackerTest(unittest.TestCase):
 
   def test_basic(self):
+    self.assertFalse(progress_tracking._TqdmProgressTracker.is_per_example())
     root_dir = os.path.join(tempfile.mkdtemp(), 'test_tqdm_progress_tracker')
     experiment = eval_test_helper.test_experiment()
     string_io = io.StringIO()

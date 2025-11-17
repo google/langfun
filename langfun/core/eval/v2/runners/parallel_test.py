@@ -23,7 +23,7 @@ from langfun.core.eval.v2.runners import parallel  # pylint: disable=unused-impo
 import pyglove as pg
 
 
-class RunnerTest(unittest.TestCase):
+class ParallelRunnerTest(unittest.TestCase):
 
   def assert_same_list(self, actual: list[Any], expected: list[Any]):
     self.assertEqual(len(actual), len(expected))
@@ -31,9 +31,6 @@ class RunnerTest(unittest.TestCase):
       if x is not y:
         print(i, pg.diff(x, y))
       self.assertIs(x, y)
-
-
-class ParallelRunnerTest(RunnerTest):
 
   def test_parallel_runner(self):
     plugin = eval_test_helper.TestPlugin()

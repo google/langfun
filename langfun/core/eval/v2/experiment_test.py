@@ -433,5 +433,24 @@ class RunnerTest(unittest.TestCase):
           pass
 
 
+class PluginTest(unittest.TestCase):
+
+  def test_per_example_only(self):
+
+    class PerExamplePlugin(experiment_lib.Plugin):
+
+      def on_example_complete(self, runner, experiment, example):
+        print('on_example_complete')
+
+    self.assertTrue(PerExamplePlugin.is_per_example())
+
+    class NonPerExamplePlugin(experiment_lib.Plugin):
+
+      def on_experiment_complete(self, runner, experiment):
+        print('on_example_complete')
+
+    self.assertFalse(NonPerExamplePlugin.is_per_example())
+
+
 if __name__ == '__main__':
   unittest.main()

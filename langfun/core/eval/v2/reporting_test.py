@@ -29,7 +29,11 @@ class ReportingTest(unittest.TestCase):
     experiment = eval_test_helper.test_experiment()
     checkpointer = checkpointing.BulkCheckpointer('checkpoint.jsonl')
     reporter = reporting.HtmlReporter()
+    self.assertFalse(reporter.is_per_example())
+
     example_html_generator = reporting.ExampleHtmlGenerator()
+    self.assertTrue(example_html_generator.is_per_example())
+
     run = experiment.run(
         root_dir,
         'new',
