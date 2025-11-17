@@ -1495,6 +1495,19 @@ class RootAction(Action):
 class SessionEventHandler:
   """Interface for handling session events."""
 
+  def get(
+      self,
+      session_cls: type['SessionEventHandler']
+  ) -> Optional['SessionEventHandler']:
+    """Returns this or a child event handler for the given session class."""
+    if isinstance(self, session_cls):
+      return self
+    elif isinstance(self, SessionEventHandlerChain):
+      for handler in self.handlers:
+        if v := handler.get(session_cls):
+          return v
+    return None
+
   def on_session_start(
       self,
       session: 'Session'

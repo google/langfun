@@ -578,11 +578,21 @@ class SessionTest(unittest.TestCase):
         self.progresses.append((action.id, title))
 
     handler = MyActionHandler()
+    self.assertIs(handler.get(MyActionHandler), handler)
+    self.assertIsNone(handler.get(action_lib.SessionLogging))
+
+    handler_chain = action_lib.SessionEventHandlerChain(
+        handlers=[handler, action_lib.SessionLogging()]
+    )
+    self.assertIs(handler_chain.get(MyActionHandler), handler)
+    self.assertIs(
+        handler_chain.get(action_lib.SessionLogging),
+        handler_chain.handlers[1]
+    )
+
     session = action_lib.Session(
         id='agent@1',
-        event_handler=action_lib.SessionEventHandlerChain(
-            handlers=[handler, action_lib.SessionLogging()]
-        )
+        event_handler=handler_chain
     )
     bar = Bar()
     with session:
