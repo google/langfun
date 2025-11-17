@@ -109,6 +109,17 @@ class CustomMimeTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Unsupported encoding'):
       mime.Mime.from_uri('data:text/plain;base16,abcd')
 
+    # Test YouTube URI
+    yt_uri = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
+    with mock.patch(
+        'langfun.core.modalities.mime.Mime.download'
+    ) as mock_download:
+      content = mime.Mime.from_uri(yt_uri)
+      self.assertIsInstance(content, mime.Custom)
+      self.assertEqual(content.mime_type, 'text/html')
+      self.assertEqual(content.uri, yt_uri)
+      mock_download.assert_not_called()
+
   def assert_html_content(self, html, expected):
     expected = inspect.cleandoc(expected).strip()
     actual = html.content.strip()

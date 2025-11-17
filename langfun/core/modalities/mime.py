@@ -204,6 +204,8 @@ class Mime(lf.Modality):
       return cls.class_from_mime_type(mime_type).from_bytes(content, **kwargs)
 
     if cls is Mime:
+      if 'youtube.com/watch' in uri:
+        return Custom(mime='text/html', uri=uri, **kwargs)
       content = cls.download(uri)
       mime = _detect_mime_type(content)
       return cls.class_from_mime_type(mime)(uri=uri, content=content, **kwargs)
