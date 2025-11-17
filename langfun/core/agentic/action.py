@@ -780,10 +780,11 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
   def remove(self, item: TracedItem) -> None:
     """Removes an item from the sequence."""
-    index = self.items.index(item)
-    if index == -1:
-      raise ValueError(f'Item not found in execution trace: {item!r}')
-
+    try:
+      index = self.items.index(item)
+    except ValueError as exc:
+      raise ValueError(f'Item not found in execution trace: {item!r}') from exc
+      
     with pg.notify_on_change(False):
       self.items.pop(index)
 
