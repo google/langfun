@@ -155,6 +155,8 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
       ckpt_file: str | list[str],
       example_input_by_id: Callable[[int], Any] | None = None,
       load_example_metadata: bool = True,
+      convert_unknown: bool = True,
+      **kwargs
   ) -> Iterator['Example']:
     """Iterates Examples from the checkpoint files."""
     ckpt_files = [ckpt_file] if isinstance(ckpt_file, str) else ckpt_file
@@ -164,7 +166,9 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
           example = pg.from_json_str(
               record,
               example_input_by_id=example_input_by_id,
-              load_example_metadata=load_example_metadata
+              load_example_metadata=load_example_metadata,
+              convert_unknown=convert_unknown,
+              **kwargs
           )
           assert isinstance(example, cls), example
           yield example

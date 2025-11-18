@@ -94,15 +94,23 @@ class ExampleTest(unittest.TestCase):
     pg.JSONConvertible._TYPE_REGISTRY._type_to_cls_map.pop(
         inputs[0].b.__type_name__
     )
-    v = pg.from_json_str(json_str, auto_dict=True, load_example_metadata=True)
-    v.output.pop('type_name')
-    v.metadata.b.pop('type_name')
+    v = pg.from_json_str(
+        json_str,
+        convert_unknown=True,
+        load_example_metadata=True
+    )
     self.assertEqual(
         v,
         Example(
             id=1,
-            output=pg.Dict(x=1),
-            metadata=dict(b=pg.Dict(x=1, y=2)),
+            output=pg.symbolic.UnknownTypedObject(
+                inputs[0].a.__type_name__, x=1
+            ),
+            metadata=dict(
+                b=pg.symbolic.UnknownTypedObject(
+                    inputs[0].b.__type_name__, x=1, y=2
+                )
+            ),
         )
     )
     # Serialize with input.
