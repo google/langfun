@@ -115,9 +115,14 @@ class GenAI(gemini.Gemini):
 
 # pylint: disable=invalid-name
 
+
 #
 # Experimental models.
 #
+class Gemini3ProPreview(GenAI):
+  """Gemini 3 Pro Preview model."""
+
+  model = 'gemini-3-pro-preview'
 
 
 class Gemini25FlashImagePreview(GenAI):

@@ -575,6 +575,14 @@ class LMSamplingOptions(component.Component):
       int | None, 'Number of max thinking tokens.'
   ] = None
 
+  thinking_level: Annotated[
+      Literal['low', 'high'] | None,
+      (
+          'Thinking level for Gemini models. High is for complex tasks, '
+          'while low is for faster responses.'
+      ),
+  ] = None
+
   reasoning_effort: Annotated[
       Literal['low', 'medium', 'high'] | None,
       (

@@ -151,6 +151,29 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
+    # Gemini 3 Pro Preview
+    GeminiModelInfo(
+        model_id='gemini-3-pro-preview',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 3 Pro Preview.',
+        release_date=datetime.datetime(2025, 11, 18),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=10.0,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
     # Gemini 2.5 Flash
     GeminiModelInfo(
         model_id='gemini-2.5-flash',
@@ -793,11 +816,14 @@ class Gemini(rest.REST):
           + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
           + pg.to_json_str(json_schema, json_indent=2)
       )
+    thinking_config_data = {}
     if options.max_thinking_tokens is not None:
-      config['thinkingConfig'] = {
-          'includeThoughts': options.max_thinking_tokens > 0,
-          'thinkingBudget': options.max_thinking_tokens,
-      }
+      thinking_config_data['includeThoughts'] = options.max_thinking_tokens > 0
+      thinking_config_data['thinkingBudget'] = options.max_thinking_tokens
+    if options.thinking_level is not None:
+      thinking_config_data['thinkingLevel'] = options.thinking_level
+    if thinking_config_data:
+      config['thinkingConfig'] = thinking_config_data
 
     if self.response_modalities:
       config['responseModalities'] = self.response_modalities

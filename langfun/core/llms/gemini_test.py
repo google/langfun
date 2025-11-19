@@ -177,6 +177,58 @@ class GeminiTest(unittest.TestCase):
         ),
     )
 
+    # Add test for thinkingConfig with thinking_level.
+    actual = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(
+            thinking_level='high',
+        ),
+    )
+    self.assertEqual(
+        actual,
+        dict(
+            candidateCount=1,
+            temperature=None,
+            topP=None,
+            topK=40,
+            maxOutputTokens=None,
+            stopSequences=None,
+            responseLogprobs=False,
+            logprobs=None,
+            seed=None,
+            thinkingConfig={'thinkingLevel': 'high'},
+        ),
+    )
+
+    # Add test for thinkingConfig with both max_thinking_tokens and
+    # thinking_level.
+    actual = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(
+            max_thinking_tokens=100,
+            thinking_level='low',
+        ),
+    )
+    self.assertEqual(
+        actual,
+        dict(
+            candidateCount=1,
+            temperature=None,
+            topP=None,
+            topK=40,
+            maxOutputTokens=None,
+            stopSequences=None,
+            responseLogprobs=False,
+            logprobs=None,
+            seed=None,
+            thinkingConfig={
+                'includeThoughts': True,
+                'thinkingBudget': 100,
+                'thinkingLevel': 'low',
+            },
+        ),
+    )
+
     with self.assertRaisesRegex(
         ValueError, '`json_schema` must be a dict, got'
     ):
