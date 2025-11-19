@@ -39,6 +39,7 @@ and run it with `lf.eval.run(runner='beam')` and passing in an additional
 import concurrent.futures
 import dataclasses
 import functools
+import hashlib
 import os
 import random
 import threading
@@ -115,9 +116,18 @@ if beam is not None:
       tmp_ckpt_file = os.path.join(
           self._output_dir, f'tmp_checkpoint_{example_id}.{self._ckpt_format}'
       )
+      example_json_str = pg.to_json_str(example)
       with pg.io.open_sequence(tmp_ckpt_file, 'w') as f:
-        f.add(pg.to_json_str(example))
+        f.add(example_json_str)
       pg.io.rename(tmp_ckpt_file, ckpt_file)
+
+      # Write the MD5 digest of the example so we know if the example has been
+      # processed multiple times.
+      digest = hashlib.md5(example_json_str.encode()).hexdigest()[:8]
+      pg.io.writefile(
+          os.path.join(self._output_dir, f'{example_id}.{digest}.md5'),
+          digest
+      )
       yield ckpt_file
 
   @dataclasses.dataclass
