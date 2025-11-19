@@ -197,6 +197,7 @@ class SessionTest(unittest.TestCase):
 
     self.assertIsInstance(session.root.action, action_lib.RootAction)
     self.assertIs(session.current_action, session.root)
+    self.assertIs(session.metadata, session.root.metadata)
 
     #
     # Inspecting the root invocation.
@@ -574,6 +575,9 @@ class SessionTest(unittest.TestCase):
         super()._on_bound()
         self.progresses = []
 
+      def on_session_start(self, session):
+        session.add_metadata(progresses=pg.Ref(self.progresses))
+
       def on_action_progress(self, session, action, title, **kwargs):
         self.progresses.append((action.id, title))
 
@@ -599,10 +603,22 @@ class SessionTest(unittest.TestCase):
       bar(session, lm=fake.StaticResponse('lm response'))
       session.update_progress('Trajectory completed')
 
+    self.assertIs(session.metadata['progresses'], handler.progresses)
     self.assertEqual(handler.progresses, [
         ('agent@1:/a1', 'Query completed'),
         ('agent@1:', 'Trajectory completed'),
     ])
+
+  def test_clone(self):
+    event_handler = action_lib.SessionLogging()
+    session = action_lib.Session(event_handler=event_handler)
+    other = session.clone()
+    self.assertIsNot(session, other)
+    self.assertIs(other.event_handler, event_handler)
+
+    other = session.clone(deep=True)
+    self.assertIsNot(session, other)
+    self.assertIsNot(other.event_handler, session.event_handler)
 
   def test_log(self):
     session = action_lib.Session()

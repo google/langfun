@@ -1334,10 +1334,12 @@ class ActionInvocation(ExecutionUnit, pg.views.html.HtmlTreeView.Extension):
       metadata: dict[str, Any] | None = None,
   ) -> None:
     """Ends the execution of the action with result and metadata."""
-    rebind_dict = dict(result=result, error=error)
-    if metadata is not None:
-      rebind_dict['metadata'] = metadata
-    self.rebind(**rebind_dict, skip_notification=True, raise_on_no_change=False)
+    with pg.notify_on_change(False):
+      self.result = result
+      self.error = error
+      if metadata:
+        self.metadata.update(metadata)
+
     self.execution.stop()
     if self._tab_control is not None:
       if self.metadata:
@@ -1792,11 +1794,6 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       'An optional identifier for the session, which will be used for logging.'
   ]
 
-  event_handler: Annotated[
-      SessionEventHandler,
-      'Event handler for the session.'
-  ]
-
   @pg.explicit_method_override
   def __init__(
       self,
@@ -1810,13 +1807,32 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     super().__init__(
         id=id,
         root=root or ActionInvocation(RootAction()),
-        event_handler=event_handler or SessionLogging(verbose=verbose),
         **kwargs
     )
+    self._event_handler = event_handler or SessionLogging(verbose=verbose)
+
+  @property
+  def event_handler(self) -> SessionEventHandler:
+    """Returns the event handler for the session."""
+    return self._event_handler
+
+  def _sym_clone(self, deep: bool, memo: Any = None) -> 'Session':
+    other = super()._sym_clone(deep=deep, memo=memo)
+    if deep:
+      event_handler = pg.clone(self.event_handler, deep=deep, memo=memo)
+    else:
+      event_handler = self.event_handler
+    other._event_handler = event_handler  # pylint: disable=protected-access
+    return other
 
   #
   # Shortcut methods for accessing the root action invocation.
   #
+
+  @property
+  def metadata(self) -> dict[str, Any]:
+    """Returns metadata associated with the root of the session."""
+    return self.root.metadata
 
   @property
   def all_queries(self) -> list[lf_structured.QueryInvocation]:
@@ -1891,6 +1907,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
   def _on_bound(self):
     super()._on_bound()
+    self._event_handler = None
     self._tls = threading.local()
     self._current_action = self.root
     self._current_execution = self.root.execution
