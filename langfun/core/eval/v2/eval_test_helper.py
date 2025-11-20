@@ -127,11 +127,16 @@ class TestEvaluationWithIndexHtmlGenerationError(TestEvaluation):
     raise ValueError('Cannot render HTML.')
 
 
+def test_evaluation(offset: int | pg.hyper.OneOf = 0):
+  """Returns a test evaluation."""
+  return TestEvaluation(lm=TestLLM(offset=offset))
+
+
 def test_experiment():
   """Returns a test experiment."""
   return Suite([
-      TestEvaluation(lm=TestLLM(offset=0)),
-      TestEvaluation(lm=TestLLM(offset=pg.oneof(range(5)))),
+      test_evaluation(),
+      test_evaluation(pg.oneof(range(5))),
   ])
 
 

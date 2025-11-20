@@ -342,7 +342,7 @@ class RunnerBase(Runner):
         self._run(targets)
 
       self.on_run_complete()
-    except Exception as e:  # pylint: disable=broad-except
+    except BaseException as e:  # pylint: disable=broad-except
       self.on_run_abort(e)
       raise e
     finally:

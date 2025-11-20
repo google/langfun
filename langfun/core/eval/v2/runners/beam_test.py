@@ -52,7 +52,9 @@ class BeamRunnerTest(unittest.TestCase):
         plugins=[
             plugin,
             reporting.ExampleHtmlGenerator(),
-            checkpointing.PerExampleCheckpointer(),
+            checkpointing.PerExampleCheckpointer(
+                checkpoint_filename='checkpoint.jsonl'
+            ),
         ],
         concurrent_startup_delay=(1, 2),
         use_cache='no',
@@ -90,56 +92,6 @@ class BeamRunnerTest(unittest.TestCase):
         self.assertEqual(node.progress.num_skipped, 0)
         self.assertEqual(node.progress.num_failed, 0)
         self.assertEqual(node.progress.num_processed, node.progress.num_total)
-
-  def test_collect_ckpt_failure(self):
-    examples = []
-
-    class MyPlugin(eval_test_helper.TestPlugin):
-      def on_example_complete(self, runner, experiment, example):
-        super().on_example_complete(runner, experiment, example)
-        examples.append(example)
-
-    plugin = MyPlugin()
-    exp = eval_test_helper.test_experiment()
-    root_dir = os.path.join(self.test_dir, 'test_collect_ckpt_failure')
-    run = exp.run(
-        root_dir,
-        runner='beam',
-        plugins=[plugin],
-        use_cache='no',
-        ckpt_format='jsonl'
-    )
-    evaluation = exp.leaf_nodes[0]
-
-    class MockRunner:
-      def __init__(self, run, plugin):
-        self.current_run = run
-        self._plugin = plugin
-
-      def on_example_complete(self, evaluation, example):
-        self._plugin.on_example_complete(self, evaluation, example)
-
-      def on_experiment_complete(self, evaluation):
-        self._plugin.on_experiment_complete(self, evaluation)
-
-    collector = beam._EvaluationCollector(
-        MockRunner(run, plugin),
-        evaluation,
-        example_ids=set([1]),
-        ckpt_format='jsonl',
-    )
-    bad_ckpt_file = os.path.join(
-        run.output_dir(evaluation), 'checkpoint_1.jsonl')
-    pg.io.writefile(bad_ckpt_file, 'bad content')
-
-    examples.clear()
-    collector._example_ids_being_collected.add(1)
-    collector._collect_ckpt(bad_ckpt_file, 1)
-    self.assertEqual(len(examples), 1)
-    self.assertIsNotNone(examples[0].error)
-    self.assertIn(
-        'Expecting value', examples[0].error.description
-    )
 
   def test_shuffle_inputs(self):
     root_dir = os.path.join(self.test_dir, 'test_shuffle_inputs')

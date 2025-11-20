@@ -36,13 +36,9 @@ and run it with `lf.eval.run(runner='beam')` and passing in an additional
 `beam_runner` argument.
 """
 
-import concurrent.futures
-import dataclasses
-import functools
 import hashlib
 import os
 import random
-import threading
 import time
 from typing import Annotated, Any, Iterator
 
@@ -50,6 +46,7 @@ from langfun.core.eval.v2 import checkpointing
 from langfun.core.eval.v2 import evaluation as evaluation_lib
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2.runners import base
+from langfun.core.eval.v2.runners import ckpt_monitor
 
 import pyglove as pg
 
@@ -130,123 +127,8 @@ if beam is not None:
       )
       yield ckpt_file
 
-  @dataclasses.dataclass
-  class _EvaluationCollector:
-    """Per-evaluation component for collecting evaluated examples."""
-
-    runner: base.RunnerBase
-    evaluation: evaluation_lib.Evaluation
-    example_ids: set[int]
-    ckpt_format: str
-    max_collector_threads: int = 128
-
-    def __post_init__(self):
-      self._monitor_thread = None
-      self._example_ids_to_be_collected = set(self.example_ids)
-      self._example_ids_being_collected = set()
-      self._collector_pool = concurrent.futures.ThreadPoolExecutor(
-          max_workers=self.max_collector_threads
-      )
-      self._error = None
-
-    @functools.cached_property
-    def output_dir(self) -> str:
-      """Returns the output directory of the evaluation."""
-      return self.runner.current_run.output_dir(self.evaluation)
-
-    def start(self):
-      self._monitor_thread = threading.Thread(target=self._monitor_loop)
-      self._monitor_thread.start()
-
-    def join(self):
-      if self._monitor_thread:
-        self._monitor_thread.join()
-      if self._error is not None:   # pytype: disable=attribute-error
-        raise self._error           # pytype: disable=attribute-error
-
-    def _monitor_loop(self):
-      """Monitors the checkpoint files and collects evaluated examples."""
-      try:
-        ckpt_file_pattern = os.path.join(
-            self.output_dir, f'checkpoint_*.{self.ckpt_format}'
-        )
-        while (
-            not self._error
-            and (self._example_ids_to_be_collected
-                 or self._example_ids_being_collected)
-        ):
-          if self._example_ids_to_be_collected:
-            for filepath in pg.io.glob(ckpt_file_pattern):
-              example_id = int(
-                  os.path.basename(filepath).split('.')[0].split('_')[-1]
-              )
-              if example_id in self._example_ids_to_be_collected:
-                # Remove example ID from the set to avoid duplicate processing.
-                self._example_ids_to_be_collected.remove(example_id)
-                self._example_ids_being_collected.add(example_id)
-                self._collector_pool.submit(
-                    self._collect_ckpt, filepath, example_id
-                )
-                pg.logging.info(
-                    '[%s] Collecting example %d from %s...',
-                    self.evaluation.id,
-                    example_id,
-                    filepath,
-                )
-          time.sleep(1)
-
-        if not self._error:
-          self.runner.on_experiment_complete(self.evaluation)
-      except BaseException as e:  # pylint: disable=broad-except
-        self._error = e
-        pg.logging.error(
-            '[%s] Collector failed with error: %s',
-            self.evaluation.id,
-            pg.ErrorInfo.from_exception(e)
-        )
-
-    def _collect_ckpt(self, ckpt_filepath: str, example_id: int):
-      """Collects examples from a checkpoint file."""
-      try:
-        loaded_examples = self.evaluation.state.load(
-            ckpt_filepath,
-            example_input_by_id=self.evaluation.example_input_by_id,
-            load_example_metadata=False
-        )
-        assert len(loaded_examples) == 1, loaded_examples
-        example = loaded_examples[0]
-      except BaseException as e:  # pylint: disable=broad-except
-        error_info = pg.ErrorInfo.from_exception(e)
-        pg.logging.error(
-            '[%s] Failed to collect example %d: %s',
-            self.evaluation.id,
-            example_id,
-            error_info
-        )
-        example = example_lib.Example(
-            id=example_id,
-            input=self.evaluation.example_input_by_id(example_id),
-            error=error_info,
-        )
-
-      # This will skip processing but still allow metrics to be collected.
-      # `process` will never be called for evaluation, thus we do not
-      # need to setup/teardown evaluation.
-      example = self.evaluation.evaluate(
-          example, reevaluate_upon_previous_errors=False
-      )
-      example.newly_processed = True
-      pg.logging.info(
-          '[%s] Successfully collected example %d.',
-          self.evaluation.id,
-          example_id,
-      )
-      self.runner.on_example_complete(self.evaluation, example)
-      self._example_ids_being_collected.remove(example_id)
-
 else:
   _EvaluateFn = None   # pylint: disable=invalid-name
-  _EvaluationCollector = None  # pylint: disable=invalid-name
 
 
 class LeafNodeRunner(base.RunnerBase):
@@ -322,9 +204,9 @@ class BeamRunner(base.RunnerBase):
       'The file extension of the checkpoint files.'
   ] = 'jsonl'
 
-  max_collector_threads: Annotated[
+  max_aggregation_threads: Annotated[
       int,
-      'The maximum number of threads to collect examples per evaluation.'
+      'The maximum number of threads to aggregate checkpoints.'
   ] = 128
 
   concurrent_startup_delay: Annotated[
@@ -368,17 +250,27 @@ class BeamRunner(base.RunnerBase):
     self._per_example_plugins = per_example_plugins
     super()._on_bound()
 
-  def _run(self, evaluations: list[evaluation_lib.Evaluation]) -> None:
+  def run(self) -> None:
     """Run evaluations using Beam."""
     assert beam is not None
     assert pipeline_options is not None
-    collectors = []
 
     with beam.Pipeline(
         runner=self.beam_runner or beam.runners.DirectRunner(),
         options=pipeline_options.PipelineOptions(**self.beam_pipeline_options)
     ) as pipeline:
-      for i, evaluation in enumerate(evaluations):
+      evaluation_ids = set()
+      for evaluation in self.current_run.experiment.leaf_nodes:
+        if evaluation.id in evaluation_ids or (
+            self.current_run.filter is not None
+            and not self.current_run.filter(evaluation)
+        ):
+          continue
+
+        # There could be suites with duplicate evaluations, but we only want
+        # to run each evaluation once.
+        evaluation_ids.add(evaluation.id)
+
         example_ids = self.current_run.example_ids
         if example_ids is None:
           example_ids = range(1, evaluation.num_examples + 1)
@@ -400,10 +292,10 @@ class BeamRunner(base.RunnerBase):
         )
         _ = (
             pipeline
-            | f'Input-{evaluation.id}-{i}' >> beam.Create(
+            | f'Input-{evaluation.id}' >> beam.Create(
                 [(x.id, pg.to_json_str(x)) for x in inputs]
             )
-            | f'Evaluate-{evaluation.id}-{i}'
+            | f'Evaluate-{evaluation.id}'
             >> beam.ParDo(
                 _EvaluateFn(
                     pg.to_json_str(leaf_node_runner),
@@ -412,22 +304,21 @@ class BeamRunner(base.RunnerBase):
                 )
             )
         )
-        self.on_experiment_start(evaluation)
-        # This is not precise, but we at least notify example start.
-        for example in inputs:
-          self.on_example_start(evaluation, example)
-        collector = _EvaluationCollector(
-            self,
-            evaluation,
-            example_ids=set(example_ids),
-            ckpt_format=self.ckpt_format,
-            max_collector_threads=self.max_collector_threads,
-        )
-        collector.start()
-        collectors.append(collector)
+      monitor = ckpt_monitor.CheckpointMonitor(
+          pg.Ref(self.current_run),
+          plugins=pg.Ref(self.plugins),
+          # No need to add progress tracker as it is already added by the
+          # Beam runner.
+          progress_tracker=None,
+          checkpoint_pattern=f'checkpoint_*.{self.ckpt_format}',
+          max_aggregation_threads=self.max_aggregation_threads,
+      )
+      monitor.start()
+    monitor.join()
 
-    for collector in collectors:
-      collector.join()
+  def _run(self, evaluations: list[evaluation_lib.Evaluation]) -> None:
+    """Runs the experiment in sequence."""
+    raise NotImplementedError('Not needed in beam runner.')
 
   def _evaluate_items(
       self,
