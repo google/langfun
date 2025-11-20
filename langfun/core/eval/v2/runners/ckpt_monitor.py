@@ -45,6 +45,11 @@ class CheckpointMonitor(base.RunnerBase):
       str, 'The glob pattern of the checkpoint files to monitor.'
   ] = 'checkpoint_*.bagz'
 
+  monitor_inprogress_files: Annotated[
+      bool,
+      'If True, monitor in-progress files to aggregate.'
+  ] = False
+
   poll_interval: Annotated[
       int,
       'The interval in seconds to poll for new checkpoint files.'
@@ -58,7 +63,10 @@ class CheckpointMonitor(base.RunnerBase):
   @dataclasses.dataclass
   class _AggregationEntry:
     evaluation: evaluation_lib.Evaluation
+    output_dir: str
+    inprogress_file_pattern: str | None
     ckpt_file_pattern: str
+    example_ids_inprogress: set[int]
     example_ids_to_be_aggregated: set[int]
     example_ids_being_aggregated: set[int]
     completion_lock: threading.Lock
@@ -86,26 +94,29 @@ class CheckpointMonitor(base.RunnerBase):
       # This is not precise, but we at least notify example start.
       if not self.current_run.filter or self.current_run.filter(evaluation):
         self.on_experiment_start(evaluation)
-        for example_id in self.current_run.examples_to_evaluate(
-            evaluation
-        ):
-          self.on_example_start(
-              evaluation,
-              example_lib.Example(
-                  id=example_id,
-                  input=evaluation.example_input_by_id(example_id),
-              )
-          )
+
+        # Signal the start of the examples if we are not monitoring in-progress
+        # files.
+        if not self.monitor_inprogress_files:
+          for example_id in self.current_run.examples_to_evaluate(evaluation):
+            self._mark_example_started(evaluation, example_id)
+
+        # Create the aggregation entries for polling.
+        output_dir = self.current_run.output_dir(evaluation)
         self._aggregation_entries.append(
             self._AggregationEntry(
                 evaluation=evaluation,
+                output_dir=output_dir,
                 ckpt_file_pattern=os.path.join(
-                    self.current_run.output_dir(evaluation),
-                    self.checkpoint_pattern
+                    output_dir, self.checkpoint_pattern
                 ),
+                inprogress_file_pattern=os.path.join(
+                    output_dir, '*.inprogress'
+                ) if self.monitor_inprogress_files else None,
                 example_ids_to_be_aggregated=(
                     self.current_run.examples_to_evaluate(evaluation)
                 ),
+                example_ids_inprogress=set(),
                 example_ids_being_aggregated=set(),
                 completion_lock=threading.Lock(),
                 is_completed=False,
@@ -138,6 +149,17 @@ class CheckpointMonitor(base.RunnerBase):
         if not entry.example_ids_to_be_aggregated:
           continue
 
+        # Signal example processing.
+        if self.monitor_inprogress_files:
+          inprogress_files = pg.io.glob(entry.inprogress_file_pattern)
+          for inprogress_file in inprogress_files:
+            example_id = int(
+                os.path.basename(inprogress_file).split('.')[0]
+            )
+            if example_id not in entry.example_ids_inprogress:
+              self._mark_example_started(entry.evaluation, example_id)
+              entry.example_ids_inprogress.add(example_id)
+
         for filepath in pg.io.glob(entry.ckpt_file_pattern):
           example_id = int(
               os.path.basename(filepath).split('.')[0].split('_')[-1]
@@ -146,6 +168,14 @@ class CheckpointMonitor(base.RunnerBase):
             # Remove example ID from the set to avoid duplicate processing.
             entry.example_ids_to_be_aggregated.remove(example_id)
             entry.example_ids_being_aggregated.add(example_id)
+
+            # It could be that the example has been processed before, but the
+            # inprogress file was removed. In this case, we should signal the
+            # example has started before completing it.
+            if example_id not in entry.example_ids_inprogress:
+              self._mark_example_started(entry.evaluation, example_id)
+              entry.example_ids_inprogress.add(example_id)
+
             self._aggregator_pool.submit(
                 self._aggregate, entry, filepath, example_id
             )
@@ -217,6 +247,14 @@ class CheckpointMonitor(base.RunnerBase):
       self._error = e
 
     entry.example_ids_being_aggregated.remove(example_id)
+
+    # Remove the in-progress file to indicate that the example has been
+    # processed.
+    try:
+      pg.io.rm(os.path.join(entry.output_dir, f'{example_id}.inprogress'))
+    except FileNotFoundError:
+      pass
+
     if (not self._error
         and not entry.example_ids_to_be_aggregated
         and not entry.example_ids_being_aggregated):
@@ -228,6 +266,22 @@ class CheckpointMonitor(base.RunnerBase):
           except BaseException as e:  # pylint: disable=broad-except
             # Plugin failures should be raised to the user.
             self._error = e
+
+  def _mark_example_started(
+      self,
+      evaluation: evaluation_lib.Evaluation,
+      example_id: int
+  ) -> None:
+    """Mark an example as started."""
+    example = example_lib.Example(
+        id=example_id, input=evaluation.example_input_by_id(example_id),
+    )
+    example.start_time = time.time()
+    self.on_example_start(evaluation, example)
+
+    # We update evaluation state with the inprogress status so the evaluation
+    # HTML could show remotely in-progress examples.
+    evaluation.state.update(example, in_progress=True)
 
   def _run(self, evaluations: list[evaluation_lib.Evaluation]):
     raise NotImplementedError('Not needed in checkpoint monitor.')

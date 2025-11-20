@@ -165,6 +165,7 @@ class RunnerBase(Runner):
       plugin.on_experiment_start(self, experiment)
 
     if experiment.is_leaf:
+      pg.io.mkdirs(self.current_run.output_dir(experiment))
       experiment.info(
           f'Starting evaluation {experiment.id!r} with '
           f'{num_examples_to_evaluate} examples to evaluate.'
@@ -261,6 +262,8 @@ class RunnerBase(Runner):
       example: Example
   ) -> None:
     """Called when an evaluation example is started."""
+    assert isinstance(experiment, Evaluation), experiment
+    experiment.state.update(example, in_progress=True)
     for plugin in self._all_plugins(experiment):
       plugin.on_example_start(self, experiment, example)
     experiment.info(f'Starting to evaluate example {example.id}.')
@@ -271,6 +274,8 @@ class RunnerBase(Runner):
       example: Example
   ) -> None:
     """Called when an evaluation example is complete."""
+    assert isinstance(experiment, Evaluation), experiment
+    experiment.state.update(example, in_progress=False)
     if example.newly_processed:
       if example.error is None:
         experiment.progress.increment_processed()

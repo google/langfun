@@ -13,6 +13,7 @@
 # limitations under the License.
 """Checkpointing evaluation runs."""
 import abc
+import datetime
 import re
 import threading
 import traceback
@@ -45,6 +46,11 @@ class Checkpointer(experiment_lib.Plugin):
       str,
       'Checkpoint file pattern.'
   ] = 'checkpoint.jsonl'
+
+  enable_inprogress_file: Annotated[
+      bool,
+      'If True, write file "<example_id>.inprogress" when example gets started.'
+  ] = True
 
   max_ckpt_loading_threads: Annotated[
       int,
@@ -89,6 +95,24 @@ class Checkpointer(experiment_lib.Plugin):
           f'{len(example_ids_to_evaluate)} examples will be processed from '
           f'scratch. Example IDs: {example_ids_to_evaluate}.'
       )
+
+  def on_example_start(
+      self,
+      runner: Runner,
+      experiment: Experiment,
+      example: Example,
+  ) -> None:
+    """Saves the example to the checkpoint file."""
+    if self.enable_inprogress_file:
+      def _save_inprogress_file(example: Example):
+        inprogress_file = runner.current_run.output_path_for(
+            experiment, f'{example.id}.inprogress'
+        )
+        pg.io.writefile(
+            inprogress_file,
+            datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        )
+      runner.background_run(_save_inprogress_file, example)
 
   def on_example_complete(
       self,

@@ -36,6 +36,7 @@ and run it with `lf.eval.run(runner='beam')` and passing in an additional
 `beam_runner` argument.
 """
 
+import datetime
 import hashlib
 import os
 import random
@@ -105,6 +106,16 @@ if beam is not None:
       )
       if pg.io.path_exists(ckpt_file):
         yield ckpt_file
+
+      # Write the in-progress file to indicate that the example is being
+      # processed.
+      in_progress_file = os.path.join(
+          self._output_dir, f'{example_id}.inprogress'
+      )
+      pg.io.writefile(
+          in_progress_file,
+          datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+      )
 
       # Process one example.
       example = self._runner.process(pg.from_json_str(example_json))
@@ -310,6 +321,7 @@ class BeamRunner(base.RunnerBase):
           # No need to add progress tracker as it is already added by the
           # Beam runner.
           progress_tracker=None,
+          monitor_inprogress_files=True,
           checkpoint_pattern=f'checkpoint_*.{self.ckpt_format}',
           max_aggregation_threads=self.max_aggregation_threads,
       )

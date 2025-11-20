@@ -54,8 +54,13 @@ class CheckpointMonitorTest(unittest.TestCase):
         run,
         plugins=[plugin],
         checkpoint_pattern='checkpoint_*.jsonl',
+        monitor_inprogress_files=True,
     )
     monitor.run()
+
+    # Assert that the in-progress files are created and not removed.
+    for entry in monitor._aggregation_entries:
+      self.assertEqual(len(entry.example_ids_inprogress), 10)
 
     # 6 leaf nodes + 1 suite + 1 hyper.
     self.assertEqual(len(plugin.started_experiments), 6 + 2)

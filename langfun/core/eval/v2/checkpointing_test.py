@@ -90,7 +90,10 @@ class PerExampleCheckpointerTest(CheckpointerTest):
     root_dir = os.path.join(tempfile.mkdtemp(), 'per_example_checkpointer')
     experiment = eval_test_helper.test_experiment()
     checkpoint_filename = 'checkpoint.jsonl'
-    checkpointer = checkpointing.PerExampleCheckpointer(checkpoint_filename)
+    checkpointer = checkpointing.PerExampleCheckpointer(
+        checkpoint_filename,
+        enable_inprogress_file=True
+    )
     collector = ExampleCollector()
     run = experiment.run(
         root_dir, 'new', runner='sequential', plugins=[checkpointer, collector]
@@ -102,6 +105,10 @@ class PerExampleCheckpointerTest(CheckpointerTest):
         example = collector.examples[i + 1]
         ckpt = run.output_path_for(leaf, f'checkpoint_{example.id}.jsonl')
         self.assertTrue(pg.io.path_exists(ckpt))
+        inprogress_file = run.output_path_for(
+            leaf, f'{example.id}.inprogress'
+        )
+        self.assertTrue(pg.io.path_exists(inprogress_file))
         with pg.io.open_sequence(ckpt) as f:
           examples_from_ckpt = list(iter(f))
           # `eval_test_helper.test_experiment` has two TestEvaluation with
