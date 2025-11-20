@@ -591,6 +591,20 @@ class LanguageModelTest(unittest.TestCase):
     lm = MockModel(cache=cache, top_k=1)
     self.assertEqual(lm('a'), 'a')
 
+  def test_empty_generation_error(self):
+    class MockModelWithEmptyResponse(MockModel):
+      def _sample(self,
+                  prompts: list[message_lib.Message]
+                  ) -> list[lm_lib.LMSamplingResult]:
+        return [lm_lib.LMSamplingResult(
+            [lm_lib.LMSample(response='')],
+            usage=lm_lib.LMSamplingUsage(100, 0, 100, 1, 1.0)
+        )]
+    lm = MockModelWithEmptyResponse()
+    with self.assertRaisesRegex(
+        lm_lib.EmptyGenerationError, 'Empty generation encountered'):
+      lm('a')
+
   def test_estimate_max_concurrency(self):
     self.assertIsNone(lm_lib.LanguageModel.estimate_max_concurrency(None, None))
     self.assertEqual(

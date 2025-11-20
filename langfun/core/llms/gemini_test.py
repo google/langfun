@@ -277,6 +277,38 @@ class GeminiTest(unittest.TestCase):
       ):
         lm('hello')
 
+  def test_call_model_with_max_tokens_error(self):
+    def mock_requests_post_error(*args, **kwargs):
+      del args, kwargs
+      response = requests.Response()
+      response.status_code = 200
+      response._content = pg.to_json_str({
+          'candidates': [
+              {
+                  'finishReason': 'MAX_TOKENS',
+                  'content': {
+                      'parts': [
+                          {
+                              'text': 'This is'
+                          }
+                      ]
+                  }
+              },
+          ],
+          'usageMetadata': {
+              'promptTokenCount': 3,
+              'candidatesTokenCount': 4,
+          }
+      }).encode()
+      return response
+
+    with mock.patch('requests.Session.post') as mock_generate:
+      mock_generate.side_effect = mock_requests_post_error
+      lm = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+      m = lm('hello')
+      self.assertEqual(m.metadata.finish_reason, 'MAX_TOKENS')
+      self.assertEqual(m.text, 'This is')
+
   def test_call_model_with_system_message(self):
     with mock.patch('requests.Session.post') as mock_generate:
       mock_generate.side_effect = mock_requests_post

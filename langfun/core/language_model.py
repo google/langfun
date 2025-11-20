@@ -49,6 +49,10 @@ class ContextLimitError(LMInputError):
   """Error for context limit exceeded."""
 
 
+class EmptyGenerationError(LMError):
+  """Error for empty generaition."""
+
+
 class RetryableLMError(LMError):
   """Base class for LLM errors that can be solved by retrying."""
 
@@ -1095,8 +1099,11 @@ class LanguageModel(component.Component):
         prompt.tag(message_lib.Message.TAG_LM_INPUT)
 
         for sample in result.samples:
+          if not sample.response.text:
+            raise EmptyGenerationError(
+                f'Empty generation encountered from model {self.model_id}.'
+            )
           # Update metadata for response message.
-
           response = sample.response
           response.metadata.score = sample.score
           response.metadata.logprobs = sample.logprobs

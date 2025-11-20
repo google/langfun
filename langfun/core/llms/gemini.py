@@ -839,10 +839,14 @@ class Gemini(rest.REST):
           'No candidates found in response. This is a Gemini API issue that '
           'happens occasionally, and retrying should fix it. '
       )
-    messages = [
-        lf.Message.from_value(candidate['content'], format='gemini')
-        for candidate in candidates
-    ]
+
+    messages = []
+    for candidate in candidates:
+      message = lf.Message.from_value(candidate['content'], format='gemini')
+      if finish_reason := candidate.get('finishReason'):
+        message.metadata['finish_reason'] = finish_reason
+      messages.append(message)
+
     usage = json['usageMetadata']
     input_tokens = usage['promptTokenCount']
     # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.

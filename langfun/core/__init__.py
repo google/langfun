@@ -121,6 +121,7 @@ from langfun.core.language_model import LMDebugMode
 from langfun.core.language_model import LMError
 from langfun.core.language_model import LMInputError
 from langfun.core.language_model import ContextLimitError
+from langfun.core.language_model import EmptyGenerationError
 from langfun.core.language_model import RetryableLMError
 from langfun.core.language_model import RateLimitError
 from langfun.core.language_model import TemporaryLMError
