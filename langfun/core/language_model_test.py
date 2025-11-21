@@ -600,10 +600,41 @@ class LanguageModelTest(unittest.TestCase):
             [lm_lib.LMSample(response='')],
             usage=lm_lib.LMSamplingUsage(100, 0, 100, 1, 1.0)
         )]
-    lm = MockModelWithEmptyResponse()
+    lm = MockModelWithEmptyResponse(max_attempts=1, retry_interval=0)
     with self.assertRaisesRegex(
-        lm_lib.EmptyGenerationError, 'Empty generation encountered'):
+        concurrent.RetryError, 'Empty generation encountered'
+    ):
       lm('a')
+
+  def test_empty_generation_retry(self):
+    class MockModelWithEmptyThenValid(MockModel):
+      attempt_count: int = 0
+
+      def _sample(
+          self, prompts: list[message_lib.Message]
+      ) -> list[lm_lib.LMSamplingResult]:
+        self.rebind(attempt_count=self.attempt_count + 1)
+        if self.attempt_count == 1:
+          # First attempt returns empty
+          return [
+              lm_lib.LMSamplingResult(
+                  [lm_lib.LMSample(response='')],
+                  usage=lm_lib.LMSamplingUsage(100, 0, 100, 1, 1.0),
+              )
+          ]
+        else:
+          # Subsequent attempts return valid response
+          return [
+              lm_lib.LMSamplingResult(
+                  [lm_lib.LMSample(response='valid response')],
+                  usage=lm_lib.LMSamplingUsage(100, 100, 200, 1, 1.0),
+              )
+          ]
+
+    lm = MockModelWithEmptyThenValid(max_attempts=3, retry_interval=0)
+    result = lm('a')
+    self.assertEqual(result.text, 'valid response')
+    self.assertEqual(lm.attempt_count, 2)
 
   def test_estimate_max_concurrency(self):
     self.assertIsNone(lm_lib.LanguageModel.estimate_max_concurrency(None, None))

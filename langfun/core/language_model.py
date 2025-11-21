@@ -1088,10 +1088,32 @@ class LanguageModel(component.Component):
     prompts = [message_lib.UserMessage.from_value(p) for p in prompts]
 
     with component.context(override_attrs=True, **kwargs):
-      if self.cache is None:
-        results = self._sample(prompts)
-      else:
-        results = self._sample_with_cache_lookup(prompts, cache_seed)
+
+      def _sample_with_retry():
+        if self.cache is None:
+          results = self._sample(prompts)
+        else:
+          results = self._sample_with_cache_lookup(prompts, cache_seed)
+
+        for i, result in enumerate(results):
+          for sample in result.samples:
+            if not sample.response.text:
+              if self.cache is not None:
+                self.cache.delete(self, prompts[i], seed=cache_seed)
+              raise EmptyGenerationError(
+                  f'Empty generation encountered from model {self.model_id}.'
+              )
+        return results
+
+      retry_fn = concurrent.with_retry(
+          _sample_with_retry,
+          retry_on_errors=EmptyGenerationError,
+          max_attempts=self.max_attempts,
+          retry_interval=self.retry_interval,
+          exponential_backoff=self.exponential_backoff,
+          max_retry_interval=self.max_retry_interval,
+      )
+      results = retry_fn()
 
       for prompt, result in zip(prompts, results):
 
@@ -1099,10 +1121,6 @@ class LanguageModel(component.Component):
         prompt.tag(message_lib.Message.TAG_LM_INPUT)
 
         for sample in result.samples:
-          if not sample.response.text:
-            raise EmptyGenerationError(
-                f'Empty generation encountered from model {self.model_id}.'
-            )
           # Update metadata for response message.
           response = sample.response
           response.metadata.score = sample.score
