@@ -131,7 +131,11 @@ class RunnerBase(Runner):
 
   def on_run_start(self) -> None:
     """Called when a runner is started."""
-    self._save_run_manifest()
+    # Save the run manifest to the output directory only when progress tracker
+    # is enabled. This is to avoid saving run manifest from multiple
+    # eval runner slices.
+    if self.progress_tracker is not None:
+      self._save_run_manifest()
 
     for plugin in self._all_plugins(self.current_run.experiment):
       plugin.on_run_start(self, self.current_run.experiment)
