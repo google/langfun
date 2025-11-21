@@ -49,12 +49,12 @@ class ContextLimitError(LMInputError):
   """Error for context limit exceeded."""
 
 
-class EmptyGenerationError(LMError):
-  """Error for empty generaition."""
-
-
 class RetryableLMError(LMError):
   """Base class for LLM errors that can be solved by retrying."""
+
+
+class EmptyGenerationError(RetryableLMError):
+  """Error for empty generaition."""
 
 
 class RateLimitError(RetryableLMError):
