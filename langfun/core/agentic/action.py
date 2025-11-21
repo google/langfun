@@ -1907,7 +1907,6 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
   def _on_bound(self):
     super()._on_bound()
-    self._event_handler = None
     self._tls = threading.local()
     self._current_action = self.root
     self._current_execution = self.root.execution
