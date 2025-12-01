@@ -138,6 +138,8 @@ class GeminiMessageConverter(lf.MessageConverter):
                 self._safe_read(data, 'mimeType')
             ).from_uri(self._safe_read(data, 'fileUri'))
         )
+      elif 'functionCall' in part or 'functionResponse' in part:
+        pass
       else:
         raise ValueError(f'Unsupported content part: {part!r}.')
     message = message_cls.from_chunks(chunks)

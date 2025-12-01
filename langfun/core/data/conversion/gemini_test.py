@@ -242,6 +242,42 @@ class GeminiConversionTest(unittest.TestCase):
         'https://www.youtube.com/watch?v=abcd'
     )
 
+  def test_from_value_with_function_call(self):
+    message = lf.Message.from_value(
+        {
+            'role': 'model',
+            'parts': [
+                {'text': 'Let me search for that.'},
+                {
+                    'functionCall': {
+                        'name': 'search',
+                        'args': {'query': 'test'},
+                    }
+                },
+            ],
+        },
+        format='gemini',
+    )
+    self.assertEqual(message.text, 'Let me search for that.')
+
+  def test_from_value_with_function_response(self):
+    message = lf.Message.from_value(
+        {
+            'role': 'user',
+            'parts': [
+                {
+                    'functionResponse': {
+                        'name': 'search',
+                        'response': {'results': ['a', 'b']},
+                    }
+                },
+                {'text': 'Here are the results.'},
+            ],
+        },
+        format='gemini',
+    )
+    self.assertEqual(message.text, 'Here are the results.')
+
 
 if __name__ == '__main__':
   unittest.main()
