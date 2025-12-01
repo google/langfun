@@ -83,6 +83,9 @@ if beam is not None:
       self._runner = pg.from_json_str(self._runner_str)
       assert isinstance(self._runner, LeafNodeRunner)
       self._runner.setup()
+      self._input_dir = self._runner.current_run.input_dir(
+          self._runner.current_run.experiment
+      )
       self._output_dir = self._runner.current_run.output_dir(
           self._runner.current_run.experiment
       )
@@ -106,6 +109,16 @@ if beam is not None:
       )
       if pg.io.path_exists(ckpt_file):
         yield ckpt_file
+        return
+
+      if self._input_dir != self._output_dir:
+        warmup_ckpt_file = os.path.join(
+            self._input_dir, f'checkpoint_{example_id}.{self._ckpt_format}'
+        )
+        if pg.io.path_exists(warmup_ckpt_file):
+          pg.io.copy(warmup_ckpt_file, ckpt_file)
+          yield ckpt_file
+          return
 
       # Write the in-progress file to indicate that the example is being
       # processed.

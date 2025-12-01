@@ -93,6 +93,30 @@ class BeamRunnerTest(unittest.TestCase):
         self.assertEqual(node.progress.num_failed, 0)
         self.assertEqual(node.progress.num_processed, node.progress.num_total)
 
+    # Test warm start.
+    root_dir2 = os.path.join(self.test_dir, 'test_warm_start')
+    exp = eval_test_helper.test_experiment()
+    plugin = eval_test_helper.TestPlugin()
+    run2 = exp.run(
+        root_dir2,
+        warm_start_from=run.output_root,
+        runner='beam',
+        plugins=[plugin],
+        use_cache='no',
+        ckpt_format='jsonl',
+    )
+    for node in run2.experiment.nodes:
+      if node.is_leaf:
+        self.assertTrue(node.progress.is_started)
+        self.assertTrue(node.progress.is_completed)
+        self.assertEqual(node.progress.num_skipped, 0)
+        self.assertEqual(node.progress.num_completed, 10)
+        self.assertEqual(node.progress.num_failed, 1)
+      else:
+        self.assertEqual(node.progress.num_skipped, 0)
+        self.assertEqual(node.progress.num_failed, 0)
+        self.assertEqual(node.progress.num_processed, node.progress.num_total)
+
   def test_shuffle_inputs(self):
     root_dir = os.path.join(self.test_dir, 'test_shuffle_inputs')
     exp = eval_test_helper.test_experiment()
