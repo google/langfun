@@ -103,6 +103,25 @@ class ImageTest(unittest.TestCase):
         image_lib.Image.from_pil_image(image), image_lib.Image
     )
 
+  def test_from_pil_image_os_error(self):
+    img = pil_image.open(io.BytesIO(image_content))
+    with mock.patch.object(img, 'save') as mock_save:
+      mock_save.side_effect = [OSError, None]
+      with mock.patch('os.chdir') as mock_chdir:
+        with mock.patch('os.getcwd') as mock_getcwd:
+          mock_getcwd.return_value = '/curr/dir'
+          image = image_lib.Image.from_pil_image(img)
+          self.assertIsInstance(image, image_lib.Image)
+          self.assertEqual(mock_save.call_count, 2)
+          mock_save.assert_has_calls([
+              mock.call(mock.ANY, format='PNG'),
+              mock.call(mock.ANY, format='PNG'),
+          ])
+          mock_chdir.assert_has_calls([
+              mock.call('/tmp'),
+              mock.call('/curr/dir'),
+          ])
+
 
 if __name__ == '__main__':
   unittest.main()

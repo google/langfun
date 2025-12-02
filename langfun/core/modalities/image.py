@@ -15,6 +15,7 @@
 
 import functools
 import io
+import os
 from typing import Any
 
 from langfun.core.modalities import mime
@@ -74,5 +75,13 @@ class Image(mime.Mime):
   @classmethod
   def from_pil_image(cls, img: PILImage) -> 'Image':  # pytype: disable=invalid-annotation
     buf = io.BytesIO()
-    img.save(buf, format='PNG')
+    try:
+      img.save(buf, format='PNG')
+    except OSError:
+      cwd = os.getcwd()
+      try:
+        os.chdir('/tmp')
+        img.save(buf, format='PNG')
+      finally:
+        os.chdir(cwd)
     return cls.from_bytes(buf.getvalue())
