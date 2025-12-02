@@ -828,6 +828,10 @@ class Gemini(rest.REST):
     if thinking_config_data:
       config['thinkingConfig'] = thinking_config_data
 
+    # This is the new feature since Gemini 3.
+    if self.model_id.startswith('gemini-3'):
+      config['mediaResolution'] = 'MEDIA_RESOLUTION_HIGH'
+
     if self.response_modalities:
       config['responseModalities'] = self.response_modalities
       if 'IMAGE' in self.response_modalities:

@@ -237,6 +237,21 @@ class GeminiTest(unittest.TestCase):
           lf.LMSamplingOptions(),
       )
 
+  def test_media_resolution_for_gemini3(self):
+    model = gemini.Gemini('gemini-3-pro-preview', api_endpoint='')
+    config = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(),
+    )
+    self.assertEqual(config.get('mediaResolution'), 'MEDIA_RESOLUTION_HIGH')
+
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    config = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(),
+    )
+    self.assertIsNone(config.get('mediaResolution'))
+
   def test_call_model(self):
     with mock.patch('requests.Session.post') as mock_generate:
       mock_generate.side_effect = mock_requests_post
