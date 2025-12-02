@@ -786,6 +786,11 @@ class Gemini(rest.REST):
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
     request['contents'] = contents
+    request['toolConfig'] = {
+        'functionCallingConfig': {
+            'mode': 'NONE',
+        }
+    }
     if sampling_options.extras:
       request.update(sampling_options.extras)
     return request

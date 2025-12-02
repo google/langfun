@@ -252,6 +252,17 @@ class GeminiTest(unittest.TestCase):
     )
     self.assertIsNone(config.get('mediaResolution'))
 
+  def test_request_tool_config(self):
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    request = model.request(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(),
+    )
+    self.assertEqual(
+        request.get('toolConfig'),
+        {'functionCallingConfig': {'mode': 'NONE'}},
+    )
+
   def test_call_model(self):
     with mock.patch('requests.Session.post') as mock_generate:
       mock_generate.side_effect = mock_requests_post
