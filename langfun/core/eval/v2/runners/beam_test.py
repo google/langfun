@@ -70,9 +70,7 @@ class BeamRunnerTest(unittest.TestCase):
     self.assertEqual(len(plugin.started_example_ids), 6 * 10)
     self.assertEqual(len(plugin.completed_example_ids), 6 * 10)
     self.assert_same_list(plugin.skipped_experiments, [])
-    self.assertTrue(
-        pg.io.path_exists(os.path.join(run.output_root, 'run.json'))
-    )
+
     for node in exp.leaf_nodes:
       for i in range(node.num_examples):
         self.assertTrue(

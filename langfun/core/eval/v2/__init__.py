@@ -35,6 +35,7 @@ from langfun.core.eval.v2.experiment import Runner
 from langfun.core.eval.v2 import runners
 
 # Plugins
+from langfun.core.eval.v2.config_saver import RunConfigSaver
 from langfun.core.eval.v2.checkpointing import BulkCheckpointer
 from langfun.core.eval.v2.checkpointing import PerExampleCheckpointer
 from langfun.core.eval.v2.reporting import HtmlReporter

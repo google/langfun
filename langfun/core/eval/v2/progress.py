@@ -92,6 +92,7 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
         stop_time=None,
         execution_summary=pg.object_utils.TimeIt.StatusSummary(),
     )
+    self._progress_bar = None
 
   @property
   def num_completed(self) -> int:

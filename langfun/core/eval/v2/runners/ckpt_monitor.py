@@ -207,7 +207,7 @@ class CheckpointMonitor(base.RunnerBase):
           # metric aggregation. Thus we do not load example metadata.
           load_example_metadata=False
       )
-      assert len(loaded_examples) > 1, loaded_examples
+      assert len(loaded_examples) >= 1, loaded_examples
       # Ocassionally the per-example checkpoint file may contain the same
       # example processed multiple times. We only need to aggregate the last
       # example.

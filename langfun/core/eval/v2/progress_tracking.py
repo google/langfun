@@ -97,8 +97,7 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
     self._leaf_progresses = {
         leaf.id: lf.concurrent.ProgressBar.install(
             label=f'[#{i + 1} - {leaf.id}]',
-            total=(len(runner.current_run.example_ids)
-                   if runner.current_run.example_ids else leaf.num_examples),
+            total=len(runner.current_run.examples_to_evaluate(leaf)),
             color='cyan',
             status=None
         )

@@ -14,6 +14,7 @@
 """Checkpointing evaluation runs."""
 import abc
 import datetime
+import os
 import re
 import threading
 import traceback
@@ -394,17 +395,26 @@ class BulkCheckpointer(Checkpointer):
 
 
 class SequenceWriter:
-  """A thread-safe writer for sequence files (e.g., Bagz).
+  """A thread-safe writer for sequence files (e.g., Bagz) with atomic write.
 
   `SequenceWriter` wraps a `pg.io.SequenceWriter` to provide thread-safe
   `add` and `close` operations, ensuring that examples can be written
   concurrently from multiple threads without corrupting the sequence file.
+  It writes to a temporary file and renames it to target path on `close` to
+  achieve atomic write. If the target path exists, new examples are appended
+  to existing content.
   """
 
   def __init__(self, path: str):
     self._lock = threading.Lock()
     self._path = path
-    self._sequence_writer = pg.io.open_sequence(path, 'a')
+    basename = os.path.basename(path)
+    self._tmp_path = os.path.join(
+        os.path.dirname(path), f'tmp.{basename}'
+    )
+    if pg.io.path_exists(self._path):
+      pg.io.copy(self._path, self._tmp_path)
+    self._sequence_writer = pg.io.open_sequence(self._tmp_path, 'a')
 
   @property
   def path(self) -> str:
@@ -429,6 +439,7 @@ class SequenceWriter:
         return
       self._sequence_writer.close()
       self._sequence_writer = None
+      pg.io.rename(self._tmp_path, self._path)
 
   def __del__(self):
     self.close()

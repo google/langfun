@@ -36,7 +36,7 @@ class SequentialRunnerTest(unittest.TestCase):
     plugin = eval_test_helper.TestPlugin()
     exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(tempfile.mkdtemp(), 'test_sequential_runner')
-    run = exp.run(root_dir, runner='sequential', plugins=[plugin])
+    _ = exp.run(root_dir, runner='sequential', plugins=[plugin])
 
     self.assertIsNotNone(plugin.start_time)
     self.assertIsNotNone(plugin.complete_time)
@@ -57,9 +57,6 @@ class SequentialRunnerTest(unittest.TestCase):
         plugin.completed_example_ids, list(range(1, 11)) * 6
     )
     self.assert_same_list(plugin.skipped_experiments, [])
-    self.assertTrue(
-        pg.io.path_exists(os.path.join(run.output_root, 'run.json'))
-    )
 
     for node in exp.nodes:
       self.assertTrue(node.progress.is_started)

@@ -22,6 +22,7 @@ from typing import Any, Annotated, Callable, Iterator, Literal
 
 from langfun import core as lf
 from langfun.core.eval.v2 import checkpointing
+from langfun.core.eval.v2 import config_saver
 from langfun.core.eval.v2 import evaluation as evaluation_lib
 from langfun.core.eval.v2 import example as example_lib
 from langfun.core.eval.v2 import experiment as experiment_lib
@@ -35,9 +36,6 @@ Example = example_lib.Example
 Evaluation = evaluation_lib.Evaluation
 Experiment = experiment_lib.Experiment
 Plugin = experiment_lib.Plugin
-
-
-_RUN_MANIFEST = 'run.json'
 
 
 class RunnerBase(Runner):
@@ -64,6 +62,7 @@ class RunnerBase(Runner):
   plugins = [
       checkpointing.BulkCheckpointer(),
       reporting.HtmlReporter(),
+      config_saver.RunConfigSaver(),
   ]
 
   max_background_threads: Annotated[
@@ -115,24 +114,8 @@ class RunnerBase(Runner):
     for plugin in experiment.plugins:
       yield plugin
 
-  #
-  # IO operations for saving running files.
-  #
-
-  def _save_run_manifest(self) -> None:
-    def _save():
-      pg.symbolic.deref(self.current_run.clone(), recursive=True).save(
-          self.current_run.output_path_for(
-              self.current_run.experiment, _RUN_MANIFEST
-          ),
-          hide_default_values=True
-      )
-    self.background_run(_save)
-
   def on_run_start(self) -> None:
     """Called when a runner is started."""
-    self._save_run_manifest()
-
     for plugin in self._all_plugins(self.current_run.experiment):
       plugin.on_run_start(self, self.current_run.experiment)
 
@@ -152,9 +135,8 @@ class RunnerBase(Runner):
     num_examples_to_evaluate = 0
     if experiment.is_leaf:
       assert isinstance(experiment, Evaluation)
-      num_examples_to_evaluate = (
-          len(self.current_run.example_ids)
-          if self.current_run.example_ids else experiment.num_examples
+      num_examples_to_evaluate = len(
+          self.current_run.examples_to_evaluate(experiment)
       )
       experiment.progress.start(total=num_examples_to_evaluate)
     else:
@@ -207,10 +189,7 @@ class RunnerBase(Runner):
       self._log_experiment_completion(experiment)
 
   def _log_experiment_completion(self, experiment: Experiment):
-    example_ids = (
-        self.current_run.example_ids if self.current_run.example_ids else
-        list(range(1, experiment.num_examples + 1))
-    )
+    example_ids = sorted(self.current_run.examples_to_evaluate(experiment))
     num_from_checkpoint, num_processed = 0, 0
     for example_id in example_ids:
       status = experiment.state.get_status(example_id)
@@ -377,18 +356,14 @@ class RunnerBase(Runner):
         per_evaluation_settings['cache'] = cache
 
       with lf.use_settings(**per_evaluation_settings):
-        if self.current_run.example_ids is None:
-          items = (
-              Example(id=i + 1, input=ex) for i, ex in enumerate(
-                  evaluation.example_inputs)
-          )
-        else:
-          items = (
-              Example(
-                  id=example_id,
-                  input=evaluation.example_input_by_id(example_id)
-              ) for example_id in self.current_run.example_ids
-          )
+        items = (
+            Example(
+                id=example_id,
+                input=evaluation.example_input_by_id(example_id)
+            ) for example_id in sorted(
+                self.current_run.examples_to_evaluate(evaluation)
+            )
+        )
         if self.current_run.shuffle_inputs:
           items = list(items)
           random.shuffle(items)

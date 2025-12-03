@@ -848,10 +848,10 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
   ] = None
 
   example_ids: Annotated[
-      list[int] | None,
+      list[int] | Callable[[Experiment], list[int]] | None,
       (
-          'The example IDs to run. If None, it will run all examples. '
-          'Though '
+          'The example IDs to run. Or a callable for determining the examples '
+          'to run based on the experiment. If None, it will run all examples. '
       )
   ] = None
 
@@ -967,10 +967,13 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
     """Returns the example IDs to evaluate."""
     if not experiment.is_leaf:
       return set()
-    return set(
-        self.example_ids if self.example_ids else
-        range(1, experiment.num_examples + 1)
-    )
+    if self.example_ids is None:
+      return set(range(1, experiment.num_examples + 1))
+    elif isinstance(self.example_ids, Callable):
+      return set(self.example_ids(experiment))
+    else:
+      assert isinstance(self.example_ids, list), self.example_ids
+      return set(self.example_ids)
 
   def examples_to_reprocess(self, experiment: Experiment) -> set[int]:
     """Returns the example IDs to reprocess per request."""
