@@ -102,6 +102,7 @@ VertexAIGeminiFlash1_5 = VertexAIGemini15Flash
 # OpenAI models.
 from langfun.core.llms.openai import OpenAI
 
+from langfun.core.llms.openai import Gpt51
 from langfun.core.llms.openai import Gpt5
 from langfun.core.llms.openai import Gpt5Mini
 from langfun.core.llms.openai import Gpt41

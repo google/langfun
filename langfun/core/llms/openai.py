@@ -51,6 +51,28 @@ class OpenAIModelInfo(lf.ModelInfo):
 SUPPORTED_MODELS = [
     # GPT-5 models
     OpenAIModelInfo(
+        model_id='gpt-5.1',
+        in_service=True,
+        model_type='instruction-tuned',
+        description='GPT 5.1 model (latest stable).',
+        url='https://platform.openai.com/docs/models/gpt-5.1',
+        input_modalities=OpenAIModelInfo.INPUT_IMAGE_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=400_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.13,
+            cost_per_1m_input_tokens=1.25,
+            cost_per_1m_output_tokens=10.0,
+        ),
+        # Tier 5 rate limits.
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=15_000,
+            max_tokens_per_minute=40_000_000,
+        ),
+    ),
+    OpenAIModelInfo(
         model_id='gpt-5',
         alias_for='gpt-5-2025-08-07',
         in_service=True,
@@ -1147,6 +1169,11 @@ class OpenAI(openai_compatible.OpenAIResponsesAPI):
     if options.logprobs and self.model.startswith(('o1-', 'o3-')):
       raise RuntimeError('`logprobs` is not supported on {self.model!r}.')
     return super()._request_args(options)
+
+
+class Gpt51(OpenAI):
+  """GPT-5.1."""
+  model = 'gpt-5.1'
 
 
 class Gpt5(OpenAI):
