@@ -122,6 +122,103 @@ class ImageTest(unittest.TestCase):
               mock.call('/curr/dir'),
           ])
 
+  def test_gif_is_compatible(self):
+    # Create a simple 1x1 GIF image using PIL
+    buf = io.BytesIO()
+    img = pil_image.new('P', (1, 1))
+    img.save(buf, format='GIF')
+    gif_bytes = buf.getvalue()
+
+    gif_image = image_lib.Image.from_bytes(gif_bytes)
+    self.assertEqual(gif_image.mime_type, 'image/gif')
+
+    # GIF should be compatible if PNG is in supported types
+    self.assertTrue(gif_image._is_compatible(['image/png']))
+    self.assertTrue(gif_image._is_compatible(['image/jpeg', 'image/webp']))
+    self.assertTrue(gif_image._is_compatible(['image/png', 'image/jpeg']))
+
+    # GIF should not be compatible if only unsupported types
+    self.assertFalse(gif_image._is_compatible(['video/mp4']))
+    self.assertFalse(gif_image._is_compatible(['application/pdf']))
+
+  def test_gif_make_compatible(self):
+    # Create a simple 1x1 GIF image using PIL
+    buf = io.BytesIO()
+    img = pil_image.new('P', (1, 1))
+    img.save(buf, format='GIF')
+    gif_bytes = buf.getvalue()
+
+    gif_image = image_lib.Image.from_bytes(gif_bytes)
+    self.assertEqual(gif_image.mime_type, 'image/gif')
+
+    # Test 1: Convert to PNG (first priority when available)
+    converted = gif_image.make_compatible(['image/png', 'image/jpeg'])
+    self.assertEqual(converted.mime_type, 'image/png')
+    self.assertIsInstance(converted, image_lib.Image)
+
+    # Test 2: Convert to JPEG when PNG not supported
+    converted = gif_image.make_compatible(['image/jpeg', 'image/webp'])
+    self.assertEqual(converted.mime_type, 'image/jpeg')
+
+    # Test 3: Convert to WEBP when PNG and JPEG not supported
+    converted = gif_image.make_compatible(['image/webp'])
+    self.assertEqual(converted.mime_type, 'image/webp')
+
+    # Test 4: Should raise error when no compatible format
+    with self.assertRaises(lf.ModalityError):
+      gif_image.make_compatible(['video/mp4'])
+
+  def test_is_compatible_direct_match(self):
+    image = image_lib.Image.from_bytes(image_content)  # image/png
+    self.assertTrue(image._is_compatible(['image/png', 'image/jpeg']))
+    self.assertTrue(image._is_compatible(['image/png']))
+    self.assertFalse(image._is_compatible(['image/jpeg']))
+
+  def test_make_compatible_no_conversion(self):
+    image = image_lib.Image.from_bytes(image_content)  # image/png
+    converted_image = image.make_compatible(['image/png', 'image/jpeg'])
+    self.assertIs(image, converted_image)
+
+  def test_convert_to_format_jpeg_transparency(self):
+    # Create a simple RGBA PNG image
+    buf = io.BytesIO()
+    img = pil_image.new('RGBA', (1, 1), (255, 0, 0, 128))
+    img.save(buf, format='PNG')
+    rgba_png_bytes = buf.getvalue()
+
+    rgba_image = image_lib.Image.from_bytes(rgba_png_bytes)
+    self.assertEqual(rgba_image.mime_type, 'image/png')
+
+    # Convert to JPEG, should trigger transparency handling
+    converted_image = rgba_image._convert_to_format('JPEG')
+    self.assertEqual(converted_image.mime_type, 'image/jpeg')
+    pil_img = converted_image.to_pil_image()
+    self.assertEqual(pil_img.mode, 'RGB')
+
+  def test_convert_to_format_os_error(self):
+    image = image_lib.Image.from_bytes(image_content)
+    mock_pil_image = mock.MagicMock()
+    mock_save = mock_pil_image.save
+    mock_save.side_effect = [OSError, None]
+
+    with mock.patch.object(
+        image, 'to_pil_image', return_value=mock_pil_image
+    ), mock.patch('os.chdir') as mock_chdir, mock.patch(
+        'os.getcwd'
+    ) as mock_getcwd:
+      mock_getcwd.return_value = '/curr/dir'
+      converted_image = image._convert_to_format('PNG')
+      self.assertIsInstance(converted_image, image_lib.Image)
+      self.assertEqual(mock_save.call_count, 2)
+      mock_save.assert_has_calls([
+          mock.call(mock.ANY, format='PNG'),
+          mock.call(mock.ANY, format='PNG'),
+      ])
+      mock_chdir.assert_has_calls([
+          mock.call('/tmp'),
+          mock.call('/curr/dir'),
+      ])
+
 
 if __name__ == '__main__':
   unittest.main()

@@ -16,7 +16,7 @@
 import functools
 import io
 import os
-from typing import Any
+from typing import Any, Iterable
 
 from langfun.core.modalities import mime
 
@@ -71,6 +71,49 @@ class Image(mime.Mime):
 
   def to_pil_image(self) -> PILImage:   # pytype: disable=invalid-annotation
     return pil_open(io.BytesIO(self.to_bytes()))
+
+  def _is_compatible(self, mime_types: Iterable[str]) -> bool:
+    """Returns True if this image is compatible with any of the MIME types."""
+    mime_types = set(mime_types)
+    if self.mime_type in mime_types:
+      return True
+    if self.mime_type == 'image/gif':
+      return bool(mime_types & {'image/png', 'image/jpeg', 'image/webp'})
+    return False
+
+  def _make_compatible(self, mime_types: Iterable[str]) -> 'Image':
+    """Converts this image to a compatible format if needed."""
+    mime_types = set(mime_types)
+    if self.mime_type in mime_types:
+      return self
+    if self.mime_type == 'image/gif':
+      # Convert to first supported format
+      for target_format, pil_format in [
+          ('image/png', 'PNG'),
+          ('image/jpeg', 'JPEG'),
+          ('image/webp', 'WEBP'),
+      ]:
+        if target_format in mime_types:
+          return self._convert_to_format(pil_format)
+    return self
+
+  def _convert_to_format(self, pil_format: str) -> 'Image':
+    """Converts this image to the specified PIL format."""
+    buf = io.BytesIO()
+    img = self.to_pil_image()
+    # JPEG doesn't support transparency, convert RGBA to RGB
+    if pil_format == 'JPEG' and img.mode in ('RGBA', 'P'):
+      img = img.convert('RGB')
+    try:
+      img.save(buf, format=pil_format)
+    except OSError:
+      cwd = os.getcwd()
+      try:
+        os.chdir('/tmp')
+        img.save(buf, format=pil_format)
+      finally:
+        os.chdir(cwd)
+    return self.from_bytes(buf.getvalue())
 
   @classmethod
   def from_pil_image(cls, img: PILImage) -> 'Image':  # pytype: disable=invalid-annotation
