@@ -60,6 +60,19 @@ class CheckpointMonitor(base.RunnerBase):
       'The maximum number of threads to aggregate checkpoints.'
   ] = 128
 
+  bypass_old_ckpt_files_with_non_oop_errors: Annotated[
+      bool,
+      'If True, ignore old checkpoint files with non-oop errors.'
+  ] = True
+
+  ckpt_start_time: Annotated[
+      float | None,
+      (
+          'The timestamp to treat checkpoint files modified before this '
+          'time as old.'
+      )
+  ] = None
+
   @dataclasses.dataclass
   class _AggregationEntry:
     evaluation: evaluation_lib.Evaluation
@@ -78,6 +91,9 @@ class CheckpointMonitor(base.RunnerBase):
     self._aggregation_entries = []
     self._aggregator_pool = None
     self._error = None
+    if self.ckpt_start_time is None:
+      self.rebind(ckpt_start_time=time.time(), skip_notification=True)
+    self._ckpt_bypass_timestamp: dict[str, int] = {}
 
   def start(self):
     # Reset the experiment state before getting started.
@@ -165,6 +181,14 @@ class CheckpointMonitor(base.RunnerBase):
               os.path.basename(filepath).split('.')[0].split('_')[-1]
           )
           if example_id in entry.example_ids_to_be_aggregated:
+            last_modified_time = pg.io.getmtime(filepath)
+            bypass_timestamp = self._ckpt_bypass_timestamp.get(filepath)
+            if (
+                bypass_timestamp is not None
+                and last_modified_time <= bypass_timestamp
+            ):
+              continue
+
             # Remove example ID from the set to avoid duplicate processing.
             entry.example_ids_to_be_aggregated.remove(example_id)
             entry.example_ids_being_aggregated.add(example_id)
@@ -177,7 +201,7 @@ class CheckpointMonitor(base.RunnerBase):
               entry.example_ids_inprogress.add(example_id)
 
             self._aggregator_pool.submit(
-                self._aggregate, entry, filepath, example_id
+                self._aggregate, entry, filepath, example_id, last_modified_time
             )
             pg.logging.info(
                 '[%s] Aggregating example %d from %s...',
@@ -196,7 +220,8 @@ class CheckpointMonitor(base.RunnerBase):
       self,
       entry: _AggregationEntry,
       ckpt_filepath: str,
-      example_id: int
+      example_id: int,
+      last_modified_time: float,
   ):
     """Aggregate an example from a checkpoint file."""
     try:
@@ -212,6 +237,25 @@ class CheckpointMonitor(base.RunnerBase):
       # example processed multiple times. We only need to aggregate the last
       # example.
       example = loaded_examples[-1]
+      if (
+          self.bypass_old_ckpt_files_with_non_oop_errors
+          and last_modified_time < self.ckpt_start_time
+          and example.error is not None
+          and not example.error.tag.startswith('MappingError')
+      ):
+        entry.example_ids_being_aggregated.remove(example_id)
+        entry.example_ids_to_be_aggregated.add(example_id)
+        self._ckpt_bypass_timestamp[ckpt_filepath] = last_modified_time
+        pg.logging.info(
+            '[%s] Bypassing old checkpoint file with non-oop errors (%s) '
+            'for example %d, last_modified_time: %s, ckpt_start_time: %s',
+            entry.evaluation.id,
+            ckpt_filepath,
+            example_id,
+            last_modified_time,
+            self.ckpt_start_time,
+        )
+        return
     except BaseException as e:  # pylint: disable=broad-except
       error_info = pg.ErrorInfo.from_exception(e)
       pg.logging.error(
@@ -229,9 +273,21 @@ class CheckpointMonitor(base.RunnerBase):
     # This will skip processing but still allow metrics to be collected.
     # `process` will never be called for evaluation, thus we do not
     # need to setup/teardown evaluation.
-    example = entry.evaluation.evaluate(
-        example, reevaluate_upon_previous_errors=False
-    )
+    try:
+      example = entry.evaluation.evaluate(
+          example, reevaluate_upon_previous_errors=False
+      )
+    except BaseException as e:  # pylint: disable=broad-except
+      pg.logging.error(
+          '[%s] Unexpected error found during evaluating example %d from %s.',
+          entry.evaluation.id,
+          example_id,
+          ckpt_filepath,
+      )
+      self._error = e
+      entry.example_ids_being_aggregated.remove(example_id)
+      return
+
     example.newly_processed = True
     pg.logging.info(
         '[%s] Successfully aggregated example %d from %s.',

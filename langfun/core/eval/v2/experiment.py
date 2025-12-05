@@ -268,11 +268,11 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
   @functools.cached_property
   def hash(self) -> str:
     """A 8-byte MD5 hash computed from experiment identity."""
-    identity = self.format(
-        compact=True, hide_default_values=True, use_inferred=True,
-        exclude_keys=('plugins', 'progress', 'usage_summary')
-    )
-    return hashlib.md5(identity.encode()).hexdigest()[:8]
+    return hashlib.md5(self._identity().encode()).hexdigest()[:8]
+
+  @abc.abstractmethod
+  def _identity(self) -> str:
+    """Returns the identity of the experiment."""
 
   @classmethod
   def link(cls, path: str) -> str:
@@ -690,6 +690,12 @@ class Suite(Experiment):
   def is_leaf(self) -> bool:
     """Returns whether the task is a leaf."""
     return False
+
+  def _identity(self) -> str:
+    """Returns the definition of the evaluation."""
+    return '[' + ', '.join(
+        [child._identity() for child in self.children]  # pylint: disable=protected-access
+    ) + ']'
 
 
 class RunId(pg.Object):

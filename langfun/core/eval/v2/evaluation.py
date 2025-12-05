@@ -114,6 +114,13 @@ class Evaluation(experiment_lib.Experiment):
     self._log_entries = []
     self._log_lock = threading.Lock()
 
+  def _identity(self) -> str:
+    """Returns the definition of the evaluation."""
+    return self.format(
+        compact=True, hide_default_values=True, use_inferred=True,
+        exclude_keys=('plugins', 'progress', 'usage_summary')
+    )
+
   #
   # Handling evaluation hierarchy (materialized vs. hyper evaluations).
   #

@@ -13,8 +13,10 @@
 # limitations under the License.
 import os
 import tempfile
+import time
 import unittest
 
+import langfun.core as lf
 from langfun.core.eval.v2 import checkpointing
 from langfun.core.eval.v2 import eval_test_helper
 from langfun.core.eval.v2 import example as example_lib
@@ -33,6 +35,7 @@ class CheckpointMonitorTest(unittest.TestCase):
   def test_aggregate(self):
     exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(self.test_dir, 'test_aggregate')
+    ckpt_start_time = time.time()
     run = exp.run(
         root_dir,
         runner='sequential',
@@ -55,6 +58,7 @@ class CheckpointMonitorTest(unittest.TestCase):
         plugins=[plugin],
         checkpoint_pattern='checkpoint_*.jsonl',
         monitor_inprogress_files=True,
+        ckpt_start_time=ckpt_start_time,
     )
     monitor.run()
 
@@ -70,7 +74,50 @@ class CheckpointMonitorTest(unittest.TestCase):
     for e in exp.leaf_nodes:
       self.assertEqual(e.progress.num_completed, 10)
 
+  def test_ignore_old_ckpt_files_with_non_oop_errors(self):
+    exp = eval_test_helper.test_evaluation()
+    root_dir = os.path.join(self.test_dir, 'test_ignore_old_ckpt_files')
+    run = exp.run(
+        root_dir,
+        runner='sequential',
+        progress_tracker=None,
+        plugins=[
+            checkpointing.PerExampleCheckpointer(
+                checkpoint_filename='checkpoint.jsonl'
+            )
+        ],
+        use_cache='no',
+    )
+    monitor = ckpt_monitor.CheckpointMonitor(
+        run,
+        plugins=[],
+        checkpoint_pattern='checkpoint_*.jsonl',
+        monitor_inprogress_files=True
+    )
+    monitor.start()
+    time.sleep(2)
+    # Example 6 is a non-oop error, we simulate a re-evaluation.
+    ex = example_lib.Example(
+        id=6, output=1, metric_metadata={'match': {'is_correct': True}},
+        start_time=time.time() - 2, end_time=time.time(),
+        usage_summary=lf.UsageSummary(),
+        execution_status={
+            'evaluate': pg.utils.TimeIt.Status(name='evaluate', elapse=1)
+        }
+    )
+    with pg.io.open_sequence(
+        run.output_path_for(exp, 'checkpoint_6.jsonl'),
+        mode='w'
+    ) as f:
+      f.add(pg.to_json_str(ex))
+    print(time.time(), pg.io.listdir(run.output_dir(exp)))
+    monitor.join()
+    self.assertEqual(exp.progress.num_processed, 10)
+    self.assertEqual(exp.progress.num_completed, 10)
+    self.assertEqual(exp.progress.num_failed, 0)
+
   def test_aggregate_with_filter(self):
+    ckpt_start_time = time.time()
     exp = eval_test_helper.test_experiment()
     root_dir = os.path.join(self.test_dir, 'test_aggregate_with_filter')
 
@@ -93,6 +140,7 @@ class CheckpointMonitorTest(unittest.TestCase):
         run,
         plugins=[plugin],
         checkpoint_pattern='checkpoint_*.jsonl',
+        ckpt_start_time=ckpt_start_time,
     )
     monitor.run()
 
@@ -127,6 +175,7 @@ class CheckpointMonitorTest(unittest.TestCase):
         if self.simulate_raise_on_experiment_complete:
           raise ValueError('experiment complete error')
 
+    ckpt_start_time = time.time()
     exp = eval_test_helper.test_evaluation()
     root_dir = os.path.join(self.test_dir, 'test_plugin_raise')
 
@@ -148,6 +197,7 @@ class CheckpointMonitorTest(unittest.TestCase):
           run,
           plugins=[TestPlugin(simulate_raise_on_example_complete=True)],
           checkpoint_pattern='checkpoint_*.jsonl',
+          ckpt_start_time=ckpt_start_time,
       ).run()
 
     with self.assertRaisesRegex(ValueError, 'experiment complete error'):
@@ -155,6 +205,7 @@ class CheckpointMonitorTest(unittest.TestCase):
           run,
           plugins=[TestPlugin(simulate_raise_on_experiment_complete=True)],
           checkpoint_pattern='checkpoint_*.jsonl',
+          ckpt_start_time=ckpt_start_time,
       ).run()
 
 
