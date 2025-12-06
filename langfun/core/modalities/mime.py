@@ -135,7 +135,20 @@ class Mime(lf.Modality):
       raise lf.ModalityError(
           f'MIME type {self.mime_type!r} cannot be converted to text.'
       )
-    return self.to_bytes().decode()
+    content = self.to_bytes()
+    # Try UTF-8 first (most common encoding).
+    try:
+      return content.decode('utf-8')
+    except UnicodeDecodeError:
+      pass
+    # Check for UTF-16 BOM (0xff 0xfe or 0xfe 0xff).
+    if content[:2] in (b'\xff\xfe', b'\xfe\xff'):
+      try:
+        return content.decode('utf-16')
+      except UnicodeDecodeError:
+        pass
+    # Fallback: decode with error replacement to avoid crashing.
+    return content.decode('utf-8', errors='replace')
 
   def is_compatible(
       self, mime_types: str | Iterable[str]

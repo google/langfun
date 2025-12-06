@@ -163,5 +163,53 @@ class CustomMimeTest(unittest.TestCase):
     )
 
 
+class ToTextEncodingTest(unittest.TestCase):
+  """Tests for to_text() encoding handling."""
+
+  def test_utf8_decoding(self):
+    """Test that valid UTF-8 content is decoded correctly."""
+    content = mime.Custom('text/plain', b'Hello, World!')
+    self.assertEqual(content.to_text(), 'Hello, World!')
+
+    # UTF-8 with multi-byte characters.
+    utf8_content = 'こんにちは'.encode('utf-8')
+    content = mime.Custom('text/plain', utf8_content)
+    self.assertEqual(content.to_text(), 'こんにちは')
+
+  def test_utf16_le_bom_decoding(self):
+    """Test that UTF-16 Little Endian with BOM is decoded correctly."""
+    # UTF-16 LE BOM: 0xff 0xfe
+    utf16_le_content = 'Hello'.encode('utf-16-le')
+    content_with_bom = b'\xff\xfe' + utf16_le_content
+    content = mime.Custom('text/plain', content_with_bom)
+    self.assertEqual(content.to_text(), 'Hello')
+
+  def test_utf16_be_bom_decoding(self):
+    """Test that UTF-16 Big Endian with BOM is decoded correctly."""
+    # UTF-16 BE BOM: 0xfe 0xff
+    utf16_be_content = 'Hello'.encode('utf-16-be')
+    content_with_bom = b'\xfe\xff' + utf16_be_content
+    content = mime.Custom('text/plain', content_with_bom)
+    self.assertEqual(content.to_text(), 'Hello')
+
+  def test_invalid_bytes_fallback_with_replacement(self):
+    """Test that invalid bytes are replaced with replacement character."""
+    # 0xff alone is invalid in UTF-8 and doesn't have UTF-16 BOM pattern.
+    invalid_content = b'\xff\xfdHello'
+    content = mime.Custom('text/plain', invalid_content)
+    result = content.to_text()
+    # Invalid bytes should be replaced with U+FFFD (replacement character).
+    self.assertIn('\ufffd', result)
+    self.assertIn('Hello', result)
+
+  def test_binary_mime_type_raises_error(self):
+    """Test that binary MIME types raise ModalityError."""
+    content = mime.Custom('application/octet-stream', b'\x00\x01\x02')
+    with self.assertRaisesRegex(
+        lf.ModalityError, 'cannot be converted to text'
+    ):
+      content.to_text()
+
+
 if __name__ == '__main__':
   unittest.main()
