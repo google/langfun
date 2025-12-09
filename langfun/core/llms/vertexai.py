@@ -220,6 +220,26 @@ class VertexAIGemini3ProPreview(VertexAIGemini):  # pylint: disable=invalid-name
   location = 'global'
 
 
+class VertexAIGemini3ProImagePreview(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3 Pro Image Preview model for high-fidelity image generation.
+
+  This model supports:
+  - Text-to-image generation
+  - Image editing (multimodal input)
+  - Visual reasoning
+
+  Key Requirements:
+  - Uses v1beta1 API endpoint
+  - responseModalities must include 'IMAGE'
+  - Supported aspect ratios: 1:1, 16:9, 9:16, 4:3, 3:4
+  - Image sizes: 1K (default), 2K, 4K
+  """
+
+  model = 'gemini-3-pro-image-preview'
+  location = 'global'
+  response_modalities = ['TEXT', 'IMAGE']
+
+
 class VertexAIGemini25Pro(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 2.5 Pro GA model launched on 06/17/2025."""
 

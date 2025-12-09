@@ -125,6 +125,24 @@ class Gemini3ProPreview(GenAI):
   model = 'gemini-3-pro-preview'
 
 
+class Gemini3ProImagePreview(GenAI):
+  """Gemini 3 Pro Image Preview model for high-fidelity image generation.
+
+  This model supports:
+  - Text-to-image generation
+  - Image editing (multimodal input)
+  - Visual reasoning
+
+  Key Requirements:
+  - responseModalities must include 'IMAGE'
+  - Supported aspect ratios: 1:1, 16:9, 9:16, 4:3, 3:4
+  - Image sizes: 1K (default), 2K, 4K
+  """
+
+  model = 'gemini-3-pro-image-preview'
+  response_modalities = ['TEXT', 'IMAGE']
+
+
 class Gemini25FlashImagePreview(GenAI):
   """Gemini 2.5 Flash Image Preview model."""
   model = 'gemini-2.5-flash-image-preview'
