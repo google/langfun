@@ -38,7 +38,7 @@ class Checkpointer(experiment_lib.Plugin):
   later. When an experiment starts, the checkpointer loads any previously saved
   examples from an earlier run (or a warm-start run) into `experiment.state`,
   so the runner can skip processing them again.
-  Subclasses should implement `_list_checkpoint_filenames` to identify
+  Subclasses should implement `_list_checkpoint_files` to identify
   checkpoint files to load, and `_save_example` to save a newly processed
   example.
   """
@@ -131,7 +131,7 @@ class Checkpointer(experiment_lib.Plugin):
       experiment: Experiment,
   ) -> None:
     """Creates the checkpoint file."""
-    ckpt_files = self._list_checkpoint_filenames(runner, experiment)
+    ckpt_files = self._list_checkpoint_files(runner, experiment)
     experiment.info(f'Found {len(ckpt_files)} checkpoint files to load.')
 
     # Load the checkpoint files in parallel.
@@ -141,18 +141,18 @@ class Checkpointer(experiment_lib.Plugin):
         experiment
     )
     context = dict(counter=0, counter_lock=threading.Lock())
-    copy_ckpt = current_run.input_root != current_run.output_root
 
     def _load_state(ckpt_file):
       error = None
       with pg.timeit() as t:
         try:
-          experiment.load_state(
-              current_run.input_path_for(experiment, ckpt_file),
+          loaded_examples = experiment.load_state(
+              ckpt_file,
               filter=lambda x: x.id in examples_to_load,
               load_example_metadata=lambda x: x.id in examples_to_load_metadata,
           )
         except BaseException as e:  # pylint: disable=broad-except
+          loaded_examples = []
           error = e
         finally:
           with context['counter_lock']:
@@ -170,22 +170,18 @@ class Checkpointer(experiment_lib.Plugin):
                 f'Skipping the file. ({progress_str})'
             )
 
-        if not copy_ckpt:
-          return
-
-        # Copy the checkpoint records to the output directory.
-        try:
-          with pg.io.open_sequence(
-              current_run.output_path_for(experiment, ckpt_file), 'w'
-          ) as o, pg.io.open_sequence(
-              current_run.input_path_for(experiment, ckpt_file), 'r'
-          ) as i:
-            for x in i:
-              o.add(x)
-        except BaseException as e:  # pylint: disable=broad-except
-          experiment.warning(
-              f'Failed to copy checkpoint {ckpt_file!r}: {e}.'
-          )
+        output_ckpt_file = current_run.output_path_for(
+            experiment, os.path.basename(ckpt_file)
+        )
+        if ckpt_file != output_ckpt_file and any(
+            e for e in loaded_examples if not e.has_error
+        ):
+          # Write the error-free warm-start examples to the output checkpoint
+          # file.
+          with SequenceWriter(output_ckpt_file) as writer:
+            for example in loaded_examples:
+              if not example.has_error:
+                writer.add(example)
 
     _ = list(
         lf.concurrent_map(
@@ -197,10 +193,10 @@ class Checkpointer(experiment_lib.Plugin):
     )
 
   @abc.abstractmethod
-  def _list_checkpoint_filenames(
+  def _list_checkpoint_files(
       self, runner: Runner, experiment: Experiment
   ) -> list[str]:
-    """Lists the checkpoint filenames to restore."""
+    """Lists the checkpoint file paths to restore."""
 
   @abc.abstractmethod
   def _save_example(
@@ -226,22 +222,41 @@ class PerExampleCheckpointer(Checkpointer):
     self._checkpoint_file_prefix = prefix
     self._checkpoint_file_ext = ext
 
-  def _list_checkpoint_filenames(
+  def _list_checkpoint_files(
       self, runner: Runner, experiment: Experiment
   ) -> list[str]:
-    experiment_dir = runner.current_run.input_dir(experiment)
-    filenames = []
+
+    def _list_checkpoints_from(ckpt_dir: str, examples_to_load: set[int]):
+      ckpt_files = []
+      if pg.io.path_exists(ckpt_dir):
+        regex = re.compile(
+            f'{self._checkpoint_file_prefix}_(\\d+){self._checkpoint_file_ext}'
+            .replace('.', '\\.')
+        )
+        for filename in pg.io.listdir(ckpt_dir):
+          match = regex.match(filename)
+          if match and int(match.group(1)) in examples_to_load:
+            examples_to_load.remove(int(match.group(1)))
+            ckpt_files.append(os.path.join(ckpt_dir, filename))
+      return ckpt_files
+
     examples_to_load = runner.current_run.examples_to_load(experiment)
-    if pg.io.path_exists(experiment_dir):
-      regex = re.compile(
-          f'{self._checkpoint_file_prefix}_(\\d+){self._checkpoint_file_ext}'
-          .replace('.', '\\.')
+
+    # Take output directory as the first priority to checkpoints processed in
+    # this run.
+    ckpt_files = _list_checkpoints_from(
+        runner.current_run.output_dir(experiment), examples_to_load
+    )
+    # If the input and output directories are different, also load from the
+    # input directory.
+    if (examples_to_load
+        and runner.current_run.input_root != runner.current_run.output_root):
+      ckpt_files.extend(
+          _list_checkpoints_from(
+              runner.current_run.input_dir(experiment), examples_to_load
+          )
       )
-      for filename in pg.io.listdir(experiment_dir):
-        match = regex.match(filename)
-        if match and int(match.group(1)) in examples_to_load:
-          filenames.append(filename)
-    return filenames
+    return ckpt_files
 
   def _save_example(
       self,
@@ -341,13 +356,24 @@ class BulkCheckpointer(Checkpointer):
         if self._sequence_writer is not None:
           self._sequence_writer[experiment.id] = sequence_writer
 
-  def _list_checkpoint_filenames(
+  def _list_checkpoint_files(
       self, runner: Runner, experiment: Experiment
   ) -> list[str]:
-    if pg.io.path_exists(
-        runner.current_run.input_path_for(experiment, self.checkpoint_filename)
-    ):
-      return [self.checkpoint_filename]
+    # Always honor the output directory if it's present, as it contains both
+    # the warm-started examples and newly processed examples.
+    output_ckpt_file = runner.current_run.output_path_for(
+        experiment, self.checkpoint_filename
+    )
+    if pg.io.path_exists(output_ckpt_file):
+      return [output_ckpt_file]
+
+    if runner.current_run.input_root != runner.current_run.output_root:
+      input_ckpt_file = runner.current_run.input_path_for(
+          experiment, self.checkpoint_filename
+      )
+      if pg.io.path_exists(input_ckpt_file):
+        return [input_ckpt_file]
+    print('CCC', experiment.hash, [])
     return []
 
   def on_experiment_complete(
@@ -440,6 +466,13 @@ class SequenceWriter:
       self._sequence_writer.close()
       self._sequence_writer = None
       pg.io.rename(self._tmp_path, self._path)
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *args, **kwargs):
+    del args, kwargs
+    self.close()
 
   def __del__(self):
     self.close()

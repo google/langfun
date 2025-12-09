@@ -139,6 +139,7 @@ class RunnerBase(Runner):
           self.current_run.examples_to_evaluate(experiment)
       )
       experiment.progress.start(total=num_examples_to_evaluate)
+      pg.io.mkdirs(self.current_run.output_dir(experiment))
     else:
       experiment.progress.start(total=len(experiment.leaf_nodes))
 

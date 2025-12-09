@@ -386,10 +386,10 @@ class Evaluation(experiment_lib.Experiment):
       load_example_metadata: bool = True,
       filter: Callable[[example_lib.Example], bool] | None = None,  # pylint: disable=redefined-builtin
       raise_if_not_exist: bool = False
-  ) -> None:
+  ) -> list[example_lib.Example]:
     """Loads saved state from a sequence IO file."""
     if pg.io.path_exists(state_file):
-      self._state.load(
+      return self._state.load(
           state_file,
           example_input_by_id=self.example_input_by_id,
           load_example_metadata=load_example_metadata,
@@ -397,6 +397,7 @@ class Evaluation(experiment_lib.Experiment):
       )
     elif raise_if_not_exist:
       raise ValueError(f'State file {state_file} does not exist.')
+    return []
 
   def _reset(self) -> None:
     """Resets the state of the evaluation."""

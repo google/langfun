@@ -86,10 +86,8 @@ class ExampleHtmlGenerator(experiment_lib.Plugin):
         return
 
       try:
-        with pg.timeit() as t, pg.io.open(src_file, 'r') as src:
-          content = src.read()
-          with pg.io.open(dest_file, 'w') as dest:
-            dest.write(content)
+        with pg.timeit() as t:
+          pg.io.copy(src_file, dest_file)
         experiment.info(
             f'\'{example.id}.html\' copied in {t.elapse:.2f} seconds.'
         )
