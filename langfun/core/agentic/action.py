@@ -288,6 +288,8 @@ class Action(pg.Object):
 
     with session.track_action(self, max_execution_time=max_execution_time):
       try:
+        # Early terminate the action if the execution time is exceeded.
+        session.check_execution_time()
         result = self.call(session=session, **kwargs)
         self._invocation.end(result)
       except BaseException as e:
@@ -2004,9 +2006,6 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           'or use `with Session(...) as session: ...` context manager to '
           'signal the start and end of the session.'
       )
-
-    # Early terminate the action if the execution time is exceeded.
-    self.check_execution_time()
 
     invocation = ActionInvocation(
         pg.maybe_ref(action),
