@@ -240,6 +240,13 @@ class VertexAIGemini3ProImagePreview(VertexAIGemini):  # pylint: disable=invalid
   response_modalities = ['TEXT', 'IMAGE']
 
 
+class VertexAIGemini3FlashPreview(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3 Flash Preview model launched on 12/17/2025."""
+
+  model = 'gemini-3-flash-preview'
+  location = 'global'
+
+
 class VertexAIGemini25Pro(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 2.5 Pro GA model launched on 06/17/2025."""
 
