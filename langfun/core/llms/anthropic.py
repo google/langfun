@@ -114,6 +114,32 @@ SUPPORTED_MODELS = [
         ),
     ),
     AnthropicModelInfo(
+        model_id='claude-opus-4-5-20251101',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4.5 Opus model (11/01/2025).',
+        release_date=datetime.datetime(2025, 11, 1),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5,
+            cost_per_1m_output_tokens=25,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-4-opus-20250514',
         provider='Anthropic',
         in_service=True,
@@ -298,6 +324,32 @@ SUPPORTED_MODELS = [
             max_requests_per_minute=1500,
             max_input_tokens_per_minute=200_000,
             max_output_tokens_per_minute=0,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-opus-4-5@20251101',
+        alias_for='claude-opus-4-5-20251101',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 4.5 Opus model served on VertexAI (11/01/2025).',
+        release_date=datetime.datetime(2025, 11, 1),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5,
+            cost_per_1m_output_tokens=25,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=80_000,
         ),
     ),
     AnthropicModelInfo(
@@ -832,6 +884,13 @@ class Claude45Sonnet_20250929(Claude45):
   """Claude 4.5 Sonnet model 20250929."""
 
   model = 'claude-sonnet-4-5-20250929'
+
+
+# pylint: disable=invalid-name
+class Claude45Opus_20251101(Claude45):
+  """Claude 4.5 Opus model 20251101."""
+
+  model = 'claude-opus-4-5-20251101'
 
 
 class Claude4(Anthropic):

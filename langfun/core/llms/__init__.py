@@ -162,6 +162,7 @@ from langfun.core.llms.openai import Gpt35
 from langfun.core.llms.anthropic import Claude45
 from langfun.core.llms.anthropic import Claude45Haiku_20251001
 from langfun.core.llms.anthropic import Claude45Sonnet_20250929
+from langfun.core.llms.anthropic import Claude45Opus_20251101
 from langfun.core.llms.anthropic import Claude4
 from langfun.core.llms.anthropic import Claude4Sonnet_20250514
 from langfun.core.llms.anthropic import Claude4Opus_20250514
@@ -181,6 +182,7 @@ from langfun.core.llms.anthropic import Claude3Haiku_20240307
 from langfun.core.llms.vertexai import VertexAIAnthropic
 from langfun.core.llms.vertexai import VertexAIClaude45Haiku_20251001
 from langfun.core.llms.vertexai import VertexAIClaude45Sonnet_20250929
+from langfun.core.llms.vertexai import VertexAIClaude45Opus_20251101
 from langfun.core.llms.vertexai import VertexAIClaude4Opus_20250514
 from langfun.core.llms.vertexai import VertexAIClaude4Sonnet_20250514
 from langfun.core.llms.vertexai import VertexAIClaude37Sonnet_20250219

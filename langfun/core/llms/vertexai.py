@@ -446,6 +446,12 @@ class VertexAIClaude45Sonnet_20250929(VertexAIAnthropic):
   model = 'claude-sonnet-4-5@20250929'
 
 
+class VertexAIClaude45Opus_20251101(VertexAIAnthropic):
+  """Anthropic's Claude 4.5 Opus model on VertexAI."""
+
+  model = 'claude-opus-4-5@20251101'
+
+
 class VertexAIClaude4Opus_20250514(VertexAIAnthropic):
   """Anthropic's Claude 4 Opus model on VertexAI."""
   model = 'claude-opus-4@20250514'
