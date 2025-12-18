@@ -227,7 +227,11 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
 
   def merge_from(self, other: 'Progress') -> None:
     """Merges the progress from another progress."""
-    with pg.notify_on_change(False), pg.allow_writable_accessors(True):
+    with (
+        self._lock,
+        pg.notify_on_change(False),
+        pg.allow_writable_accessors(True)
+    ):
       if other.start_time is not None and (
           self.start_time is None or self.start_time > other.start_time):
         self.start_time = other.start_time
@@ -268,16 +272,17 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
         stop_time=self.stop_time_str,
     )
     if self.execution_summary:
-      time_info['execution'] = pg.Dict(
-          {
-              k: pg.Dict(
-                  num_started=v.num_started,
-                  num_ended=v.num_ended,
-                  num_failed=v.num_failed,
-                  avg_duration=round(v.avg_duration, 2),
-              ) for k, v in self.execution_summary.breakdown.items()
-          }
-      )
+      with self._lock:
+        time_info['execution'] = pg.Dict(
+            {
+                k: pg.Dict(
+                    num_started=v.num_started,
+                    num_ended=v.num_ended,
+                    num_failed=v.num_failed,
+                    avg_duration=round(v.avg_duration, 2),
+                ) for k, v in self.execution_summary.breakdown.items()
+            }
+        )
     return pg.format(time_info, verbose=False)
 
   def _html_tree_view(
