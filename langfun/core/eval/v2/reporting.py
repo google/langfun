@@ -99,6 +99,7 @@ class ExampleHtmlGenerator(experiment_lib.Plugin):
 
     generate_example_html = current_run.generate_example_html
     if (generate_example_html == 'all'
+        or runner.current_run.force_recompute_metrics
         or (generate_example_html == 'new' and example.newly_processed)
         or (isinstance(generate_example_html, list)
             and example.id in generate_example_html)):

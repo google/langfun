@@ -396,6 +396,7 @@ class RunnerBase(Runner):
         item,
         raise_if_has_error=self.current_run.raise_if_has_error,
         reevaluate_upon_previous_errors=self.current_run.reevaluate_upon_previous_errors,
+        force_recompute_metrics=self.current_run.force_recompute_metrics,
     )
     self.on_example_complete(evaluation, item)
     return item

@@ -122,7 +122,7 @@ class Checkpointer(experiment_lib.Plugin):
       example: Example,
   ) -> None:
     """Saves the example to the checkpoint file."""
-    if example.newly_processed:
+    if example.newly_processed or runner.current_run.force_recompute_metrics:
       self._save_example(runner, experiment, example)
 
   def _load_experiment(
@@ -173,9 +173,9 @@ class Checkpointer(experiment_lib.Plugin):
         output_ckpt_file = current_run.output_path_for(
             experiment, os.path.basename(ckpt_file)
         )
-        if ckpt_file != output_ckpt_file and any(
-            e for e in loaded_examples if not e.has_error
-        ):
+        if (not runner.current_run.force_recompute_metrics
+            and ckpt_file != output_ckpt_file
+            and any(e for e in loaded_examples if not e.has_error)):
           # Write the error-free warm-start examples to the output checkpoint
           # file.
           with SequenceWriter(output_ckpt_file) as writer:
@@ -373,7 +373,6 @@ class BulkCheckpointer(Checkpointer):
       )
       if pg.io.path_exists(input_ckpt_file):
         return [input_ckpt_file]
-    print('CCC', experiment.hash, [])
     return []
 
   def on_experiment_complete(

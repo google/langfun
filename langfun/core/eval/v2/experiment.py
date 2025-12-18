@@ -376,23 +376,24 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
   def run(
       self,
       root_dir: str,
-      id: str | None = None,   # pylint: disable=redefined-builtin
+      id: str | None = None,  # pylint: disable=redefined-builtin
       *,
       runner: str = 'parallel',
       warm_start_from: str | None = None,
-      filter: Callable[['Experiment'], bool] | None = None,   # pylint: disable=redefined-builtin
+      filter: Callable[['Experiment'], bool] | None = None,  # pylint: disable=redefined-builtin
       example_ids: list[int] | None = None,
       shuffle_inputs: bool = False,
       raise_if_has_error: bool = False,
       reevaluate_upon_previous_errors: bool = True,
       reprocess: bool | list[int] = False,
+      force_recompute_metrics: bool = False,
       generate_example_html: Literal['new', 'all', 'no'] | list[int] = 'new',
       process_timeout: int | None = None,
       use_cache: Literal['global', 'per_dataset', 'no'] = 'per_dataset',
       note: str | None = None,
       tags: list[str] | None = None,
       plugins: list['Plugin'] | None = None,
-      **kwargs
+      **kwargs,
   ) -> 'Run':
     """Runs the experiment.
 
@@ -445,6 +446,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         meaning that existing checkpoints will be ignored. If a list of
         example IDs, it indicates that only the specified examples will be
         reprocessed.
+      force_recompute_metrics: If True, it will recompute the metrics for all
+        examples, even if the previous checkpoints have metric metadata.
       generate_example_html: Among 'new', 'all', 'no' or a list of example IDs.
         If 'new', generate HTML files for all newly processed examples, and
           keep/copy existing HTML files for unchanged examples.
@@ -481,6 +484,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
             raise_if_has_error=raise_if_has_error,
             reevaluate_upon_previous_errors=reevaluate_upon_previous_errors,
             reprocess=reprocess,
+            force_recompute_metrics=force_recompute_metrics,
             generate_example_html=generate_example_html,
             use_cache=use_cache,
             process_timeout=process_timeout,
@@ -884,6 +888,14 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
       )
   ] = True
 
+  force_recompute_metrics: Annotated[
+      bool,
+      (
+          'If True, force recompute the metrics even if metric metadata is '
+          'already present from previous checkpoint.'
+      )
+  ] = False
+
   note: Annotated[
       str | None,
       'The user note for the current run.'
@@ -1003,7 +1015,7 @@ class Run(pg.Object, pg.views.html.HtmlTreeView.Extension):
     load_metadata_ids = set()
     if isinstance(self.generate_example_html, list):
       load_metadata_ids = set(self.generate_example_html)
-    elif self.generate_example_html == 'all':
+    elif self.generate_example_html == 'all' or self.force_recompute_metrics:
       load_metadata_ids = self.examples_to_evaluate(experiment)
     load_metadata_ids -= self.examples_to_reprocess(experiment)
     return load_metadata_ids
