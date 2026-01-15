@@ -122,6 +122,8 @@ class REST(lf.LanguageModel):
         raise lf.TemporaryLMError(error_message) from e
       if 'Connection reset by peer' in error_message:
         raise lf.TemporaryLMError(error_message) from e
+      if 'Remote end closed connection' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
