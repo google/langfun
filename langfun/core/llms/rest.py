@@ -107,6 +107,10 @@ class REST(lf.LanguageModel):
         TimeoutError,
     ) as e:
       raise lf.TemporaryLMError(str(e)) from e
+    except requests.exceptions.SSLError as e:
+      # SSLEOFError during handshake is typically transient (load balancer
+      # drops, network instability, etc.) and should be retried.
+      raise lf.TemporaryLMError(str(e)) from e
     except (
         requests.exceptions.ConnectionError,
         requests.exceptions.ChunkedEncodingError,
