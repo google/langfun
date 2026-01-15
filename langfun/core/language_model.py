@@ -405,6 +405,7 @@ class LMSamplingUsage(pg.Object):
   prompt_tokens: int
   completion_tokens: int
   total_tokens: int
+  cached_prompt_tokens: int = 0
   num_requests: int = 1
   estimated_cost: Annotated[
       float | None,
@@ -430,6 +431,11 @@ class LMSamplingUsage(pg.Object):
     return self.completion_tokens // self.num_requests
 
   @property
+  def average_cached_prompt_tokens(self) -> int:
+    """Returns the average cached prompt tokens per request."""
+    return self.cached_prompt_tokens // self.num_requests
+
+  @property
   def average_total_tokens(self) -> int:
     """Returns the average total tokens per request."""
     return self.total_tokens // self.num_requests
@@ -453,6 +459,8 @@ class LMSamplingUsage(pg.Object):
     return LMSamplingUsage(
         prompt_tokens=self.prompt_tokens + other.prompt_tokens,
         completion_tokens=self.completion_tokens + other.completion_tokens,
+        cached_prompt_tokens=self.cached_prompt_tokens
+        + other.cached_prompt_tokens,
         total_tokens=self.total_tokens + other.total_tokens,
         num_requests=self.num_requests + other.num_requests,
         estimated_cost=estimated_cost,
@@ -1146,6 +1154,7 @@ class LanguageModel(component.Component):
                 prompt_tokens=usage.prompt_tokens // n,
                 completion_tokens=usage.completion_tokens // n,
                 total_tokens=usage.total_tokens // n,
+                cached_prompt_tokens=usage.cached_prompt_tokens // n,
                 estimated_cost=(
                     usage.estimated_cost / n if usage.estimated_cost else None
                 ),
@@ -1637,7 +1646,14 @@ class UsageSummary(pg.Object, pg.views.HtmlTreeView.Extension):
   class AggregatedUsage(pg.Object):
     """Aggregated usage."""
 
-    total: LMSamplingUsage = LMSamplingUsage(0, 0, 0, 0, 0.0)
+    total: LMSamplingUsage = LMSamplingUsage(
+        prompt_tokens=0,
+        completion_tokens=0,
+        total_tokens=0,
+        cached_prompt_tokens=0,
+        num_requests=0,
+        estimated_cost=0.0,
+    )
     breakdown: dict[str, LMSamplingUsage] = {}
 
     def __bool__(self) -> bool:
