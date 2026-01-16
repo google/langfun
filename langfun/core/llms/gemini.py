@@ -124,17 +124,48 @@ class GeminiModelInfo(lf.ModelInfo):
         The estimated cost in US dollars. If None, cost estimating is not
         supported on the model.
       """
-      if (usage.prompt_tokens is None
-          or usage.prompt_tokens < 128_000
-          or not self.cost_per_1m_input_tokens_with_prompt_longer_than_128k):
-        return super().estimate_cost(usage)
+      # Use 128K+ pricing if applicable
+      if (
+          usage.prompt_tokens is not None
+          and usage.prompt_tokens >= 128_000
+          and self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+      ):
+        # Calculate non-cached prompt tokens
+        non_cached_prompt_tokens = (
+            usage.prompt_tokens - usage.cached_prompt_tokens
+        )
+        cost = (
+            self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+            * non_cached_prompt_tokens
+        )
 
-      return (
-          self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
-          * usage.prompt_tokens
-          + self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
-          * (usage.total_tokens - usage.prompt_tokens)
-      ) / 1000_000
+        # Add cost for cached prompt tokens (if pricing is available)
+        if (
+            self.cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k
+            is not None
+        ):
+          cost += (
+              self.cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k
+              * usage.cached_prompt_tokens
+          )
+        else:
+          # Fall back to regular 128K+ input pricing for cached tokens
+          cost += (
+              self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+              * usage.cached_prompt_tokens
+          )
+
+        # Add cost for output tokens
+        cost += (
+            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
+            * usage.completion_tokens
+        )
+
+        return cost / 1000_000
+
+      # Use regular pricing (delegates to parent class which handles cached
+      # tokens)
+      return super().estimate_cost(usage)
 
   experimental: Annotated[
       bool,
@@ -918,6 +949,7 @@ class Gemini(rest.REST):
     output_tokens = usage.get('candidatesTokenCount', 0)
     thinking_tokens = usage.get('thoughtsTokenCount', 0)
     total_tokens = usage.get('totalTokenCount', 0)
+    cached_tokens = usage.get('cachedContentTokenCount', 0)
 
     return lf.LMSamplingResult(
         [lf.LMSample(message) for message in messages],
@@ -925,6 +957,7 @@ class Gemini(rest.REST):
             prompt_tokens=input_tokens,
             completion_tokens=output_tokens,
             total_tokens=total_tokens,
+            cached_prompt_tokens=cached_tokens,
             completion_tokens_details={
                 'thinking_tokens': thinking_tokens,
             },

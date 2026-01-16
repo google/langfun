@@ -109,6 +109,34 @@ class GeminiTest(unittest.TestCase):
         ),
         0.51
     )
+    # Test with cached prompt tokens (regular pricing < 128K)
+    self.assertEqual(
+        model.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=100_000,
+                completion_tokens=1000,
+                total_tokens=101_000,
+                cached_prompt_tokens=50_000,
+            )
+        ),
+        # (50K non-cached * 1.25 + 50K cached * 0.3125 + 1K output * 5) / 1M
+        # = (62500 + 15625 + 5000) / 1M = 0.083125
+        0.083125,
+    )
+    # Test with cached prompt tokens (128K+ pricing)
+    self.assertEqual(
+        model.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=200_000,
+                completion_tokens=1000,
+                total_tokens=201_000,
+                cached_prompt_tokens=100_000,
+            )
+        ),
+        # (100K non-cached * 2.5 + 100K cached * 0.625 + 1K output * 10) / 1M
+        # = (250000 + 62500 + 10000) / 1M = 0.3225
+        0.3225,
+    )
 
   def test_generation_config(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
