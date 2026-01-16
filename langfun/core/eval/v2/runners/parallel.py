@@ -190,7 +190,10 @@ class MultiSliceParallelRunner(experiment_lib.Runner):
     monitor_plugins = []
     worker_plugins = [
         checkpointing.PerExampleCheckpointer(
-            checkpoint_filename=f'checkpoint.{self.ckpt_format}'
+            checkpoint_filename=f'checkpoint.{self.ckpt_format}',
+            # Disable inprogress file creation since the CheckpointMonitor
+            # tracks in-progress status via its internal sets.
+            enable_inprogress_file=False,
         ),
     ]
     for plugin in self.plugins:
