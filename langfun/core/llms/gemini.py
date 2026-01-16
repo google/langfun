@@ -271,9 +271,9 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=0.3,
-            cost_per_1m_input_tokens=0.3,
-            cost_per_1m_output_tokens=2.5,
+            cost_per_1m_cached_input_tokens=0.030,
+            cost_per_1m_input_tokens=0.30,
+            cost_per_1m_output_tokens=2.50,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -294,9 +294,12 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_cached_input_tokens=0.125,
             cost_per_1m_input_tokens=1.25,
             cost_per_1m_output_tokens=10.0,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -317,9 +320,12 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_cached_input_tokens=0.125,
             cost_per_1m_input_tokens=1.25,
             cost_per_1m_output_tokens=10.0,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -363,9 +369,12 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_cached_input_tokens=0.125,
             cost_per_1m_input_tokens=1.25,
             cost_per_1m_output_tokens=10.0,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -409,9 +418,12 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_cached_input_tokens=0.125,
             cost_per_1m_input_tokens=1.25,
             cost_per_1m_output_tokens=10.0,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -431,9 +443,12 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=1.25,
+            cost_per_1m_cached_input_tokens=0.125,
             cost_per_1m_input_tokens=1.25,
             cost_per_1m_output_tokens=10.0,
+            cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
+            cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
+            cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=20,
@@ -501,7 +516,6 @@ SUPPORTED_MODELS = [
             max_output_tokens=8_192,
         ),
         pricing=GeminiModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=0.01875,
             cost_per_1m_input_tokens=0.075,
             cost_per_1m_output_tokens=0.3,
         ),
