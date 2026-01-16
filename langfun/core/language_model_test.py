@@ -160,6 +160,49 @@ class ModelInfoTest(unittest.TestCase):
         ).estimate_cost(lm_lib.LMSamplingUsage(100, 100, 200, 0, 1)),
         0.0003,
     )
+    # Test with cached prompt tokens using cached pricing
+    self.assertEqual(
+        lm_lib.ModelInfo(
+            'unknown',
+            pricing=lm_lib.ModelInfo.Pricing(
+                cost_per_1m_input_tokens=1.0,
+                cost_per_1m_output_tokens=2.0,
+                cost_per_1m_cached_input_tokens=0.1,
+            ),
+        ).estimate_cost(
+            lm_lib.LMSamplingUsage(
+                prompt_tokens=100,
+                completion_tokens=100,
+                total_tokens=200,
+                cached_prompt_tokens=50,
+                num_requests=1,
+            )
+        ),
+        # (50 non-cached * 1.0 + 50 cached * 0.1 + 100 output * 2.0) / 1M
+        # = (50 + 5 + 200) / 1M = 0.000255
+        0.000255,
+    )
+    # Test with cached prompt tokens but no cached pricing (fallback)
+    self.assertEqual(
+        lm_lib.ModelInfo(
+            'unknown',
+            pricing=lm_lib.ModelInfo.Pricing(
+                cost_per_1m_input_tokens=1.0,
+                cost_per_1m_output_tokens=2.0,
+            ),
+        ).estimate_cost(
+            lm_lib.LMSamplingUsage(
+                prompt_tokens=100,
+                completion_tokens=100,
+                total_tokens=200,
+                cached_prompt_tokens=50,
+                num_requests=1,
+            )
+        ),
+        # Falls back to regular input pricing for cached tokens
+        # (100 prompt * 1.0 + 100 output * 2.0) / 1M = 0.0003
+        0.0003,
+    )
 
 
 class LMSamplingOptionsTest(unittest.TestCase):

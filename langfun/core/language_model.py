@@ -212,15 +212,30 @@ class ModelInfo(pg.Object):
         The estimated cost in US dollars. If None, cost estimating is not
         supported on the model.
       """
-      # NOTE(daiyip): supported cached tokens accounting in future.
+
       if (self.cost_per_1m_input_tokens is None
           or self.cost_per_1m_output_tokens is None):
         return None
-      return (
-          self.cost_per_1m_input_tokens * usage.prompt_tokens
-          + self.cost_per_1m_output_tokens
-          * (usage.total_tokens - usage.prompt_tokens)
-      ) / 1000_000
+
+      # Calculate cost for non-cached prompt tokens
+      non_cached_prompt_tokens = (
+          usage.prompt_tokens - usage.cached_prompt_tokens
+      )
+      cost = self.cost_per_1m_input_tokens * non_cached_prompt_tokens
+
+      # Add cost for cached prompt tokens (if pricing is available)
+      if self.cost_per_1m_cached_input_tokens is not None:
+        cost += (
+            self.cost_per_1m_cached_input_tokens * usage.cached_prompt_tokens
+        )
+      else:
+        # Fall back to regular input token pricing for cached tokens
+        cost += self.cost_per_1m_input_tokens * usage.cached_prompt_tokens
+
+      # Add cost for output/completion tokens
+      cost += self.cost_per_1m_output_tokens * usage.completion_tokens
+
+      return cost / 1000_000
 
   pricing: Annotated[
       Pricing | None,
