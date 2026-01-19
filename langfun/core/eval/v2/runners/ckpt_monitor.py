@@ -163,6 +163,20 @@ class CheckpointMonitor(base.RunnerBase):
     ):
       for entry in self._aggregation_entries:
         if not entry.example_ids_to_be_aggregated:
+          # Check if entry is complete (both sets empty, no pending work).
+          if not entry.is_completed and not entry.example_ids_being_aggregated:
+            with entry.completion_lock:
+              if not entry.is_completed:
+                entry.is_completed = True
+                pg.logging.info(
+                    '[%s] All examples aggregated, triggering experiment'
+                    ' completion.',
+                    entry.evaluation.id,
+                )
+                try:
+                  self.on_experiment_complete(entry.evaluation)
+                except BaseException as e:  # pylint: disable=broad-except
+                  self._error = e
           continue
 
         # Signal example processing.
