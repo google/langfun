@@ -140,6 +140,14 @@ class RestTest(unittest.TestCase):
             'REJECTED_CLIENT_THROTTLED',
         ),
         (
+            requests.exceptions.ConnectionError(
+                "('Connection aborted.', TimeoutError('The write operation"
+                " timed out'))"
+            ),
+            lf.TemporaryLMError,
+            'Connection aborted',
+        ),
+        (
             requests.exceptions.ConnectionError('Connection error.'),
             lf.LMError,
             'Connection error.',
@@ -148,7 +156,7 @@ class RestTest(unittest.TestCase):
             ConnectionError('Connection error.'),
             lf.LMError,
             'Connection error.',
-        )
+        ),
     ]:
       with mock.patch('requests.Session.post') as mock_post:
         mock_post.side_effect = mock_requests_post_exception(error)
