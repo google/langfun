@@ -1342,7 +1342,8 @@ class ActionInvocation(ExecutionUnit, pg.views.html.HtmlTreeView.Extension):
       if metadata:
         self.metadata.update(metadata)
 
-    self.execution.stop()
+    if not self.execution.has_stopped:
+      self.execution.stop()
     if self._tab_control is not None:
       if self.metadata:
         self._tab_control.insert(
