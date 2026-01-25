@@ -97,6 +97,13 @@ from langfun.core.llms.vertexai import VertexAIGemini3ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProImagePreview
 from langfun.core.llms.vertexai import VertexAIGemini3FlashPreview
 
+# Veo video generation models.
+from langfun.core.llms.veo import Veo
+from langfun.core.llms.veo import VeoModelInfo
+from langfun.core.llms.veo import VeoSafetyError
+from langfun.core.llms.veo import VertexAIVeo31
+
+
 # For backward compatibility.
 GeminiPro1_5 = Gemini15Pro
 GeminiFlash1_5 = Gemini15Flash
