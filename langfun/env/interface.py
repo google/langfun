@@ -343,6 +343,23 @@ class Environment(pg.Object):
   # Disable symbolic comparison and hashing for environment objects.
   use_symbolic_comparison = False
 
+  _DEFAULT: ClassVar[Optional['Environment']] = None
+
+  def as_default(self) -> 'Environment':
+    """Sets the global default environment."""
+    Environment.set_default(self)
+    return self
+
+  @classmethod
+  def set_default(cls, env: 'Environment') -> None:
+    """Sets the global default environment."""
+    Environment._DEFAULT = env
+
+  @classmethod
+  def default(cls) -> Optional['Environment']:
+    """Returns the global default environment if set, otherwise None."""
+    return Environment._DEFAULT
+
   @dataclasses.dataclass(frozen=True)
   class Id:
     """Identifier for an environment."""

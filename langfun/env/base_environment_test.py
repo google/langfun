@@ -48,6 +48,12 @@ class BaseEnvironmentTests(unittest.TestCase):
 
     self.assertIsNone(env.start_time)
 
+    self.assertIsNone(interface.Environment.default())
+    self.assertIs(env.as_default(), env)
+    self.assertIs(interface.Environment.default(), env)
+    interface.Environment.set_default(None)
+    self.assertIsNone(interface.Environment.default())
+
     with env:
       self.assertEqual(env.status, interface.Environment.Status.ONLINE)
       self.assertIs(interface.Environment.current(), env)
