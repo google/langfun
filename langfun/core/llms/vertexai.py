@@ -16,6 +16,7 @@
 import datetime
 import functools
 import os
+import random
 from typing import Annotated, Any, Literal
 
 import langfun.core as lf
@@ -92,10 +93,12 @@ class VertexAI(rest.REST):
   ] = None
 
   project: Annotated[
-      str | None,
+      str | list[str] | None,
       (
-          'Vertex AI project ID. Or set from environment variable '
-          'VERTEXAI_PROJECT.'
+          'Vertex AI project ID(s). Can be a single project ID or a list of '
+          'project IDs for load balancing (random selection per request). '
+          'For lf.LanguageModel.get(), use comma-separated values. '
+          'Or set from environment variable VERTEXAI_PROJECT.'
       ),
   ] = None
 
@@ -121,7 +124,7 @@ class VertexAI(rest.REST):
       raise ValueError(
           'Please install "langfun[llm-google-vertex]" to use Vertex AI models.'
       )
-    self._project = None
+    self._projects = None
     self._credentials = None
 
   def _initialize(self):
@@ -132,6 +135,16 @@ class VertexAI(rest.REST):
           'variable `VERTEXAI_PROJECT` with your Vertex AI project ID.'
       )
 
+    # Support comma-separated projects from string (for LanguageModel.get())
+    if isinstance(project, str) and ',' in project:
+      project = [p.strip() for p in project.split(',')]
+
+    # Normalize to list for _projects
+    if isinstance(project, str):
+      self._projects = [project]
+    else:
+      self._projects = list(project)
+
     location = self.location or os.environ.get('VERTEXAI_LOCATION', None)
     if not location:
       raise ValueError(
@@ -139,7 +152,6 @@ class VertexAI(rest.REST):
           'variable `VERTEXAI_LOCATION` with your Vertex AI service location.'
       )
 
-    self._project = project
     self._location = location
 
     credentials = self.credentials
@@ -149,6 +161,13 @@ class VertexAI(rest.REST):
           scopes=['https://www.googleapis.com/auth/cloud-platform']
       )
     self._credentials = credentials
+
+  @property
+  def _project(self) -> str:
+    """Returns a project ID. Randomly selects from list if multiple provided."""
+    if len(self._projects) == 1:
+      return self._projects[0]
+    return random.choice(self._projects)
 
   def session(self):
     assert self._api_initialized
@@ -199,9 +218,10 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
   @property
   def api_endpoint(self) -> str:
     assert self._api_initialized
+    project = self._project
     return (
-        f'https://aiplatform.googleapis.com/v1/projects/'
-        f'{self._project}/locations/{self._location}/publishers/google/'
+        'https://aiplatform.googleapis.com/v1/projects/'
+        f'{project}/locations/{self._location}/publishers/google/'
         f'models/{self.model}:generateContent'
     )
 
@@ -416,9 +436,10 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
 
   @property
   def api_endpoint(self) -> str:
+    project = self._project
     return (
         f'https://{self.location}-aiplatform.googleapis.com/v1/projects/'
-        f'{self._project}/locations/{self.location}/publishers/anthropic/'
+        f'{project}/locations/{self.location}/publishers/anthropic/'
         f'models/{self.model}:streamRawPredict'
     )
 
@@ -593,10 +614,11 @@ class VertexAILlama(VertexAI, openai_compatible.OpenAIChatCompletionAPI):
   @property
   def api_endpoint(self) -> str:
     assert self._api_initialized
+    project = self._project
     return (
         f'https://{self._location}-aiplatform.googleapis.com/v1beta1/projects/'
-        f'{self._project}/locations/{self._location}/endpoints/'
-        f'openapi/chat/completions'
+        f'{project}/locations/{self._location}/endpoints/'
+        'openapi/chat/completions'
     )
 
   def request(
@@ -706,9 +728,10 @@ class VertexAIMistral(VertexAI, openai_compatible.OpenAIChatCompletionAPI):
   @property
   def api_endpoint(self) -> str:
     assert self._api_initialized
+    project = self._project
     return (
         f'https://{self._location}-aiplatform.googleapis.com/v1/projects/'
-        f'{self._project}/locations/{self._location}/publishers/mistralai/'
+        f'{project}/locations/{self._location}/publishers/mistralai/'
         f'models/{self.model}:rawPredict'
     )
 

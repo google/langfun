@@ -53,6 +53,62 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_PROJECT']
     del os.environ['VERTEXAI_LOCATION']
 
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_multi_project_support(self):
+    # Test single project (backward compatibility)
+    model = vertexai.VertexAIGemini15Pro(
+        project='single-project', location='us-central1'
+    )
+    self.assertTrue(model._api_initialized)  # Trigger initialization
+    self.assertEqual(model._projects, ['single-project'])
+    # Single project always returns the same value
+    self.assertEqual(model._project, 'single-project')
+    self.assertEqual(model._project, 'single-project')  # Consistent
+    self.assertIn('single-project', model.api_endpoint)
+
+    # Test list of projects
+    model = vertexai.VertexAIGemini15Pro(
+        project=['proj-a', 'proj-b', 'proj-c'], location='us-central1'
+    )
+    self.assertTrue(model._api_initialized)
+    self.assertEqual(model._projects, ['proj-a', 'proj-b', 'proj-c'])
+    # _project property returns random project from list
+    self.assertIn(model._project, ['proj-a', 'proj-b', 'proj-c'])
+
+    # Test comma-separated string (for LanguageModel.get())
+    model = vertexai.VertexAIGemini15Pro(
+        project='proj-a,proj-b,proj-c', location='us-central1'
+    )
+    self.assertTrue(model._api_initialized)
+    self.assertEqual(model._projects, ['proj-a', 'proj-b', 'proj-c'])
+
+    # Test comma-separated with spaces
+    model = vertexai.VertexAIGemini15Pro(
+        project='proj-a, proj-b, proj-c', location='us-central1'
+    )
+    self.assertTrue(model._api_initialized)
+    self.assertEqual(model._projects, ['proj-a', 'proj-b', 'proj-c'])
+
+    # Test _project property returns random values across multiple accesses
+    model = vertexai.VertexAIGemini15Pro(
+        project=['proj-a', 'proj-b'], location='us-central1'
+    )
+    self.assertTrue(model._api_initialized)
+    projects_seen = set()
+    for _ in range(20):
+      projects_seen.add(model._project)
+    # With random selection, we should see both projects
+    self.assertEqual(projects_seen, {'proj-a', 'proj-b'})
+
+    # Test api_endpoint uses random project selection
+    endpoints = set()
+    for _ in range(20):
+      endpoints.add(model.api_endpoint)
+    # Should see both projects in endpoints
+    self.assertEqual(len(endpoints), 2)
+    self.assertTrue(any('proj-a' in ep for ep in endpoints))
+    self.assertTrue(any('proj-b' in ep for ep in endpoints))
+
   def test_auth_refresh_error(self):
     def _auth_refresh_error(*args, **kwargs):
       del args, kwargs
