@@ -175,6 +175,22 @@ class DefinitionTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Bad template string.*'):
       Template('{{x=1')
 
+  def test_preprocess_template(self):
+
+    class MyTemplate(Template):
+      """My template.
+
+      $COMPANY {{x}}
+      """
+
+      def _preprocess_template(self, template_str: str) -> str:
+        return template_str.replace('$COMPANY', 'Google')
+
+    self.assertEqual(
+        MyTemplate(x='is good').render(),
+        'Google is good'
+    )
+
 
 class FromValueTest(unittest.TestCase):
 

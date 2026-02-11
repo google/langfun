@@ -233,6 +233,7 @@ class Template(
     # Invalidate cached variables and template cache.
     self.__dict__.pop('_variables', None)
     self.__dict__.pop('_template', None)
+    self.__dict__.pop('preprocessed_template_str', None)
 
     # Use contextual value for unassigned attributes.
     # TODO(daiyip): Consider to delay template parsing upon usage.
@@ -255,11 +256,29 @@ class Template(
   @functools.cached_property
   def _variables(self) -> Set[str]:
     """Returns all declared variables from the template."""
-    return Template.resolve_vars(self.template_str)
+    return Template.resolve_vars(self.preprocessed_template_str)
 
   @functools.cached_property
   def _template(self) -> jinja2.Template:
-    return jinja2.Template(self.template_str)
+    return jinja2.Template(self.preprocessed_template_str)
+
+  @functools.cached_property
+  def preprocessed_template_str(self) -> str:
+    return self._preprocess_template(self.template_str)
+
+  def _preprocess_template(self, template_str: str) -> str:
+    """Preprocesses the template string.
+
+    This method allows subclass to preprocess the template string before
+    it is parsed by Jinja2.
+
+    Args:
+      template_str: The template string to preprocess.
+
+    Returns:
+      The preprocessed template string.
+    """
+    return template_str
 
   def vars(
       self,
@@ -671,7 +690,7 @@ class Template(
       return pg.Html.element(
           'div',
           [
-              pg.Html.element('span', [self.template_str])
+              pg.Html.element('span', [self.preprocessed_template_str])
           ],
           css_classes=['template-str'],
       )
