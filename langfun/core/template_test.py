@@ -191,6 +191,22 @@ class DefinitionTest(unittest.TestCase):
         'Google is good'
     )
 
+  def test_postprocess_rendered(self):
+
+    class MyTemplate(Template):
+      """My template with postprocess.
+
+      $COMPANY {{x}}
+      """
+
+      def _postprocess_rendered(self, rendered_text: str) -> str:
+        return rendered_text.replace('$COMPANY', 'Google')
+
+    self.assertEqual(
+        MyTemplate(x='is $COMPANY').render(),
+        'Google is Google'
+    )
+
 
 class FromValueTest(unittest.TestCase):
 

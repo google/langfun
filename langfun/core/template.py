@@ -280,6 +280,10 @@ class Template(
     """
     return template_str
 
+  def _postprocess_rendered(self, rendered_text: str) -> str:
+    """Postprocesses the rendered text."""
+    return rendered_text
+
   def vars(
       self,
       specified: bool | None = None,
@@ -441,7 +445,9 @@ class Template(
                 # natural language when they are directly returned as rendering
                 # elements in the template.
                 with modality.format_modality_as_ref():
-                  rendered_text = self._template.render(**inputs)
+                  rendered_text = self._postprocess_rendered(
+                      self._template.render(**inputs)
+                  )
 
               # Carry the modality references passed from the constructor.
               # This is to support modality objects that is already rendered
