@@ -161,7 +161,18 @@ class Mime(lf.Modality):
   def _is_compatible(self, mime_types: Iterable[str]):
     if not mime_types:
       return False
-    return self.mime_type in mime_types
+    if self.mime_type in mime_types:
+      return True
+    # Fallback: if text/plain is accepted, check if content is valid UTF-8.
+    # This handles files with misdetected MIME types (e.g., .ts detected as
+    # video/mp2t) that are actually text.
+    if 'text/plain' in mime_types:
+      try:
+        self.to_bytes().decode('utf-8')
+        return True
+      except Exception:  # pylint: disable=broad-exception-caught
+        pass
+    return False
 
   def make_compatible(
       self,
@@ -175,6 +186,10 @@ class Mime(lf.Modality):
           f'MIME type {self.mime_type!r} cannot be converted to supported '
           f'types: {mime_types!r}.'
       )
+    # If compatibility was achieved via the UTF-8 text fallback (not exact MIME
+    # match), wrap content as text/plain so the LLM receives the correct type.
+    if self.mime_type not in mime_types and 'text/plain' in mime_types:
+      return Custom(mime='text/plain', content=self.to_bytes())
     return self._make_compatible(mime_types)
 
   def _make_compatible(
