@@ -60,6 +60,31 @@ class AnthropicModelInfo(lf.ModelInfo):
 
 SUPPORTED_MODELS = [
     AnthropicModelInfo(
+        model_id='claude-opus-4-6',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4.6 Opus model (02/05/2026).',
+        release_date=datetime.datetime(2026, 2, 5),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_000_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5,
+            cost_per_1m_output_tokens=25,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-haiku-4-5-20251001',
         provider='Anthropic',
         in_service=True,
@@ -324,6 +349,32 @@ SUPPORTED_MODELS = [
             max_requests_per_minute=1500,
             max_input_tokens_per_minute=200_000,
             max_output_tokens_per_minute=0,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-opus-4-6',
+        alias_for='claude-opus-4-6',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude 4.6 Opus model served on VertexAI (02/05/2026).',
+        release_date=datetime.datetime(2026, 2, 5),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_000_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5,
+            cost_per_1m_output_tokens=25,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=80_000,
         ),
     ),
     AnthropicModelInfo(
@@ -866,6 +917,17 @@ class Anthropic(rest.REST):
     if status_code == 413 and b'Prompt is too long' in content:
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
+
+
+class Claude46(Anthropic):
+  """Base class for Claude 4.6 models."""
+
+
+# pylint: disable=invalid-name
+class Claude46Opus(Claude46):
+  """Claude 4.6 Opus model."""
+
+  model = 'claude-opus-4-6'
 
 
 class Claude45(Anthropic):
