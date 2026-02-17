@@ -54,7 +54,7 @@ class RunnerBase(Runner):
           'If `tqdm`, force using tqdm for progress update. '
           'If `html`, force using html for progress update. '
           'If `auto`, determine it automatically based on the running '
-          'environment (console vs. notebook)'
+          'environment (console vs. notebook). '
           'If `none`, disable progress update.'
       )
   ] = 'auto'
@@ -143,9 +143,11 @@ class RunnerBase(Runner):
     else:
       experiment.progress.start(total=len(experiment.leaf_nodes))
 
-    # Notify the plugins of the experiment start.
     for plugin in self._all_plugins(experiment):
       plugin.on_experiment_start(self, experiment)
+
+    if experiment.is_leaf:
+      self._set_prior_elapse(experiment)
 
     if experiment.is_leaf:
       pg.io.mkdirs(self.current_run.output_dir(experiment))
@@ -206,13 +208,25 @@ class RunnerBase(Runner):
 
   def on_experiment_abort(
       self, experiment: Experiment, error: BaseException) -> None:
-    """Called when an evaluation is complete."""
+    """Called when an evaluation is aborted."""
     assert experiment.is_leaf
     experiment.fatal(f'{error}\n\n{traceback.format_exc()}')
 
     # Notify the plugins of the experiment abort.
     for plugin in self._all_plugins(experiment):
       plugin.on_experiment_abort(self, experiment, error)
+
+  def _set_prior_elapse(self, experiment: Evaluation) -> None:
+    """Sets prior elapsed time from checkpointed examples."""
+    ckpt_examples = experiment.state.ckpt_examples
+    if not ckpt_examples:
+      return
+    total_elapse = 0.0
+    for example in ckpt_examples.values():
+      if example.start_time is not None and example.end_time is not None:
+        total_elapse += example.end_time - example.start_time
+    if total_elapse > 0:
+      experiment.progress.add_prior_elapse(total_elapse)
 
   def _update_ancestor_progresses(self, experiment: Experiment):
     """Updates the progresses of the parent nodes of the experiment."""

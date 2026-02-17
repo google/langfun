@@ -80,6 +80,7 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
     self._progress_bar = None
     self._time_label = None
     self._lock = threading.Lock()
+    self._prior_elapse = 0.0
 
   def reset(self) -> None:
     """Resets the progress."""
@@ -93,6 +94,7 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
         execution_summary=pg.object_utils.TimeIt.StatusSummary(),
     )
     self._progress_bar = None
+    self._prior_elapse = 0.0
 
   @property
   def num_completed(self) -> int:
@@ -145,8 +147,16 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
     if self.start_time is None:
       return None
     if self.stop_time is None:
-      return time.time() - self.start_time
-    return self.stop_time - self.start_time
+      return self._prior_elapse + time.time() - self.start_time
+    return self._prior_elapse + self.stop_time - self.start_time
+
+  @property
+  def prior_elapse(self) -> float:
+    return self._prior_elapse
+
+  def add_prior_elapse(self, seconds: float) -> None:
+    """Adds prior elapsed time from previous runs."""
+    self._prior_elapse += seconds
 
   @property
   def start_time_str(self) -> str | None:
@@ -249,6 +259,7 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
       self.num_failed += other.num_failed
       self.num_skipped += other.num_skipped
       self.execution_summary.aggregate(other.execution_summary.breakdown)
+      self._prior_elapse += other.prior_elapse
 
   #
   # HTML view.

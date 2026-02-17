@@ -104,6 +104,20 @@ class ProgressTest(unittest.TestCase):
     self.assertEqual(p1.start_time, 1.0)
     self.assertEqual(p1.stop_time, 5.0)
 
+  def test_prior_elapse(self):
+    p = Progress()
+    p.start(10)
+    p.add_prior_elapse(100.0)
+    elapse = p.elapse
+    self.assertGreaterEqual(elapse, 100.0)
+    p.stop()
+    self.assertGreaterEqual(p.elapse, 100.0)
+
+    p.reset()
+    self.assertIsNone(p.elapse)
+    p.start(10)
+    self.assertLess(p.elapse, 1.0)
+
 
 if __name__ == '__main__':
   unittest.main()

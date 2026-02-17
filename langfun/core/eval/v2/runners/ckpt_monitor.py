@@ -129,8 +129,8 @@ class CheckpointMonitor(base.RunnerBase):
                 inprogress_file_pattern=os.path.join(
                     output_dir, '*.inprogress'
                 ) if self.monitor_inprogress_files else None,
-                example_ids_to_be_aggregated=(
-                    self.current_run.examples_to_evaluate(evaluation)
+                example_ids_to_be_aggregated=self.current_run.examples_to_evaluate(
+                    evaluation
                 ),
                 example_ids_inprogress=set(),
                 example_ids_being_aggregated=set(),
