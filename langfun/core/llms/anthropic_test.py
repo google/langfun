@@ -253,6 +253,22 @@ class AnthropicTest(unittest.TestCase):
       ):
         lm('hello', max_attempts=1)
 
+  def test_text_mime_call(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post
+      lm = anthropic.Claude35Sonnet(api_key='fake_key')
+      text_content = b'def hello():\n    print("hello")\n'
+      response = lm(
+          lf.Template(
+              'Review this code: {{code}}',
+              code=lf_modalities.Custom(
+                  mime='text/plain', content=text_content
+              ),
+          ).render(),
+          lm=lm,
+      )
+      self.assertIn('Review this code:', response.text)
+
   def test_lm_get(self):
     self.assertIsInstance(
         lf.LanguageModel.get('claude-3-5-sonnet-latest'),

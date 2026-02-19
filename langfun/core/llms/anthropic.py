@@ -847,6 +847,8 @@ class Anthropic(rest.REST):
 
     def modality_check(chunk: Any) -> Any:
       if isinstance(chunk, lf_modalities.Mime):
+        if chunk.is_text:
+          return chunk.to_text()
         if not self.supports_input(chunk.mime_type):
           raise ValueError(f'Unsupported modality: {chunk!r}.')
       return chunk

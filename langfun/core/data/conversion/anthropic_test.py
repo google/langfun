@@ -264,6 +264,43 @@ class AnthropicConversionTest(unittest.TestCase):
     self.assertIsInstance(modalities[1], lf_modalities.PDF)
     self.assertEqual(modalities[1].content, pdf_content)
 
+  def test_as_format_with_text_mime(self):
+    text_content = b'def hello():\n    print("hello world")\n'
+    self.assertEqual(
+        lf.Template(
+            'Review this code: {{code}}',
+            code=lf_modalities.Custom(mime='text/plain', content=text_content),
+        )
+        .render()
+        .as_anthropic_format(),
+        {
+            'role': 'user',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': 'Review this code:',
+                },
+                {
+                    'type': 'text',
+                    'text': 'def hello():\n    print("hello world")\n',
+                },
+            ],
+        },
+    )
+
+  def test_as_format_with_unsupported_binary_mime(self):
+    audio_content = (
+        b'RIFF$\x00\x00\x00WAVEfmt '
+        b'\x10\x00\x00\x00\x01\x00\x01\x00'
+        b'\x00\x04\x00\x00\x00\x04\x00\x00'
+        b'\x01\x00\x08\x00data\x00\x00\x00\x00'
+    )
+    with self.assertRaises(NotImplementedError):
+      lf.Template(
+          'Transcribe this: {{audio}}',
+          audio=lf_modalities.Audio(content=audio_content),
+      ).render().as_anthropic_format()
+
 
 if __name__ == '__main__':
   unittest.main()

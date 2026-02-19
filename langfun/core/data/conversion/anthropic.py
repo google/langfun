@@ -53,7 +53,9 @@ class AnthropicMessageConverter(lf.MessageConverter):
       if isinstance(chunk, str):
         content.append({'type': 'text', 'text': chunk})
       elif isinstance(chunk, lf_modalities.Mime):
-        if isinstance(chunk, lf_modalities.Image):
+        if chunk.is_text:
+          content.append({'type': 'text', 'text': chunk.to_text()})
+        elif isinstance(chunk, lf_modalities.Image):
           content.append(
               dict(
                   type='image',
