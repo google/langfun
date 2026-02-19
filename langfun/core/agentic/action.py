@@ -19,6 +19,7 @@ import contextlib
 import dataclasses
 import functools
 import itertools
+import os
 import threading
 import time
 import typing
@@ -315,6 +316,109 @@ class Action(pg.Object):
     Returns:
       The result of the action.
     """
+
+  @property
+  def checkpoint_type_id(self) -> str:
+    """Stable identifier for checkpoint type validation."""
+    return f'{self.__class__.__module__}.{self.__class__.__name__}'
+
+  def on_checkpoint(self) -> 'ActionCheckpoint':
+    """Override to return checkpoint data. Default: empty state."""
+    return ActionCheckpoint(
+        action_type=self.checkpoint_type_id,
+        state={},
+        step=0,
+    )
+
+  def on_restore(self, checkpoint: 'ActionCheckpoint') -> None:
+    """Override to restore from checkpoint. Validates action type."""
+    if checkpoint.action_type != self.checkpoint_type_id:
+      raise ValueError(
+          f'Checkpoint type mismatch: expected {self.checkpoint_type_id}, '
+          f'got {checkpoint.action_type}'
+      )
+
+  @classmethod
+  def restore_from_checkpoint(
+      cls,
+      checkpointer: 'Checkpointer',
+      **kwargs,
+  ) -> tuple['Action', 'ActionCheckpoint | None']:
+    """Convenience method: create action and restore from checkpoint if exists.
+
+    Args:
+      checkpointer: The checkpointer to use for loading.
+      **kwargs: Keyword arguments to pass to the action constructor.
+
+    Returns:
+      (action, checkpoint) tuple. checkpoint is None if no checkpoint found.
+    """
+    action = cls(**kwargs)
+    checkpoint = checkpointer.load()
+    if checkpoint is not None:
+      action.on_restore(checkpoint)
+    return action, checkpoint
+
+
+#
+# Checkpointing.
+#
+
+
+class ActionCheckpoint(pg.Object):
+  """Checkpoint data for an action's context."""
+
+  action_type: Annotated[str, 'Fully qualified class name for validation']
+  state: Annotated[dict[str, Any], 'Action-specific state to persist']
+  step: Annotated[int, 'Last completed step'] = 0
+
+
+class Checkpointer(pg.Object):
+  """Interface for action context checkpointing."""
+
+  def _on_bound(self):
+    super()._on_bound()
+    if type(self) is Checkpointer:  # pylint: disable=unidiomatic-typecheck
+      raise TypeError(
+          'Checkpointer is abstract and cannot be instantiated directly. '
+          'Use a subclass like FileCheckpointer.'
+      )
+
+  def save(self, checkpoint: ActionCheckpoint) -> None:
+    raise NotImplementedError
+
+  def load(self) -> ActionCheckpoint | None:
+    raise NotImplementedError
+
+
+class FileCheckpointer(Checkpointer):
+  """Checkpoints to a file using pg.io (supports CNS/GCS/local)."""
+
+  path: Annotated[str, 'File path for checkpoint (CNS/GCS/local)']
+
+  def save(self, checkpoint: ActionCheckpoint) -> None:
+    content = checkpoint.to_json_str(json_indent=2)
+    dir_path = os.path.dirname(self.path)
+    if dir_path:
+      pg.io.mkdirs(dir_path, exist_ok=True)
+    tmp_path = os.path.join(dir_path, f'tmp.{os.path.basename(self.path)}')
+    pg.io.writefile(tmp_path, content)
+    pg.io.rename(tmp_path, self.path)
+
+  def load(self) -> ActionCheckpoint | None:
+    if not pg.io.path_exists(self.path):
+      return None
+    file_content = pg.io.readfile(self.path)
+    if file_content is None:
+      return None
+    if isinstance(file_content, bytes):
+      content = file_content.decode('utf-8')
+    else:
+      content = file_content
+    try:
+      return pg.from_json_str(content)
+    except Exception:  # pylint: disable=broad-except
+      return None
 
 
 #
