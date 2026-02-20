@@ -918,6 +918,8 @@ class Anthropic(rest.REST):
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 413 and b'Prompt is too long' in content:
       return lf.ContextLimitError(f'{status_code}: {content}')
+    if status_code == 400 and b'prompt is too long' in content:
+      return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
 
 

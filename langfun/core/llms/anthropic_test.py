@@ -253,6 +253,17 @@ class AnthropicTest(unittest.TestCase):
       ):
         lm('hello', max_attempts=1)
 
+  def test_call_with_context_limit_error_400(self):
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post_error(
+          400,
+          'invalid_request_error',
+          'prompt is too long: 267093 tokens > 200000 maximum',
+      )
+      lm = anthropic.Claude3Haiku(api_key='fake_key')
+      with self.assertRaisesRegex(lf.ContextLimitError, 'prompt is too long'):
+        lm('hello', max_attempts=1)
+
   def test_text_mime_call(self):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_requests_post
