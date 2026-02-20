@@ -208,6 +208,33 @@ class CheckpointMonitorTest(unittest.TestCase):
           ckpt_start_time=ckpt_start_time,
       ).run()
 
+  def test_prior_elapse_accumulated_from_preexisting_checkpoints(self):
+    exp = eval_test_helper.test_evaluation()
+    root_dir = os.path.join(self.test_dir, 'test_prior_elapse')
+    run = exp.run(
+        root_dir,
+        runner='sequential',
+        progress_tracker=None,
+        plugins=[
+            checkpointing.PerExampleCheckpointer(
+                checkpoint_filename='checkpoint.jsonl'
+            )
+        ],
+        use_cache='no',
+    )
+
+    ckpt_start_time = time.time()
+    monitor = ckpt_monitor.CheckpointMonitor(
+        run,
+        plugins=[],
+        checkpoint_pattern='checkpoint_*.jsonl',
+        ckpt_start_time=ckpt_start_time,
+        bypass_old_ckpt_files_with_non_oop_errors=False,
+    )
+    monitor.run()
+    for leaf in run.experiment.leaf_nodes:
+      self.assertGreater(leaf.progress.prior_elapse, 0.0)
+
 
 if __name__ == '__main__':
   unittest.main()

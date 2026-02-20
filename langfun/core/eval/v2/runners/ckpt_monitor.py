@@ -110,6 +110,7 @@ class CheckpointMonitor(base.RunnerBase):
       # This is not precise, but we at least notify example start.
       if not self.current_run.filter or self.current_run.filter(evaluation):
         self.on_experiment_start(evaluation)
+        self._set_prior_elapse_from_checkpoints(evaluation)
 
         # Signal the start of the examples if we are not monitoring in-progress
         # files.
@@ -352,6 +353,31 @@ class CheckpointMonitor(base.RunnerBase):
     # We update evaluation state with the inprogress status so the evaluation
     # HTML could show remotely in-progress examples.
     evaluation.state.update(example, in_progress=True)
+
+  def _set_prior_elapse_from_checkpoints(
+      self,
+      evaluation: evaluation_lib.Evaluation,
+  ) -> None:
+    output_dir = self.current_run.output_dir(evaluation)
+    ckpt_file_pattern = os.path.join(output_dir, self.checkpoint_pattern)
+    total_elapse = 0.0
+    for filepath in pg.io.glob(ckpt_file_pattern):
+      last_modified_time = pg.io.getmtime(filepath)
+      if last_modified_time >= self.ckpt_start_time:
+        continue
+      try:
+        loaded_examples = evaluation.state.load(
+            filepath,
+            example_input_by_id=evaluation.example_input_by_id,
+            load_example_metadata=False,
+        )
+        for example in loaded_examples:
+          if example.start_time is not None and example.end_time is not None:
+            total_elapse += example.end_time - example.start_time
+      except Exception:  # pylint: disable=broad-except
+        pass
+    if total_elapse > 0:
+      evaluation.progress.add_prior_elapse(total_elapse)
 
   def _run(self, evaluations: list[evaluation_lib.Evaluation]):
     raise NotImplementedError('Not needed in checkpoint monitor.')
