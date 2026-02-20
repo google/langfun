@@ -119,6 +119,12 @@ class GenAI(gemini.Gemini):
 #
 # Experimental models.
 #
+class Gemini31ProPreview(GenAI):
+  """Gemini 3.1 Pro Preview model."""
+
+  model = 'gemini-3.1-pro-preview'
+
+
 class Gemini3ProPreview(GenAI):
   """Gemini 3 Pro Preview model."""
 
