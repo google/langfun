@@ -92,6 +92,72 @@ class GeminiConversionTest(unittest.TestCase):
         },
     )
 
+  def test_as_format_youtube_with_video_metadata(self):
+    self.assertEqual(
+        lf.Template(
+            'Describe {{video}}',
+            video=lf_modalities.Custom.from_uri(
+                'https://www.youtube.com/watch?v=abcd',
+                mime='text/html',
+                metadata={'video_metadata': {'fps': 0.5}},
+            ),
+        )
+        .render()
+        .as_gemini_format(),
+        {
+            'role': 'user',
+            'parts': [
+                {'text': 'Describe'},
+                {
+                    'fileData': {
+                        'fileUri': 'https://www.youtube.com/watch?v=abcd',
+                        'mimeType': 'video/*',
+                    },
+                    'videoMetadata': {
+                        'fps': 0.5,
+                    },
+                },
+            ],
+        },
+    )
+
+  def test_as_format_youtube_with_video_metadata_clipping(self):
+    self.assertEqual(
+        lf.Template(
+            'Describe {{video}}',
+            video=lf_modalities.Custom.from_uri(
+                'https://www.youtube.com/watch?v=abcd',
+                mime='text/html',
+                metadata={
+                    'video_metadata': {
+                        'fps': 0.5,
+                        'startOffset': '0s',
+                        'endOffset': '300s',
+                    }
+                },
+            ),
+        )
+        .render()
+        .as_gemini_format(),
+        {
+            'role': 'user',
+            'parts': [
+                {'text': 'Describe'},
+                {
+                    'fileData': {
+                        'fileUri': 'https://www.youtube.com/watch?v=abcd',
+                        'mimeType': 'video/*',
+                    },
+                    'videoMetadata': {
+                        'fps': 0.5,
+                        'startOffset': '0s',
+                        'endOffset': '300s',
+                    },
+                },
+            ],
+        },
+    )
+
   def test_as_format_with_chunk_preprocessor(self):
     self.assertEqual(
         lf.Template(

@@ -78,12 +78,11 @@ class GeminiMessageConverter(lf.MessageConverter):
       raise ValueError(f'Unsupported content chunk: {chunk!r}.')
     # NOTE(daiyip): special handling for YouTube video.
     if chunk.uri and chunk.uri.startswith('https://www.youtube.com/watch?v='):
-      return {
-          'fileData': {
-              'mimeType': 'video/*',
-              'fileUri': chunk.uri
-          }
-      }
+      result = {'fileData': {'mimeType': 'video/*', 'fileUri': chunk.uri}}
+      video_metadata = chunk.metadata.get('video_metadata')
+      if video_metadata:
+        result['videoMetadata'] = video_metadata
+      return result
     if chunk.is_text:
       return {'text': chunk.to_text()}
     if (
