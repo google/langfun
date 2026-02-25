@@ -92,6 +92,30 @@ class GeminiConversionTest(unittest.TestCase):
         },
     )
 
+  def test_as_format_with_gcs_uri(self):
+    self.assertEqual(
+        lf.Template(
+            'Summarize {{doc}}',
+            doc=lf_modalities.Custom.from_uri(
+                'gs://my-bucket/temp/doc.pdf', mime='application/pdf'
+            ),
+        )
+        .render()
+        .as_gemini_format(),
+        {
+            'role': 'user',
+            'parts': [
+                {'text': 'Summarize'},
+                {
+                    'fileData': {
+                        'fileUri': 'gs://my-bucket/temp/doc.pdf',
+                        'mimeType': 'application/pdf',
+                    }
+                },
+            ],
+        },
+    )
+
   def test_as_format_youtube_with_video_metadata(self):
     self.assertEqual(
         lf.Template(

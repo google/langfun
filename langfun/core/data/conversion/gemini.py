@@ -83,12 +83,14 @@ class GeminiMessageConverter(lf.MessageConverter):
       if video_metadata:
         result['videoMetadata'] = video_metadata
       return result
+    if chunk.uri and chunk.uri.startswith('gs://'):
+      always_send_content = False
     if chunk.is_text:
       return {'text': chunk.to_text()}
     if (
         not always_send_content
         and chunk.uri
-        and chunk.uri.lower().startswith(('http:', 'https:', 'ftp:'))
+        and chunk.uri.lower().startswith(('http:', 'https:', 'ftp:', 'gs:'))
     ):
       return {
           'fileData': {
