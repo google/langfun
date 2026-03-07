@@ -349,7 +349,8 @@ def class_dependencies(
   def _fill_dependencies(vs: pg.typing.ValueSpec, include_subclasses: bool):
     if isinstance(vs, pg.typing.Object):
       cls = vs.cls
-      if cls.__module__ == 'builtins':
+      if (not include_generated_subclasses
+          and getattr(cls, '__module__', 'builtins') == 'builtins'):
         return
 
       if cls not in seen:
@@ -376,7 +377,8 @@ def class_dependencies(
           # polluting the generation space, classes dynamically created by
           # 'eval' (which have __module__ == 'builtins') are excluded from
           # dependencies by default.
-          if ((include_generated_subclasses or subcls.__module__ != 'builtins')
+          if ((include_generated_subclasses
+               or getattr(subcls, '__module__', 'builtins') != 'builtins')
               and subcls not in dependencies):
             _fill_dependencies(
                 pg.typing.Object(subcls), include_subclasses=True

@@ -261,6 +261,27 @@ class ClassDependenciesTest(unittest.TestCase):
 
     self.assertEqual(base.class_dependencies(1), [])
 
+  def test_class_dependencies_missing_module(self):
+    class Meta(type):
+      @property
+      def __module__(cls):
+        raise AttributeError('Testing AttributeError')
+
+    class Base:
+      pass
+
+    class Sub(Base, metaclass=Meta):
+      pass
+
+    self.assertEqual(
+        base.class_dependencies(Base, include_generated_subclasses=True),
+        [Base, Sub],
+    )
+    self.assertEqual(
+        base.class_dependencies(Base, include_generated_subclasses=False),
+        [Base],
+    )
+
 
 class AnnotationTest(unittest.TestCase):
 
