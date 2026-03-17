@@ -813,35 +813,42 @@ class SandboxStateTests(unittest.TestCase):
           sb.shell('echo foo', raise_error=RuntimeError)
       self.assertEqual(len(sb.state_errors), 1)
       self.assertEqual(sb.status, interface.Sandbox.Status.OFFLINE)
-      self.assertEqual(
-          self.event_handler.logs,
-          [
-              # pylint: disable=line-too-long
-              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup',
-              '[testing-env/test_image:0:0/feature1] feature setup',
-              '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
-              '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
-              '[testing-env/test_image:0:0] created -> ready',
-              '[testing-env/test_image:0:0] sandbox started',
-              '[testing-env] environment started',
-              '[testing-env/test_image:0:0] ready -> acquired',
-              '[testing-env/test_image:0:0] acquired -> setting_up',
-              '[testing-env/test_image:0:0] setting_up -> in_session',
-              "[testing-env/test_image:0:0] session 'session1' started",
-              '[testing-env/test_image:0:0@session1] shell: echo foo with RuntimeError',
-              '[testing-env/test_image:0:0] in_session -> exiting_session',
-              '[testing-env/test_image:0:0@session1] shell: "feature1" teardown session',
-              '[testing-env/test_image:0:0/feature1@session1] feature teardown session',
-              "[testing-env/test_image:0:0] session 'session1' ended with SandboxStateError",
-              '[testing-env/test_image:0:0] exiting_session -> acquired',
-              '[testing-env/test_image:0:0] acquired -> shutting_down',
-              '[testing-env/test_image:0:0@<idle>] shell: "feature1" teardown',
-              '[testing-env/test_image:0:0/feature1] feature teardown',
-              '[testing-env/test_image:0:0] shutting_down -> offline',
-              '[testing-env/test_image:0:0] sandbox shutdown',
-              # pylint: enable=line-too-long
-          ]
-      )
+    # The first 22 log entries are deterministic (sandbox lifecycle).
+    # After that, the maintenance thread may or may not replace the dead
+    # sandbox before shutdown, depending on timing.
+    expected_logs = [
+        # pylint: disable=line-too-long
+        '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup',
+        '[testing-env/test_image:0:0/feature1] feature setup',
+        '[testing-env/test_image:0:0@<idle>] shell: "feature1" setup session',
+        '[testing-env/test_image:0:0/feature1@<idle>] feature setup session',
+        '[testing-env/test_image:0:0] created -> ready',
+        '[testing-env/test_image:0:0] sandbox started',
+        '[testing-env] environment started',
+        '[testing-env/test_image:0:0] ready -> acquired',
+        '[testing-env/test_image:0:0] acquired -> setting_up',
+        '[testing-env/test_image:0:0] setting_up -> in_session',
+        "[testing-env/test_image:0:0] session 'session1' started",
+        '[testing-env/test_image:0:0@session1] shell: echo foo with RuntimeError',
+        '[testing-env/test_image:0:0] in_session -> exiting_session',
+        '[testing-env/test_image:0:0@session1] shell: "feature1" teardown session',
+        '[testing-env/test_image:0:0/feature1@session1] feature teardown session',
+        "[testing-env/test_image:0:0] session 'session1' ended with SandboxStateError",
+        '[testing-env/test_image:0:0] exiting_session -> acquired',
+        '[testing-env/test_image:0:0] acquired -> shutting_down',
+        '[testing-env/test_image:0:0@<idle>] shell: "feature1" teardown',
+        '[testing-env/test_image:0:0/feature1] feature teardown',
+        '[testing-env/test_image:0:0] shutting_down -> offline',
+        '[testing-env/test_image:0:0] sandbox shutdown',
+        # pylint: enable=line-too-long
+    ]
+    self.assertEqual(
+        self.event_handler.logs[:len(expected_logs)], expected_logs
+    )
+    self.assertEqual(
+        self.event_handler.logs[-1],
+        '[testing-env] environment shutdown',
+    )
 
 
 class SandboxActivityTests(unittest.TestCase):
