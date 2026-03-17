@@ -62,6 +62,8 @@ PythonFunction = coding.PythonFunction
 from langfun.core import llms
 lm_cache = llms.cache.lm_cache
 
+from langfun.core import ems
+
 from langfun.core import agentic
 Action = agentic.Action
 Session = agentic.Session

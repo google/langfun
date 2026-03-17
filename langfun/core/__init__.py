@@ -126,6 +126,12 @@ from langfun.core.language_model import RetryableLMError
 from langfun.core.language_model import RateLimitError
 from langfun.core.language_model import TemporaryLMError
 
+# Interfaces for embedding models.
+from langfun.core.embedding_model import EmbeddingUsage
+from langfun.core.embedding_model import EmbeddingOptions
+from langfun.core.embedding_model import EmbeddingResult
+from langfun.core.embedding_model import EmbeddingModel
+
 # Context manager for tracking usages.
 from langfun.core.language_model import track_usages
 
