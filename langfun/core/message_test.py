@@ -56,6 +56,69 @@ class MessageTest(unittest.TestCase):
     self.assertEqual(hash(m), hash(m.text))
     del d
 
+  def test_init_referred_modalities_from_list(self):
+    """Tests that list-based referred_modalities are converted to dict."""
+    foo = CustomModality('foo')
+    bar = CustomModality('bar')
+    # When modalities are already referenced in text, no auto-append.
+    m = message.UserMessage(
+        f'Look at <<[[{foo.id}]]>> and <<[[{bar.id}]]>>',
+        referred_modalities=[foo, bar],
+    )
+    self.assertIn(foo.id, m.referred_modalities)
+    self.assertIn(bar.id, m.referred_modalities)
+    self.assertNotIn('\n', m.text)
+
+  def test_init_referred_modalities_auto_append(self):
+    """Tests that modalities not in text are auto-appended as markers."""
+    foo = CustomModality('foo')
+    bar = CustomModality('bar')
+    # When modalities are NOT in text, markers are auto-appended.
+    m = message.UserMessage(
+        'Hello world',
+        referred_modalities=[foo, bar],
+    )
+    self.assertIn(modality.Modality.text_marker(foo.id), m.text)
+    self.assertIn(modality.Modality.text_marker(bar.id), m.text)
+    # Verify the modality is accessible.
+    self.assertIs(m.get_modality(foo.id), foo)
+
+  def test_init_referred_modalities_dict_no_auto_append(self):
+    """Tests that dict-based referred_modalities do NOT auto-append markers."""
+    foo = CustomModality('foo')
+    m = message.UserMessage(
+        'Hello world',
+        referred_modalities={foo.id: pg.Ref(foo)},
+    )
+    # Dict path is explicit: no auto-appending of markers.
+    self.assertNotIn(modality.Modality.text_marker(foo.id), m.text)
+    self.assertEqual(m.text, 'Hello world')
+
+  def test_init_referred_modalities_dict_no_append_when_present(self):
+    """Tests that dict-based modalities already in text are not appended."""
+    foo = CustomModality('foo')
+    text = f'Look at <<[[{foo.id}]]>>'
+    m = message.UserMessage(
+        text,
+        referred_modalities={foo.id: pg.Ref(foo)},
+    )
+    self.assertEqual(m.text, text)
+
+  def test_init_referred_modalities_none(self):
+    """Tests that None referred_modalities results in empty dict."""
+    m = message.UserMessage('hi', referred_modalities=None)
+    self.assertEqual(m.referred_modalities, {})
+
+  def test_init_metadata_kwargs(self):
+    """Tests that kwargs are merged into metadata."""
+    m = message.UserMessage('hi', metadata=dict(x=1), y=2)
+    self.assertEqual(m.metadata, {'x': 1, 'y': 2})
+
+  def test_init_metadata_kwargs_override(self):
+    """Tests that kwargs override metadata with same key."""
+    m = message.UserMessage('hi', metadata=dict(x=1), x=2)
+    self.assertEqual(m.metadata['x'], 2)
+
   def test_from_value(self):
     self.assertTrue(
         pg.eq(message.UserMessage.from_value('hi'), message.UserMessage('hi'))

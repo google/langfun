@@ -186,6 +186,14 @@ class Message(
     if isinstance(referred_modalities, list):
       referred_modalities = {m.id: pg.Ref(m) for m in referred_modalities}
 
+      # Auto-append text markers for modalities not yet referenced in the
+      # text, so they are included in the LM prompt. This only applies to the
+      # list input path; dict users explicitly manage the text themselves.
+      for modality_id in referred_modalities:
+        marker = modality.Modality.text_marker(modality_id)
+        if marker not in text:
+          text += f'\n{marker}'
+
     super().__init__(
         text=text,
         metadata=metadata,
