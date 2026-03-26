@@ -132,6 +132,16 @@ class REST(lf.LanguageModel):
         raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
 
+  # Content filtering patterns from various LLM providers.
+  _CONTENT_FILTER_PATTERNS = (
+      'content filtering',
+      'content_filter',
+      'output blocked',
+      'blocked by safety',
+      'blocked due to safety',
+      'safety filter',
+  )
+
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 429:
       error_cls = lf.RateLimitError
@@ -144,7 +154,15 @@ class REST(lf.LanguageModel):
     ):
       error_cls = lf.TemporaryLMError
     else:
-      error_cls = lf.LMError
+      # Check for content filtering in non-retryable errors.
+      content_lower = (
+          content.lower() if isinstance(content, str)
+          else str(content).lower()
+      )
+      if any(p in content_lower for p in self._CONTENT_FILTER_PATTERNS):
+        error_cls = lf.ContentFilteredError
+      else:
+        error_cls = lf.LMError
     return error_cls(f'{status_code}: {content}')
 
   def _parse_response(self, response: requests.Response) -> lf.LMSamplingResult:

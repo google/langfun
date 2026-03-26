@@ -166,5 +166,121 @@ class RestTest(unittest.TestCase):
           self._lm._sample_single(lf.UserMessage('hello'))
 
 
+class ContentFilteringErrorTest(unittest.TestCase):
+  """TDD tests for content filtering classification at the REST layer."""
+
+  def setUp(self):
+    super().setUp()
+    self._lm = rest.REST(
+        api_endpoint='https://fake-api.com',
+        request=lambda x, o: dict(
+            model='test-model', prompt=x.text, max_tokens=4096,
+        ),
+        result=lambda x: lf.LMSamplingResult(
+            [lf.LMSample(c) for c in x['content']]),
+        headers=dict(api_key='fake_key'),
+    )
+
+  # --- Exception hierarchy tests ---
+
+  def test_content_filtered_error_is_lm_error(self):
+    """ContentFilteredError should be a subclass of LMError."""
+    self.assertTrue(issubclass(lf.ContentFilteredError, lf.LMError))
+
+  def test_content_filtered_error_not_retryable(self):
+    """ContentFilteredError should NOT be retryable (raw retry won't help)."""
+    self.assertFalse(
+        issubclass(lf.ContentFilteredError, lf.RetryableLMError)
+    )
+
+  def test_content_filtered_error_not_context_limit(self):
+    """ContentFilteredError != ContextLimitError (distinct failure modes)."""
+    self.assertFalse(
+        issubclass(lf.ContentFilteredError, lf.ContextLimitError)
+    )
+    self.assertFalse(
+        issubclass(lf.ContextLimitError, lf.ContentFilteredError)
+    )
+
+  def test_content_filtered_error_instantiation(self):
+    """ContentFilteredError should be instantiable with a message."""
+    error = lf.ContentFilteredError('400: Output blocked by content filter')
+    self.assertIn('blocked', str(error))
+
+  # --- _error() classification tests ---
+
+  def test_claude_content_filtering_returns_content_filtered_error(self):
+    """Claude's 400 content filtering → ContentFilteredError."""
+    error = self._lm._error(
+        400, 'Output blocked by content filtering policy'
+    )
+    self.assertIsInstance(error, lf.ContentFilteredError)
+
+  def test_gemini_safety_block_returns_content_filtered_error(self):
+    """Gemini's safety block → ContentFilteredError."""
+    error = self._lm._error(
+        400, 'Request blocked due to SAFETY reasons'
+    )
+    self.assertIsInstance(error, lf.ContentFilteredError)
+
+  def test_openai_content_filter_returns_content_filtered_error(self):
+    """OpenAI's content_filter → ContentFilteredError."""
+    error = self._lm._error(
+        400, 'content_filter triggered for this request'
+    )
+    self.assertIsInstance(error, lf.ContentFilteredError)
+
+  def test_safety_filter_returns_content_filtered_error(self):
+    """Generic safety filter → ContentFilteredError."""
+    error = self._lm._error(400, 'blocked by safety filter')
+    self.assertIsInstance(error, lf.ContentFilteredError)
+
+  def test_400_non_filtering_returns_plain_lm_error(self):
+    """400 errors without filtering keywords → plain LMError."""
+    error = self._lm._error(400, 'Invalid request format')
+    self.assertIsInstance(error, lf.LMError)
+    self.assertNotIsInstance(error, lf.ContentFilteredError)
+
+  def test_429_still_returns_rate_limit_error(self):
+    """429 must NOT be reclassified as content filtering."""
+    error = self._lm._error(429, 'Rate limit exceeded')
+    self.assertIsInstance(error, lf.RateLimitError)
+
+  def test_500_still_returns_temporary_error(self):
+    """500 must NOT be reclassified."""
+    error = self._lm._error(500, 'Internal server error')
+    self.assertIsInstance(error, lf.TemporaryLMError)
+
+  def test_503_still_returns_temporary_error(self):
+    """503 must NOT be reclassified."""
+    error = self._lm._error(503, 'Service unavailable')
+    self.assertIsInstance(error, lf.TemporaryLMError)
+
+  # --- End-to-end _sample_single() test ---
+
+  def test_sample_raises_content_filtered_error_on_400(self):
+    """_sample_single should raise ContentFilteredError for filtered 400."""
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_requests_post_error(
+          400,
+          'invalid_request_error',
+          'Output blocked by content filtering policy',
+      )
+      with self.assertRaises(lf.ContentFilteredError):
+        self._lm._sample_single(lf.UserMessage('test'))
+
+  def test_sample_raises_plain_lm_error_on_non_filter_400(self):
+    """_sample_single should raise LMError for non-filter 400."""
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_requests_post_error(
+          400,
+          'invalid_request_error',
+          'Malformed JSON in request body',
+      )
+      with self.assertRaises(lf.LMError) as ctx:
+        self._lm._sample_single(lf.UserMessage('test'))
+      self.assertNotIsInstance(ctx.exception, lf.ContentFilteredError)
+
+
 if __name__ == '__main__':
   unittest.main()
