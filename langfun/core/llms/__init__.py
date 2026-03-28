@@ -233,6 +233,11 @@ from langfun.core.llms.deepseek import DeepSeek
 from langfun.core.llms.deepseek import DeepSeekV3
 from langfun.core.llms.deepseek import DeepSeekR1
 
+# MiniMax models.
+from langfun.core.llms.minimax import MiniMax
+from langfun.core.llms.minimax import MiniMaxM27
+from langfun.core.llms.minimax import MiniMaxM27Highspeed
+
 # LLaMA C++ models.
 from langfun.core.llms.llama_cpp import LlamaCppRemote
 
