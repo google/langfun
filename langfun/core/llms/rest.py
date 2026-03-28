@@ -132,6 +132,20 @@ class REST(lf.LanguageModel):
         raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
 
+  # Content filtering patterns observed from various LLM providers.
+  # These are best-effort substring heuristics derived from real API error
+  # messages, as providers do not formally document exact error strings.
+  _CONTENT_FILTER_PATTERNS = (
+      'content filtering',  # Anthropic/Claude: "Output blocked by content
+      #   filtering policy"
+      'content_filter',  # OpenAI: "content_filter triggered for this
+      #   request"
+      'output blocked',  # Anthropic/Claude: "Output blocked by ..."
+      'blocked by safety',  # Google/Gemini: "blocked by safety filter"
+      'blocked due to safety',  # Google/Gemini: "blocked due to SAFETY reasons"
+      'safety filter',  # Generic: covers variations across providers.
+  )
+
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 429:
       error_cls = lf.RateLimitError
@@ -143,6 +157,17 @@ class REST(lf.LanguageModel):
         499,  # Client Closed Request
     ):
       error_cls = lf.TemporaryLMError
+    elif status_code == 400:  # Bad Request — providers use this for both
+      # malformed requests AND content policy violations
+      # (input prompt or output blocked by safety).
+      # We disambiguate via message patterns below.
+      content_lower = (
+          content.lower() if isinstance(content, str) else str(content).lower()
+      )
+      if any(p in content_lower for p in self._CONTENT_FILTER_PATTERNS):
+        error_cls = lf.ContentFilteredError
+      else:
+        error_cls = lf.LMError
     else:
       error_cls = lf.LMError
     return error_cls(f'{status_code}: {content}')

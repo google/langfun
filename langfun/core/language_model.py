@@ -49,6 +49,10 @@ class ContextLimitError(LMInputError):
   """Error for context limit exceeded."""
 
 
+class ContentFilteredError(LMError):
+  """Error raised when LLM output is blocked by content filtering policy."""
+
+
 class RetryableLMError(LMError):
   """Base class for LLM errors that can be solved by retrying."""
 
