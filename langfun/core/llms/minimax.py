@@ -39,12 +39,12 @@ SUPPORTED_MODELS = [
         model_id='MiniMax-M2.7',
         in_service=True,
         model_type='instruction-tuned',
-        description='MiniMax M2.7 model with 1M context window.',
+        description='MiniMax M2.7 model with 204K context window.',
         url='https://platform.minimaxi.com/document/Models',
         release_date=datetime.datetime(2025, 3, 1),
         input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
         context_length=lf.ModelInfo.ContextLength(
-            max_input_tokens=1_000_000,
+            max_input_tokens=204_800,
             max_output_tokens=65_536,
         ),
         pricing=lf.ModelInfo.Pricing(
@@ -57,12 +57,12 @@ SUPPORTED_MODELS = [
         model_id='MiniMax-M2.7-highspeed',
         in_service=True,
         model_type='instruction-tuned',
-        description='MiniMax M2.7 Highspeed model with 1M context window.',
+        description='MiniMax M2.7 Highspeed model with 204K context window.',
         url='https://platform.minimaxi.com/document/Models',
         release_date=datetime.datetime(2025, 3, 1),
         input_modalities=lf.ModelInfo.TEXT_INPUT_ONLY,
         context_length=lf.ModelInfo.ContextLength(
-            max_input_tokens=1_000_000,
+            max_input_tokens=204_800,
             max_output_tokens=65_536,
         ),
         pricing=lf.ModelInfo.Pricing(
@@ -160,13 +160,13 @@ class MiniMax(openai_compatible.OpenAIChatCompletionAPI):
 
 
 class MiniMaxM27(MiniMax):  # pylint: disable=invalid-name
-  """MiniMax M2.7 model with 1M context window."""
+  """MiniMax M2.7 model with 204K context window."""
 
   model = 'MiniMax-M2.7'
 
 
 class MiniMaxM27Highspeed(MiniMax):  # pylint: disable=invalid-name
-  """MiniMax M2.7 Highspeed model with 1M context window."""
+  """MiniMax M2.7 Highspeed model with 204K context window."""
 
   model = 'MiniMax-M2.7-highspeed'
 
