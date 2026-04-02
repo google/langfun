@@ -208,6 +208,31 @@ SUPPORTED_MODELS = [
             max_tokens_per_minute=4_000_000,
         ),
     ),
+    # Gemini 3.1 Flash Lite Preview
+    GeminiModelInfo(
+        model_id='gemini-3.1-flash-lite-preview',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 3.1 Flash Lite Preview.',
+        # https://ai.google.dev/gemini-api/docs/changelog#03-03-2026
+        release_date=datetime.datetime(2026, 3, 3),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            # https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite-preview
+            cost_per_1m_cached_input_tokens=0.025,
+            cost_per_1m_input_tokens=0.25,
+            cost_per_1m_output_tokens=1.5,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
     # Gemini 3 Pro Preview
     GeminiModelInfo(
         model_id='gemini-3-pro-preview',
@@ -955,8 +980,12 @@ class Gemini(rest.REST):
 
     # This is the new feature since Gemini 3.
     # Skip for image generation models as they don't support mediaResolution.
-    if self.model_id.startswith('gemini-3') and not (
-        self.response_modalities and 'IMAGE' in self.response_modalities
+    if (
+        self.model_id.startswith('gemini-3')
+        and 'lite' not in self.model_id
+        and not (
+            self.response_modalities and 'IMAGE' in self.response_modalities
+        )
     ):
       config['mediaResolution'] = 'MEDIA_RESOLUTION_HIGH'
 
