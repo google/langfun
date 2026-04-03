@@ -43,6 +43,9 @@ except ImportError:
   Credentials = Any
 
 
+# Placeholder for sidechannel imports.
+
+
 @pg.use_init_args(['api_endpoint'])
 class VertexAI(rest.REST):
   """Base class for models served on Vertex AI.
@@ -118,6 +121,8 @@ class VertexAI(rest.REST):
       ),
   ] = None
 
+  # Placeholder for sidechannel parameters.
+
   def _on_bound(self):
     super()._on_bound()
     if google_auth is None:
@@ -174,7 +179,22 @@ class VertexAI(rest.REST):
     assert self._credentials is not None
     assert auth_requests is not None
     s = auth_requests.AuthorizedSession(self._credentials)
-    s.headers.update(self.headers or {})
+
+    headers = dict(self.headers or {})
+    # VertexAIGemini overrides headers property in Gemini, which might drop
+    # headers passed in init. We try to recover them from rest.REST.
+    try:
+      # Bypass pytype check for descriptor access.
+      getter = getattr(rest.REST.headers, '__get__', None)
+      if getter:
+        init_headers = getter(self, rest.REST)
+        if init_headers:
+          headers.update(init_headers)
+    except AttributeError:
+      pass
+    # Placeholder for sidechannel metadata execution.
+
+    s.headers.update(headers)
     return s
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:

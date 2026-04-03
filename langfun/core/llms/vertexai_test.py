@@ -122,6 +122,8 @@ class VertexAITest(unittest.TestCase):
     self.assertTrue(any('proj-a' in ep for ep in endpoints))
     self.assertTrue(any('proj-b' in ep for ep in endpoints))
 
+  # Placeholder for sidechannel metadata tests.
+
   def test_auth_refresh_error(self):
     def _auth_refresh_error(*args, **kwargs):
       del args, kwargs
