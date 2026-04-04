@@ -22,6 +22,10 @@ from langfun.core.agentic.action import ActionTimeoutError
 
 from langfun.core.agentic.action import Action
 
+from langfun.core.agentic.action import ActionCheckpoint
+from langfun.core.agentic.action import Checkpointer
+from langfun.core.agentic.action import FileCheckpointer
+
 from langfun.core.agentic.action import ExecutionUnit
 from langfun.core.agentic.action import ActionInvocation
 from langfun.core.agentic.action import ParallelExecutions
