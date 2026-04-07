@@ -205,7 +205,7 @@ class PythonFunction(pg.Object):
   @functools.cached_property
   def implementation(self) -> Callable[..., Any]:
     """Returns the function implementation based on source code."""
-    return execution.run(self.source)
+    return execution.run(self.source, sandbox=True)
 
   def __call__(
       self,
