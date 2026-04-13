@@ -65,6 +65,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         description='Claude 4.6 Opus model (02/05/2026).',
         release_date=datetime.datetime(2026, 2, 5),
+        knowledge_cutoff=datetime.date(2025, 8, 31),
         input_modalities=(
             AnthropicModelInfo.INPUT_IMAGE_TYPES
             + AnthropicModelInfo.INPUT_DOC_TYPES
@@ -358,6 +359,7 @@ SUPPORTED_MODELS = [
         in_service=True,
         description='Claude 4.6 Opus model served on VertexAI (02/05/2026).',
         release_date=datetime.datetime(2026, 2, 5),
+        knowledge_cutoff=datetime.date(2025, 8, 31),
         input_modalities=(
             AnthropicModelInfo.INPUT_IMAGE_TYPES
             + AnthropicModelInfo.INPUT_DOC_TYPES

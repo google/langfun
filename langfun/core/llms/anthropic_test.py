@@ -14,6 +14,7 @@
 """Tests for Anthropic models."""
 
 import base64
+import datetime
 import os
 from typing import Any
 import unittest
@@ -285,6 +286,23 @@ class AnthropicTest(unittest.TestCase):
         lf.LanguageModel.get('claude-3-5-sonnet-latest'),
         anthropic.Anthropic,
     )
+
+  def test_knowledge_cutoff(self):
+    # Check that claude-opus-4-6 entries have the correct knowledge cutoff.
+    opus_entries = [
+        info for info in anthropic.SUPPORTED_MODELS
+        if info.model_id == 'claude-opus-4-6'
+    ]
+    self.assertEqual(len(opus_entries), 2)
+    for entry in opus_entries:
+      self.assertEqual(
+          entry.knowledge_cutoff,
+          datetime.date(2025, 8, 31),
+      )
+
+  def test_knowledge_cutoff_default(self):
+    model = anthropic.Anthropic('claude-3-5-sonnet-20241022')
+    self.assertIsNone(model.model_info.knowledge_cutoff)
 
 
 if __name__ == '__main__':

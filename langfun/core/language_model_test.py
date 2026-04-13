@@ -114,6 +114,7 @@ class ModelInfoTest(unittest.TestCase):
     self.assertIsNone(info.description)
     self.assertIsNone(info.url)
     self.assertIsNone(info.release_date)
+    self.assertIsNone(info.knowledge_cutoff)
     self.assertTrue(info.in_service)
     self.assertIsNone(info.context_length)
     self.assertIsNone(info.pricing)

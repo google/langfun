@@ -190,6 +190,7 @@ SUPPORTED_MODELS = [
         model_type='instruction-tuned',
         description='Gemini 3.1 Pro Preview.',
         release_date=datetime.datetime(2026, 2, 19),
+        knowledge_cutoff=datetime.date(2025, 1, 31),
         input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
         context_length=lf.ModelInfo.ContextLength(
             max_input_tokens=1_048_576,

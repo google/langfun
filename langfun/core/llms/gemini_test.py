@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for Gemini API."""
 
+import datetime
 from typing import Any
 import unittest
 from unittest import mock
@@ -85,6 +86,17 @@ class GeminiTest(unittest.TestCase):
 
   def test_dir(self):
     self.assertIn('gemini-1.5-pro', gemini.Gemini.dir())
+
+  def test_knowledge_cutoff(self):
+    model = gemini.Gemini('gemini-3.1-pro-preview', api_endpoint='')
+    self.assertEqual(
+        model.model_info.knowledge_cutoff,
+        datetime.date(2025, 1, 31),
+    )
+
+  def test_knowledge_cutoff_default(self):
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    self.assertIsNone(model.model_info.knowledge_cutoff)
 
   def test_estimate_cost(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')

@@ -122,6 +122,14 @@ class ModelInfo(pg.Object):
       'The release date of the model. '
   ] = None
 
+  knowledge_cutoff: Annotated[
+      datetime.date | None,
+      (
+          'The knowledge cutoff date of the model\'s training data. '
+          'If None, this information is unknown.'
+      )
+  ] = None
+
   in_service: Annotated[
       bool,
       'If True, the model is in service.'
