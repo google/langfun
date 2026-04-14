@@ -304,6 +304,198 @@ class AnthropicTest(unittest.TestCase):
     model = anthropic.Anthropic('claude-3-5-sonnet-20241022')
     self.assertIsNone(model.model_info.knowledge_cutoff)
 
+  def test_thinking_param_true_adaptive(self):
+    """Claude 4.6 + thinking=True -> adaptive thinking, no budget needed."""
+    lm = anthropic.Claude46Opus(api_key='fake', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_thinking_param_true_manual(self):
+    """Older model + thinking=True + max_thinking_tokens -> manual thinking."""
+    lm = anthropic.Claude35Sonnet(api_key='fake', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(
+        args['thinking'], {'type': 'enabled', 'budget_tokens': 1024}
+    )
+    self.assertEqual(args['max_tokens'], 2024)
+    self.assertNotIn('temperature', args)
+
+  def test_thinking_param_true_manual_no_budget_raises(self):
+    """Older model + thinking=True WITHOUT max_thinking_tokens -> error."""
+    lm = anthropic.Claude35Sonnet(api_key='fake', thinking=True)
+    with self.assertRaises(ValueError):
+      lm._request_args(lf.LMSamplingOptions(
+          max_tokens=1000, temperature=0.5
+      ))
+
+  def test_thinking_param_false_no_thinking(self):
+    """thinking=False -> no thinking config, temperature preserved."""
+    lm = anthropic.Claude46Opus(api_key='fake', thinking=False)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertEqual(args['temperature'], 0.5)
+
+  def test_thinking_param_none_default_no_thinking(self):
+    """Default thinking=None with no max_thinking_tokens -> no thinking."""
+    lm = anthropic.Claude46Opus(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertEqual(args['temperature'], 0.5)
+
+  def test_thinking_false_overrides_max_thinking_tokens(self):
+    """thinking=False + max_thinking_tokens -> NO thinking (False wins)."""
+    lm = anthropic.Claude46Opus(api_key='fake', thinking=False)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertEqual(args['temperature'], 0.5)
+
+  def test_thinking_false_overrides_max_thinking_tokens_older_model(self):
+    """thinking=False + max_thinking_tokens on older model -> NO thinking."""
+    lm = anthropic.Claude35Sonnet(api_key='fake', thinking=False)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertEqual(args['temperature'], 0.5)
+
+  def test_thinking_options_older_model(self):
+    lm = anthropic.Claude35Sonnet(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(
+        args['thinking'], {'type': 'enabled', 'budget_tokens': 1024}
+    )
+    self.assertEqual(args['max_tokens'], 2024)
+    self.assertNotIn('temperature', args)
+
+  def test_thinking_options_adaptive(self):
+    lm = anthropic.Claude46Opus(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_opus46_no_thinking_by_default(self):
+    lm = anthropic.Claude46Opus(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertEqual(args['temperature'], 0.5)
+
+  def test_older_model_no_thinking_by_default(self):
+    lm = anthropic.Claude35Sonnet(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertEqual(args['temperature'], 0.5)
+
+  def test_thinking_adaptive_with_max_thinking_tokens_set(self):
+    """Adaptive model with thinking=True AND max_thinking_tokens should use adaptive (not manual)."""
+    model = anthropic.Claude46Opus(api_key='test_key', thinking=True)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1000, max_thinking_tokens=2048)
+    )
+    # Should be adaptive, not manual, even though max_thinking_tokens is set
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    # budget_tokens should NOT be present
+    self.assertNotIn('budget_tokens', args['thinking'])
+
+  def test_thinking_removes_temperature_top_k_top_p(self):
+    """When thinking is enabled, temperature/top_k/top_p should be removed."""
+    model = anthropic.Claude46Opus(api_key='test_key', thinking=True)
+    args = model._request_args(
+        lf.LMSamplingOptions(
+            max_tokens=1000, temperature=0.7, top_k=40, top_p=0.9
+        )
+    )
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+
+  def test_thinking_manual_max_tokens_adjustment(self):
+    """When max_tokens < max_thinking_tokens, max_tokens should be increased."""
+    model = anthropic.Claude35Sonnet(api_key='test_key', thinking=True)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024, max_thinking_tokens=4096)
+    )
+    self.assertEqual(
+        args['thinking'], {'type': 'enabled', 'budget_tokens': 4096}
+    )
+    # max_tokens should be adjusted: 1024 + 4096 = 5120
+    self.assertEqual(args['max_tokens'], 5120)
+
+  def test_thinking_manual_max_tokens_no_adjustment_when_sufficient(self):
+    """When max_tokens >= max_thinking_tokens, max_tokens should NOT be increased."""
+    model = anthropic.Claude35Sonnet(api_key='test_key', thinking=True)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=8192, max_thinking_tokens=4096)
+    )
+    self.assertEqual(
+        args['thinking'], {'type': 'enabled', 'budget_tokens': 4096}
+    )
+    # max_tokens should NOT be adjusted since 8192 >= 4096
+    self.assertEqual(args['max_tokens'], 8192)
+
+  def test_model_uri_instantiation_claude46_opus(self):
+    """Test LLM instantiation from model URI string for Claude 4.6 Opus."""
+    model = lf.LanguageModel.get('claude-opus-4-6?api_key=test_key')
+    self.assertIsInstance(model, anthropic.Anthropic)
+    self.assertTrue(model._use_adaptive_thinking)
+
+  def test_model_uri_instantiation_with_thinking_true(self):
+    """Test model URI with thinking=true parameter."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?api_key=test_key&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+
+  def test_model_uri_instantiation_with_thinking_false(self):
+    """Test model URI with thinking=false parameter."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?api_key=test_key&thinking=false'
+    )
+    self.assertFalse(model.thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+
+  def test_model_uri_instantiation_without_thinking(self):
+    """Test model URI without thinking parameter (default None)."""
+    model = lf.LanguageModel.get('claude-opus-4-6?api_key=test_key')
+    self.assertIsNone(model.thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+
+  def test_model_uri_instantiation_older_model_with_thinking(self):
+    """Test model URI for older model with thinking=true requires budget."""
+    model = lf.LanguageModel.get(
+        'claude-3-5-sonnet-20241022?api_key=test_key&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertFalse(model._use_adaptive_thinking)
+    with self.assertRaises(ValueError):
+      model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+
 
 if __name__ == '__main__':
   unittest.main()

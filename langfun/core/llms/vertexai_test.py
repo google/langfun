@@ -219,6 +219,62 @@ class VertexAIAnthropicTest(unittest.TestCase):
         vertexai.VertexAIMistral,
     )
 
+  def test_thinking_param_true_adaptive_vertexai(self):
+    """VertexAI Claude 4.6 + thinking=True -> adaptive thinking."""
+    lm = vertexai.VertexAIClaude46Opus(
+        project='test', location='us-east5', thinking=True
+    )
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_thinking_options_adaptive_vertexai(self):
+    lm = vertexai.VertexAIClaude46Opus(project='test', location='us-east5')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_thinking_param_false_vertexai(self):
+    """VertexAI Claude 4.6 with thinking=False should have no thinking."""
+    model = vertexai.VertexAIClaude46Opus(
+        project='test-project', location='us-east5', thinking=False
+    )
+    args = model._request_args(
+        lf.LMSamplingOptions(max_thinking_tokens=1024, max_tokens=1000)
+    )
+    self.assertNotIn('thinking', args)
+
+  def test_thinking_param_none_no_thinking_vertexai(self):
+    """VertexAI Claude 4.6 with default thinking=None and no budget has no thinking."""
+    model = vertexai.VertexAIClaude46Opus(
+        project='test-project', location='us-east5'
+    )
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1000))
+    self.assertNotIn('thinking', args)
+
+  def test_model_uri_instantiation_vertexai_claude46(self):
+    """Test VertexAI model URI instantiation for Claude 4.6."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?project=lf-agent&location=us-east5&max_attempts=80&timeout=300'
+    )
+    # Verify the model is created correctly
+    self.assertIsInstance(model, vertexai.VertexAIAnthropic)
+    self.assertTrue(model._use_adaptive_thinking)
+
+  def test_model_uri_instantiation_vertexai_with_thinking(self):
+    """Test VertexAI model URI with thinking=true."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?project=lf-agent&location=us-east5&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+
 
 if __name__ == '__main__':
   unittest.main()

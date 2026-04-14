@@ -807,6 +807,16 @@ class Anthropic(rest.REST):
       'Anthropic API version.'
   ] = '2023-06-01'
 
+  thinking: Annotated[
+      bool | None,
+      (
+          'Whether to enable thinking/reasoning mode. If True, enables '
+          'thinking (adaptive for Claude 4.6+, manual with budget for older '
+          'models). If None and max_thinking_tokens is set, thinking is '
+          'enabled for backward compatibility. If False, thinking is disabled.'
+      ),
+  ] = None
+
   def _on_bound(self):
     super()._on_bound()
     self._api_key = None
@@ -837,6 +847,10 @@ class Anthropic(rest.REST):
       mi = _SUPPORTED_MODELS_BY_MODEL_ID[mi.alias_for]
       assert mi.provider == 'Anthropic', mi
     return mi
+
+  @property
+  def _use_adaptive_thinking(self) -> bool:
+    return self.model is not None and 'claude-opus-4-6' in self.model
 
   def request(
       self,
@@ -884,18 +898,39 @@ class Anthropic(rest.REST):
       args['top_k'] = options.top_k
     if options.top_p is not None:
       args['top_p'] = options.top_p
-    if options.max_thinking_tokens is not None:
-      args['thinking'] = {
-          'type': 'enabled',
-          # Minimum budget is 1,024 tokens.
-          'budget_tokens': options.max_thinking_tokens,
-      }
-      # max_tokens, which is thinking tokens + response tokens, must be greater
-      # than the thinking tokens.
-      if args['max_tokens'] < options.max_thinking_tokens:
-        args['max_tokens'] += options.max_thinking_tokens
+    # Determine if thinking should be enabled.
+    thinking_enabled = False
+    if self.thinking:
+      thinking_enabled = True
+    elif self.thinking is None and options.max_thinking_tokens is not None:
+      # Backward compatibility: max_thinking_tokens implies thinking=True.
+      thinking_enabled = True
+    # self.thinking is False -> no thinking regardless.
 
-      # Thinking isn’t compatible with temperature, top_p, or top_k.
+    if thinking_enabled:
+      if self._use_adaptive_thinking:
+        args['thinking'] = {
+            'type': 'adaptive',
+        }
+      else:
+        if options.max_thinking_tokens is None:
+          raise ValueError(
+              'max_thinking_tokens must be set when thinking is enabled '
+              'for non-adaptive thinking models.'
+          )
+        args['thinking'] = {
+            'type': 'enabled',
+            # Minimum budget is 1,024 tokens.
+            'budget_tokens': (
+                options.max_thinking_tokens
+            ),
+        }
+        # max_tokens, which is thinking tokens + response tokens, must be
+        # greater than the thinking tokens.
+        if args['max_tokens'] < options.max_thinking_tokens:
+          args['max_tokens'] += options.max_thinking_tokens
+
+      # Thinking isn't compatible with temperature, top_p, or top_k.
       # https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
       args.pop('temperature', None)
       args.pop('top_k', None)
