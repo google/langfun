@@ -291,7 +291,8 @@ class AnthropicTest(unittest.TestCase):
     # Check that claude-opus-4-6 entries have the correct knowledge cutoff.
     opus_entries = [
         info for info in anthropic.SUPPORTED_MODELS
-        if info.model_id == 'claude-opus-4-6'
+        if (info.model_id == 'claude-opus-4-6'
+            or info.alias_for == 'claude-opus-4-6')
     ]
     self.assertEqual(len(opus_entries), 2)
     for entry in opus_entries:
@@ -389,6 +390,58 @@ class AnthropicTest(unittest.TestCase):
     self.assertEqual(args['thinking'], {'type': 'adaptive'})
     self.assertEqual(args['max_tokens'], 1000)
     self.assertNotIn('temperature', args)
+
+  def test_thinking_options_opus_4_7(self):
+    lm = anthropic.Claude47Opus(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(
+        args['thinking'], {'type': 'adaptive', 'display': 'summarized'}
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_thinking_options_opus_4_7_with_effort(self):
+    lm = anthropic.Claude47Opus(api_key='fake', effort='xhigh')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000
+    ))
+    self.assertEqual(args['output_config'], {'effort': 'xhigh'})
+
+  def test_thinking_options_opus_4_7_with_reasoning_effort(self):
+    lm = anthropic.Claude47Opus(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000, reasoning_effort='low'
+    ))
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  def test_thinking_options_opus_4_7_no_effort(self):
+    lm = anthropic.Claude47Opus(api_key='fake', effort=None)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_thinking_tokens=1024, max_tokens=1000
+    ))
+    self.assertNotIn('output_config', args)
+
+  def test_opus47_no_thinking_removes_sampling_params(self):
+    lm = anthropic.Claude47Opus(api_key='fake', thinking=False)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5, top_k=40, top_p=0.9
+    ))
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_thinking_param_true_adaptive_opus_4_7(self):
+    """Claude 4.7 + thinking=True -> adaptive thinking with summarized display."""
+    lm = anthropic.Claude47Opus(api_key='fake', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.5
+    ))
+    self.assertEqual(
+        args['thinking'], {'type': 'adaptive', 'display': 'summarized'}
+    )
 
   def test_opus46_no_thinking_by_default(self):
     lm = anthropic.Claude46Opus(api_key='fake')
@@ -495,6 +548,120 @@ class AnthropicTest(unittest.TestCase):
     self.assertFalse(model._use_adaptive_thinking)
     with self.assertRaises(ValueError):
       model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+
+  def test_model_uri_instantiation_opus_4_7(self):
+    """Test LLM instantiation from model URI for Claude Opus 4.7."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?api_key=test_key'
+    )
+    self.assertIsInstance(model, anthropic.Anthropic)
+    self.assertTrue(model._use_adaptive_thinking)
+    self.assertEqual(model.effort, 'high')
+
+  def test_model_uri_instantiation_opus_4_7_with_thinking(self):
+    """Test Opus 4.7 model URI with thinking=true."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?api_key=test_key&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(
+        args['thinking'],
+        {'type': 'adaptive', 'display': 'summarized'},
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+
+  def test_model_uri_instantiation_opus_4_7_no_thinking(self):
+    """Test Opus 4.7 model URI with thinking=false."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?api_key=test_key&thinking=false'
+    )
+    self.assertFalse(model.thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertNotIn('thinking', args)
+    # Opus 4.7 still strips temperature/top_k/top_p
+    self.assertNotIn('temperature', args)
+
+  def test_model_uri_instantiation_opus_4_7_default(self):
+    """Test Opus 4.7 model URI default (thinking=None)."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?api_key=test_key'
+    )
+    self.assertIsNone(model.thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertNotIn('thinking', args)
+
+  def test_opus47_default_no_thinking_strips_sampling_params(self):
+    """Opus 4.7 strips temperature/top_k/top_p even without thinking."""
+    lm = anthropic.Claude47Opus(api_key='fake')
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1000, temperature=0.7, top_k=40, top_p=0.9
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_opus47_effort_max(self):
+    """Test Opus 4.7 with effort='max'."""
+    lm = anthropic.Claude47Opus(api_key='fake', effort='max', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['output_config'], {'effort': 'max'})
+
+  def test_opus47_effort_medium(self):
+    """Test Opus 4.7 with effort='medium'."""
+    lm = anthropic.Claude47Opus(api_key='fake', effort='medium', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['output_config'], {'effort': 'medium'})
+
+  def test_opus47_effort_low(self):
+    """Test Opus 4.7 with effort='low'."""
+    lm = anthropic.Claude47Opus(api_key='fake', effort='low', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  def test_opus47_reasoning_effort_overrides_model_effort(self):
+    """reasoning_effort in sampling options overrides model-level effort."""
+    lm = anthropic.Claude47Opus(
+        api_key='fake', effort='high', thinking=True
+    )
+    args = lm._request_args(lf.LMSamplingOptions(
+        max_tokens=1024, reasoning_effort='low'
+    ))
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  def test_opus46_effort_config_with_thinking(self):
+    """Claude 4.6 with thinking has output_config from default effort."""
+    lm = anthropic.Claude46Opus(api_key='fake', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+
+  def test_opus46_effort_none_no_output_config(self):
+    """Claude 4.6 with effort=None should NOT have output_config."""
+    lm = anthropic.Claude46Opus(
+        api_key='fake', thinking=True, effort=None
+    )
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertNotIn('output_config', args)
 
 
 if __name__ == '__main__':

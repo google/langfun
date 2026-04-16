@@ -218,6 +218,27 @@ class VertexAIAnthropicTest(unittest.TestCase):
         lf.LanguageModel.get('mistral-large-2411'),
         vertexai.VertexAIMistral,
     )
+    # Bare model IDs for Opus 4.6/4.7 resolve as VertexAI.
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-opus-4-6'),
+        vertexai.VertexAIAnthropic,
+    )
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-opus-4-7'),
+        vertexai.VertexAIAnthropic,
+    )
+
+  def test_lm_get_at_latest_resolves_anthropic(self):
+    """@latest suffix for Opus 4.6/4.7 resolves as Anthropic direct API."""
+    from langfun.core.llms import anthropic  # pylint: disable=g-import-not-at-top
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-opus-4-6@latest'),
+        anthropic.Anthropic,
+    )
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-opus-4-7@latest'),
+        anthropic.Anthropic,
+    )
 
   def test_thinking_param_true_adaptive_vertexai(self):
     """VertexAI Claude 4.6 + thinking=True -> adaptive thinking."""
@@ -261,20 +282,203 @@ class VertexAIAnthropicTest(unittest.TestCase):
   def test_model_uri_instantiation_vertexai_claude46(self):
     """Test VertexAI model URI instantiation for Claude 4.6."""
     model = lf.LanguageModel.get(
-        'claude-opus-4-6?project=lf-agent&location=us-east5&max_attempts=80&timeout=300'
+        'claude-opus-4-6?project=lf-agent'
+        '&location=us-east5&max_attempts=80&timeout=300'
     )
-    # Verify the model is created correctly
     self.assertIsInstance(model, vertexai.VertexAIAnthropic)
     self.assertTrue(model._use_adaptive_thinking)
 
-  def test_model_uri_instantiation_vertexai_with_thinking(self):
-    """Test VertexAI model URI with thinking=true."""
+  def test_model_uri_vertexai_claude46_thinking_true(self):
+    """Test VertexAI Claude 4.6 model URI with thinking=true."""
     model = lf.LanguageModel.get(
-        'claude-opus-4-6?project=lf-agent&location=us-east5&thinking=true'
+        'claude-opus-4-6?project=lf-agent'
+        '&location=us-east5&thinking=true'
     )
+    self.assertIsInstance(model, vertexai.VertexAIAnthropic)
     self.assertTrue(model.thinking)
     self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+    self.assertNotIn('temperature', args)
+
+  def test_model_uri_vertexai_claude46_thinking_false(self):
+    """Test VertexAI Claude 4.6 model URI with thinking=false."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?project=lf-agent'
+        '&location=us-east5&thinking=false'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIAnthropic)
+    self.assertFalse(model.thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertNotIn('thinking', args)
+
+  def test_model_uri_vertexai_claude46_default(self):
+    """Test VertexAI Claude 4.6 model URI default (thinking=None)."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?project=lf-agent&location=us-east5'
+    )
+    self.assertIsNone(model.thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+
+  def test_model_uri_instantiation_vertexai_claude47(self):
+    """Test VertexAI model URI instantiation for Claude Opus 4.7."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?project=lf-agent'
+        '&location=us-east5'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIAnthropic)
+    self.assertTrue(model._use_adaptive_thinking)
+    self.assertEqual(model.effort, 'high')
+
+  def test_model_uri_instantiation_vertexai_claude47_thinking(self):
+    """Test VertexAI Claude 4.7 model URI with thinking=true."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?project=lf-agent'
+        '&location=us-east5&thinking=true'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIAnthropic)
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(
+        args['thinking'],
+        {'type': 'adaptive', 'display': 'summarized'},
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+
+  def test_model_uri_vertexai_claude47_thinking_false(self):
+    """Test VertexAI Claude 4.7 with thinking=false."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?project=lf-agent'
+        '&location=us-east5&thinking=false'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIAnthropic)
+    self.assertFalse(model.thinking)
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('output_config', args)
+
+  def test_model_uri_vertexai_claude47_default(self):
+    """Test VertexAI Claude 4.7 model URI default (thinking=None)."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-7?project=lf-agent&location=us-east5'
+    )
+    self.assertIsNone(model.thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('output_config', args)
+
+  # --- Claude Opus 4.7: VertexAI direct instantiation tests ---
+
+  def test_vertexai_claude47_opus_direct(self):
+    """Test direct VertexAIClaude47Opus instantiation."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5'
+    )
+    self.assertTrue(model._use_adaptive_thinking)
+    self.assertEqual(model.effort, 'high')
+
+  def test_vertexai_claude47_opus_thinking_true(self):
+    """Test VertexAIClaude47Opus with thinking=True."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5', thinking=True
+    )
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024, temperature=0.5)
+    )
+    self.assertEqual(
+        args['thinking'],
+        {'type': 'adaptive', 'display': 'summarized'},
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+
+  def test_vertexai_claude47_opus_thinking_false(self):
+    """Test VertexAIClaude47Opus with thinking=False."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5', thinking=False
+    )
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertNotIn('thinking', args)
+
+  def test_vertexai_claude47_opus_default(self):
+    """Test VertexAIClaude47Opus default (no thinking, no budget)."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5'
+    )
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+
+  def test_vertexai_claude47_opus_default_strips_sampling_params(self):
+    """Opus 4.7 strips temperature/top_k/top_p even without thinking."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5'
+    )
+    args = model._request_args(lf.LMSamplingOptions(
+        max_tokens=1024, temperature=0.7, top_k=40, top_p=0.9
+    ))
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_vertexai_claude47_opus_effort_xhigh(self):
+    """Test VertexAIClaude47Opus with effort='xhigh'."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5',
+        thinking=True, effort='xhigh'
+    )
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['output_config'], {'effort': 'xhigh'})
+
+  def test_vertexai_claude47_opus_effort_max(self):
+    """Test VertexAIClaude47Opus with effort='max'."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5',
+        thinking=True, effort='max'
+    )
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertEqual(args['output_config'], {'effort': 'max'})
+
+  def test_vertexai_claude47_opus_effort_none(self):
+    """Test VertexAIClaude47Opus with effort=None (no output_config)."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5',
+        thinking=True, effort=None
+    )
+    args = model._request_args(
+        lf.LMSamplingOptions(max_tokens=1024)
+    )
+    self.assertNotIn('output_config', args)
+
+  def test_vertexai_claude47_opus_reasoning_effort_override(self):
+    """reasoning_effort in sampling options overrides model-level effort."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5',
+        thinking=True, effort='high'
+    )
+    args = model._request_args(lf.LMSamplingOptions(
+        max_tokens=1024, reasoning_effort='low'
+    ))
+    self.assertEqual(args['output_config'], {'effort': 'low'})
 
 
 if __name__ == '__main__':
   unittest.main()
+
