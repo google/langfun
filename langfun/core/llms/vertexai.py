@@ -456,7 +456,7 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
     mi = anthropic._SUPPORTED_MODELS_BY_MODEL_ID[self.model]  # pylint: disable=protected-access
     if mi.provider != 'VertexAI':
       for m in anthropic.SUPPORTED_MODELS:
-        if m.provider == 'VertexAI' and m.alias_for == m.model_id:
+        if m.provider == 'VertexAI' and m.alias_for == self.model:
           mi = m
           self.rebind(model=mi.model_id, skip_notification=True)
           break
@@ -471,10 +471,11 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
   @property
   def api_endpoint(self) -> str:
     project = self._project
+    model_id = str(self.model).removesuffix('@latest')
     return (
         f'https://{self.location}-aiplatform.googleapis.com/v1/projects/'
         f'{project}/locations/{self.location}/publishers/anthropic/'
-        f'models/{self.model}:streamRawPredict'
+        f'models/{model_id}:streamRawPredict'
     )
 
   def request(

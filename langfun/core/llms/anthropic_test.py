@@ -23,6 +23,7 @@ from unittest import mock
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 from langfun.core.llms import anthropic
+from langfun.core.llms import vertexai  # pylint: disable=unused-import
 import pyglove as pg
 import requests
 
@@ -517,6 +518,26 @@ class AnthropicTest(unittest.TestCase):
     """Test model URI with thinking=true parameter."""
     model = lf.LanguageModel.get(
         'claude-opus-4-6?api_key=test_key&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+
+  def test_model_uri_instantiation_with_thinking_true_uppercase(self):
+    """Test model URI with thinking=True parameter (uppercase)."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?api_key=test_key&thinking=True'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['thinking'], {'type': 'adaptive'})
+
+  def test_model_uri_instantiation_user_scenario(self):
+    """Test model URI with user's specific scenario."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-6?project=lf-agent&location=us-east5&max_attempts=80&timeout=300&thinking=True'
     )
     self.assertTrue(model.thinking)
     self.assertTrue(model._use_adaptive_thinking)

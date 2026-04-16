@@ -910,7 +910,7 @@ class Anthropic(rest.REST):
   @property
   def _use_adaptive_thinking(self) -> bool:
     return self.model is not None and (
-        'claude-opus-4-6' in self.model or 'claude-opus-4-7' in self.model
+        'claude-opus-4-6' in self.model_id or 'claude-opus-4-7' in self.model_id
     )
 
   def request(
