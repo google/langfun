@@ -467,6 +467,29 @@ class VertexAIAnthropicTest(unittest.TestCase):
     )
     self.assertNotIn('output_config', args)
 
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_vertexai_claude47_opus_global_default(self):
+    """Verifies that Opus 4.7 defaults to 'global' and uses correct host."""
+    model = vertexai.VertexAIClaude47Opus(project='test')
+    self.assertEqual(model.location, 'global')
+    self.assertTrue(model._api_initialized)
+    self.assertIn('https://aiplatform.googleapis.com', model.api_endpoint)
+    self.assertNotIn('global-aiplatform', model.api_endpoint)
+
+    model2 = lf.LanguageModel.get('claude-opus-4-7', project='test')
+    self.assertIsInstance(model2, vertexai.VertexAIClaude47Opus)
+    self.assertEqual(model2.location, 'global')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_vertexai_anthropic_explicit_global(self):
+    """Verifies explicit 'global' location works and uses correct host."""
+    model = vertexai.VertexAIAnthropic(
+        'claude-opus-4-7', project='test', location='global'
+    )
+    self.assertEqual(model.location, 'global')
+    self.assertTrue(model._api_initialized)
+    self.assertIn('https://aiplatform.googleapis.com', model.api_endpoint)
+
   def test_vertexai_claude47_opus_reasoning_effort_override(self):
     """reasoning_effort in sampling options overrides model-level effort."""
     model = vertexai.VertexAIClaude47Opus(
@@ -481,4 +504,3 @@ class VertexAIAnthropicTest(unittest.TestCase):
 
 if __name__ == '__main__':
   unittest.main()
-

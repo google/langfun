@@ -445,8 +445,8 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
   """Anthropic models on VertexAI."""
 
   location: Annotated[
-      Literal['us-east5', 'europe-west1'],
-      'GCP location with Anthropic models hosted.'
+      Literal['us-east5', 'europe-west1', 'global'],
+      'GCP location with Anthropic models hosted.',
   ] = 'us-east5'
 
   api_version = 'vertex-2023-10-16'
@@ -472,8 +472,13 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
   def api_endpoint(self) -> str:
     project = self._project
     model_id = str(self.model).removesuffix('@latest')
+    host = (
+        'aiplatform.googleapis.com'
+        if self.location == 'global'
+        else f'{self.location}-aiplatform.googleapis.com'
+    )
     return (
-        f'https://{self.location}-aiplatform.googleapis.com/v1/projects/'
+        f'https://{host}/v1/projects/'
         f'{project}/locations/{self.location}/publishers/anthropic/'
         f'models/{model_id}:streamRawPredict'
     )
@@ -496,6 +501,7 @@ class VertexAIClaude47Opus(VertexAIAnthropic):
   """Anthropic's Claude 4.7 Opus model on VertexAI."""
 
   model = 'claude-opus-4-7'
+  location = 'global'
 
 
 class VertexAIClaude46Opus(VertexAIAnthropic):
@@ -816,9 +822,9 @@ def _register_vertexai_models():
 
   # Override: bare model IDs resolve as VertexAI (primary use case),
   # @latest suffixes resolve as Anthropic direct API.
-  lf.LanguageModel.register('claude-opus-4-6', VertexAIAnthropic)
+  lf.LanguageModel.register('claude-opus-4-6', VertexAIClaude46Opus)
   lf.LanguageModel.register('claude-opus-4-6@latest', anthropic.Anthropic)
-  lf.LanguageModel.register('claude-opus-4-7', VertexAIAnthropic)
+  lf.LanguageModel.register('claude-opus-4-7', VertexAIClaude47Opus)
   lf.LanguageModel.register('claude-opus-4-7@latest', anthropic.Anthropic)
 
   for m in LLAMA_MODELS:
