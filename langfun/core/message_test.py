@@ -359,6 +359,10 @@ class MessageTest(unittest.TestCase):
     with self.assertRaisesRegex(ValueError, 'Unknown modality reference'):
       message.UserMessage('<<[[abc]]>>').chunk()
 
+    # Test that literal template-like references are treated as text.
+    chunks = message.UserMessage('<<[[{img.id}]]>>').chunk()
+    self.assertEqual(chunks, ['<<[[{img.id}]]>>'])
+
   def assert_html_content(self, html, expected):
     expected = inspect.cleandoc(expected).strip()
     actual = html.content.strip()

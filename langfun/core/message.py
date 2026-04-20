@@ -504,6 +504,11 @@ class Message(
       var_name = text[var_start:ref_end].strip()
       var_value = self.get_modality(var_name)
       if var_value is None:
+        if '{' in var_name or '}' in var_name:
+          ref_end_pos = ref_end + len(modality.Modality.REF_END)
+          add_text_chunk(text[chunk_start:ref_end_pos].strip(' '))
+          chunk_start = ref_end_pos
+          continue
         raise ValueError(
             f'Unknown modality reference: {var_name!r}. '
             'Please make sure the modality object is present in '
