@@ -491,6 +491,22 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
     request = super().request(prompt, sampling_options)
     request['anthropic_version'] = self.api_version
     del request['model']
+
+    # Temporary workaround: The Vertex AI gateway for Anthropic does not fully
+    # support 'adaptive' thinking yet (some regions reject it with a 400 error
+    # stating expected tags are 'disabled, enabled'). We gracefully fallback to
+    # 'enabled' mode and ensure budget_tokens is set.
+    if 'thinking' in request and request['thinking'].get('type') == 'adaptive':
+      request['thinking']['type'] = 'enabled'
+      budget = sampling_options.max_thinking_tokens or 1024
+      request['thinking']['budget_tokens'] = budget
+      request['thinking'].pop('display', None)
+      # 'effort' config is only for adaptive mode.
+      request.pop('output_config', None)
+      # Anthropic requires max_tokens > budget_tokens.
+      if request.get('max_tokens', 0) < budget:
+        request['max_tokens'] += budget
+
     return request
 
 

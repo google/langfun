@@ -501,6 +501,38 @@ class VertexAIAnthropicTest(unittest.TestCase):
     ))
     self.assertEqual(args['output_config'], {'effort': 'low'})
 
+  def test_vertexai_request_downgrades_adaptive_thinking(self):
+    """Verifies model.request() converts adaptive to enabled with budget."""
+    model = vertexai.VertexAIClaude46Opus(
+        project='test', location='us-east5', thinking=True
+    )
+    # Explicitly call request(), which intercepts the output of _request_args().
+    req = model.request(
+        lf.UserMessage('hi'), lf.LMSamplingOptions(max_tokens=500)
+    )
+    self.assertEqual(
+        req['thinking'], {'type': 'enabled', 'budget_tokens': 1024}
+    )
+    # max_tokens is boosted since it was less than budget (500 < 1024).
+    self.assertEqual(req['max_tokens'], 1524)
+    self.assertNotIn('output_config', req)
+
+  def test_vertexai_request_downgrades_adaptive_thinking_with_budget(self):
+    """Verifies it honors explicit max_thinking_tokens if provided."""
+    model = vertexai.VertexAIClaude47Opus(
+        project='test', location='us-east5', thinking=True
+    )
+    req = model.request(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(max_tokens=3000, max_thinking_tokens=2048)
+    )
+    self.assertEqual(
+        req['thinking'], {'type': 'enabled', 'budget_tokens': 2048}
+    )
+    # No boost needed as 3000 >= 2048.
+    self.assertEqual(req['max_tokens'], 3000)
+    self.assertNotIn('output_config', req)
+
 
 if __name__ == '__main__':
   unittest.main()
