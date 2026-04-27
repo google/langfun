@@ -265,6 +265,43 @@ class FromValueTest(unittest.TestCase):
     self.assertEqual(t2.template_str, t.template_str)
     self.assertEqual(t2.x, 2)
 
+  def test_from_same_template_with_override_preserves_modalities(self):
+    """Tests that clone(override=kwargs) preserves _referred_modalities."""
+
+    class CustomModality(modality.Modality):
+      content: str
+
+      def to_bytes(self):
+        return self.content.encode()
+
+    t = Template('{{image}}', image=CustomModality('foo'))
+    t._referred_modalities = {'foo': CustomModality('foo')}
+
+    # Clone with override (kwargs non-empty) must preserve modalities.
+    t2 = Template.from_value(t, image=CustomModality('bar'))
+    self.assertIsInstance(t2, Template)
+    self.assertIsNot(t2, t)
+    self.assertEqual(t2._referred_modalities, t._referred_modalities)  # pylint: disable=protected-access
+
+  def test_from_different_template_with_modalities(self):
+    """Tests that cross-class conversion preserves _referred_modalities."""
+
+    class CustomModality(modality.Modality):
+      content: str
+
+      def to_bytes(self):
+        return self.content.encode()
+
+    t = Template('{{image}}', image=CustomModality('foo'))
+    t._referred_modalities = {'foo': CustomModality('foo')}
+
+    class MyTemplate(Template):
+      pass
+
+    t2 = MyTemplate.from_value(t)
+    self.assertIsInstance(t2, MyTemplate)
+    self.assertEqual(t2._referred_modalities, t._referred_modalities)  # pylint: disable=protected-access
+
   def test_from_python_object(self):
     t = Template.from_value(pg.Dict(x=1, y=2))
     self.assertEqual(t.template_str, '{{input}}')
