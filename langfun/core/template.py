@@ -659,11 +659,16 @@ class Template(
   ) -> 'Template':
     """Creates a template object from a value."""
     if isinstance(value, cls):
-      return value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter
+      res = value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter
+      if res is not value and hasattr(value, '_referred_modalities'):
+        res._referred_modalities = value._referred_modalities  # pylint: disable=protected-access
+      return res
     if isinstance(value, str):
       return cls(template_str=value, **kwargs)
     if isinstance(value, Template):
       lfun = cls(template_str=value.template_str, **kwargs)  # pylint: disable=attribute-error
+      if hasattr(value, '_referred_modalities'):
+        lfun._referred_modalities = value._referred_modalities  # pylint: disable=protected-access
       # So lfun could acccess all attributes from value.
       lfun.sym_setparent(value)
       return lfun
