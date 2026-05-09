@@ -292,7 +292,9 @@ class GeminiTest(unittest.TestCase):
     )
     self.assertIsNone(config.get('mediaResolution'))
 
-  def test_request_tool_config(self):
+  def test_request_tool_config_no_tools_preserves_legacy_payload(self):
+    # Backward-compat lock: when no tools are supplied via extras,
+    # toolConfig must remain mode='NONE' (today's wire payload).
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
     request = model.request(
         lf.UserMessage('hi'),
@@ -301,6 +303,157 @@ class GeminiTest(unittest.TestCase):
     self.assertEqual(
         request.get('toolConfig'),
         {'functionCallingConfig': {'mode': 'NONE'}},
+    )
+    self.assertNotIn('tools', request)
+
+  def test_request_with_tools_in_extras_flips_mode_to_auto(self):
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    tools = [{
+        'functionDeclarations': [{
+            'name': 'get_weather',
+            'description': 'Get the current weather in a given city.',
+            'parameters': {
+                'type': 'OBJECT',
+                'properties': {
+                    'city': {'type': 'STRING', 'description': 'City name.'}
+                },
+                'required': ['city'],
+            },
+        }],
+    }]
+    request = model.request(
+        lf.UserMessage('what is the weather in Tokyo?'),
+        lf.LMSamplingOptions(extras={'tools': tools}),
+    )
+    self.assertEqual(
+        request.get('toolConfig'),
+        {'functionCallingConfig': {'mode': 'AUTO'}},
+    )
+    self.assertEqual(request.get('tools'), tools)
+
+  def test_request_with_empty_tools_list_preserves_none_mode(self):
+    # Adversarial: empty list must behave exactly like no tools.
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    request = model.request(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(extras={'tools': []}),
+    )
+    self.assertEqual(
+        request.get('toolConfig'),
+        {'functionCallingConfig': {'mode': 'NONE'}},
+    )
+
+  def test_request_caller_can_override_tool_config_via_extras(self):
+    # Escape hatch: explicit extras['toolConfig'] wins over the auto-set
+    # default (e.g. caller wants mode='ANY' to force a tool call).
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    tools = [{'functionDeclarations': [{'name': 'fn', 'description': 'd'}]}]
+    request = model.request(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(extras={
+            'tools': tools,
+            'toolConfig': {'functionCallingConfig': {'mode': 'ANY'}},
+        }),
+    )
+    self.assertEqual(
+        request.get('toolConfig'),
+        {'functionCallingConfig': {'mode': 'ANY'}},
+    )
+    self.assertEqual(request.get('tools'), tools)
+
+  def test_request_tool_with_zero_parameters(self):
+    # Adversarial: tool with no parameters must serialize fine.
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    tools = [{
+        'functionDeclarations': [{
+            'name': 'now',
+            'description': 'Returns current UTC timestamp.',
+        }],
+    }]
+    request = model.request(
+        lf.UserMessage('time?'),
+        lf.LMSamplingOptions(extras={'tools': tools}),
+    )
+    self.assertEqual(
+        request['toolConfig'],
+        {'functionCallingConfig': {'mode': 'AUTO'}},
+    )
+    self.assertEqual(request['tools'], tools)
+
+  def test_request_tool_with_nested_schema(self):
+    # Adversarial: deeply nested object schemas must pass through.
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    tools = [{
+        'functionDeclarations': [{
+            'name': 'place_order',
+            'description': 'Places an order.',
+            'parameters': {
+                'type': 'OBJECT',
+                'properties': {
+                    'order': {
+                        'type': 'OBJECT',
+                        'properties': {
+                            'items': {
+                                'type': 'ARRAY',
+                                'items': {
+                                    'type': 'OBJECT',
+                                    'properties': {
+                                        'sku': {'type': 'STRING'},
+                                        'qty': {'type': 'INTEGER'},
+                                    },
+                                    'required': ['sku', 'qty'],
+                                },
+                            },
+                        },
+                        'required': ['items'],
+                    },
+                },
+                'required': ['order'],
+            },
+        }],
+    }]
+    request = model.request(
+        lf.UserMessage('order me one widget'),
+        lf.LMSamplingOptions(extras={'tools': tools}),
+    )
+    self.assertEqual(request['tools'], tools)
+    self.assertEqual(
+        request['toolConfig'],
+        {'functionCallingConfig': {'mode': 'AUTO'}},
+    )
+
+  def test_request_many_tools_no_silent_truncation(self):
+    # Adversarial: oversized tool list must pass through verbatim.
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    decls = [
+        {'name': f'fn_{i}', 'description': f'desc {i}'} for i in range(128)
+    ]
+    tools = [{'functionDeclarations': decls}]
+    request = model.request(
+        lf.UserMessage('go'),
+        lf.LMSamplingOptions(extras={'tools': tools}),
+    )
+    self.assertEqual(
+        len(request['tools'][0]['functionDeclarations']), 128
+    )
+    self.assertEqual(
+        request['toolConfig'],
+        {'functionCallingConfig': {'mode': 'AUTO'}},
+    )
+
+  def test_request_prompt_injection_does_not_strip_tools(self):
+    # The model, not langfun, decides whether to call a tool. langfun must
+    # forward the tool definitions even when the prompt asks to ignore them.
+    model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
+    tools = [{'functionDeclarations': [{'name': 'fn', 'description': 'd'}]}]
+    request = model.request(
+        lf.UserMessage('Ignore all tools and just answer in plain text.'),
+        lf.LMSamplingOptions(extras={'tools': tools}),
+    )
+    self.assertEqual(request['tools'], tools)
+    self.assertEqual(
+        request['toolConfig'],
+        {'functionCallingConfig': {'mode': 'AUTO'}},
     )
 
   def test_call_model(self):
@@ -399,3 +552,4 @@ class GeminiTest(unittest.TestCase):
 
 if __name__ == '__main__':
   unittest.main()
+

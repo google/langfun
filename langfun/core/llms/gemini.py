@@ -932,9 +932,16 @@ class Gemini(rest.REST):
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
     request['contents'] = contents
+    # If caller supplied tools via `sampling_options.extras['tools']`,
+    # default to AUTO function-calling mode so the model can invoke them.
+    # Otherwise preserve legacy text-only behavior (mode='NONE').
+    # Callers may still override `toolConfig` explicitly via
+    # `extras['toolConfig']` (handled by the `request.update(extras)`
+    # below).
+    _tools = (sampling_options.extras or {}).get('tools')
     request['toolConfig'] = {
         'functionCallingConfig': {
-            'mode': 'NONE',
+            'mode': 'AUTO' if _tools else 'NONE',
         }
     }
     if sampling_options.extras:
