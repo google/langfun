@@ -20,6 +20,7 @@ from unittest import mock
 from google import auth
 from google.auth import exceptions
 import langfun.core as lf
+from langfun.core.data.conversion import gemini as gemini_conversion
 from langfun.core.llms import rest
 from langfun.core.llms import vertexai
 import pyglove as pg
@@ -66,6 +67,56 @@ class VertexAITest(unittest.TestCase):
     self.assertIn('global', model.api_endpoint)
     del os.environ['VERTEXAI_PROJECT']
     del os.environ['VERTEXAI_LOCATION']
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_code_execution(self):
+    os.environ['VERTEXAI_PROJECT'] = 'langfun'
+    model = vertexai.VertexAIGemini31ProPreview(enable_code_execution=True)
+    self.assertTrue(model.enable_code_execution)
+
+    request = model.request(
+        lf.UserMessage('Calculate 2+2'),
+        lf.LMSamplingOptions(),
+    )
+    self.assertEqual(request['tools'], [{'codeExecution': {}}])
+    self.assertNotIn('toolConfig', request)
+
+    converter = gemini_conversion.GeminiMessageConverter()
+
+    # TDD: Without the handler, unrecognized parts raise ValueError.
+    # This proves executableCode/codeExecutionResult would crash without
+    # the fix, since they would hit the same else branch.
+    with self.assertRaises(ValueError):
+      converter.from_value({
+          'role': 'model',
+          'parts': [{'unknownPartType': {'data': 'foo'}}],
+      })
+
+    # With the fix: executableCode and codeExecutionResult are silently
+    # skipped, only text parts appear in the final message.
+    msg = converter.from_value({
+        'role': 'model',
+        'parts': [
+            {'text': 'Sure!'},
+            {'executableCode': {'code': 'print(2+2)', 'language': 'PYTHON'}},
+            {'codeExecutionResult': {'outcome': 'OUTCOME_OK', 'output': '4\n'}},
+            {'text': 'And the result is 4!'},
+        ]
+    })
+    self.assertEqual(msg.text, 'Sure! And the result is 4!')
+
+    # Test configuration via lf.LanguageModel.get URI
+    uri_model = lf.LanguageModel.get(
+        'gemini-3.1-pro-preview?project=langfun&location=global'
+        '&enable_code_execution=True'
+    )
+    self.assertTrue(uri_model.enable_code_execution)
+    req2 = uri_model.request(
+        lf.UserMessage('Calculate'), lf.LMSamplingOptions()
+    )
+    self.assertEqual(req2['tools'], [{'codeExecution': {}}])
+
+    del os.environ['VERTEXAI_PROJECT']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_multi_project_support(self):

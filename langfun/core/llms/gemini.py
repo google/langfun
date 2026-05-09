@@ -891,6 +891,11 @@ class Gemini(rest.REST):
       + 'are more than plain text.',
   ] = None
 
+  enable_code_execution: pg.typing.Annotated[
+      bool,
+      'Whether to enable code execution tool for the model.',
+  ] = False
+
   @functools.cached_property
   def model_info(self) -> GeminiModelInfo:
     return _SUPPORTED_MODELS_BY_ID[self.model]
@@ -932,11 +937,14 @@ class Gemini(rest.REST):
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
     request['contents'] = contents
-    request['toolConfig'] = {
-        'functionCallingConfig': {
-            'mode': 'NONE',
-        }
-    }
+    if self.enable_code_execution:
+      request['tools'] = [{'codeExecution': {}}]
+    else:
+      request['toolConfig'] = {
+          'functionCallingConfig': {
+              'mode': 'NONE',
+          }
+      }
     if sampling_options.extras:
       request.update(sampling_options.extras)
     return request
