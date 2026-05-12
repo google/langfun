@@ -1140,15 +1140,18 @@ class LanguageModel(component.Component):
               )
         return results
 
-      retry_fn = concurrent.with_retry(
-          _sample_with_retry,
-          retry_on_errors=EmptyGenerationError,
-          max_attempts=self.max_attempts,
-          retry_interval=self.retry_interval,
-          exponential_backoff=self.exponential_backoff,
-          max_retry_interval=self.max_retry_interval,
-      )
-      results = retry_fn()
+      try:
+        retry_fn = concurrent.with_retry(
+            _sample_with_retry,
+            retry_on_errors=[EmptyGenerationError],
+            max_attempts=self.max_attempts,
+            retry_interval=self.retry_interval,
+            exponential_backoff=self.exponential_backoff,
+            max_retry_interval=self.max_retry_interval,
+        )
+        results = retry_fn()
+      except concurrent.RetryError as e:
+        raise e.errors[-1]
 
       for prompt, result in zip(prompts, results):
 
