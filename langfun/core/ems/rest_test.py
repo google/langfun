@@ -128,6 +128,123 @@ class RESTEmbeddingTest(unittest.TestCase):
         with self.assertRaises(expected_cls):
           self._em._embed(lf.UserMessage('hello'))
 
+  def test_embed_retries_on_temporary_error(self):
+    """RED: __call__ should retry on TemporaryLMError using max_attempts."""
+    em = rest.REST(
+        api_endpoint='https://fake-embedding-api.com',
+        request=lambda msg: dict(text=msg.text),
+        result=lambda x: lf.EmbeddingResult(embedding=x['embedding']),
+        headers=dict(api_key='fake_key'),
+        max_attempts=3,
+        retry_interval=0,
+        exponential_backoff=False,
+    )
+    call_count = 0
+    original_embed = em._embed
+
+    def flaky_embed(message):
+      nonlocal call_count
+      call_count += 1
+      if call_count < 3:
+        raise lf.TemporaryLMError('Server error')
+      return original_embed(message)
+
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post
+      with mock.patch.object(em, '_embed', side_effect=flaky_embed):
+        result = em('hello')
+        self.assertEqual(result.embedding, [0.1, 0.2, 0.3])
+        self.assertEqual(call_count, 3)
+
+  def test_embed_retry_exhaustion_raises(self):
+    """RED: After max_attempts, error should propagate."""
+    from langfun.core import concurrent as lf_concurrent  # pylint: disable=g-import-not-at-top
+
+    em = rest.REST(
+        api_endpoint='https://fake-embedding-api.com',
+        request=lambda msg: dict(text=msg.text),
+        result=lambda x: lf.EmbeddingResult(embedding=x['embedding']),
+        headers=dict(api_key='fake_key'),
+        max_attempts=2,
+        retry_interval=0,
+        exponential_backoff=False,
+    )
+
+    def always_fail(message):
+      raise lf.TemporaryLMError('Persistent server error')
+
+    with mock.patch.object(em, '_embed', side_effect=always_fail):
+      with self.assertRaises(lf_concurrent.RetryError):
+        em('hello')
+
+  # ===== ADVERSARIAL / RED TEAM TESTS (CL/918044373) =====
+
+  def test_non_retryable_lm_error_not_retried(self):
+    """RED TEAM: Non-RetryableLMError must NOT trigger retry logic.
+
+    LMInputError inherits from LMError, NOT RetryableLMError. The retry
+    wrapper in __call__ should let it propagate immediately without any
+    retry attempts. If retried, a permanent input error would waste N
+    API calls and add unnecessary latency.
+    """
+    em = rest.REST(
+        api_endpoint='https://fake-embedding-api.com',
+        request=lambda msg: dict(text=msg.text),
+        result=lambda x: lf.EmbeddingResult(embedding=x['embedding']),
+        headers=dict(api_key='fake_key'),
+        max_attempts=3,
+        retry_interval=0,
+        exponential_backoff=False,
+    )
+    call_count = 0
+
+    def non_retryable_fail(_):
+      nonlocal call_count
+      call_count += 1
+      raise lf.LMInputError('Invalid input format')
+
+    with mock.patch.object(em, '_embed', side_effect=non_retryable_fail):
+      with self.assertRaises(lf.LMInputError):
+        em('hello')
+
+    self.assertEqual(
+        call_count, 1,
+        f'Non-retryable LMInputError was retried {call_count} times — '
+        'should propagate immediately without retry.',
+    )
+
+  def test_generic_runtime_error_not_retried(self):
+    """RED TEAM: Generic RuntimeError must NOT be retried by __call__.
+
+    The retry wrapper only catches RetryableLMError. Any other exception
+    type (RuntimeError, ValueError, etc.) should propagate immediately.
+    """
+    em = rest.REST(
+        api_endpoint='https://fake-embedding-api.com',
+        request=lambda msg: dict(text=msg.text),
+        result=lambda x: lf.EmbeddingResult(embedding=x['embedding']),
+        headers=dict(api_key='fake_key'),
+        max_attempts=3,
+        retry_interval=0,
+        exponential_backoff=False,
+    )
+    call_count = 0
+
+    def generic_fail(_):
+      nonlocal call_count
+      call_count += 1
+      raise RuntimeError('Unexpected internal error')
+
+    with mock.patch.object(em, '_embed', side_effect=generic_fail):
+      with self.assertRaises(RuntimeError):
+        em('hello')
+
+    self.assertEqual(
+        call_count, 1,
+        f'Generic RuntimeError was retried {call_count} times — '
+        'should propagate immediately without retry.',
+    )
+
 
 if __name__ == '__main__':
   unittest.main()

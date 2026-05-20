@@ -19,6 +19,8 @@ from typing import Annotated, Any, Callable, ClassVar, Literal
 
 from langfun.core import async_support
 from langfun.core import component
+from langfun.core import concurrent as concurrent_lib
+from langfun.core import language_model as lm_lib
 from langfun.core import message as message_lib
 import pyglove as pg
 
@@ -275,7 +277,15 @@ class EmbeddingModel(component.Component):
     if isinstance(message, str):
       message = message_lib.UserMessage.from_value(message)
     with component.context(override_attrs=True, **kwargs):
-      return self._embed(message)
+      retry_fn = concurrent_lib.with_retry(
+          lambda: self._embed(message),
+          retry_on_errors=lm_lib.RetryableLMError,
+          max_attempts=self.max_attempts,
+          retry_interval=self.retry_interval,
+          exponential_backoff=self.exponential_backoff,
+          max_retry_interval=self.max_retry_interval,
+      )
+      return retry_fn()
 
   async def acall(
       self,

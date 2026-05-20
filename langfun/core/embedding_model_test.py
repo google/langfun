@@ -13,6 +13,7 @@
 # limitations under the License.
 import asyncio
 import unittest
+from unittest import mock
 
 import langfun.core as lf
 from langfun.core import embedding_model
@@ -214,6 +215,116 @@ class ModelRegistryTest(unittest.TestCase):
     lf.EmbeddingModel.register('text-embedding-.*', SimpleEmbeddingModel)
     with self.assertRaisesRegex(ValueError, 'Multiple models found'):
       lf.EmbeddingModel.get('text-embedding-v1')
+
+
+class EmbeddingModelRetryTest(unittest.TestCase):
+  """Tests for retry logic in EmbeddingModel.__call__() (CL/918044373)."""
+
+  def test_call_retries_on_retryable_error_and_succeeds(self):
+    """__call__ retries on RetryableLMError and returns on success."""
+    em = SimpleEmbeddingModel()
+    em.rebind({
+        'max_attempts': 3,
+        'retry_interval': 0,
+        'exponential_backoff': False,
+    })
+    call_count = 0
+
+    def fail_then_succeed(_):
+      nonlocal call_count
+      call_count += 1
+      if call_count < 3:
+        raise lf.TemporaryLMError('Transient failure')
+      return lf.EmbeddingResult(embedding=[1.0])
+
+    with mock.patch.object(em, '_embed', side_effect=fail_then_succeed):
+      result = em('hello')
+
+    self.assertEqual(result.embedding, [1.0])
+    self.assertEqual(call_count, 3)
+
+  def test_call_retry_exhaustion_raises_retry_error(self):
+    """After max_attempts exhaustion, RetryError is raised."""
+    from langfun.core import concurrent as lf_concurrent  # pylint: disable=g-import-not-at-top
+
+    em = SimpleEmbeddingModel()
+    em.rebind({
+        'max_attempts': 2,
+        'retry_interval': 0,
+        'exponential_backoff': False,
+    })
+
+    def always_fail(_):
+      raise lf.TemporaryLMError('Service unavailable')
+
+    with mock.patch.object(em, '_embed', side_effect=always_fail):
+      with self.assertRaises(lf_concurrent.RetryError):
+        em('hello')
+
+  def test_call_non_retryable_lm_error_not_retried(self):
+    """LMInputError (not a RetryableLMError) propagates immediately."""
+    em = SimpleEmbeddingModel()
+    em.rebind({
+        'max_attempts': 3,
+        'retry_interval': 0,
+        'exponential_backoff': False,
+    })
+    call_count = 0
+
+    def non_retryable_fail(_):
+      nonlocal call_count
+      call_count += 1
+      raise lf.LMInputError('Invalid input')
+
+    with mock.patch.object(em, '_embed', side_effect=non_retryable_fail):
+      with self.assertRaises(lf.LMInputError):
+        em('hello')
+
+    self.assertEqual(call_count, 1)
+
+  def test_call_generic_error_not_retried(self):
+    """RuntimeError (not an LM error) propagates immediately."""
+    em = SimpleEmbeddingModel()
+    em.rebind({
+        'max_attempts': 3,
+        'retry_interval': 0,
+        'exponential_backoff': False,
+    })
+    call_count = 0
+
+    def generic_fail(_):
+      nonlocal call_count
+      call_count += 1
+      raise RuntimeError('Unexpected error')
+
+    with mock.patch.object(em, '_embed', side_effect=generic_fail):
+      with self.assertRaises(RuntimeError):
+        em('hello')
+
+    self.assertEqual(call_count, 1)
+
+  def test_call_retry_respects_kwargs_override(self):
+    """max_attempts can be overridden via kwargs at call time."""
+    from langfun.core import concurrent as lf_concurrent  # pylint: disable=g-import-not-at-top
+
+    em = SimpleEmbeddingModel()
+    em.rebind({
+        'max_attempts': 5,  # High default
+        'retry_interval': 0,
+        'exponential_backoff': False,
+    })
+    call_count = 0
+
+    def always_fail(_):
+      nonlocal call_count
+      call_count += 1
+      raise lf.TemporaryLMError('Fail')
+
+    with mock.patch.object(em, '_embed', side_effect=always_fail):
+      with self.assertRaises(lf_concurrent.RetryError):
+        em('hello', max_attempts=2)  # Override to 2 at call time
+
+    self.assertEqual(call_count, 2)
 
 
 if __name__ == '__main__':
