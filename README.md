@@ -115,6 +115,11 @@ See [Langfun 101](https://colab.research.google.com/github/google/langfun/blob/m
 
 ## Install
 
+Langfun requires **Python 3.10 or later**.
+
+> [!TIP]
+> It is recommended to use a virtual environment (e.g., `python -m venv venv && source venv/bin/activate`) to avoid dependency conflicts.
+
 Langfun offers a range of features through [Extras](https://packaging.python.org/en/latest/tutorials/installing-packages/#installing-extras), allowing users to install only what they need. The minimal installation of Langfun requires only [PyGlove](https://github.com/google/pyglove), [Jinja2](https://github.com/pallets/jinja/), and [requests](https://github.com/psf/requests). To install Langfun with its minimal dependencies, use:
 
 ```
