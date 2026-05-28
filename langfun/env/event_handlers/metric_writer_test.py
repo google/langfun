@@ -14,6 +14,7 @@
 
 import unittest
 
+from langfun.env import environment
 from langfun.env import interface
 from langfun.env import test_utils
 from langfun.env.event_handlers import metric_writer as metric_writer_lib
@@ -23,17 +24,26 @@ class MetricWriterTest(unittest.TestCase):
 
   def test_write_metric(self):
     writer = metric_writer_lib.MetricWriter(app='test_app')
-    env = test_utils.TestingEnvironment(
-        features={
-            'test_feature1': test_utils.TestingFeature(housekeep_interval=0),
-            'test_feature2': test_utils.TestingFeature(housekeep_interval=None),
-        },
-        pool_size=2,
-        outage_grace_period=0,
-        outage_retry_interval=0,
-        housekeep_interval=10.0,
-        sandbox_keepalive_interval=1.0,
+    env = environment.Environment(
+        id='testing-env',
         event_handler=writer,
+        sandboxes={
+            'ss': test_utils.TestingSandboxService(
+                features={
+                    'test_feature1': test_utils.TestingFeature(
+                        housekeep_interval=0
+                    ),
+                    'test_feature2': test_utils.TestingFeature(
+                        housekeep_interval=None
+                    ),
+                },
+                pool_size=2,
+                outage_grace_period=0,
+                outage_retry_interval=0,
+                housekeep_interval=10.0,
+                sandbox_keepalive_interval=1.0,
+            )
+        }
     )
     with env:
       with env.sandbox(session_id='session1') as sb:
@@ -207,6 +217,23 @@ class MetricWriterTest(unittest.TestCase):
             error='RuntimeError'
         ),
         1
+    )
+
+  def test_environment_housekeep(self):
+    writer = metric_writer_lib.MetricWriter(app='test_app')
+    env = environment.Environment(
+        id='testing-env',
+        event_handler=writer,
+    )
+    with env:
+      env.on_housekeep(duration=0.5)
+    self.assertEqual(
+        writer._environment_housekeep_duration_ms.value(
+            app='test_app',
+            environment_id='testing-env',
+            error='Success',
+        ).sum,
+        500.0,
     )
 
 

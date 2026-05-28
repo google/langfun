@@ -15,23 +15,29 @@
 
 # pylint: disable=g-importing-member, g-bad-import-order, g-import-not-at-top
 from langfun.env.interface import EnvironmentError   # pylint: disable=redefined-builtin
-from langfun.env.interface import EnvironmentOutageError
-from langfun.env.interface import EnvironmentOverloadError
+from langfun.env.interface import SandboxServiceOutageError
+from langfun.env.interface import SandboxServiceOverloadError
 from langfun.env.interface import SandboxError
 from langfun.env.interface import SandboxStateError
+from langfun.env.interface import FeatureError
+from langfun.env.interface import FeatureSetupError
+from langfun.env.interface import FeatureTeardownError
+from langfun.env.interface import FeatureOutageError
 
-from langfun.env.interface import Environment
-from langfun.env.interface import Sandbox
 from langfun.env.interface import Feature
-
+from langfun.env.interface import Sandbox
+from langfun.env.interface import SandboxService
+from langfun.env.interface import AbstractEnvironment
 from langfun.env.interface import EventHandler
+from langfun.env.environment import Environment
 
 # Decorators for sandbox/feature methods.
 from langfun.env.interface import treat_as_sandbox_state_error
 from langfun.env.interface import log_activity
 
-from langfun.env.base_environment import BaseEnvironment
 from langfun.env.base_sandbox import BaseSandbox
+from langfun.env.base_sandbox_service import BaseSandboxService
+from langfun.env.base_sandbox_service import PooledSandboxService
 from langfun.env.base_feature import BaseFeature
 
 from langfun.env import load_balancers

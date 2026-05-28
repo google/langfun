@@ -32,7 +32,7 @@ class EventHandlerChain(interface.EventHandler):
 
   def on_environment_starting(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
   ) -> None:
     """Called when the environment is starting."""
     for handler in self._handlers:
@@ -40,16 +40,15 @@ class EventHandlerChain(interface.EventHandler):
 
   def on_environment_shutting_down(
       self,
-      environment: interface.Environment,
-      offline_duration: float,
+      environment: interface.AbstractEnvironment,
   ) -> None:
     """Called when the environment is shutting down."""
     for handler in self._handlers:
-      handler.on_environment_shutting_down(environment, offline_duration)
+      handler.on_environment_shutting_down(environment)
 
   def on_environment_start(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -59,7 +58,7 @@ class EventHandlerChain(interface.EventHandler):
 
   def on_environment_housekeep(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       counter: int,
       duration: float,
       error: BaseException | None,
@@ -73,7 +72,7 @@ class EventHandlerChain(interface.EventHandler):
 
   def on_environment_shutdown(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       duration: float,
       lifetime: float,
       error: BaseException | None
