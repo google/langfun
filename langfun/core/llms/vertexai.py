@@ -497,6 +497,13 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
 # pylint: disable=invalid-name
 
 
+class VertexAIClaude48Opus(VertexAIAnthropic):
+  """Anthropic's Claude 4.8 Opus model on VertexAI."""
+
+  model = 'claude-opus-4-8'
+  location = 'global'
+
+
 class VertexAIClaude47Opus(VertexAIAnthropic):
   """Anthropic's Claude 4.7 Opus model on VertexAI."""
 
@@ -826,6 +833,8 @@ def _register_vertexai_models():
   lf.LanguageModel.register('claude-opus-4-6@latest', anthropic.Anthropic)
   lf.LanguageModel.register('claude-opus-4-7', VertexAIClaude47Opus)
   lf.LanguageModel.register('claude-opus-4-7@latest', anthropic.Anthropic)
+  lf.LanguageModel.register('claude-opus-4-8', VertexAIClaude48Opus)
+  lf.LanguageModel.register('claude-opus-4-8@latest', anthropic.Anthropic)
 
   for m in LLAMA_MODELS:
     lf.LanguageModel.register(m.model_id, VertexAILlama)

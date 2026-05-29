@@ -788,6 +788,163 @@ class AnthropicTest(unittest.TestCase):
     )
 
 
+class Claude48OpusTest(unittest.TestCase):
+  """Tests for Claude Opus 4.8 model support."""
+
+  def test_opus48_basics(self):
+    """Test Claude Opus 4.8 basic instantiation."""
+    lm = anthropic.Claude48Opus(api_key='fake')
+    self.assertEqual(lm.model_id, 'claude-opus-4-8')
+    self.assertTrue(lm._use_adaptive_thinking)
+
+  def test_opus48_model_info(self):
+    """Test Claude Opus 4.8 model info is registered."""
+    opus_entries = [
+        info
+        for info in anthropic.SUPPORTED_MODELS
+        if info.model_id == 'claude-opus-4-8'
+    ]
+    self.assertEqual(len(opus_entries), 1)
+    self.assertEqual(opus_entries[0].provider, 'Anthropic')
+    self.assertTrue(opus_entries[0].in_service)
+
+  def test_opus48_vertexai_model_info(self):
+    """Test Claude Opus 4.8 VertexAI model info is registered."""
+    vertex_entries = [
+        info
+        for info in anthropic.SUPPORTED_MODELS
+        if info.model_id == 'claude-opus-4-8@latest'
+    ]
+    self.assertEqual(len(vertex_entries), 1)
+    self.assertEqual(vertex_entries[0].provider, 'VertexAI')
+    self.assertEqual(vertex_entries[0].alias_for, 'claude-opus-4-8')
+
+  def test_thinking_param_true_adaptive_opus_4_8(self):
+    """Claude 4.8 + thinking=True -> adaptive thinking with summarized display."""
+    lm = anthropic.Claude48Opus(api_key='fake', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1000, temperature=0.5)
+    )
+    self.assertEqual(
+        args['thinking'], {'type': 'adaptive', 'display': 'summarized'}
+    )
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_opus48_no_thinking_removes_sampling_params(self):
+    """Opus 4.8 strips temperature/top_k/top_p even with thinking=False."""
+    lm = anthropic.Claude48Opus(api_key='fake', thinking=False)
+    args = lm._request_args(
+        lf.LMSamplingOptions(
+            max_tokens=1000, temperature=0.5, top_k=40, top_p=0.9
+        )
+    )
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_opus48_default_strips_sampling_params(self):
+    """Opus 4.8 strips temperature/top_k/top_p even without thinking."""
+    lm = anthropic.Claude48Opus(api_key='fake')
+    args = lm._request_args(
+        lf.LMSamplingOptions(
+            max_tokens=1000, temperature=0.7, top_k=40, top_p=0.9
+        )
+    )
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_opus48_effort_max(self):
+    """Test Opus 4.8 with effort='max'."""
+    lm = anthropic.Claude48Opus(api_key='fake', effort='max', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['output_config'], {'effort': 'max'})
+
+  def test_opus48_effort_medium(self):
+    """Test Opus 4.8 with effort='medium'."""
+    lm = anthropic.Claude48Opus(api_key='fake', effort='medium', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['output_config'], {'effort': 'medium'})
+
+  def test_opus48_reasoning_effort_overrides_model_effort(self):
+    """reasoning_effort in sampling options overrides model-level effort."""
+    lm = anthropic.Claude48Opus(api_key='fake', effort='high', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='low')
+    )
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  def test_opus48_no_effort(self):
+    """Test Opus 4.8 with effort=None."""
+    lm = anthropic.Claude48Opus(api_key='fake', effort=None)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024, max_thinking_tokens=1024)
+    )
+    self.assertNotIn('output_config', args)
+
+  def test_opus48_thinking_options_adaptive(self):
+    """Claude 4.8 with thinking options uses adaptive mode."""
+    lm = anthropic.Claude48Opus(api_key='fake')
+    args = lm._request_args(
+        lf.LMSamplingOptions(
+            max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+        )
+    )
+    self.assertEqual(
+        args['thinking'], {'type': 'adaptive', 'display': 'summarized'}
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_model_uri_instantiation_opus_4_8(self):
+    """Test LLM instantiation from model URI for Claude Opus 4.8."""
+    model = lf.LanguageModel.get('claude-opus-4-8?api_key=test_key')
+    self.assertIsInstance(model, anthropic.Anthropic)
+    self.assertTrue(model._use_adaptive_thinking)
+    self.assertEqual(model.effort, 'high')
+
+  def test_model_uri_instantiation_opus_4_8_with_thinking(self):
+    """Test Opus 4.8 model URI with thinking=true."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-8?api_key=test_key&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(
+        args['thinking'],
+        {'type': 'adaptive', 'display': 'summarized'},
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+
+  def test_model_uri_instantiation_opus_4_8_no_thinking(self):
+    """Test Opus 4.8 model URI with thinking=false."""
+    model = lf.LanguageModel.get(
+        'claude-opus-4-8?api_key=test_key&thinking=false'
+    )
+    self.assertFalse(model.thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+    # Opus 4.8 still strips temperature/top_k/top_p
+    self.assertNotIn('temperature', args)
+
+  def test_opus48_call_e2e(self):
+    """End-to-end call test for Claude Opus 4.8."""
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post
+      lm = anthropic.Claude48Opus(api_key='fake_key', thinking=False)
+      response = lm('hello')
+      self.assertIn('hello', response.text)
+      # Verify sampling params are stripped (temperature/top_k/top_p = None)
+      self.assertIn('temperature=None', response.text)
+      self.assertIn('top_k=None', response.text)
+      self.assertIn('top_p=None', response.text)
+
+
 class AnthropicCachingTest(unittest.TestCase):
 
   def test_helper_stamps_system_string_to_block_list(self):

@@ -112,6 +112,32 @@ SUPPORTED_MODELS = [
         ),
     ),
     AnthropicModelInfo(
+        model_id='claude-opus-4-8',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude Opus 4.8 model.',
+        release_date=datetime.datetime(2026, 8, 5),
+        knowledge_cutoff=datetime.date(2026, 7, 31),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_000_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5.0,
+            cost_per_1m_output_tokens=25.0,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-haiku-4-5-20251001',
         provider='Anthropic',
         in_service=True,
@@ -413,6 +439,33 @@ SUPPORTED_MODELS = [
         description='Claude Opus 4.7 model served on VertexAI.',
         release_date=datetime.datetime(2026, 2, 5),
         knowledge_cutoff=datetime.date(2026, 1, 31),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_000_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5.0,
+            cost_per_1m_output_tokens=25.0,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=100,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=80_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-opus-4-8@latest',
+        alias_for='claude-opus-4-8',
+        provider='VertexAI',
+        in_service=True,
+        description='Claude Opus 4.8 model served on VertexAI.',
+        release_date=datetime.datetime(2026, 8, 5),
+        knowledge_cutoff=datetime.date(2026, 7, 31),
         input_modalities=(
             AnthropicModelInfo.INPUT_IMAGE_TYPES
             + AnthropicModelInfo.INPUT_DOC_TYPES
@@ -962,7 +1015,9 @@ class Anthropic(rest.REST):
 
   @property
   def _use_adaptive_thinking(self) -> bool:
-    return self.model is not None and 'claude-opus-4-7' in self.model_id
+    return self.model is not None and (
+        'claude-opus-4-7' in self.model_id or 'claude-opus-4-8' in self.model_id
+    )
 
   def request(
       self,
@@ -1032,7 +1087,9 @@ class Anthropic(rest.REST):
         args['thinking'] = {
             'type': 'adaptive',
         }
-        if self.model is not None and 'claude-opus-4-7' in self.model:
+        if self.model is not None and (
+            'claude-opus-4-7' in self.model or 'claude-opus-4-8' in self.model
+        ):
           args['thinking']['display'] = 'summarized'
 
         effort = options.reasoning_effort or self.effort
@@ -1071,8 +1128,10 @@ class Anthropic(rest.REST):
       args.pop('top_k', None)
       args.pop('top_p', None)
 
-    # Claude Opus 4.7 does not support temperature, top_p, or top_k.
-    if self.model is not None and 'claude-opus-4-7' in self.model:
+    # Claude Opus 4.7 and 4.8 do not support temperature, top_p, or top_k.
+    if self.model is not None and (
+        'claude-opus-4-7' in self.model or 'claude-opus-4-8' in self.model
+    ):
       args.pop('temperature', None)
       args.pop('top_k', None)
       args.pop('top_p', None)
@@ -1107,6 +1166,12 @@ class Claude46(Anthropic):
 
 
 # pylint: disable=invalid-name
+class Claude48Opus(Anthropic):
+  """Claude Opus 4.8 model."""
+
+  model = 'claude-opus-4-8'
+
+
 class Claude47Opus(Anthropic):
   """Claude Opus 4.7 model."""
 
