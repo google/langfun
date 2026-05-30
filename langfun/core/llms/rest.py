@@ -14,6 +14,7 @@
 """Base class for language models through REST APIs."""
 
 import functools
+import time
 from typing import Annotated, Any, Callable
 
 import langfun.core as lf
@@ -93,13 +94,19 @@ class REST(lf.LanguageModel):
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
     try:
       with self.session() as session:
-        return self._parse_response(
-            session.post(
-                self.api_endpoint,
-                json=self.request(prompt, self.sampling_options),
-                timeout=self.timeout,
-            )
+        deadline = (
+            (time.monotonic() + self.timeout)
+            if self.timeout is not None
+            else None
         )
+        response = session.post(
+            self.api_endpoint,
+            json=self.request(prompt, self.sampling_options),
+            timeout=self._per_operation_timeout,
+            stream=True,
+        )
+        self._read_response_with_deadline(response, deadline)
+        return self._parse_response(response)
     except (
         requests.exceptions.Timeout,
         requests.exceptions.ReadTimeout,
@@ -130,7 +137,68 @@ class REST(lf.LanguageModel):
         raise lf.TemporaryLMError(error_message) from e
       if 'Connection aborted' in error_message:
         raise lf.TemporaryLMError(error_message) from e
+      if 'IncompleteRead' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
+      if 'Broken pipe' in error_message:
+        raise lf.TemporaryLMError(error_message) from e
       raise lf.LMError(error_message) from e
+
+  @property
+  def _per_operation_timeout(self):
+    """Per-operation (connect, read) timeout tuple for the requests library.
+
+    Splits self.timeout into separate connect and read timeouts:
+    - connect: bounded to 60s (no server needs more to accept a TCP connection)
+    - read: uses self.timeout (max wait for each chunk of response data)
+
+    This is the per-socket-read timeout. The total-request deadline is enforced
+    separately by _read_response_with_deadline.
+    """
+    if self.timeout is None:
+      return None
+    timeout = max(0.0, self.timeout)
+    return (min(60.0, timeout), timeout)
+
+  def _read_response_with_deadline(
+      self, response: requests.Response, deadline: float | None
+  ) -> None:
+    """Reads response body, enforcing a total-request deadline.
+
+    When stream=True, session.post() returns after HTTP headers are received.
+    This method reads the body in chunks, checking the wall-clock deadline
+    between each chunk. If the deadline is exceeded, the response is closed
+    (which immediately closes the underlying socket) and TimeoutError is raised.
+
+    After successful read, sets response._content so that response.json()
+    and response.content work normally for _parse_response().
+
+    Args:
+      response: A streaming requests.Response (from stream=True).
+      deadline: Monotonic clock deadline (from time.monotonic()), or None
+        to disable deadline enforcement.
+    """
+    # If body was already buffered (non-streaming or content pre-loaded),
+    # there is nothing to read.
+    if response._content is not False:  # pylint: disable=protected-access,g-bool-id-comparison
+      return
+    chunks = []
+    try:
+      for chunk in response.iter_content(chunk_size=65536):
+        chunks.append(chunk)
+        if deadline is not None and time.monotonic() > deadline:
+          raise TimeoutError(
+              f'Response exceeded total deadline of {self.timeout}s'
+          )
+    except BaseException:
+      # Close on any error to prevent TCP connection leaks. Protect close()
+      # with try/except to prevent close errors from masking the original.
+      try:
+        response.close()
+      except Exception:  # pylint: disable=broad-except
+        pass
+      raise
+    # Set internal cache so response.json() / response.content work normally.
+    response._content = b''.join(chunks)  # pylint: disable=protected-access
 
   # Content filtering patterns observed from various LLM providers.
   # These are best-effort substring heuristics derived from real API error
@@ -173,9 +241,12 @@ class REST(lf.LanguageModel):
     return error_cls(f'{status_code}: {content}')
 
   def _parse_response(self, response: requests.Response) -> lf.LMSamplingResult:
-    """Parses Anthropic's response."""
+    """Parses the LLM response."""
     if response.status_code == 200:
-      return self.result(response.json())
+      try:
+        return self.result(response.json())
+      except (ValueError, KeyError) as e:
+        raise lf.LMError(str(e)) from e
     else:
       raise self._error(response.status_code, response.content)
 
