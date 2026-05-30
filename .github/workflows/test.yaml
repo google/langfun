@@ -1,0 +1,34 @@
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-xdist pytest-cov
+          pip install -r requirements.txt
+      - name: Run tests
+        run: |
+          pytest -n auto -p no:threadexception --cov=langfun --cov-report=xml -vv
+        timeout-minutes: 10
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
