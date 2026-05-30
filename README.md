@@ -36,7 +36,7 @@ Langfun is *simple and elegant*:
 
 *   An intuitive programming model, graspable in 5 minutes;
 *   Plug-and-play into any Python codebase, making an immediate difference;
-*   Comprehensive LLMs under a unified API: Gemini, GPT, Claude, Llama3, and more.
+*   Comprehensive LLMs under a unified API: Gemini, GPT, Claude, MiniMax, Llama3, and more.
 *   Designed for agile developement: offering intellisense, easy debugging, with minimal overhead;
 
 ## Hello, Langfun
