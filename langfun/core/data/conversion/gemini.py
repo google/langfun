@@ -141,6 +141,11 @@ class GeminiMessageConverter(lf.MessageConverter):
         )
       elif 'functionCall' in part or 'functionResponse' in part:
         pass
+      elif 'executableCode' in part or 'codeExecutionResult' in part:
+        # Silently skip code execution parts. The model uses code execution
+        # as an internal reasoning tool; we don't surface intermediate code
+        # or execution output in the final AIMessage.
+        pass
       else:
         raise ValueError(f'Unsupported content part: {part!r}.')
     message = message_cls.from_chunks(chunks)
