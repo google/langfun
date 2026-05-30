@@ -153,3 +153,11 @@ pip install langfun[vertexai,mime,ui] --pre
 ```
 
 *Disclaimer: this is not an officially supported Google product.*
+
+## Quick Start
+
+```bash
+pip install langfun
+python -c "import langfun; print(langfun.engines())"
+```
+
