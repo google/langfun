@@ -45,9 +45,14 @@ class BaseSandbox(interface.Sandbox):
       'The image id for the sandbox.'
   ]
 
-  environment: Annotated[
-      pg.Ref[interface.Environment],
-      'The parent environment.'
+  sandbox_service: Annotated[
+      pg.Ref[interface.SandboxService],
+      'The parent sandbox service.'
+  ]
+
+  features: Annotated[
+      dict[str, interface.Feature],
+      'The features in the sandbox.'
   ]
 
   reusable: Annotated[
@@ -110,7 +115,7 @@ class BaseSandbox(interface.Sandbox):
     # the features when the sandbox is shutdown.
     self._features_with_setup_called.clear()
 
-    for feature in self._features.values():
+    for feature in self.features.values():
       self._features_with_setup_called.add(feature.name)
       feature.setup(self)
 
@@ -120,21 +125,21 @@ class BaseSandbox(interface.Sandbox):
     # teardown the session for them when the session ends.
     self._features_with_setup_session_called.clear()
 
-    for feature in self._features.values():
+    for feature in self.features.values():
       self._features_with_setup_session_called.add(feature.name)
       feature.setup_session()
 
-  def _teardown_features(self) -> interface.FeatureTeardownError | None:
+  def _teardown_features(self) -> interface.SandboxFeaturesTeardownError | None:
     """Tears down the features in the sandbox.
 
     IMPORTANT: This method shall not raise any exceptions.
 
     Returns:
-      FeatureTeardownError: If feature teardown failed with errors.
+      SandboxFeaturesTeardownError: If feature teardown failed with errors.
         Otherwise None.
     """
     errors = {}
-    for feature in self._features.values():
+    for feature in self.features.values():
       if feature.name in self._features_with_setup_called:
         try:
           feature.teardown()
@@ -143,7 +148,7 @@ class BaseSandbox(interface.Sandbox):
             self.report_state_error(e)
           errors[feature.name] = e
     if errors:
-      return interface.FeatureTeardownError(sandbox=self, errors=errors)
+      return interface.SandboxFeaturesTeardownError(sandbox=self, errors=errors)
     return None
 
   def _start_session(self) -> None:
@@ -159,7 +164,7 @@ class BaseSandbox(interface.Sandbox):
     if not self._enable_pre_session_setup:
       self._setup_session()
 
-  def _end_session(self) -> interface.SessionTeardownError | None:
+  def _end_session(self) -> interface.SandboxSessionTeardownError | None:
     """Ends a user session.
 
     IMPORTANT: This method shall not raise any exceptions.
@@ -169,7 +174,7 @@ class BaseSandbox(interface.Sandbox):
         Otherwise None.
     """
     feature_teardown_errors = {}
-    for name, feature in self._features.items():
+    for name, feature in self.features.items():
       if name in self._features_with_setup_session_called:
         try:
           feature.teardown_session()
@@ -178,7 +183,7 @@ class BaseSandbox(interface.Sandbox):
             self.report_state_error(e)
           feature_teardown_errors[name] = e
 
-    return interface.SessionTeardownError(
+    return interface.SandboxSessionTeardownError(
         sandbox=self, errors=feature_teardown_errors
     ) if feature_teardown_errors else None
 
@@ -192,12 +197,19 @@ class BaseSandbox(interface.Sandbox):
   def _on_bound(self) -> None:
     """Called when the sandbox is bound."""
     super()._on_bound()
-    self._features = pg.Dict({
-        name: pg.clone(feature)
-        for name, feature in self.environment.features.items()
-        if feature.is_applicable(self.image_id)
-    })
-    self._event_handler = self.environment.event_handler
+    self._event_handler = self.sandbox_service.event_handler
+    for feature in self.features.values():
+      if not feature.is_applicable(self.image_id):
+        raise ValueError(
+            f'Feature {feature.name!r} is not applicable to image '
+            f'{self.image_id!r}.'
+        )
+      feature.rebind(
+          root_dir=self.sandbox_service.root_dir,
+          event_handler=pg.Ref(self._event_handler),
+          skip_notification=True,
+      )
+
     self._enable_pre_session_setup = (
         self.reusable and self.proactive_session_setup
     )
@@ -205,10 +217,11 @@ class BaseSandbox(interface.Sandbox):
         self.keepalive_interval is not None
         or any(
             feature.housekeep_interval is not None
-            for feature in self._features.values()
+            for feature in self.features.values()
         )
     )
     self._housekeep_thread = None
+    self._housekeep_event = threading.Event()
     self._housekeep_counter = 0
 
     # Runtime state.
@@ -230,7 +243,7 @@ class BaseSandbox(interface.Sandbox):
   @functools.cached_property
   def working_dir(self) -> str | None:
     """Returns the working directory for the sandbox."""
-    return self.id.working_dir(self.environment.root_dir)
+    return self.id.working_dir(self.sandbox_service.root_dir)
 
   @property
   def status(self) -> interface.Sandbox.Status:
@@ -257,11 +270,6 @@ class BaseSandbox(interface.Sandbox):
     return self._status == self.Status.SHUTTING_DOWN or (
         self._state_errors and self._status == self.Status.EXITING_SESSION
     )
-
-  @property
-  def features(self) -> dict[str, interface.Feature]:
-    """Returns the features in the sandbox."""
-    return self._features
 
   #
   # Sandbox start/shutdown.
@@ -391,6 +399,8 @@ class BaseSandbox(interface.Sandbox):
     shutting_down_time = time.time()
     self._set_status(interface.Sandbox.Status.SHUTTING_DOWN)
 
+    if self._housekeep_event is not None:
+      self._housekeep_event.set()
     if (self._housekeep_thread is not None
         and threading.current_thread() is not self._housekeep_thread):
       self._housekeep_thread.join()
@@ -674,7 +684,7 @@ class BaseSandbox(interface.Sandbox):
     """Sandbox housekeeping loop."""
     now = time.time()
     last_ping = now
-    last_housekeep_time = {name: now for name in self._features.keys()}
+    last_housekeep_time = {name: now for name in self.features.keys()}
 
     def _next_housekeep_wait_time() -> float:
       # Decide how long to sleep for the next housekeeping.
@@ -682,7 +692,7 @@ class BaseSandbox(interface.Sandbox):
       if self.keepalive_interval is not None:
         next_housekeep_time = last_ping + self.keepalive_interval
 
-      for name, feature in self._features.items():
+      for name, feature in self.features.items():
         if feature.housekeep_interval is None:
           continue
         next_feature_housekeep_time = (
@@ -717,7 +727,7 @@ class BaseSandbox(interface.Sandbox):
             break
           last_ping = time.time()
 
-      for name, feature in self._features.items():
+      for name, feature in self.features.items():
         if feature.housekeep_interval is not None and (
             time.time() - last_housekeep_time[name]
             > feature.housekeep_interval
@@ -741,7 +751,7 @@ class BaseSandbox(interface.Sandbox):
 
       self._housekeep_counter += 1
       self.on_housekeep(time.time() - housekeep_start)
-      time.sleep(_next_housekeep_wait_time())
+      self._housekeep_event.wait(max(0.01, _next_housekeep_wait_time()))
 
   #
   # Event handlers subclasses can override.

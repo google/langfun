@@ -25,9 +25,9 @@ the `Environment` and `Sandbox` interfaces directly.
 import contextlib
 import functools
 import os
-import re
+import threading
 import time
-from typing import Annotated, Any, Callable, Iterator
+from typing import Any, Callable, Iterator
 
 from langfun.env import interface
 import pyglove as pg
@@ -35,24 +35,6 @@ import pyglove as pg
 
 class BaseFeature(interface.Feature):
   """Common base class for environment features."""
-
-  is_sandbox_based: Annotated[
-      bool,
-      'Whether the feature is sandbox-based.'
-  ] = True
-
-  applicable_images: Annotated[
-      list[str],
-      (
-          'A list of regular expressions for image IDs which enable '
-          'this feature. By default, all images are enabled.'
-      )
-  ] = ['.*']
-
-  housekeep_interval: Annotated[
-      float | None,
-      'Interval in seconds for feature housekeeping.'
-  ] = None
 
   #
   # Subclasses can override:
@@ -101,51 +83,69 @@ class BaseFeature(interface.Feature):
     self._sandbox = None
     self._housekeep_counter = 0
 
-  @functools.cached_property
-  def name(self) -> str:
-    """Returns the name of the feature."""
-    assert isinstance(self.sym_parent, dict), 'Feature is not put into a dict.'
-    return self.sym_path.key
+    # Fields applicable only to non-sandbox-based features.
+    self._is_online = False
+    self._housekeep_thread = None
+    self._housekeep_event = threading.Event()
+    self._offline_start_time = None
 
   def _on_parent_change(
-      self,
-      old_parent: pg.Symbolic | None,
-      new_parent: pg.Symbolic | None
+      self, old_parent: pg.Symbolic | None, new_parent: pg.Symbolic | None
   ) -> None:
     """Called when the feature is bound."""
     super()._on_parent_change(old_parent, new_parent)
     self.__dict__.pop('name', None)
+    self.__dict__.pop('environment', None)
 
   @functools.cached_property
-  def environment(self) -> interface.Environment:
+  def environment(self) -> interface.AbstractEnvironment | None:
     """Returns the environment that the feature is running in."""
     if self._sandbox is not None:
       return self._sandbox.environment
-    env = self.sym_ancestor(lambda v: isinstance(v, interface.Environment))
-    assert env is not None, 'Feature is not put into an environment.'
+    env = self.sym_ancestor(
+        lambda v: isinstance(v, interface.AbstractEnvironment)
+    )
     return env
 
   @property
   def sandbox(self) -> interface.Sandbox | None:
     """Returns the sandbox that the feature is running in."""
-    assert self._sandbox is not None or not self.is_sandbox_based, (
-        'Feature has not been set up yet.'
-    )
+    assert (
+        self._sandbox is not None or not self.is_sandbox_based
+    ), 'Feature has not been set up yet.'
     return self._sandbox
+
+  @property
+  def event_handler(self) -> interface.EventHandler:
+    if hasattr(self, '_event_handler_ref'):
+      return self._event_handler_ref
+    return super().event_handler
+
+  @property
+  def is_online(self) -> bool:
+    """Returns True if the feature is online."""
+    if self.is_sandbox_based:
+      return self.sandbox.is_online
+    return self._is_online
+
+  @property
+  def offline_duration(self) -> float:
+    """Returns the offline duration of the feature."""
+    if self._offline_start_time is None:
+      return 0.0
+    return time.time() - self._offline_start_time
 
   @property
   def working_dir(self) -> str | None:
     """Returns the working directory of the feature."""
-    sandbox_workdir = self.sandbox.working_dir
-    if sandbox_workdir is None:
+    if self.is_sandbox_based:
+      sandbox_workdir = self.sandbox.working_dir
+      if sandbox_workdir is None:
+        return None
+      return os.path.join(sandbox_workdir, self.name)
+    if self.environment is None or self.environment.working_dir is None:
       return None
-    return os.path.join(sandbox_workdir, self.name)
-
-  def is_applicable(self, image_id: str) -> bool:
-    """Returns True if the feature is applicable to the given image."""
-    return any(
-        re.fullmatch(regex, image_id) for regex in self.applicable_images
-    )
+    return os.path.join(self.environment.working_dir, self.name)
 
   #
   # Setup and teardown of the feature.
@@ -169,12 +169,42 @@ class BaseFeature(interface.Feature):
 
   def setup(self, sandbox: interface.Sandbox | None = None) -> None:
     """Sets up the feature."""
+
+    def _setup():
+      try:
+        self._setup()
+        self._is_online = True
+        if not self.is_sandbox_based and self.housekeep_interval is not None:
+          self._housekeep_thread = threading.Thread(
+              target=self._housekeep_loop, daemon=True
+          )
+          self._housekeep_thread.start()
+      except BaseException as e:  # pylint: disable=broad-except
+        if isinstance(
+            e, (interface.EnvironmentError, interface.SandboxStateError)
+        ):
+          raise
+        raise interface.FeatureSetupError(feature=self) from e
+
     self._sandbox = sandbox
-    self._do(self._setup, self.on_setup)
+    self._do(_setup, self.on_setup)
 
   def teardown(self) -> None:
     """Tears down the feature."""
-    self._do(self._teardown, event_handler=self.on_teardown)
+
+    def _teardown():
+      self._is_online = False
+      if self._housekeep_event is not None:
+        self._housekeep_event.set()
+      if self._housekeep_thread is not None:
+        self._housekeep_thread.join()
+        self._housekeep_thread = None
+      try:
+        self._teardown()
+      except BaseException as e:  # pylint: disable=broad-except
+        raise interface.FeatureTeardownError(feature=self) from e
+
+    self._do(_teardown, event_handler=self.on_teardown)
 
   def setup_session(self) -> None:
     """Sets up the feature for a user session."""
@@ -185,7 +215,7 @@ class BaseFeature(interface.Feature):
     self._do(self._teardown_session, self.on_teardown_session)
 
   #
-  # Housekeeping.
+  # Housekeeping operation and loop.
   #
 
   def housekeep(self) -> None:
@@ -195,47 +225,51 @@ class BaseFeature(interface.Feature):
     finally:
       self._housekeep_counter += 1
 
+  def _housekeep_loop(self) -> None:
+    """Housekeeping loop for the feature."""
+    assert not self.is_sandbox_based and self.housekeep_interval
+    while self._is_online:
+      try:
+        self.housekeep()
+        self._offline_start_time = None
+      except BaseException:  # pylint: disable=broad-except
+        if self._offline_start_time is None:
+          self._offline_start_time = time.time()
+        if time.time() - self._offline_start_time > self.outage_grace_period:
+          self._is_online = False
+          break
+      self._housekeep_event.wait(self.housekeep_interval)
+
   #
   # Event handlers subclasses can override.
   #
 
   def on_setup(
-      self,
-      duration: float,
-      error: BaseException | None = None
+      self, duration: float, error: BaseException | None = None
   ) -> None:
     """Called when the feature is setup."""
-    self.environment.event_handler.on_feature_setup(
-        feature=self,
-        duration=duration,
-        error=error
+    self.event_handler.on_feature_setup(
+        feature=self, duration=duration, error=error
     )
 
   def on_teardown(
-      self,
-      duration: float,
-      error: BaseException | None = None
+      self, duration: float, error: BaseException | None = None
   ) -> None:
     """Called when the feature is teardown."""
-    self.environment.event_handler.on_feature_teardown(
-        feature=self,
-        duration=duration,
-        error=error
+    self.event_handler.on_feature_teardown(
+        feature=self, duration=duration, error=error
     )
 
   def on_housekeep(
-      self,
-      duration: float,
-      error: BaseException | None = None,
-      **kwargs
+      self, duration: float, error: BaseException | None = None, **kwargs
   ) -> None:
     """Called when the feature has done housekeeping."""
-    self.environment.event_handler.on_feature_housekeep(
+    self.event_handler.on_feature_housekeep(
         feature=self,
         counter=self._housekeep_counter,
         duration=duration,
         error=error,
-        **kwargs
+        **kwargs,
     )
 
   def on_setup_session(
@@ -244,11 +278,8 @@ class BaseFeature(interface.Feature):
       error: BaseException | None = None,
   ) -> None:
     """Called when the feature is setup for a user session."""
-    self.environment.event_handler.on_feature_setup_session(
-        feature=self,
-        session_id=self.session_id,
-        duration=duration,
-        error=error
+    self.event_handler.on_feature_setup_session(
+        feature=self, session_id=self.session_id, duration=duration, error=error
     )
 
   def on_teardown_session(
@@ -257,11 +288,8 @@ class BaseFeature(interface.Feature):
       error: BaseException | None = None,
   ) -> None:
     """Called when the feature is teardown for a user session."""
-    self.environment.event_handler.on_feature_teardown_session(
-        feature=self,
-        session_id=self.session_id,
-        duration=duration,
-        error=error
+    self.event_handler.on_feature_teardown_session(
+        feature=self, session_id=self.session_id, duration=duration, error=error
     )
 
   def on_activity(
@@ -269,24 +297,20 @@ class BaseFeature(interface.Feature):
       name: str,
       duration: float,
       error: BaseException | None = None,
-      **kwargs
+      **kwargs,
   ) -> None:
     """Called when a sandbox activity is performed."""
-    self.environment.event_handler.on_feature_activity(
+    self.event_handler.on_feature_activity(
         name=f'{self.name}.{name}',
         feature=self,
         session_id=self.session_id,
         duration=duration,
         error=error,
-        **kwargs
+        **kwargs,
     )
 
   @contextlib.contextmanager
-  def track_activity(
-      self,
-      name: str,
-      **kwargs: Any
-  ) -> Iterator[None]:
+  def track_activity(self, name: str, **kwargs: Any) -> Iterator[None]:
     """Context manager that tracks a feature activity."""
     start_time = time.time()
     error = None
@@ -297,8 +321,5 @@ class BaseFeature(interface.Feature):
       raise
     finally:
       self.on_activity(
-          name=name,
-          duration=time.time() - start_time,
-          error=error,
-          **kwargs
+          name=name, duration=time.time() - start_time, error=error, **kwargs
       )

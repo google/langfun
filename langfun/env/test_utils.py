@@ -14,35 +14,41 @@
 """Test utils for base environment."""
 
 import contextlib
+import re
+import threading
 import time
-from typing import Iterator, Type
+from typing import Any, Iterator, Type
 
-from langfun.env import base_environment
 from langfun.env import base_feature
 from langfun.env import base_sandbox
+from langfun.env import base_sandbox_service
 from langfun.env import interface
 import pyglove as pg
 
 
-class TestingEnvironment(base_environment.BaseEnvironment):
-  """Testing environment for unit tests."""
+class TestingSandboxService(base_sandbox_service.PooledSandboxService):
+  """Testing sandbox service for unit tests."""
   image_ids: list[str] = ['test_image']
-  housekeep_interval: float = 0.0
+  housekeep_interval: float = 3600.0
   simulate_start_error: Type[BaseException] | None = None
   simulate_shutdown_error: Type[BaseException] | None = None
   simulate_ping_error: Type[BaseException] | None = None
   offline: bool = False
-
   __test__ = False
 
-  @property
-  def id(self) -> interface.Environment.Id:
-    return interface.Environment.Id('testing-env')
+  def _on_bound(self) -> None:
+    super()._on_bound()
+    self._housekeep_done_event = threading.Event()
+
+  def _housekeep_cycle(self) -> tuple[bool, dict[str, Any]]:
+    try:
+      return super()._housekeep_cycle()
+    finally:
+      self._housekeep_done_event.set()
 
   def wait_for_housekeeping(self):
-    housekeep_counter = self.housekeep_counter
-    while self.housekeep_counter == housekeep_counter:
-      time.sleep(0.01)
+    self._housekeep_done_event.wait(timeout=5.0)
+    self._housekeep_done_event.clear()
 
   def _create_sandbox(
       self,
@@ -53,13 +59,17 @@ class TestingEnvironment(base_environment.BaseEnvironment):
       keepalive_interval: float | None,
   ) -> base_sandbox.BaseSandbox:
     return TestingSandbox(
-        environment=self,
+        sandbox_service=pg.Ref(self),
         id=interface.Sandbox.Id(
-            environment_id=self.id,
+            service_id=self.id,
             image_id=image_id,
             sandbox_id=sandbox_id
         ),
         image_id=image_id,
+        features={
+            k: v.clone() for k, v in self.features.items()
+            if v.is_applicable(image_id)
+        },
         reusable=reusable,
         proactive_session_setup=proactive_session_setup,
         keepalive_interval=keepalive_interval,
@@ -136,7 +146,7 @@ class TestingSandbox(base_sandbox.BaseSandbox):
 class TestingFeature(base_feature.BaseFeature):
   """Testing feature for unit tests."""
 
-  housekeep_interval = 0
+  housekeep_interval = None
   setup_session_delay: float = 0.0
   simulate_housekeep_error: Type[BaseException] | None = None
   simulate_setup_error: Type[BaseException] | None = None
@@ -255,14 +265,25 @@ class TestingNonSandboxBasedFeature(base_feature.BaseFeature):
           'Feature session teardown error'
       )
 
+  def _on_bound(self) -> None:
+    super()._on_bound()
+    self._housekeep_done_event = threading.Event()
+
   def _housekeep(self) -> None:
-    if self.simulate_housekeep_error:
-      raise self.simulate_housekeep_error('Feature housekeeping error')
-    _ = self.foo(1)
+    try:
+      if self.simulate_housekeep_error:
+        raise self.simulate_housekeep_error('Feature housekeeping error')
+      _ = self.foo(1)
+    finally:
+      self._housekeep_done_event.set()
 
   @interface.log_activity()
   def foo(self, x: int) -> int:
     return x + 1
+
+  def wait_for_housekeeping(self):
+    self._housekeep_done_event.wait(timeout=5.0)
+    self._housekeep_done_event.clear()
 
 
 class TestingEventHandler(pg.Object, interface.EventHandler):
@@ -272,6 +293,9 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
   log_feature_setup: bool = True
   log_session_setup: bool = False
   log_housekeep: bool = False
+  strip_service_name: bool = False
+  filter_service_lifecycle_logs: bool = False
+  log_environment_lifecycle: bool = False
 
   __test__ = False
 
@@ -285,14 +309,30 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
 
   def _add_message(self, message: str, error: BaseException | None) -> None:
     """Adds a message to the history."""
+    if self.filter_service_lifecycle_logs and re.search(
+        r'\[[^/]+/[^\]]+\] sandbox service '
+        r'(starting|started|shutting down|shutdown)',
+        message,
+    ):
+      return
+    if self.strip_service_name:
+      message = re.sub(r'\[([^/]+)/[^/]+/(.*)\]', r'[\1/\2]', message)
+
     if error is None:
       self._logs.append(message)
     else:
       self._logs.append(f'{message} with {error.__class__.__name__}')
 
+  def on_environment_starting(
+      self,
+      environment: interface.AbstractEnvironment,
+  ) -> None:
+    if self.log_environment_lifecycle:
+      self._add_message(f'[{environment.id}] environment starting', None)
+
   def on_environment_start(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       duration: float,
       error: BaseException | None
   ) -> None:
@@ -300,24 +340,16 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
     assert duration > 0
     self._add_message(f'[{environment.id}] environment started', error)
 
-  def on_environment_housekeep(
+  def on_environment_shutting_down(
       self,
-      environment: interface.Environment,
-      counter: int,
-      duration: float,
-      error: BaseException | None,
-      **kwargs
+      environment: interface.AbstractEnvironment,
   ) -> None:
-    """Called when the environment finishes a round of housekeeping."""
-    assert duration > 0
-    if self.log_housekeep:
-      self._add_message(
-          f'[{environment.id}] environment housekeeping {counter}', error
-      )
+    if self.log_environment_lifecycle:
+      self._add_message(f'[{environment.id}] environment shutting down', None)
 
   def on_environment_shutdown(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       duration: float,
       lifetime: float,
       error: BaseException | None
@@ -325,6 +357,72 @@ class TestingEventHandler(pg.Object, interface.EventHandler):
     """Called when the environment is shutdown."""
     assert duration > 0 and lifetime is not None
     self._add_message(f'[{environment.id}] environment shutdown', error)
+
+  def on_environment_housekeep(
+      self,
+      environment: interface.AbstractEnvironment,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    if self.log_housekeep:
+      self._add_message(
+          f'[{environment.id}] environment housekeeping {counter}', error
+      )
+
+  def on_sandbox_service_starting(
+      self,
+      sandbox_service: interface.SandboxService,
+  ) -> None:
+    """Called when a sandbox service is getting started."""
+    self._add_message(f'[{sandbox_service.id}] sandbox service starting', None)
+
+  def on_sandbox_service_start(
+      self,
+      sandbox_service: interface.SandboxService,
+      duration: float,
+      error: BaseException | None
+  ) -> None:
+    """Called when a sandbox service is started."""
+    self._add_message(f'[{sandbox_service.id}] sandbox service started', error)
+
+  def on_sandbox_service_shutting_down(
+      self,
+      sandbox_service: interface.SandboxService,
+      offline_duration: float,
+  ) -> None:
+    """Called when a sandbox service is shutting down."""
+    self._add_message(
+        f'[{sandbox_service.id}] sandbox service shutting down', None
+    )
+
+  def on_sandbox_service_shutdown(
+      self,
+      sandbox_service: interface.SandboxService,
+      duration: float,
+      lifetime: float,
+      error: BaseException | None,
+  ) -> None:
+    """Called when a sandbox service is shutdown."""
+    self._add_message(
+        f'[{sandbox_service.id}] sandbox service shutdown', error
+    )
+
+  def on_sandbox_service_housekeep(
+      self,
+      sandbox_service: interface.SandboxService,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs
+  ) -> None:
+    """Called when a sandbox service finishes a round of housekeeping."""
+    if self.log_housekeep:
+      self._add_message(
+          f'[{sandbox_service.id}] sandbox service housekeeping {counter}',
+          error
+      )
 
   def on_sandbox_start(
       self,

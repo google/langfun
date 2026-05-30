@@ -35,13 +35,20 @@ class TestingSandbox(interface.Sandbox):
   @property
   def id(self) -> interface.Sandbox.Id:
     return interface.Sandbox.Id(
-        environment_id=interface.Environment.Id('testing-env'),
+        service_id=interface.SandboxService.Id(
+            interface.AbstractEnvironment.Id('testing-env'),
+            'ss'
+        ),
         image_id=self.image_id,
         sandbox_id=self.sandbox_id
     )
 
   @property
-  def environment(self) -> interface.Environment:
+  def sandbox_service(self) -> interface.SandboxService:
+    raise NotImplementedError()
+
+  @property
+  def environment(self) -> interface.AbstractEnvironment:
     raise NotImplementedError()
 
   @property
