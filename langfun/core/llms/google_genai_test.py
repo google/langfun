@@ -50,5 +50,33 @@ class GenAITest(unittest.TestCase):
         google_genai.GenAI,
     )
 
+  def test_gemini_31_pro_preview_tools_enabled_via_extras(self):
+    # Subclass smoke test: Gemini31ProPreview must inherit the AUTO-on-tools
+    # behavior from Gemini.request().
+    os.environ['GOOGLE_API_KEY'] = 'abc'
+    try:
+      lm = google_genai.Gemini31ProPreview()
+      tools = [{'functionDeclarations': [{'name': 'fn', 'description': 'd'}]}]
+      request = lm.request(
+          lf.UserMessage('hi'),
+          lf.LMSamplingOptions(extras={'tools': tools}),
+      )
+      self.assertEqual(request.get('tools'), tools)
+      self.assertEqual(
+          request.get('toolConfig'),
+          {'functionCallingConfig': {'mode': 'AUTO'}},
+      )
+      # And verify backward-compat: no tools => NONE.
+      request_no_tools = lm.request(
+          lf.UserMessage('hi'),
+          lf.LMSamplingOptions(),
+      )
+      self.assertEqual(
+          request_no_tools.get('toolConfig'),
+          {'functionCallingConfig': {'mode': 'NONE'}},
+      )
+    finally:
+      del os.environ['GOOGLE_API_KEY']
+
 if __name__ == '__main__':
   unittest.main()

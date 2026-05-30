@@ -145,6 +145,34 @@ class VertexAITest(unittest.TestCase):
         )
         model('hi')
 
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_31_pro_preview_tools_enabled_via_extras(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    try:
+      lm = vertexai.VertexAIGemini31ProPreview()
+      tools = [{'functionDeclarations': [{'name': 'fn', 'description': 'd'}]}]
+      request = lm.request(
+          lf.UserMessage('hi'),
+          lf.LMSamplingOptions(extras={'tools': tools}),
+      )
+      self.assertEqual(request.get('tools'), tools)
+      self.assertEqual(
+          request.get('toolConfig'),
+          {'functionCallingConfig': {'mode': 'AUTO'}},
+      )
+      request_no_tools = lm.request(
+          lf.UserMessage('hi'),
+          lf.LMSamplingOptions(),
+      )
+      self.assertEqual(
+          request_no_tools.get('toolConfig'),
+          {'functionCallingConfig': {'mode': 'NONE'}},
+      )
+    finally:
+      del os.environ['VERTEXAI_PROJECT']
+      del os.environ['VERTEXAI_LOCATION']
+
 
 class VertexAIAnthropicTest(unittest.TestCase):
   """Tests for VertexAI Anthropic models."""
