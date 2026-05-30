@@ -47,3 +47,6 @@ from langfun.core.structured.schema.python import structure_from_python
 from langfun.core.structured.schema.python import class_definition
 from langfun.core.structured.schema.python import class_definitions
 from langfun.core.structured.schema.python import include_method_in_prompt
+
+# Markdown protocol.
+from langfun.core.structured.schema.markdown import MarkdownPromptingProtocol
