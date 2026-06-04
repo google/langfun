@@ -14,9 +14,11 @@
 
 import contextlib
 import io
+import re
 from typing import Iterator
 import unittest
 
+from langfun.env import environment
 from langfun.env import interface
 from langfun.env import test_utils
 from langfun.env.event_handlers import event_logger as event_logger_lib
@@ -51,6 +53,7 @@ class EventLoggerTest(unittest.TestCase):
       feature_status: bool = True,
       housekeep_status: bool = True,
       stats_report_interval: float = 1.0,
+      strip_service_lifecycle: bool = True,
   ):
     event_logger = self.LOGGER_CLS(
         error_only=error_only,
@@ -61,17 +64,26 @@ class EventLoggerTest(unittest.TestCase):
         housekeep_status=housekeep_status,
         stats_report_interval=stats_report_interval,
     )
-    env = test_utils.TestingEnvironment(
-        features={
-            'test_feature1': test_utils.TestingFeature(housekeep_interval=0),
-            'test_feature2': test_utils.TestingFeature(housekeep_interval=None),
-        },
-        pool_size=2,
-        outage_grace_period=0,
-        outage_retry_interval=0,
-        housekeep_interval=1.0,
-        sandbox_keepalive_interval=1.0,
+    env = environment.Environment(
+        id='testing-env',
         event_handler=event_logger,
+        sandboxes={
+            'ss': test_utils.TestingSandboxService(
+                features={
+                    'test_feature1': test_utils.TestingFeature(
+                        housekeep_interval=0
+                    ),
+                    'test_feature2': test_utils.TestingFeature(
+                        housekeep_interval=None
+                    ),
+                },
+                pool_size=2,
+                outage_grace_period=0,
+                outage_retry_interval=0,
+                housekeep_interval=1.0,
+                sandbox_keepalive_interval=1.0,
+            )
+        },
     )
     with self._capture_logs(test_name) as stream:
       with env:
@@ -83,6 +95,21 @@ class EventLoggerTest(unittest.TestCase):
             sb.shell('echo "bar"', raise_error=RuntimeError)
 
     stdout = stream.getvalue()
+    # Compatibility strip of service name for old test assertions
+    stdout = re.sub(r'\[([^/]+)/ss/(.*)\]', r'[\1/\2]', stdout)
+    # Compatibility ignore of service lifecycle logs for old test assertions
+    if strip_service_lifecycle:
+      stdout = '\n'.join([
+          line
+          for line in stdout.split('\n')
+          if not re.search(
+              (
+                  r'\[[^/]+/ss\] sandbox service '
+                  r'(starting|started|shutting down|shutdown)'
+              ),
+              line,
+          )
+      ])
     for substring in expected_substrings:
       self.assertIn(substring, stdout)
     for substring in unexpected_substrings:
@@ -95,7 +122,6 @@ class EventLoggerTest(unittest.TestCase):
             'environment starting',
             'environment started',
             'environment shutdown',
-            'environment housekeeping',
             'environment stats',
             'sandbox started',
             '-> acquired',
@@ -106,7 +132,7 @@ class EventLoggerTest(unittest.TestCase):
             '/test_feature1] feature housekeeping',
             'sandbox session started',
             'sandbox session ended',
-            'sandbox call \'shell\'',
+            "sandbox call 'shell'",
             'RuntimeError',
         ],
         unexpected_substrings=[
@@ -119,7 +145,7 @@ class EventLoggerTest(unittest.TestCase):
         test_name='test_error_only',
         expected_substrings=[
             'session ended',
-            'call \'shell\'',
+            "call 'shell'",
             'RuntimeError',
         ],
         unexpected_substrings=[
@@ -146,7 +172,6 @@ class EventLoggerTest(unittest.TestCase):
             'environment started',
             'environment shutting down',
             'environment shutdown',
-            'environment housekeeping',
         ],
         unexpected_substrings=[
             'sandbox started',
@@ -156,7 +181,7 @@ class EventLoggerTest(unittest.TestCase):
             'feature teardown complete',
             'sandbox session started',
             'sandbox session ended',
-            'sandbox call \'shell\'',
+            "sandbox call 'shell'",
             'RuntimeError',
         ],
         regex='.*environment.*',
@@ -170,13 +195,12 @@ class EventLoggerTest(unittest.TestCase):
             'environment started',
             'environment shutting down',
             'environment shutdown',
-            'environment housekeeping',
             'feature setup complete',
             'feature teardown complete',
             'feature housekeeping',
             'sandbox session started',
             'sandbox session ended',
-            'sandbox call \'shell\'',
+            "sandbox call 'shell'",
             'RuntimeError',
         ],
         unexpected_substrings=[
@@ -196,7 +220,6 @@ class EventLoggerTest(unittest.TestCase):
             'environment started',
             'environment shutting down',
             'environment shutdown',
-            'environment housekeeping',
             'environment stats',
             'sandbox started',
             '-> acquired',
@@ -204,7 +227,7 @@ class EventLoggerTest(unittest.TestCase):
             'sandbox housekeeping',
             'sandbox session started',
             'sandbox session ended',
-            'sandbox call \'shell\'',
+            "sandbox call 'shell'",
             'RuntimeError',
         ],
         unexpected_substrings=[
@@ -224,7 +247,6 @@ class EventLoggerTest(unittest.TestCase):
             'environment shutting down',
             'environment shutdown',
             'environment stats',
-            'environment housekeeping',
             'sandbox started',
             '-> acquired',
             'sandbox shutdown',
@@ -232,7 +254,7 @@ class EventLoggerTest(unittest.TestCase):
             'feature setup complete',
             'feature teardown complete',
             'feature housekeeping',
-            'sandbox call \'shell\'',
+            "sandbox call 'shell'",
             'RuntimeError',
         ],
         unexpected_substrings=[
@@ -258,7 +280,7 @@ class EventLoggerTest(unittest.TestCase):
             'feature teardown complete',
             'sandbox session started',
             'sandbox session ended',
-            'sandbox call \'shell\'',
+            "sandbox call 'shell'",
             'RuntimeError',
         ],
         unexpected_substrings=[
@@ -277,13 +299,42 @@ class EventLoggerTest(unittest.TestCase):
             'environment started',
             'environment shutting down',
             'environment shutdown',
-            'environment housekeeping',
         ],
         unexpected_substrings=[
             'environment stats',
         ],
         stats_report_interval=None,
     )
+
+  def test_sandbox_service_lifecycle(self):
+    return self._test_logger(
+        test_name='test_sandbox_service_lifecycle',
+        expected_substrings=[
+            'sandbox service starting',
+            'sandbox service started',
+            'sandbox service shutting down',
+            'sandbox service shutdown',
+        ],
+        unexpected_substrings=[],
+        strip_service_lifecycle=False,
+    )
+
+  def test_environment_housekeeping(self):
+    event_logger = self.LOGGER_CLS(
+        housekeep_status=True,
+        stats_report_interval=1.0,
+    )
+    env = environment.Environment(
+        id='testing-env',
+        event_handler=event_logger,
+    )
+    with self._capture_logs('test_environment_housekeeping') as stream:
+      with env:
+        env.on_housekeep(duration=0.5)
+
+    stdout = stream.getvalue()
+    self.assertIn('environment housekeeping complete', stdout)
+    self.assertIn('environment stats', stdout)
 
 
 class ConsoleEventLoggerTest(EventLoggerTest):

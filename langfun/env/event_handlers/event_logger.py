@@ -23,62 +23,38 @@ import pyglove as pg
 class EventLogger(pg.Object, interface.EventHandler):
   """Event handler for logging debugger."""
 
-  colored: Annotated[
-      bool,
-      (
-          'If True, log events with colors.'
-      )
-  ] = False
+  colored: Annotated[bool, 'If True, log events with colors.'] = False
 
   regex: Annotated[
       str | list[str] | None,
       (
           'One or a list of regular expressions to filter event messages. '
           'If None, no filtering will be applied.'
-      )
+      ),
   ] = None
 
-  error_only: Annotated[
-      bool,
-      (
-          'If True, log events with errors only.'
-      )
-  ] = False
+  error_only: Annotated[bool, 'If True, log events with errors only.'] = False
 
   sandbox_status: Annotated[
-      bool,
-      (
-          'If True, log events for sandbox status changes.'
-      )
+      bool, 'If True, log events for sandbox status changes.'
   ] = True
 
   feature_status: Annotated[
-      bool,
-      (
-          'If True, log events for feature setup/teardown updates.'
-      )
+      bool, 'If True, log events for feature setup/teardown updates.'
   ] = True
 
   session_status: Annotated[
-      bool,
-      (
-          'If True, log events for session start/end status update.'
-      )
+      bool, 'If True, log events for session start/end status update.'
   ] = True
 
-  housekeep_status: Annotated[
-      bool,
-      (
-          'If True, log housekeeping events.'
-      )
-  ] = True
+  housekeep_status: Annotated[bool, 'If True, log housekeeping events.'] = True
 
   stats_report_interval: Annotated[
       float | None,
       (
           'The minimum interval in seconds for reporting the environment '
           'stats. If None, stats will not be reported.'
-      )
+      ),
   ] = 300.0
 
   def _on_bound(self) -> None:
@@ -125,7 +101,7 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_environment_starting(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
   ) -> None:
     """Called when the environment is starting."""
     self._print(
@@ -137,13 +113,11 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_environment_shutting_down(
       self,
-      environment: interface.Environment,
-      offline_duration: float,
+      environment: interface.AbstractEnvironment,
   ) -> None:
     """Called when the environment is shutting down."""
     self._print(
-        f'[{environment.id}] environment shutting down '
-        f'(offline_duration={offline_duration:.2f} seconds)',
+        f'[{environment.id}] environment shutting down',
         error=None,
         color='green',
         styles=['bold'],
@@ -151,9 +125,9 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_environment_start(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when the environment is started."""
     self._print(
@@ -166,11 +140,11 @@ class EventLogger(pg.Object, interface.EventHandler):
 
   def on_environment_housekeep(
       self,
-      environment: interface.Environment,
+      environment: interface.AbstractEnvironment,
       counter: int,
       duration: float,
       error: BaseException | None,
-      **kwargs
+      **kwargs,
   ) -> None:
     """Called when the environment is housekeeping."""
     if self.housekeep_status:
@@ -181,10 +155,11 @@ class EventLogger(pg.Object, interface.EventHandler):
           error=error,
           color='green',
       )
-    if (self.stats_report_interval is not None and
-        (self._last_stats_report_time is None
-         or time.time() - self._last_stats_report_time
-         > self.stats_report_interval)):
+    if self.stats_report_interval is not None and (
+        self._last_stats_report_time is None
+        or time.time() - self._last_stats_report_time
+        > self.stats_report_interval
+    ):
       self._write_log(
           f'[{environment.id}] environment stats: {environment.stats()}',
           color='magenta',
@@ -192,12 +167,102 @@ class EventLogger(pg.Object, interface.EventHandler):
       )
       self._last_stats_report_time = time.time()
 
-  def on_environment_shutdown(
+  def on_sandbox_service_starting(
       self,
-      environment: interface.Environment,
+      sandbox_service: interface.SandboxService,
+  ) -> None:
+    """Called when a sandbox service is starting."""
+    self._print(
+        f'[{sandbox_service.id}] sandbox service starting',
+        error=None,
+        color='green',
+        styles=['bold'],
+    )
+
+  def on_sandbox_service_start(
+      self,
+      sandbox_service: interface.SandboxService,
+      duration: float,
+      error: BaseException | None,
+  ) -> None:
+    """Called when a sandbox service is started."""
+    self._print(
+        f'[{sandbox_service.id}] sandbox service started '
+        f'(duration={duration:.2f} seconds)',
+        error=error,
+        color='green',
+        styles=['bold'],
+    )
+
+  def on_sandbox_service_housekeep(
+      self,
+      service: interface.SandboxService,
+      counter: int,
+      duration: float,
+      error: BaseException | None,
+      **kwargs,
+  ) -> None:
+    """Called when a sandbox service finishes housekeeping."""
+
+    if self.housekeep_status:
+      self._print(
+          f'[{service.id}] sandbox service housekeeping complete '
+          f'(counter={counter}, duration={duration:.2f} seconds, '
+          f'housekeep_info={kwargs})',
+          error=error,
+          color='green',
+      )
+    if self.stats_report_interval is not None and (
+        self._last_stats_report_time is None
+        or time.time() - self._last_stats_report_time
+        > self.stats_report_interval
+    ):
+      if service.environment is not None:
+        env_id = service.environment.id
+        stats = service.environment.stats()
+        self._write_log(
+            f'[{env_id}] environment stats: {stats}',
+            color='magenta',
+            error=None,
+        )
+        self._last_stats_report_time = time.time()
+
+  def on_sandbox_service_shutting_down(
+      self,
+      sandbox_service: interface.SandboxService,
+      offline_duration: float,
+  ) -> None:
+    """Called when a sandbox service is shutting down."""
+    self._print(
+        f'[{sandbox_service.id}] sandbox service shutting down '
+        f'(offline_duration={offline_duration:.2f} seconds)',
+        error=None,
+        color='green',
+        styles=['bold'],
+    )
+
+  def on_sandbox_service_shutdown(
+      self,
+      sandbox_service: interface.SandboxService,
       duration: float,
       lifetime: float,
-      error: BaseException | None
+      error: BaseException | None,
+  ) -> None:
+    """Called when a sandbox service is shutdown."""
+    self._print(
+        f'[{sandbox_service.id}] sandbox service shutdown '
+        f'(duration={duration:.2f} seconds, lifetime={lifetime:.2f} seconds)',
+        error=error,
+        color='green',
+        styles=['bold'],
+    )
+
+  def on_environment_shutdown(
+      self,
+      environment: interface.AbstractEnvironment,
+      duration: float,
+      lifetime: float,
+      error: BaseException | None,
   ) -> None:
     """Called when the environment is shutdown."""
     self._print(
@@ -212,12 +277,11 @@ class EventLogger(pg.Object, interface.EventHandler):
       self,
       sandbox: interface.Sandbox,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     if self.sandbox_status:
       self._print(
-          f'[{sandbox.id}] sandbox started '
-          f'(duration={duration:.2f} seconds)',
+          f'[{sandbox.id}] sandbox started (duration={duration:.2f} seconds)',
           error=error,
           color='white',
           styles=['bold'],
@@ -228,7 +292,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       sandbox: interface.Sandbox,
       old_status: interface.Sandbox.Status,
       new_status: interface.Sandbox.Status,
-      span: float
+      span: float,
   ) -> None:
     if self.sandbox_status:
       self._print(
@@ -243,7 +307,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       sandbox: interface.Sandbox,
       duration: float,
       lifetime: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     if self.sandbox_status:
       self._print(
@@ -260,7 +324,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       sandbox: interface.Sandbox,
       session_id: str,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when a sandbox session starts."""
     if self.session_status:
@@ -277,7 +341,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       session_id: str,
       duration: float,
       lifetime: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when a sandbox session ends."""
     if self.session_status:
@@ -296,7 +360,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       session_id: str | None,
       duration: float,
       error: BaseException | None,
-      **kwargs
+      **kwargs,
   ) -> None:
     """Called when a sandbox activity is performed."""
     log_id = f'{sandbox.id}@{session_id or "<idle>"}'
@@ -305,7 +369,7 @@ class EventLogger(pg.Object, interface.EventHandler):
         f'[{log_id}] sandbox call {name!r} '
         f'(duration={duration:.2f} seconds, kwargs={kwargs}) ',
         error,
-        color=color
+        color=color,
     )
 
   def on_sandbox_housekeep(
@@ -314,7 +378,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       counter: int,
       duration: float,
       error: BaseException | None,
-      **kwargs
+      **kwargs,
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
     if self.sandbox_status and self.housekeep_status:
@@ -330,7 +394,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       self,
       feature: interface.Feature,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when a sandbox feature is setup."""
     if self.feature_status:
@@ -345,7 +409,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       self,
       feature: interface.Feature,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when a sandbox feature is teardown."""
     if self.feature_status:
@@ -361,7 +425,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       feature: interface.Feature,
       session_id: str | None,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when a sandbox feature is setup."""
     if self.feature_status:
@@ -377,7 +441,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       feature: interface.Feature,
       session_id: str,
       duration: float,
-      error: BaseException | None
+      error: BaseException | None,
   ) -> None:
     """Called when a sandbox feature is teardown."""
     if self.feature_status:
@@ -395,7 +459,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       session_id: str | None,
       duration: float,
       error: BaseException | None,
-      **kwargs
+      **kwargs,
   ) -> None:
     """Called when a feature activity is performed."""
     log_id = f'{feature.id}@{session_id or "<idle>"}'
@@ -404,7 +468,7 @@ class EventLogger(pg.Object, interface.EventHandler):
         f'[{log_id}] feature call {name!r} '
         f'(duration={duration:.2f} seconds, kwargs={kwargs}) ',
         error,
-        color=color
+        color=color,
     )
 
   def on_feature_housekeep(
@@ -413,7 +477,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       counter: int,
       duration: float,
       error: BaseException | None,
-      **kwargs
+      **kwargs,
   ) -> None:
     """Called when a sandbox feature is housekeeping."""
     if self.feature_status and self.housekeep_status:
@@ -463,7 +527,7 @@ class ConsoleEventLogger(EventLogger):
       message: str,
       error: BaseException | None,
       color: str | None = None,
-      styles: list[str] | None = None
+      styles: list[str] | None = None,
   ):
     print(
         self._maybe_colored(

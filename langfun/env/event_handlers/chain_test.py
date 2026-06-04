@@ -28,9 +28,9 @@ class MockEventHandler(interface.EventHandler):
   def on_environment_starting(self, environment):
     self._record_call('on_environment_starting', environment)
 
-  def on_environment_shutting_down(self, environment, offline_duration):
+  def on_environment_shutting_down(self, environment):
     self._record_call(
-        'on_environment_shutting_down', environment, offline_duration
+        'on_environment_shutting_down', environment
     )
 
   def on_environment_start(self, environment, duration, error):
@@ -176,7 +176,7 @@ class EventHandlerChainTest(unittest.TestCase):
     feature = object()
 
     chain_handler.on_environment_starting(env)
-    chain_handler.on_environment_shutting_down(env, 1.0)
+    chain_handler.on_environment_shutting_down(env)
     chain_handler.on_environment_start(env, 2.0, None)
     chain_handler.on_environment_housekeep(env, 1, 3.0, None, a=1)
     chain_handler.on_environment_shutdown(env, 4.0, 5.0, None)
@@ -199,7 +199,7 @@ class EventHandlerChainTest(unittest.TestCase):
         handler1.calls,
         [
             ('on_environment_starting', (env,), {}),
-            ('on_environment_shutting_down', (env, 1.0), {}),
+            ('on_environment_shutting_down', (env,), {}),
             ('on_environment_start', (env, 2.0, None), {}),
             ('on_environment_housekeep', (env, 1, 3.0, None), {'a': 1}),
             ('on_environment_shutdown', (env, 4.0, 5.0, None), {}),
