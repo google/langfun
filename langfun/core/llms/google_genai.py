@@ -1,0 +1,300 @@
+# Copyright 2025 The Langfun Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Language models from Google GenAI."""
+
+import functools
+import os
+from typing import Annotated, Literal
+
+import langfun.core as lf
+from langfun.core.llms import gemini
+import pyglove as pg
+
+
+@lf.use_init_args(['model'])
+@pg.members([('api_endpoint', pg.typing.Str().freeze(''))])
+class GenAI(gemini.Gemini):
+  """Google GenAI models.
+
+  **Quick Start:**
+
+  ```python
+  import langfun as lf
+
+  # Call Gemini 1.5 Flash using API key from environment variable
+  # 'GOOGLE_API_KEY'.
+  lm = lf.llms.Gemini15Flash()
+  r = lm('Who are you?')
+  print(r)
+  ```
+
+  **Setting up API key:**
+
+  The Google API key can be specified in following ways:
+
+  1. At model instantiation:
+
+     ```python
+     lm = lf.llms.Gemini15Flash(api_key='MY_API_KEY')
+     ```
+  2. via environment variable `GOOGLE_API_KEY`.
+
+  **References:**
+
+  *   https://ai.google.dev/docs
+  """
+
+  model: pg.typing.Annotated[
+      pg.typing.Enum(
+          pg.MISSING_VALUE,
+          [
+              m.model_id for m in gemini.SUPPORTED_MODELS
+              if m.provider == 'Google GenAI' or (
+                  isinstance(m.provider, pg.hyper.OneOf)
+                  and 'Google GenAI' in m.provider.candidates
+              )
+          ]
+      ),
+      'The name of the model to use.',
+  ]
+
+  api_key: Annotated[
+      str | None,
+      (
+          'API key. If None, the key will be read from environment variable '
+          "'GOOGLE_API_KEY'. "
+          'Get an API key at https://ai.google.dev/tutorials/setup'
+      ),
+  ] = None
+
+  api_version: Annotated[
+      Literal['v1beta', 'v1alpha'],
+      'The API version to use.'
+  ] = 'v1beta'
+
+  @functools.cached_property
+  def model_info(self) -> lf.ModelInfo:
+    return super().model_info.clone(
+        override=dict(provider='Google GenAI')
+    )
+
+  def session(self):
+    assert self._api_initialized
+    s = self._session()
+    s.headers.update(self.headers or {})
+    return s
+
+  @property
+  def api_endpoint(self) -> str:
+    api_key = self.api_key or os.environ.get('GOOGLE_API_KEY', None)
+    if not api_key:
+      raise ValueError(
+          'Please specify `api_key` during `__init__` or set environment '
+          'variable `GOOGLE_API_KEY` with your Google Cloud API key. '
+          'Check out '
+          'https://cloud.google.com/api-keys/docs/create-manage-api-keys '
+          'for more details.'
+      )
+    return (
+        f'https://generativelanguage.googleapis.com/{self.api_version}'
+        f'/models/{self.model}:generateContent?'
+        f'key={api_key}'
+    )
+
+
+# pylint: disable=invalid-name
+
+
+#
+# Experimental models.
+#
+class Gemini31ProPreview(GenAI):
+  """Gemini 3.1 Pro Preview model."""
+
+  model = 'gemini-3.1-pro-preview'
+
+
+class Gemini3ProPreview(GenAI):
+  """Gemini 3 Pro Preview model."""
+
+  model = 'gemini-3-pro-preview'
+
+
+class Gemini3ProImagePreview(GenAI):
+  """Gemini 3 Pro Image Preview model for high-fidelity image generation.
+
+  This model supports:
+  - Text-to-image generation
+  - Image editing (multimodal input)
+  - Visual reasoning
+
+  Key Requirements:
+  - responseModalities must include 'IMAGE'
+  - Supported aspect ratios: 1:1, 16:9, 9:16, 4:3, 3:4
+  - Image sizes: 1K (default), 2K, 4K
+  """
+
+  model = 'gemini-3-pro-image-preview'
+  response_modalities = ['TEXT', 'IMAGE']
+
+
+class Gemini3FlashPreview(GenAI):
+  """Gemini 3 Flash Preview model."""
+
+  model = 'gemini-3-flash-preview'
+
+
+class Gemini31FlashLitePreview(GenAI):
+  """Gemini 3.1 Flash Lite Preview model."""
+
+  model = 'gemini-3.1-flash-lite-preview'
+
+
+class Gemini25FlashImagePreview(GenAI):
+  """Gemini 2.5 Flash Image Preview model."""
+  model = 'gemini-2.5-flash-image-preview'
+
+
+class Gemini25Pro(GenAI):
+  """Gemini 2.5 Pro GA model."""
+
+  model = 'gemini-2.5-pro'
+
+
+class Gemini25Flash(GenAI):
+  """Gemini 2.5 Flash GA model."""
+
+  model = 'gemini-2.5-flash'
+
+
+class Gemini2ProExp_20250205(GenAI):
+  """Gemini 2.0 Pro experimental model launched on 02/05/2025."""
+  model = 'gemini-2.0-pro-exp-02-05'
+
+
+class Gemini2FlashThinkingExp_20250121(GenAI):
+  """Gemini 2.0 Flash Thinking model launched on 01/21/2025."""
+  api_version = 'v1beta'
+  model = 'gemini-2.0-flash-thinking-exp-01-21'
+  timeout = None
+
+
+class GeminiExp_20241206(GenAI):
+  """Gemini Experimental model launched on 12/06/2024."""
+  model = 'gemini-exp-1206'
+
+
+#
+# Production models.
+#
+class Gemini25ProPreview_20250605(GenAI):
+  """Gemini 2.5 Pro model launched on 06/05/2025."""
+  model = 'gemini-2.5-pro-preview-06-05'
+
+
+class Gemini25FlashPreview_20250520(GenAI):
+  """Gemini 2.5 Flash model launched on 05/20/2025."""
+  model = 'gemini-2.5-flash-preview-05-20'
+
+
+class Gemini25ProPreview_20250506(GenAI):
+  """Gemini 2.5 Pro model launched on 05/06/2025."""
+
+  model = 'gemini-2.5-pro-preview-05-06'
+
+
+class Gemini25FlashPreview_20250417(GenAI):
+  """Gemini 2.5 Flash model launched on 04/17/2025."""
+
+  model = 'gemini-2.5-flash-preview-04-17'
+
+
+class Gemini25ProPreview_20250325(GenAI):
+  """Gemini 2.5 Pro model launched on 03/25/2025."""
+  model = 'gemini-2.5-pro-preview-03-25'
+
+
+class Gemini2Flash(GenAI):
+  """Gemini 2.0 Flash model (latest stable)."""
+  model = 'gemini-2.0-flash'
+
+
+class Gemini2Flash_001(GenAI):
+  """Gemini 2.0 Flash model launched on 02/05/2025."""
+  model = 'gemini-2.0-flash-001'
+
+
+class Gemini2FlashLitePreview_20250205(GenAI):
+  """Gemini 2.0 Flash lite preview model launched on 02/05/2025."""
+  model = 'gemini-2.0-flash-lite-preview-02-05'
+
+
+class Gemini15Pro(GenAI):
+  """Gemini 1.5 Pro latest stable model."""
+  model = 'gemini-1.5-pro'
+
+
+class Gemini15Pro_002(GenAI):
+  """Gemini 1.5 Pro stable version 002."""
+  model = 'gemini-1.5-pro-002'
+
+
+class Gemini15Pro_001(GenAI):
+  """Gemini 1.5 Pro stable version 001."""
+  model = 'gemini-1.5-pro-001'
+
+
+class Gemini15Flash(GenAI):
+  """Gemini 1.5 Flash latest model."""
+  model = 'gemini-1.5-flash'
+
+
+class Gemini15Flash_002(GenAI):
+  """Gemini 1.5 Flash model stable version 002."""
+  model = 'gemini-1.5-flash-002'
+
+
+class Gemini15Flash_001(GenAI):
+  """Gemini 1.5 Flash model stable version 001."""
+  model = 'gemini-1.5-flash-001'
+
+
+class Gemini15Flash8B(GenAI):
+  """Gemini 1.5 Flash 8B modle (latest stable)."""
+  model = 'gemini-1.5-flash-8b'
+
+
+class Gemini15Flash8B_001(GenAI):
+  """Gemini 1.5 Flash 8B model (version 001)."""
+  model = 'gemini-1.5-flash-8b-001'
+
+
+# For backward compatibility.
+GeminiPro1_5 = Gemini15Pro
+GeminiFlash1_5 = Gemini15Flash
+
+# pylint: enable=invalid-name
+
+
+def _genai_model(model: str, *args, **kwargs) -> GenAI:
+  model = model.removeprefix('google_genai://')
+  return GenAI(model=model, *args, **kwargs)
+
+
+def _register_genai_models():
+  """Register GenAI models."""
+  for m in gemini.SUPPORTED_MODELS:
+    lf.LanguageModel.register('google_genai://' + m.model_id, _genai_model)
+
+_register_genai_models()

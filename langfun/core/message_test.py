@@ -1,0 +1,670 @@
+# Copyright 2023 The Langfun Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tests for message, including on_unknown_modality_marker behaviors."""
+
+import inspect
+import unittest
+from langfun.core import language_model
+from langfun.core import message
+from langfun.core import modality
+import pyglove as pg
+
+
+class CustomModality(modality.Modality):
+  content: str
+
+  def to_bytes(self):
+    return self.content.encode()
+
+
+class MessageTest(unittest.TestCase):
+
+  def test_basics(self):
+
+    class A(pg.Object):
+      pass
+
+    d = pg.Dict(x=A())
+
+    m = message.UserMessage(
+        'hi', metadata=dict(x=1), x=pg.Ref(d.x), y=2, tags=['lm-input']
+    )
+    self.assertEqual(m.metadata, {'x': pg.Ref(d.x), 'y': 2})
+    self.assertEqual(m.sender, 'User')
+    self.assertIs(m.x, d.x)
+    self.assertEqual(m.y, 2)
+    self.assertTrue(m.has_tag('lm-input'))
+    self.assertTrue(m.has_tag(('lm-input', '')))
+    self.assertFalse(m.has_tag('lm-response'))
+
+    with self.assertRaises(AttributeError):
+      _ = m.z
+    self.assertEqual(hash(m), hash(m.text))
+    del d
+
+  def test_init_referred_modalities_from_list(self):
+    """Tests that list-based referred_modalities are converted to dict."""
+    foo = CustomModality('foo')
+    bar = CustomModality('bar')
+    # When modalities are already referenced in text, no auto-append.
+    m = message.UserMessage(
+        f'Look at <<[[{foo.id}]]>> and <<[[{bar.id}]]>>',
+        referred_modalities=[foo, bar],
+    )
+    self.assertIn(foo.id, m.referred_modalities)
+    self.assertIn(bar.id, m.referred_modalities)
+    self.assertNotIn('\n', m.text)
+
+  def test_init_referred_modalities_auto_append(self):
+    """Tests that modalities not in text are auto-appended as markers."""
+    foo = CustomModality('foo')
+    bar = CustomModality('bar')
+    # When modalities are NOT in text, markers are auto-appended.
+    m = message.UserMessage(
+        'Hello world',
+        referred_modalities=[foo, bar],
+    )
+    self.assertIn(modality.Modality.text_marker(foo.id), m.text)
+    self.assertIn(modality.Modality.text_marker(bar.id), m.text)
+    # Verify the modality is accessible.
+    self.assertIs(m.get_modality(foo.id), foo)
+
+  def test_init_referred_modalities_dict_no_auto_append(self):
+    """Tests that dict-based referred_modalities do NOT auto-append markers."""
+    foo = CustomModality('foo')
+    m = message.UserMessage(
+        'Hello world',
+        referred_modalities={foo.id: pg.Ref(foo)},
+    )
+    # Dict path is explicit: no auto-appending of markers.
+    self.assertNotIn(modality.Modality.text_marker(foo.id), m.text)
+    self.assertEqual(m.text, 'Hello world')
+
+  def test_init_referred_modalities_dict_no_append_when_present(self):
+    """Tests that dict-based modalities already in text are not appended."""
+    foo = CustomModality('foo')
+    text = f'Look at <<[[{foo.id}]]>>'
+    m = message.UserMessage(
+        text,
+        referred_modalities={foo.id: pg.Ref(foo)},
+    )
+    self.assertEqual(m.text, text)
+
+  def test_init_referred_modalities_none(self):
+    """Tests that None referred_modalities results in empty dict."""
+    m = message.UserMessage('hi', referred_modalities=None)
+    self.assertEqual(m.referred_modalities, {})
+
+  def test_init_metadata_kwargs(self):
+    """Tests that kwargs are merged into metadata."""
+    m = message.UserMessage('hi', metadata=dict(x=1), y=2)
+    self.assertEqual(m.metadata, {'x': 1, 'y': 2})
+
+  def test_init_metadata_kwargs_override(self):
+    """Tests that kwargs override metadata with same key."""
+    m = message.UserMessage('hi', metadata=dict(x=1), x=2)
+    self.assertEqual(m.metadata['x'], 2)
+
+  def test_from_value(self):
+    self.assertTrue(
+        pg.eq(message.UserMessage.from_value('hi'), message.UserMessage('hi'))
+    )
+    foo = CustomModality('foo')
+    self.assertTrue(
+        pg.eq(
+            message.UserMessage.from_value(foo),
+            message.UserMessage(f'<<[[{foo.id}]]>>', referred_modalities=[foo]),
+        )
+    )
+    self.assertTrue(
+        pg.eq(
+            message.UserMessage.from_value(foo),
+            message.UserMessage(
+                f'<<[[{foo.id}]]>>', referred_modalities={foo.id: foo}
+            ),
+        )
+    )
+    m = message.UserMessage('hi')
+    self.assertIs(message.UserMessage.from_value(m), m)
+
+  def test_source_tracking(self):
+    m1 = message.UserMessage('hi')
+    m1.tag('lm-input')
+    self.assertIsNone(m1.source)
+    self.assertIs(m1.root, m1)
+
+    m2 = message.UserMessage('foo', source=m1)
+    m2.source = m1
+    self.assertIs(m2.source, m1)
+    self.assertIs(m2.root, m1)
+    m2.tag('lm-response')
+
+    m3 = message.UserMessage('bar', source=m2)
+    self.assertIs(m3.source, m2)
+    self.assertIs(m3.root, m1)
+    m3.tag('transformed')
+    m3.tag('lm-output')
+
+    self.assertEqual(
+        m3.trace(),
+        [m1, m2, m3],
+    )
+    self.assertEqual(m3.trace('lm-input'), [m1])
+    self.assertEqual(m3.trace('transformed'), [m3])
+    self.assertIs(m2.lm_input, m1)
+    self.assertIs(m3.lm_input, m1)
+    self.assertEqual(m3.lm_inputs, [m1])
+    self.assertIs(m2.lm_response, m2)
+    self.assertIs(m3.lm_response, m2)
+    self.assertEqual(m3.lm_responses, [m2])
+    self.assertIs(m3.lm_output, m3)
+    self.assertEqual(m3.lm_outputs, [m3])
+    self.assertIsNone(m3.last('non-exist'))
+
+  def test_result(self):
+    m = message.UserMessage('hi', x=1, y=2)
+    self.assertIsNone(m.result)
+    m.result = 1
+    self.assertEqual(m.result, 1)
+
+  def test_jsonify(self):
+    m = message.UserMessage('hi', result=1)
+    self.assertEqual(pg.from_json_str(m.to_json_str()), m)
+
+  def test_get(self):
+
+    class A(pg.Object):
+      p: int
+
+    # Create a symbolic object and assign it to a container, so we could test
+    # pg.Ref.
+    a = A(1)
+    d = pg.Dict(x=a)
+
+    m = message.UserMessage('hi', x=pg.Ref(a), y=dict(z=[0, 1, 2]))
+    self.assertEqual(m.get('text'), 'hi')
+    self.assertIs(m.get('x'), a)
+    self.assertIs(m.get('x.p'), 1)
+    self.assertEqual(m.get('y'), dict(z=[0, 1, 2]))
+    self.assertEqual(m.get('y.z'), [0, 1, 2])
+    self.assertEqual(m.get('y.z[0]'), 0)
+    self.assertIsNone(m.get('p'))
+    self.assertEqual(m.get('p', default='foo'), 'foo')
+    del d
+
+  def test_set(self):
+    m = message.UserMessage('hi', metadata=dict(x=1, z=0))
+    m.set('text', 'hello')
+    m.set('x', 2)
+    m.set('y', [0, 1, 2])
+    m.set('y[0]', 1)
+    m.set('y[2]', pg.MISSING_VALUE)  # delete `y[2]`.
+    m.set('z', pg.MISSING_VALUE)  # delete `z`.
+    self.assertEqual(
+        m, message.UserMessage('hello', metadata=dict(x=2, y=[1, 1]))
+    )
+
+  def test_updates(self):
+    m = message.UserMessage('hi')
+    self.assertFalse(m.modified)
+    self.assertFalse(m.has_errors)
+
+    with m.update_scope():
+      m.metadata.x = 1
+      m.metadata.y = 1
+      self.assertTrue(m.modified)
+      self.assertEqual(len(m.updates), 2)
+      self.assertFalse(m.has_errors)
+
+      with m.update_scope():
+        m.metadata.y = 2
+        m.metadata.z = 2
+        m.errors.append(ValueError('b'))
+        self.assertTrue(m.modified)
+        self.assertEqual(len(m.updates), 2)
+        self.assertTrue(m.has_errors)
+        self.assertEqual(len(m.errors), 1)
+
+        with m.update_scope():
+          self.assertFalse(m.modified)
+          self.assertFalse(m.has_errors)
+
+    self.assertTrue(m.modified)
+    self.assertEqual(len(m.updates), 3)
+    self.assertTrue(m.has_errors)
+    self.assertEqual(len(m.errors), 1)
+
+    m2 = message.UserMessage('hi')
+    m2.apply_updates(m.updates)
+    self.assertEqual(m, m2)
+
+  def test_user_message(self):
+    m = message.UserMessage('hi')
+    self.assertEqual(m.text, 'hi')
+    self.assertEqual(m.sender, 'User')
+    self.assertEqual(str(m), m.text)
+
+    m = message.UserMessage('hi', sender='Tom')
+    self.assertEqual(m.sender, 'Tom')
+    self.assertEqual(str(m), m.text)
+
+  def test_ai_message(self):
+    m = message.AIMessage('hi')
+    self.assertEqual(m.text, 'hi')
+    self.assertEqual(m.sender, 'AI')
+    self.assertEqual(str(m), m.text)
+
+    m = message.AIMessage('hi', sender='Model')
+    self.assertEqual(m.sender, 'Model')
+    self.assertEqual(str(m), m.text)
+
+  def test_system_message(self):
+    m = message.SystemMessage('hi')
+    self.assertEqual(m.text, 'hi')
+    self.assertEqual(m.sender, 'System')
+    self.assertEqual(str(m), m.text)
+
+    m = message.SystemMessage('hi', sender='Environment1')
+    self.assertEqual(m.sender, 'Environment1')
+    self.assertEqual(str(m), m.text)
+
+  def test_memory_record(self):
+    m = message.MemoryRecord('hi')
+    self.assertEqual(m.text, 'hi')
+    self.assertEqual(m.sender, 'Memory')
+    self.assertEqual(str(m), m.text)
+
+    m = message.MemoryRecord('hi', sender="Someone's Memory")
+    self.assertEqual(m.sender, "Someone's Memory")
+    self.assertEqual(str(m), m.text)
+
+  def test_get_modality(self):
+    foo = CustomModality('foo')
+    bar = CustomModality('bar')
+    m1 = message.UserMessage(
+        'hi',
+        referred_modalities={
+            foo.id: foo,
+            bar.id: pg.Ref(bar),
+        },
+    )
+    self.assertIs(m1.get_modality(foo.id), foo)
+    self.assertIs(m1.get_modality(bar.id), bar)
+    self.assertIsNone(m1.get_modality('video'))
+    self.assertEqual(len(m1.modalities()), 2)
+    self.assertEqual(len(m1.modalities(CustomModality)), 2)
+
+    class MyModality(modality.Modality):
+      pass
+
+    self.assertEqual(len(m1.modalities(MyModality)), 0)
+    self.assertEqual(len(m1.modalities(lambda x: x.content == 'foo')), 1)
+
+  def test_chunking(self):
+    foo = CustomModality('foo')
+    bar = CustomModality('bar')
+    m = message.UserMessage(
+        inspect.cleandoc(f"""
+            Hi, this is <<[[{foo.id}]]>> and this is {{b}}.
+            <<[[{bar.id}]]>> something else
+            """),
+        referred_modalities={
+            foo.id: pg.Ref(foo),
+            bar.id: pg.Ref(bar),
+        },
+    )
+    chunks = m.chunk()
+    self.assertTrue(
+        pg.eq(
+            chunks,
+            [
+                'Hi, this is',
+                foo,
+                'and this is {b}.\n',
+                bar,
+                'something else',
+            ],
+        )
+    )
+    self.assertTrue(
+        pg.eq(
+            message.AIMessage.from_chunks(chunks),
+            message.AIMessage(
+                (
+                    f'Hi, this is <<[[{foo.id}]]>> and this '
+                    f'is {{b}}.\n<<[[{bar.id}]]>> '
+                    'something else'
+                ),
+                referred_modalities=[foo, bar],
+            ),
+        )
+    )
+    with self.assertRaisesRegex(ValueError, 'Unknown modality reference'):
+      message.UserMessage('<<[[abc]]>>').chunk()
+
+  def test_treat_unknown_modality_marker(self):
+    with message.treat_unknown_modality_marker('raise'):
+      with self.assertRaisesRegex(ValueError, 'Unknown modality reference'):
+        message.UserMessage('<<[[abc]]>>').chunk()
+
+    with message.treat_unknown_modality_marker('drop'):
+      m = message.UserMessage('Hi <<[[abc]]>> world')
+      chunks = m.chunk()
+      self.assertEqual(chunks, ['Hi', 'world'])
+
+    with message.treat_unknown_modality_marker('keep'):
+      m = message.UserMessage('Hi <<[[abc]]>> world')
+      chunks = m.chunk()
+      self.assertEqual(chunks, ['Hi <<[[abc]]>>', 'world'])
+
+    with pg.contextual_override(
+        __unknown_modality_marker_treatment__='invalid'
+    ):
+      with self.assertRaisesRegex(ValueError, 'Invalid treatment'):
+        message.UserMessage('<<[[abc]]>>').chunk()
+
+  def assert_html_content(self, html, expected):
+    expected = inspect.cleandoc(expected).strip()
+    actual = html.content.strip()
+    if actual != expected:
+      print(actual)
+    self.assertEqual(actual, expected)
+
+  def test_html_style(self):
+    self.assertIn(
+        inspect.cleandoc("""
+            /* Langfun Message styles.*/
+            [class^="message-"] > details {
+                margin: 0px 0px 5px 0px;
+                border: 1px solid #EEE;
+            }
+            .lf-message.summary-title::after {
+                content: ' 💬';
+            }
+            details.pyglove.ai-message {
+                border: 1px solid blue;
+                color: blue;
+            }
+            details.pyglove.user-message {
+                border: 1px solid green;
+                color: green;
+            }
+            .message-tags {
+                margin: 5px 0px 5px 0px;
+                font-size: .8em;
+            }
+            .message-tags > span {
+                border-radius: 5px;
+                background-color: #CCC;
+                padding: 3px;
+                margin: 0px 2px 0px 2px;
+                color: white;
+            }
+            .message-text {
+                padding: 20px;
+                margin: 10px 5px 10px 5px;
+                font-style: italic;
+                white-space: pre-wrap;
+                border: 1px solid #EEE;
+                border-radius: 5px;
+                background-color: #EEE;
+            }
+            .modality-in-text {
+                display: inline-block;
+            }
+            .modality-in-text > details.pyglove {
+                display: inline-block;
+                font-size: 0.8em;
+                border: 0;
+                background-color: #A6F1A6;
+                margin: 0px 5px 0px 5px;
+            }
+            .message-result {
+                color: dodgerblue;
+            }
+            .message-usage {
+                color: orange;
+            }
+            .message-usage .object-key.str {
+                border: 1px solid orange;
+                background-color: orange;
+                color: white;
+            }
+            """),
+        message.UserMessage('hi').to_html().style_section,
+    )
+
+  def test_html_user_message(self):
+    self.assert_html_content(
+        message.UserMessage('what is a <div>').to_html(
+            enable_summary_tooltip=False
+        ),
+        """
+        <details open class="pyglove user-message lf-message"><summary><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"></div><div class="message-text">what is a &lt;div&gt;</div><div class="message-metadata"><details open class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div></div></details>
+        """,
+    )
+    image = CustomModality('bird')
+    self.assert_html_content(
+        message.UserMessage(
+            f'what is this <<[[{image.id}]]>>',
+            tags=['lm-input'],
+            referred_modalities=[image],
+        ).to_html(
+            enable_summary_tooltip=False,
+            extra_flags=dict(include_message_metadata=False),
+        ),
+        """
+        <details open class="pyglove user-message lf-message"><summary><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">what is this<div class="modality-in-text"><details class="pyglove custom-modality"><summary><div class="summary-name">custom_modality:abaecf8c<span class="tooltip"></span></div><div class="summary-title">CustomModality(...)</div></summary><div class="complex-value custom-modality"><details open class="pyglove str"><summary><div class="summary-name">content<span class="tooltip">content</span></div><div class="summary-title">str</div></summary><span class="simple-value str">&#x27;bird&#x27;</span></details></div></details></div></div></div></details>
+        """,
+    )
+
+  def test_html_ai_message(self):
+    image = CustomModality('foo')
+    user_message = message.UserMessage(
+        f'What is in this image? <<[[{image.id}]]>> this is a test',
+        referred_modalities=[image],
+        source=message.UserMessage('User input'),
+        tags=['lm-input'],
+    )
+    ai_message = message.AIMessage(
+        'My name is Gemini',
+        metadata=dict(
+            result=pg.Dict(x=1, y=2, z=pg.Dict(a=[12, 323])),
+            usage=language_model.LMSamplingUsage(10, 2, 12, 0),
+        ),
+        tags=['lm-response', 'lm-output'],
+        source=user_message,
+    )
+    self.assert_html_content(
+        ai_message.to_html(enable_summary_tooltip=False),
+        """
+        <details open class="pyglove ai-message lf-message"><summary><div class="summary-title lf-message">AIMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-response</span><span>lm-output</span></div><div class="message-text">My name is Gemini</div><div class="message-result"><details open class="pyglove dict"><summary><div class="summary-name">result<span class="tooltip">metadata.result</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><details open class="pyglove int"><summary><div class="summary-name">x<span class="tooltip">metadata.result.x</span></div><div class="summary-title">int</div></summary><span class="simple-value int">1</span></details><details open class="pyglove int"><summary><div class="summary-name">y<span class="tooltip">metadata.result.y</span></div><div class="summary-title">int</div></summary><span class="simple-value int">2</span></details><details class="pyglove dict"><summary><div class="summary-name">z<span class="tooltip">metadata.result.z</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><details class="pyglove list"><summary><div class="summary-name">a<span class="tooltip">metadata.result.z.a</span></div><div class="summary-title">List(...)</div></summary><div class="complex-value list"><table><tr><td><span class="object-key int">0</span><span class="tooltip">metadata.result.z.a[0]</span></td><td><span class="simple-value int">12</span></td></tr><tr><td><span class="object-key int">1</span><span class="tooltip">metadata.result.z.a[1]</span></td><td><span class="simple-value int">323</span></td></tr></table></div></details></div></details></div></details></div><div class="message-usage"><details open class="pyglove lm-sampling-usage"><summary><div class="summary-name">llm usage<span class="tooltip">metadata.usage</span></div><div class="summary-title">LMSamplingUsage(...)</div></summary><div class="complex-value lm-sampling-usage"><table><tr><td><span class="object-key str">prompt_tokens</span><span class="tooltip">metadata.usage.prompt_tokens</span></td><td><span class="simple-value int">10</span></td></tr><tr><td><span class="object-key str">completion_tokens</span><span class="tooltip">metadata.usage.completion_tokens</span></td><td><span class="simple-value int">2</span></td></tr><tr><td><span class="object-key str">total_tokens</span><span class="tooltip">metadata.usage.total_tokens</span></td><td><span class="simple-value int">12</span></td></tr><tr><td><span class="object-key str">cached_prompt_tokens</span><span class="tooltip">metadata.usage.cached_prompt_tokens</span></td><td><span class="simple-value int">0</span></td></tr><tr><td><span class="object-key str">num_requests</span><span class="tooltip">metadata.usage.num_requests</span></td><td><span class="simple-value int">1</span></td></tr><tr><td><span class="object-key str">estimated_cost</span><span class="tooltip">metadata.usage.estimated_cost</span></td><td><span class="simple-value none-type">None</span></td></tr><tr><td><span class="object-key str">retry_stats</span><span class="tooltip">metadata.usage.retry_stats</span></td><td><details class="pyglove retry-stats"><summary><div class="summary-title">RetryStats(...)</div></summary><div class="complex-value retry-stats"><table><tr><td><span class="object-key str">num_occurences</span><span class="tooltip">metadata.usage.retry_stats.num_occurences</span></td><td><span class="simple-value int">0</span></td></tr><tr><td><span class="object-key str">total_wait_interval</span><span class="tooltip">metadata.usage.retry_stats.total_wait_interval</span></td><td><span class="simple-value float">0.0</span></td></tr><tr><td><span class="object-key str">total_call_interval</span><span class="tooltip">metadata.usage.retry_stats.total_call_interval</span></td><td><span class="simple-value float">0.0</span></td></tr><tr><td><span class="object-key str">errors</span><span class="tooltip">metadata.usage.retry_stats.errors</span></td><td><details class="pyglove dict"><summary><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></td></tr></table></div></details></td></tr><tr><td><span class="object-key str">completion_tokens_details</span><span class="tooltip">metadata.usage.completion_tokens_details</span></td><td><span class="simple-value none-type">None</span></td></tr></table></div></details></div><div class="message-metadata"><details open class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div><details open class="pyglove user-message lf-message"><summary><div class="summary-name lf-message">source<span class="tooltip lf-message">source</span></div><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">What is in this image?<div class="modality-in-text"><details class="pyglove custom-modality"><summary><div class="summary-name">custom_modality:acbd18db<span class="tooltip"></span></div><div class="summary-title">CustomModality(...)</div></summary><div class="complex-value custom-modality"><details open class="pyglove str"><summary><div class="summary-name">content<span class="tooltip">content</span></div><div class="summary-title">str</div></summary><span class="simple-value str">&#x27;foo&#x27;</span></details></div></details></div>this is a test</div><div class="message-metadata"><details open class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">source.metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div></div></details></div></details>
+        """,
+    )
+    self.assert_html_content(
+        ai_message.to_html(
+            key_style='label',
+            enable_summary_tooltip=False,
+            extra_flags=dict(
+                collapse_modalities_in_text=False,
+                collapse_llm_usage=True,
+                collapse_message_result_level=0,
+                collapse_message_metadata_level=0,
+                collapse_source_message_level=0,
+                source_tag=None,
+            ),
+        ),
+        """
+        <details open class="pyglove ai-message lf-message"><summary><div class="summary-title lf-message">AIMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-response</span><span>lm-output</span></div><div class="message-text">My name is Gemini</div><div class="message-result"><details class="pyglove dict"><summary><div class="summary-name">result<span class="tooltip">metadata.result</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><table><tr><td><span class="object-key str">x</span><span class="tooltip">metadata.result.x</span></td><td><span class="simple-value int">1</span></td></tr><tr><td><span class="object-key str">y</span><span class="tooltip">metadata.result.y</span></td><td><span class="simple-value int">2</span></td></tr><tr><td><span class="object-key str">z</span><span class="tooltip">metadata.result.z</span></td><td><details class="pyglove dict"><summary><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><table><tr><td><span class="object-key str">a</span><span class="tooltip">metadata.result.z.a</span></td><td><details class="pyglove list"><summary><div class="summary-title">List(...)</div></summary><div class="complex-value list"><table><tr><td><span class="object-key int">0</span><span class="tooltip">metadata.result.z.a[0]</span></td><td><span class="simple-value int">12</span></td></tr><tr><td><span class="object-key int">1</span><span class="tooltip">metadata.result.z.a[1]</span></td><td><span class="simple-value int">323</span></td></tr></table></div></details></td></tr></table></div></details></td></tr></table></div></details></div><div class="message-usage"><details class="pyglove lm-sampling-usage"><summary><div class="summary-name">llm usage<span class="tooltip">metadata.usage</span></div><div class="summary-title">LMSamplingUsage(...)</div></summary><div class="complex-value lm-sampling-usage"><table><tr><td><span class="object-key str">prompt_tokens</span><span class="tooltip">metadata.usage.prompt_tokens</span></td><td><span class="simple-value int">10</span></td></tr><tr><td><span class="object-key str">completion_tokens</span><span class="tooltip">metadata.usage.completion_tokens</span></td><td><span class="simple-value int">2</span></td></tr><tr><td><span class="object-key str">total_tokens</span><span class="tooltip">metadata.usage.total_tokens</span></td><td><span class="simple-value int">12</span></td></tr><tr><td><span class="object-key str">cached_prompt_tokens</span><span class="tooltip">metadata.usage.cached_prompt_tokens</span></td><td><span class="simple-value int">0</span></td></tr><tr><td><span class="object-key str">num_requests</span><span class="tooltip">metadata.usage.num_requests</span></td><td><span class="simple-value int">1</span></td></tr><tr><td><span class="object-key str">estimated_cost</span><span class="tooltip">metadata.usage.estimated_cost</span></td><td><span class="simple-value none-type">None</span></td></tr><tr><td><span class="object-key str">retry_stats</span><span class="tooltip">metadata.usage.retry_stats</span></td><td><details class="pyglove retry-stats"><summary><div class="summary-title">RetryStats(...)</div></summary><div class="complex-value retry-stats"><table><tr><td><span class="object-key str">num_occurences</span><span class="tooltip">metadata.usage.retry_stats.num_occurences</span></td><td><span class="simple-value int">0</span></td></tr><tr><td><span class="object-key str">total_wait_interval</span><span class="tooltip">metadata.usage.retry_stats.total_wait_interval</span></td><td><span class="simple-value float">0.0</span></td></tr><tr><td><span class="object-key str">total_call_interval</span><span class="tooltip">metadata.usage.retry_stats.total_call_interval</span></td><td><span class="simple-value float">0.0</span></td></tr><tr><td><span class="object-key str">errors</span><span class="tooltip">metadata.usage.retry_stats.errors</span></td><td><details class="pyglove dict"><summary><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></td></tr></table></div></details></td></tr><tr><td><span class="object-key str">completion_tokens_details</span><span class="tooltip">metadata.usage.completion_tokens_details</span></td><td><span class="simple-value none-type">None</span></td></tr></table></div></details></div><div class="message-metadata"><details class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div><details class="pyglove user-message lf-message"><summary><div class="summary-name lf-message">source<span class="tooltip lf-message">source</span></div><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">What is in this image?<div class="modality-in-text"><details open class="pyglove custom-modality"><summary><div class="summary-name">custom_modality:acbd18db<span class="tooltip"></span></div><div class="summary-title">CustomModality(...)</div></summary><div class="complex-value custom-modality"><table><tr><td><span class="object-key str">content</span><span class="tooltip">content</span></td><td><span class="simple-value str">&#x27;foo&#x27;</span></td></tr></table></div></details></div>this is a test</div><div class="message-metadata"><details class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">source.metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div><details class="pyglove user-message lf-message"><summary><div class="summary-name lf-message">source<span class="tooltip lf-message">source.source</span></div><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"></div><div class="message-text">User input</div><div class="message-metadata"><details class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">source.source.metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div></div></details></div></details></div></details>
+        """,
+    )
+    self.assert_html_content(
+        ai_message.to_html(
+            key_style='label',
+            enable_summary_tooltip=False,
+            extra_flags=dict(
+                collapse_modalities_in_text=True,
+                collapse_llm_usage=False,
+                collapse_message_result_level=1,
+                collapse_message_metadata_level=1,
+                collapse_source_message_level=2,
+                source_tag=None,
+            ),
+        ),
+        """
+        <details open class="pyglove ai-message lf-message"><summary><div class="summary-title lf-message">AIMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-response</span><span>lm-output</span></div><div class="message-text">My name is Gemini</div><div class="message-result"><details open class="pyglove dict"><summary><div class="summary-name">result<span class="tooltip">metadata.result</span></div><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><table><tr><td><span class="object-key str">x</span><span class="tooltip">metadata.result.x</span></td><td><span class="simple-value int">1</span></td></tr><tr><td><span class="object-key str">y</span><span class="tooltip">metadata.result.y</span></td><td><span class="simple-value int">2</span></td></tr><tr><td><span class="object-key str">z</span><span class="tooltip">metadata.result.z</span></td><td><details class="pyglove dict"><summary><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><table><tr><td><span class="object-key str">a</span><span class="tooltip">metadata.result.z.a</span></td><td><details class="pyglove list"><summary><div class="summary-title">List(...)</div></summary><div class="complex-value list"><table><tr><td><span class="object-key int">0</span><span class="tooltip">metadata.result.z.a[0]</span></td><td><span class="simple-value int">12</span></td></tr><tr><td><span class="object-key int">1</span><span class="tooltip">metadata.result.z.a[1]</span></td><td><span class="simple-value int">323</span></td></tr></table></div></details></td></tr></table></div></details></td></tr></table></div></details></div><div class="message-usage"><details open class="pyglove lm-sampling-usage"><summary><div class="summary-name">llm usage<span class="tooltip">metadata.usage</span></div><div class="summary-title">LMSamplingUsage(...)</div></summary><div class="complex-value lm-sampling-usage"><table><tr><td><span class="object-key str">prompt_tokens</span><span class="tooltip">metadata.usage.prompt_tokens</span></td><td><span class="simple-value int">10</span></td></tr><tr><td><span class="object-key str">completion_tokens</span><span class="tooltip">metadata.usage.completion_tokens</span></td><td><span class="simple-value int">2</span></td></tr><tr><td><span class="object-key str">total_tokens</span><span class="tooltip">metadata.usage.total_tokens</span></td><td><span class="simple-value int">12</span></td></tr><tr><td><span class="object-key str">cached_prompt_tokens</span><span class="tooltip">metadata.usage.cached_prompt_tokens</span></td><td><span class="simple-value int">0</span></td></tr><tr><td><span class="object-key str">num_requests</span><span class="tooltip">metadata.usage.num_requests</span></td><td><span class="simple-value int">1</span></td></tr><tr><td><span class="object-key str">estimated_cost</span><span class="tooltip">metadata.usage.estimated_cost</span></td><td><span class="simple-value none-type">None</span></td></tr><tr><td><span class="object-key str">retry_stats</span><span class="tooltip">metadata.usage.retry_stats</span></td><td><details class="pyglove retry-stats"><summary><div class="summary-title">RetryStats(...)</div></summary><div class="complex-value retry-stats"><table><tr><td><span class="object-key str">num_occurences</span><span class="tooltip">metadata.usage.retry_stats.num_occurences</span></td><td><span class="simple-value int">0</span></td></tr><tr><td><span class="object-key str">total_wait_interval</span><span class="tooltip">metadata.usage.retry_stats.total_wait_interval</span></td><td><span class="simple-value float">0.0</span></td></tr><tr><td><span class="object-key str">total_call_interval</span><span class="tooltip">metadata.usage.retry_stats.total_call_interval</span></td><td><span class="simple-value float">0.0</span></td></tr><tr><td><span class="object-key str">errors</span><span class="tooltip">metadata.usage.retry_stats.errors</span></td><td><details class="pyglove dict"><summary><div class="summary-title">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></td></tr></table></div></details></td></tr><tr><td><span class="object-key str">completion_tokens_details</span><span class="tooltip">metadata.usage.completion_tokens_details</span></td><td><span class="simple-value none-type">None</span></td></tr></table></div></details></div><div class="message-metadata"><details open class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div><details open class="pyglove user-message lf-message"><summary><div class="summary-name lf-message">source<span class="tooltip lf-message">source</span></div><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"><span>lm-input</span></div><div class="message-text">What is in this image?<div class="modality-in-text"><details class="pyglove custom-modality"><summary><div class="summary-name">custom_modality:acbd18db<span class="tooltip"></span></div><div class="summary-title">CustomModality(...)</div></summary><div class="complex-value custom-modality"><table><tr><td><span class="object-key str">content</span><span class="tooltip">content</span></td><td><span class="simple-value str">&#x27;foo&#x27;</span></td></tr></table></div></details></div>this is a test</div><div class="message-metadata"><details open class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">source.metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div><details open class="pyglove user-message lf-message"><summary><div class="summary-name lf-message">source<span class="tooltip lf-message">source.source</span></div><div class="summary-title lf-message">UserMessage(...)</div></summary><div class="complex_value"><div class="message-tags"></div><div class="message-text">User input</div><div class="message-metadata"><details open class="pyglove dict message-metadata"><summary><div class="summary-name message-metadata">metadata<span class="tooltip message-metadata">source.source.metadata</span></div><div class="summary-title message-metadata">Dict(...)</div></summary><div class="complex-value dict"><span class="empty-container"></span></div></details></div></div></details></div></details></div></details>
+        """,
+    )
+
+  def test_from_chunks_with_empty_str(self):
+    chunks = ['Hello', '', 'World']
+    msg = message.AIMessage.from_chunks(chunks)
+    self.assertEqual(msg.text, 'Hello World')
+
+    chunks = ['', 'hello']
+    msg = message.AIMessage.from_chunks(chunks)
+    self.assertEqual(msg.text, 'hello')
+
+
+class MessageConverterTest(unittest.TestCase):
+
+  def test_basics(self):
+
+    class IntConverter(message.MessageConverter):
+      OUTPUT_TYPE = int
+
+    class TestConverter(IntConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'test_format1'
+
+      def to_value(self, m: message.Message) -> int:
+        return int(m.text)
+
+      def from_value(self, value: int) -> message.Message:
+        return message.UserMessage(str(value))
+
+    class TestConverter2(IntConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'test_format2'
+
+      def to_value(self, m: message.Message) -> int:
+        return int(m.text) + 1
+
+      def from_value(self, value: int) -> message.Message:
+        return message.UserMessage(str(value - 1))
+
+    class TestConverter3(message.MessageConverter):  # pylint: disable=unused-variable
+      FORMAT_ID = 'test_format3'
+      OUTPUT_TYPE = tuple
+
+      def to_value(self, m: message.Message) -> tuple[int, ...]:
+        return tuple(int(x) for x in m.text.split(','))
+
+      def from_value(self, value: tuple[int, ...]) -> message.Message:
+        return message.UserMessage(','.join(str(x) for x in value))
+
+    self.assertIn('test_format1', message.Message.convertible_formats())
+    self.assertIn('test_format2', message.Message.convertible_formats())
+    self.assertIn('test_format3', message.Message.convertible_formats())
+
+    self.assertTrue(message.Message.is_convertible(int))
+    self.assertFalse(message.Message.is_convertible(dict))
+    self.assertTrue(message.Message.is_convertible('test_format1'))
+    self.assertTrue(message.Message.is_convertible('test_format2'))
+    self.assertTrue(message.Message.is_convertible('test_format3'))
+    self.assertFalse(message.Message.is_convertible('test_format4'))
+    self.assertIn(int, message.Message.convertible_types())
+    self.assertIn(tuple, message.Message.convertible_types())
+    self.assertEqual(
+        message.Message.from_value(1, format='test_format1'),
+        message.UserMessage('1'),
+    )
+    self.assertEqual(message.UserMessage('1').as_format('test_format1'), 1)
+    self.assertEqual(
+        message.Message.from_value(1, format='test_format2'),
+        message.UserMessage('0'),
+    )
+    self.assertEqual(message.UserMessage('1').as_format('test_format2'), 2)
+    with self.assertRaisesRegex(ValueError, 'Unsupported format: .*'):
+      message.UserMessage('1').as_format('test4')
+
+    with self.assertRaisesRegex(TypeError, 'Cannot convert Message to .*'):
+      message.UserMessage('1').as_format(float)
+
+    with self.assertRaisesRegex(
+        TypeError, 'More than one converters found for output type .*'
+    ):
+      message.UserMessage('1').as_format(int)
+    self.assertEqual(
+        message.UserMessage('1,2,3').as_format('test_format3'), (1, 2, 3)
+    )
+    self.assertEqual(message.UserMessage('1,2,3').as_format(tuple), (1, 2, 3))
+    self.assertEqual(
+        message.Message.from_value((1, 2, 3)), message.UserMessage('1,2,3')
+    )
+    message.MessageConverter._REGISTRY.unregister(TestConverter)
+    message.MessageConverter._REGISTRY.unregister(TestConverter2)
+    message.MessageConverter._REGISTRY.unregister(TestConverter3)
+
+  def test_get_role(self):
+    self.assertEqual(
+        message.MessageConverter.get_role(message.SystemMessage('hi')),
+        'system',
+    )
+    self.assertEqual(
+        message.MessageConverter.get_role(message.UserMessage('hi')),
+        'user',
+    )
+    self.assertEqual(
+        message.MessageConverter.get_role(message.AIMessage('hi')),
+        'assistant',
+    )
+    with self.assertRaisesRegex(ValueError, 'Unsupported message type: .*'):
+      message.MessageConverter.get_role(message.MemoryRecord('hi'))
+
+  def test_get_message_cls(self):
+    self.assertEqual(
+        message.MessageConverter.get_message_cls('system'),
+        message.SystemMessage,
+    )
+    self.assertEqual(
+        message.MessageConverter.get_message_cls('user'),
+        message.UserMessage,
+    )
+    self.assertEqual(
+        message.MessageConverter.get_message_cls('assistant'),
+        message.AIMessage,
+    )
+    with self.assertRaisesRegex(ValueError, 'Unsupported role: .*'):
+      message.MessageConverter.get_message_cls('foo')
+
+  def test_safe_read(self):
+    self.assertEqual(
+        message.MessageConverter._safe_read({'a': 1}, 'a'),
+        1,
+    )
+    self.assertEqual(
+        message.MessageConverter._safe_read({'a': 1}, 'a', default=2),
+        1,
+    )
+    self.assertEqual(
+        message.MessageConverter._safe_read({'a': 1}, 'b', default=2),
+        2,
+    )
+    with self.assertRaisesRegex(ValueError, 'Invalid data type: .*'):
+      message.MessageConverter._safe_read(1, 'a')
+    with self.assertRaisesRegex(ValueError, 'Missing key .*'):
+      message.MessageConverter._safe_read({'a': 1}, 'b')
+
+
+if __name__ == '__main__':
+  unittest.main()
