@@ -1,9 +1,0 @@
-.DS_Store
-.coverage
-.vscode
-*.egg-info
-__pycache__/
-.env
-.aider*
-.python-version
-.venv
