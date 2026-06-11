@@ -269,6 +269,31 @@ class GeminiTest(unittest.TestCase):
         ),
     )
 
+    # max_thinking_tokens=-1 requests a DYNAMIC budget (model decides) while
+    # still returning thought summaries. This reproduces the gemini-api default.
+    actual = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(
+            max_thinking_tokens=-1,
+        ),
+    )
+    self.assertEqual(
+        actual['thinkingConfig'],
+        {'includeThoughts': True, 'thinkingBudget': -1},
+    )
+
+    # max_thinking_tokens=0 turns thinking off (no thoughts, zero budget).
+    actual = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(
+            max_thinking_tokens=0,
+        ),
+    )
+    self.assertEqual(
+        actual['thinkingConfig'],
+        {'includeThoughts': False, 'thinkingBudget': 0},
+    )
+
     with self.assertRaisesRegex(
         ValueError, '`json_schema` must be a dict, got'
     ):

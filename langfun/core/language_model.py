@@ -951,16 +951,21 @@ class LanguageModel(component.Component):
         if len(kv_parts) != 2:
           raise ValueError(f'Invalid kwargs in model string: {model_str!r}.')
         k, v = kv_parts
-        if v.isnumeric():
-          v = int(v)
-        elif v.lower() in ('true', 'false'):
+        v = v.strip()
+        if v.lower() in ('true', 'false'):
           v = v.lower() == 'true'
         else:
-          v = v.strip()
+          # Try int first; this also handles negative integers like '-1',
+          # which `str.isnumeric()` rejects. Fall back to float, else keep the
+          # string. '-1' must be int (not -1.0) for int-typed options such as
+          # `max_thinking_tokens` (pyglove has no float->int coercion).
           try:
-            v = float(v)
+            v = int(v)
           except ValueError:
-            pass
+            try:
+              v = float(v)
+            except ValueError:
+              pass
         kwargs[k] = v
       return model_id, kwargs
     else:

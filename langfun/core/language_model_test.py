@@ -264,6 +264,12 @@ class LanguageModelTest(unittest.TestCase):
     lm = lm_lib.LanguageModel.get('MockModel?temperature=0.1', temperature=0.2)
     self.assertEqual(lm.sampling_options.temperature, 0.2)
 
+    # Negative integers must parse as int (not float), so int-typed options like
+    # `max_thinking_tokens` are accepted by LMSamplingOptions.
+    lm = lm_lib.LanguageModel.get('MockModel?max_thinking_tokens=-1')
+    self.assertEqual(lm.sampling_options.max_thinking_tokens, -1)
+    self.assertIsInstance(lm.sampling_options.max_thinking_tokens, int)
+
     with self.assertRaisesRegex(ValueError, 'Invalid model string'):
       lm_lib.LanguageModel.get('MockModel??')
 

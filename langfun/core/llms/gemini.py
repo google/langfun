@@ -972,8 +972,14 @@ class Gemini(rest.REST):
       )
     thinking_config_data = {}
     if options.max_thinking_tokens is not None:
-      thinking_config_data['includeThoughts'] = options.max_thinking_tokens > 0
-      thinking_config_data['thinkingBudget'] = options.max_thinking_tokens
+      # `includeThoughts` is decoupled from the budget's sign: a negative budget
+      # (e.g. -1) requests a DYNAMIC/adaptive budget where the model decides how
+      # much to think while still returning thought summaries. Only an explicit
+      # budget of 0 turns thinking off. `max_thinking_tokens` is coerced to int
+      # to guard against float values (e.g. -1.0) that may reach this code path.
+      thinking_budget = int(options.max_thinking_tokens)
+      thinking_config_data['includeThoughts'] = thinking_budget != 0
+      thinking_config_data['thinkingBudget'] = thinking_budget
     if options.thinking_level is not None:
       thinking_config_data['thinkingLevel'] = options.thinking_level
     if thinking_config_data:
