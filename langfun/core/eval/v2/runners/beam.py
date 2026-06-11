@@ -80,7 +80,12 @@ if beam is not None:
     def setup(self):
       if self._concurrent_startup_delay is not None:
         time.sleep(random.randint(*self._concurrent_startup_delay))
-      self._runner = pg.from_json_str(self._runner_str)
+      # The runner config is first-party data serialized by the orchestrator
+      # for distribution; it may contain non-symbolic objects that use
+      # pyglove's opaque-object pickle path, disabled by default for security
+      # (b/511887449). Opt in for this trusted boundary.
+      with pg.enable_opaque_pickle(True):
+        self._runner = pg.from_json_str(self._runner_str)
       assert isinstance(self._runner, LeafNodeRunner)
       self._runner.setup()
       self._input_dir = self._runner.current_run.input_dir(
@@ -130,8 +135,14 @@ if beam is not None:
           datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
       )
 
-      # Process one example.
-      example = self._runner.process(pg.from_json_str(example_json))
+      # Process one example. The example input is first-party data serialized
+      # by the orchestrator; `Example.input` is typed `Any` and may contain
+      # non-symbolic objects that use pyglove's opaque-object pickle path,
+      # disabled by default for security (b/511887449). Opt in for this
+      # trusted boundary.
+      with pg.enable_opaque_pickle(True):
+        deserialized_example = pg.from_json_str(example_json)
+      example = self._runner.process(deserialized_example)
 
       # Perform atomic checkpointing.
       tmp_ckpt_file = os.path.join(

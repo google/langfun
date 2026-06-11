@@ -310,6 +310,32 @@ class InMemoryLMCacheTest(unittest.TestCase):
     cache3 = in_memory.InMemory(path)
     self.assertEqual(len(cache3), 0)
 
+  def test_save_load_with_secure_pickle_default(self):
+    """Warm-start round-trip works though opaque pickle is off by default.
+
+    Regression test for b/511887449: pyglove now disables opaque-object pickle
+    deserialization by default. The file-backed LM cache stores `LMCacheEntry`
+    (a plain dataclass) via the opaque-object pickle path, so loading its own
+    trusted cache file must keep working through the guarded I/O boundary.
+    """
+    pg.set_load_handler(pg.symbolic.default_load_handler)
+    pg.set_save_handler(pg.symbolic.default_save_handler)
+
+    path = os.path.join(tempfile.gettempdir(), 'secure_default_cache.json')
+    if os.path.exists(path):
+      os.remove(path)
+
+    cache = in_memory.InMemory(path)
+    lm = fake.StaticSequence(['1', '2'], cache=cache)
+    self.assertEqual(lm('a'), '1')
+    self.assertEqual(lm('b'), '2')
+    cache.save()
+
+    # Reloading the trusted cache file must succeed via the guarded boundary.
+    cache2 = in_memory.InMemory(path)
+    self.assertEqual(len(cache2), 2)
+    self.assertEqual(cache2._cache, cache._cache)
+
 
 class LmCacheTest(unittest.TestCase):
 

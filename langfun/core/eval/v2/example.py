@@ -163,13 +163,20 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
     for ckpt_file in ckpt_files:
       with pg.io.open_sequence(ckpt_file) as f:
         for record in f:
-          example = pg.from_json_str(
-              record,
-              example_input_by_id=example_input_by_id,
-              load_example_metadata=load_example_metadata,
-              convert_unknown=convert_unknown,
-              **kwargs
-          )
+          # Checkpoint files are first-party data written by langfun itself.
+          # `Example.input`/`output` are typed `Any`, so they may contain
+          # non-symbolic objects serialized through pyglove's opaque-object
+          # pickle path, which is disabled by default for security
+          # (b/511887449). Explicitly opt in to pickle for this trusted I/O
+          # boundary so checkpoint warm-start keeps working.
+          with pg.enable_opaque_pickle(True):
+            example = pg.from_json_str(
+                record,
+                example_input_by_id=example_input_by_id,
+                load_example_metadata=load_example_metadata,
+                convert_unknown=convert_unknown,
+                **kwargs,
+            )
           assert isinstance(example, cls), example
           yield example
 
@@ -333,4 +340,3 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
         }
         """
     ]
-

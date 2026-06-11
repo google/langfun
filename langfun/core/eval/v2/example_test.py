@@ -11,12 +11,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+import tempfile
 import unittest
 
 from langfun.core.eval.v2 import example as example_lib
 import pyglove as pg
 
 Example = example_lib.Example
+
+
+class _PlainOutput:
+  """A non-symbolic (opaque) output type, picklable at module scope."""
+
+  def __init__(self, value):
+    self.value = value
+
+  def __eq__(self, other):
+    return isinstance(other, _PlainOutput) and other.value == self.value
 
 
 class ExampleTest(unittest.TestCase):
@@ -117,6 +129,24 @@ class ExampleTest(unittest.TestCase):
     ex = Example(id=2, input=pg.Dict(x=1), output=pg.Dict(x=2))
     json_str = pg.to_json_str(ex, exclude_input=False)
     self.assertEqual(pg.from_json_str(json_str), ex)
+
+  def test_iter_ckpts_with_opaque_output(self):
+    """Checkpoint warm-start round-trips non-symbolic (opaque) outputs.
+
+    Regression test for b/511887449: `Example.output` is typed `Any`, so eval
+    outputs may be plain (non-symbolic) Python objects that pyglove serializes
+    through the opaque-object pickle path. With opaque pickle disabled by
+    default, reloading these trusted checkpoint files must still work.
+    """
+
+    ex = Example(id=1, input=pg.Dict(x=1), output=_PlainOutput(42))
+    ckpt = os.path.join(tempfile.mkdtemp(), 'opaque_ckpt.jsonl')
+    with pg.io.open_sequence(ckpt, 'a') as writer:
+      writer.add(pg.to_json_str(ex, exclude_input=False))
+
+    loaded = list(example_lib.Example.iter_ckpts(ckpt))
+    self.assertEqual(len(loaded), 1)
+    self.assertEqual(loaded[0].output, _PlainOutput(42))
 
   def test_html_view(self):
     ex = Example(

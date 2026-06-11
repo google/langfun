@@ -64,7 +64,13 @@ class InMemory(base.LMCacheBase):
 
     if self.filename is not None:
       try:
-        records = pg.load(self.filename)
+        # The cache file is first-party data written by `save()` below. It can
+        # contain `LMCacheEntry` (a plain dataclass) serialized through
+        # pyglove's opaque-object pickle path, which is disabled by default for
+        # security (b/511887449). Explicitly opt in to pickle for this trusted,
+        # self-written I/O boundary so warm-start keeps working.
+        with pg.enable_opaque_pickle(True):
+          records = pg.load(self.filename)
         for record in records:
           model_cache = {}
           for entry in record.entries:
@@ -75,10 +81,13 @@ class InMemory(base.LMCacheBase):
             "Creating a new cache as cache file '%s' does not exist.",
             self.filename,
         )
-      except json.JSONDecodeError:
+      except (json.JSONDecodeError, TypeError, ValueError) as e:
+        # Degrade gracefully (start fresh) if the cache file is corrupted or
+        # cannot be deserialized, rather than crashing the caller.
         pg.logging.warning(
-            "Creating a new cache as cache file '%s' is corrupted.",
+            "Creating a new cache as cache file '%s' could not be loaded: %s",
             self.filename,
+            e,
         )
 
   def model_ids(self) -> list[str]:
