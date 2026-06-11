@@ -64,7 +64,14 @@ class InMemory(base.LMCacheBase):
 
     if self.filename is not None:
       try:
-        records = pg.load(self.filename)
+        # The cache file is written by this class via `pg.save` (see `save`),
+        # which round-trips non-symbolic `LMCacheEntry` values through the
+        # opaque-object pickle path. That path is disabled by default
+        # (secure-by-default), so explicitly opt in here: this is a trusted,
+        # first-party I/O boundary that only reads cache files this same code
+        # produced.
+        with pg.utils.json_conversion.enable_opaque_pickle(True):
+          records = pg.load(self.filename)
         for record in records:
           model_cache = {}
           for entry in record.entries:
@@ -75,10 +82,16 @@ class InMemory(base.LMCacheBase):
             "Creating a new cache as cache file '%s' does not exist.",
             self.filename,
         )
-      except json.JSONDecodeError:
+      except (json.JSONDecodeError, TypeError, ValueError) as e:
+        # Degrade gracefully to an empty cache for any unloadable blob: a
+        # corrupt/truncated file (JSONDecodeError), or an opaque payload that
+        # cannot be deserialized -- e.g. a legacy/incompatible entry or a
+        # hostile blob (raised as TypeError/ValueError by pyglove). Crashing
+        # the run on a bad cache file would be a denial of service.
         pg.logging.warning(
-            "Creating a new cache as cache file '%s' is corrupted.",
+            "Creating a new cache as cache file '%s' could not be loaded: %s",
             self.filename,
+            e,
         )
 
   def model_ids(self) -> list[str]:
@@ -164,7 +177,11 @@ class InMemory(base.LMCacheBase):
     for model_id in self.model_ids():
       entries = [dict(k=k, v=v) for k, v in self.items(model_id)]
       records.append(dict(model_id=model_id, entries=entries))
-    pg.save(records, path)
+    # Non-symbolic `LMCacheEntry` values serialize through the opaque-object
+    # pickle path; opt in explicitly at this trusted, first-party boundary so
+    # the cache stays writable under the secure-by-default policy.
+    with pg.utils.json_conversion.enable_opaque_pickle(True):
+      pg.save(records, path)
 
 
 @contextlib.contextmanager

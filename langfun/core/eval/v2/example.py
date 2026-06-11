@@ -115,7 +115,14 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
     else:
       example_input = json_value.pop('input', pg.MISSING_VALUE)
       if example_input is not pg.MISSING_VALUE:
-        example_input = pg.from_json(example_input, **kwargs)
+        # Checkpoints are first-party data this framework wrote via `pg.save`
+        # (see checkpointing.py). An example's `input`/`output`/`metadata` are
+        # typed `Any` and may hold non-symbolic Python objects, which round-trip
+        # through the opaque-object pickle path. That path is disabled by
+        # default (secure-by-default), so opt in explicitly at this trusted
+        # checkpoint-read boundary.
+        with pg.utils.json_conversion.enable_opaque_pickle(True):
+          example_input = pg.from_json(example_input, **kwargs)
     json_value['input'] = example_input
 
     # NOTE(daiyip): We need to load the types of the examples into the
@@ -137,7 +144,12 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
     # loaded. So we could apply the filter to decide whether to load the
     # metadata.
     metadata_dict = json_value.pop('metadata', None)
-    with pg.JSONConvertible.load_types_for_deserialization(
+    # See the comment above: opt in to opaque-object pickle while deserializing
+    # the remaining (possibly non-symbolic) `output`/`metadata` fields of this
+    # trusted, first-party checkpoint example.
+    with pg.utils.json_conversion.enable_opaque_pickle(
+        True
+    ), pg.JSONConvertible.load_types_for_deserialization(
         *example_class_defs(example_input)
     ):
       example = cls(
@@ -333,4 +345,3 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
         }
         """
     ]
-

@@ -310,6 +310,25 @@ class InMemoryLMCacheTest(unittest.TestCase):
     cache3 = in_memory.InMemory(path)
     self.assertEqual(len(cache3), 0)
 
+  def test_load_hostile_opaque_cache_degrades_gracefully(self):
+    pg.set_load_handler(pg.symbolic.default_load_handler)
+    pg.set_save_handler(pg.symbolic.default_save_handler)
+
+    path = os.path.join(tempfile.gettempdir(), 'hostile_cache.json')
+    # Structurally valid JSON whose payload is an _OpaqueObject with a value
+    # that cannot be unpickled. Loading opts in to opaque pickle at this trusted
+    # boundary, so this exercises the decode-failure path: pyglove raises a
+    # ValueError ('Cannot decode opaque object'). The cache must absorb it and
+    # degrade to an empty cache instead of crashing the run (a denial of
+    # service on a bad/hostile/legacy cache file).
+    hostile = (
+        '{"_type": "pyglove.core.utils.json_conversion._OpaqueObject",'
+        ' "value": "this-is-not-a-valid-pickle"}'
+    )
+    pg.io.writefile(path, hostile)
+    cache = in_memory.InMemory(path)
+    self.assertEqual(len(cache), 0)
+
 
 class LmCacheTest(unittest.TestCase):
 
