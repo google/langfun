@@ -204,6 +204,16 @@ from langfun.core.llms.vertexai import VertexAIClaude35Sonnet_20241022
 from langfun.core.llms.vertexai import VertexAIClaude35Haiku_20241022
 from langfun.core.llms.vertexai import VertexAIClaude3Opus_20240229
 
+from langfun.core.llms.vertexai import VertexAIClaude45Haiku
+from langfun.core.llms.vertexai import VertexAIClaude45Sonnet
+from langfun.core.llms.vertexai import VertexAIClaude45Opus
+from langfun.core.llms.vertexai import VertexAIClaude4Opus
+from langfun.core.llms.vertexai import VertexAIClaude4Sonnet
+from langfun.core.llms.vertexai import VertexAIClaude37Sonnet
+from langfun.core.llms.vertexai import VertexAIClaude35Sonnet
+from langfun.core.llms.vertexai import VertexAIClaude35Haiku
+from langfun.core.llms.vertexai import VertexAIClaude3Opus
+
 # Misc open source models.
 
 # Gemma models.

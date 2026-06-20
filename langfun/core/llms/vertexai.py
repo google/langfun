@@ -565,6 +565,17 @@ class VertexAIClaude3Opus_20240229(VertexAIAnthropic):
   """Anthropic's Claude 3 Opus model on VertexAI."""
   model = 'claude-3-opus@20240229'
 
+
+VertexAIClaude45Haiku = VertexAIClaude45Haiku_20251001
+VertexAIClaude45Sonnet = VertexAIClaude45Sonnet_20250929
+VertexAIClaude45Opus = VertexAIClaude45Opus_20251101
+VertexAIClaude4Opus = VertexAIClaude4Opus_20250514
+VertexAIClaude4Sonnet = VertexAIClaude4Sonnet_20250514
+VertexAIClaude37Sonnet = VertexAIClaude37Sonnet_20250219
+VertexAIClaude35Sonnet = VertexAIClaude35Sonnet_20241022
+VertexAIClaude35Haiku = VertexAIClaude35Haiku_20241022
+VertexAIClaude3Opus = VertexAIClaude3Opus_20240229
+
 # pylint: enable=invalid-name
 
 #
