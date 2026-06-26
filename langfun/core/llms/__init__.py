@@ -94,6 +94,7 @@ from langfun.core.llms.vertexai import VertexAIGemini25ProPreview_20250605
 from langfun.core.llms.vertexai import VertexAIGemini25Pro
 from langfun.core.llms.vertexai import VertexAIGemini25Flash
 from langfun.core.llms.vertexai import VertexAIGemini25FlashImagePreview
+from langfun.core.llms.vertexai import VertexAIGemini35Flash
 from langfun.core.llms.vertexai import VertexAIGemini31ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProImagePreview

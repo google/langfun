@@ -68,6 +68,19 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_35_flash(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    model = vertexai.VertexAIGemini35Flash(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-3.5-flash')
+    self.assertEqual(model.model_info.model_id, 'gemini-3.5-flash')
+    self.assertEqual(model.model_info.provider, 'VertexAI')
+    # 3.x models default to 'global' location.
+    self.assertIn('global', model.api_endpoint)
+    del os.environ['VERTEXAI_PROJECT']
+    del os.environ['VERTEXAI_LOCATION']
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_multi_project_support(self):
     # Test single project (backward compatibility)
     model = vertexai.VertexAIGemini15Pro(
