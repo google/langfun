@@ -98,6 +98,7 @@ from langfun.core.llms.vertexai import VertexAIGemini31ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProImagePreview
 from langfun.core.llms.vertexai import VertexAIGemini3FlashPreview
+from langfun.core.llms.vertexai import VertexAIGemini35Flash
 
 # Veo video generation models.
 from langfun.core.llms.veo import Veo
