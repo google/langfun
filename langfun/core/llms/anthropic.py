@@ -138,6 +138,36 @@ SUPPORTED_MODELS = [
         ),
     ),
     AnthropicModelInfo(
+        # NOTE(yifenglu): GA on Vertex (model_id 'claude-sonnet-4-6', us-east5).
+        # Context-window/token/pricing/rate-limit fields mirror the
+        # claude-sonnet-4-5 entry (nearest Sonnet); release_date and
+        # knowledge_cutoff are best-effort and not independently verified.
+        model_id='claude-sonnet-4-6',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude 4.6 Sonnet model.',
+        release_date=datetime.datetime(2026, 2, 5),
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=200_000,
+            max_output_tokens=64_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.3,
+            cost_per_1m_input_tokens=3,
+            cost_per_1m_output_tokens=15,
+        ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            # Tier 4 rate limits
+            max_requests_per_minute=4000,
+            max_input_tokens_per_minute=2_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-haiku-4-5-20251001',
         provider='Anthropic',
         in_service=True,

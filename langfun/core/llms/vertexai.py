@@ -294,6 +294,13 @@ class VertexAIGemini3FlashPreview(VertexAIGemini):  # pylint: disable=invalid-na
   location = 'global'
 
 
+class VertexAIGemini35Flash(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3.5 Flash GA model launched on 05/19/2026."""
+
+  model = 'gemini-3.5-flash'
+  location = 'global'
+
+
 class VertexAIGemini31FlashLitePreview(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 3.1 Flash Lite Preview model."""
 
@@ -515,6 +522,16 @@ class VertexAIClaude46Opus(VertexAIAnthropic):
   """Anthropic's Claude 4.6 Opus model on VertexAI."""
 
   model = 'claude-opus-4-6'
+
+
+class VertexAIClaude46Sonnet(VertexAIAnthropic):
+  """Anthropic's Claude 4.6 Sonnet model on VertexAI.
+
+  Uses the bare model id 'claude-sonnet-4-6' (NEVER a date suffix, which 404s
+  on Vertex) and inherits the Anthropic base default location 'us-east5'.
+  """
+
+  model = 'claude-sonnet-4-6'
 
 
 class VertexAIClaude45Haiku_20251001(VertexAIAnthropic):
@@ -835,6 +852,8 @@ def _register_vertexai_models():
   lf.LanguageModel.register('claude-opus-4-7@latest', anthropic.Anthropic)
   lf.LanguageModel.register('claude-opus-4-8', VertexAIClaude48Opus)
   lf.LanguageModel.register('claude-opus-4-8@latest', anthropic.Anthropic)
+  lf.LanguageModel.register('claude-sonnet-4-6', VertexAIClaude46Sonnet)
+  lf.LanguageModel.register('claude-sonnet-4-6@latest', anthropic.Anthropic)
 
   for m in LLAMA_MODELS:
     lf.LanguageModel.register(m.model_id, VertexAILlama)

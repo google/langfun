@@ -98,6 +98,7 @@ from langfun.core.llms.vertexai import VertexAIGemini31ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProImagePreview
 from langfun.core.llms.vertexai import VertexAIGemini3FlashPreview
+from langfun.core.llms.vertexai import VertexAIGemini35Flash
 
 # Veo video generation models.
 from langfun.core.llms.veo import Veo
@@ -194,6 +195,7 @@ from langfun.core.llms.anthropic import Claude3Haiku_20240307
 from langfun.core.llms.vertexai import VertexAIAnthropic
 from langfun.core.llms.vertexai import VertexAIClaude47Opus
 from langfun.core.llms.vertexai import VertexAIClaude46Opus
+from langfun.core.llms.vertexai import VertexAIClaude46Sonnet
 from langfun.core.llms.vertexai import VertexAIClaude45Haiku_20251001
 from langfun.core.llms.vertexai import VertexAIClaude45Sonnet_20250929
 from langfun.core.llms.vertexai import VertexAIClaude45Opus_20251101
