@@ -151,17 +151,18 @@ def _function_gen(
       f = python.evaluate(source_code, global_vars=context)
 
       # Check whether the sigantures are the same.
-      if inspect.signature(f) != inspect.signature(func):
+      if inspect.signature(f) != inspect.signature(func):  # pyrefly: ignore[bad-argument-type]
         raise python.CodeError(
             code=source_code,
             cause=TypeError(
+                # pyrefly: ignore[bad-argument-type]
                 f"Signature mismatch: Expected: {inspect.signature(func)}, "
                 f"Actual: {inspect.signature(f)}.",
             ),
         )
 
       if callable(unittest):
-        unittest(f)
+        unittest(f)  # pyrefly: ignore[bad-argument-type]
       elif unittest_examples:
         unittest_with_test_cases(f, unittest_examples)
 
@@ -171,7 +172,7 @@ def _function_gen(
       pg.logging.warning(
           f"Bad code generated: {e}",
       )
-  raise last_error
+  raise last_error  # pyrefly: ignore[bad-raise]
 
 
 def _process_signature(signature):
@@ -270,7 +271,7 @@ def function_gen(
           func.__function__ = python.evaluate(
               func.__source_code__, global_vars=context
           )
-          return func.__function__(*args, **kwargs)
+          return func.__function__(*args, **kwargs)  # pyrefly: ignore[not-callable]
 
       func.__function__, func.__source_code__ = _function_gen(
           func,
@@ -289,7 +290,7 @@ def function_gen(
     lm_generated_func.__name__ = func.__name__
     lm_generated_func.__qualname__ = func.__qualname__
     lm_generated_func.__module__ = func.__module__
-    lm_generated_func.source = lambda: func.__source_code__
+    lm_generated_func.source = lambda: func.__source_code__  # pyrefly: ignore[missing-attribute]
     return lm_generated_func
 
   return _decorate

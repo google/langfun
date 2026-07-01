@@ -106,7 +106,7 @@ class BaseFeature(interface.Feature):
     env = self.sym_ancestor(
         lambda v: isinstance(v, interface.AbstractEnvironment)
     )
-    return env
+    return env  # pyrefly: ignore[bad-return]
 
   @property
   def sandbox(self) -> interface.Sandbox | None:
@@ -117,7 +117,7 @@ class BaseFeature(interface.Feature):
     return self._sandbox
 
   @property
-  def event_handler(self) -> interface.EventHandler:
+  def event_handler(self) -> interface.EventHandler:  # pyrefly: ignore[bad-override]
     if hasattr(self, '_event_handler_ref'):
       return self._event_handler_ref
     return super().event_handler
@@ -126,7 +126,7 @@ class BaseFeature(interface.Feature):
   def is_online(self) -> bool:
     """Returns True if the feature is online."""
     if self.is_sandbox_based:
-      return self.sandbox.is_online
+      return self.sandbox.is_online  # pyrefly: ignore[missing-attribute]
     return self._is_online
 
   @property
@@ -140,7 +140,7 @@ class BaseFeature(interface.Feature):
   def working_dir(self) -> str | None:
     """Returns the working directory of the feature."""
     if self.is_sandbox_based:
-      sandbox_workdir = self.sandbox.working_dir
+      sandbox_workdir = self.sandbox.working_dir  # pyrefly: ignore[missing-attribute]
       if sandbox_workdir is None:
         return None
       return os.path.join(sandbox_workdir, self.name)
@@ -292,7 +292,7 @@ class BaseFeature(interface.Feature):
   ) -> None:
     """Called when the feature is teardown for a user session."""
     self.event_handler.on_feature_teardown_session(
-        feature=self, session_id=self.session_id, duration=duration, error=error
+        feature=self, session_id=self.session_id, duration=duration, error=error  # pyrefly: ignore[bad-argument-type]
     )
 
   def on_activity(
