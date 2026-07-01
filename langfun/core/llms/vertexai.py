@@ -294,6 +294,13 @@ class VertexAIGemini3FlashPreview(VertexAIGemini):  # pylint: disable=invalid-na
   location = 'global'
 
 
+class VertexAIGemini35Flash(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3.5 Flash GA model launched on 05/19/2026."""
+
+  model = 'gemini-3.5-flash'
+  location = 'global'
+
+
 class VertexAIGemini31FlashLitePreview(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 3.1 Flash Lite Preview model."""
 
