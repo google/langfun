@@ -325,16 +325,19 @@ class Evaluable(lf.Component):
               'LastCompleted': leaf.node.id
           })
 
-      # NOTE(daiyip): Run leaf nodes grouped by model resource id. This allows
-      # evaluations using the same resource to run sequentially, which favors
-      # completing evaluations over running evaluations sparsely.
+      # NOTE: Fan out all independent leaf evaluations concurrently. Each leaf
+      # is placed in its own group (keyed by its unique leaf id) and the run is
+      # dispatched with max_workers == number of leaves, so every leaf can be
+      # in flight at once. Per-model backpressure is still enforced by the
+      # LM-level rate-limit semaphore (Layer C, keyed by resource_id), which
+      # remains the only cap on concurrent requests to a given model.
       filter = filter or (lambda x: True)
       leaf_nodes: list[_LeafNode] = []
       leaf_groups: dict[str, list[_LeafNode]] = collections.defaultdict(list)
 
       for i, leaf in enumerate(self.leaf_nodes):
         node = _LeafNode(index=i + 1, node=leaf, enabled=filter(leaf))
-        leaf_groups[leaf.lm.resource_id].append(node)
+        leaf_groups[leaf.id].append(node)
         leaf_nodes.append(node)
 
       if leaf_groups:
@@ -354,7 +357,8 @@ class Evaluable(lf.Component):
               _run_group,
               [(overview_bar, group) for group in leaf_groups.values()],
               silence_on_errors=None,
-              max_workers=len(leaf_groups)):
+              max_workers=len(leaf_nodes),
+          ):
             pass
 
           # Save results for non-leaf nodes.
