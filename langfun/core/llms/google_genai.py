@@ -84,8 +84,8 @@ class GenAI(gemini.Gemini):
   ] = 'v1beta'
 
   @functools.cached_property
-  def model_info(self) -> lf.ModelInfo:
-    return super().model_info.clone(
+  def model_info(self) -> lf.ModelInfo:  # pyrefly: ignore[bad-override]
+    return super().model_info.clone(  # pyrefly: ignore[bad-return]
         override=dict(provider='Google GenAI')
     )
 
@@ -96,7 +96,7 @@ class GenAI(gemini.Gemini):
     return s
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     api_key = self.api_key or os.environ.get('GOOGLE_API_KEY', None)
     if not api_key:
       raise ValueError(

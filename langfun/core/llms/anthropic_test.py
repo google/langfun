@@ -17,6 +17,7 @@ import base64
 import copy
 import datetime
 import os
+import time
 from typing import Any
 import unittest
 from unittest import mock
@@ -1056,6 +1057,351 @@ class AnthropicCachingTest(unittest.TestCase):
     anthropic._apply_cache_breakpoints(request)
     self.assertIn('cache_control', request['system'][0])
     self.assertIn('cache_control', request['messages'][-1]['content'][-1])
+
+
+# A realistic Anthropic Messages SSE byte stream: one thinking block followed
+# by one text block, then a message_delta carrying the final stop_reason and
+# usage.output_tokens, then message_stop. Mirrors what Vertex/Anthropic emits
+# when the request body has stream=True.
+_SSE_STREAM = (
+    'event: message_start\n'
+    'data: {"type":"message_start","message":{"id":"msg_1","type":"message",'
+    '"role":"assistant","model":"claude-opus-4-6","content":[],'
+    '"stop_reason":null,"stop_sequence":null,'
+    '"usage":{"input_tokens":25,"output_tokens":1}}}\n'
+    '\n'
+    'event: content_block_start\n'
+    'data: {"type":"content_block_start","index":0,'
+    '"content_block":{"type":"thinking","thinking":""}}\n'
+    '\n'
+    'event: content_block_delta\n'
+    'data: {"type":"content_block_delta","index":0,'
+    '"delta":{"type":"thinking_delta","thinking":"Let me think. "}}\n'
+    '\n'
+    'event: content_block_delta\n'
+    'data: {"type":"content_block_delta","index":0,'
+    '"delta":{"type":"thinking_delta","thinking":"Done."}}\n'
+    '\n'
+    'event: content_block_delta\n'
+    'data: {"type":"content_block_delta","index":0,'
+    '"delta":{"type":"signature_delta","signature":"sig=="}}\n'
+    '\n'
+    'event: content_block_stop\n'
+    'data: {"type":"content_block_stop","index":0}\n'
+    '\n'
+    'event: content_block_start\n'
+    'data: {"type":"content_block_start","index":1,'
+    '"content_block":{"type":"text","text":""}}\n'
+    '\n'
+    'event: ping\n'
+    'data: {"type":"ping"}\n'
+    '\n'
+    'event: content_block_delta\n'
+    'data: {"type":"content_block_delta","index":1,'
+    '"delta":{"type":"text_delta","text":"Hello"}}\n'
+    '\n'
+    'event: content_block_delta\n'
+    'data: {"type":"content_block_delta","index":1,'
+    '"delta":{"type":"text_delta","text":", world!"}}\n'
+    '\n'
+    'event: content_block_stop\n'
+    'data: {"type":"content_block_stop","index":1}\n'
+    '\n'
+    'event: message_delta\n'
+    'data: {"type":"message_delta",'
+    '"delta":{"stop_reason":"end_turn","stop_sequence":null},'
+    '"usage":{"output_tokens":42}}\n'
+    '\n'
+    'event: message_stop\n'
+    'data: {"type":"message_stop"}\n'
+    '\n'
+)
+
+
+def mock_sse_post(sse_text, chunk_size_bytes=16, delay_per_chunk=0.0):
+  """Returns a mock session.post that streams `sse_text` in chunks."""
+  raw = sse_text.encode('utf-8')
+
+  def _mock_post(url, json=None, timeout=None, stream=False, **kwargs):
+    del url, json, timeout, stream, kwargs
+    response = requests.Response()
+    response.status_code = 200
+    response.headers['Content-Type'] = 'text/event-stream'
+    response._content = False  # pylint: disable=protected-access
+
+    def _iter(chunk_size=1, decode_unicode=False):
+      del chunk_size, decode_unicode
+      for i in range(0, len(raw), chunk_size_bytes):
+        if delay_per_chunk > 0:
+          time.sleep(delay_per_chunk)
+        yield raw[i : i + chunk_size_bytes]
+
+    response.iter_content = _iter
+    response.close = lambda: None
+    return response
+
+  return _mock_post
+
+
+class AnthropicStreamingSSETest(unittest.TestCase):
+  """TDD tests for the streaming-body SSE reassembler."""
+
+  def test_reassemble_sse_matches_buffered_equivalent(self):
+    """Reassembled SSE dict must equal the buffered (non-streaming) dict."""
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    reassembled = lm._reassemble_sse(_SSE_STREAM)
+    expected_buffered = {
+        'id': 'msg_1',
+        'type': 'message',
+        'role': 'assistant',
+        'model': 'claude-opus-4-6',
+        'content': [
+            {
+                'type': 'thinking',
+                'thinking': 'Let me think. Done.',
+                'signature': 'sig==',
+            },
+            {'type': 'text', 'text': 'Hello, world!'},
+        ],
+        'stop_reason': 'end_turn',
+        'stop_sequence': None,
+        'usage': {'input_tokens': 25, 'output_tokens': 42},
+    }
+    self.assertEqual(reassembled, expected_buffered)
+
+  def test_streaming_call_end_to_end(self):
+    """A full streamed call rebuilds text + usage through the client path."""
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_sse_post(_SSE_STREAM, chunk_size_bytes=8)
+      lm = anthropic.Claude46Opus(api_key='fake_key')
+      response = lm('hello')
+      # stream=True must be sent in the request body.
+      _, kwargs = mock_request.call_args
+      self.assertTrue(kwargs.get('stream'))
+      self.assertEqual(kwargs['json']['stream'], True)
+      # Text content correctly reassembled.
+      self.assertEqual(response.text, 'Hello, world!')
+      # Usage rebuilt: input_tokens from message_start, output_tokens from
+      # the final message_delta (NOT the initial output_tokens=1).
+      self.assertEqual(response.usage.prompt_tokens, 25)
+      self.assertEqual(response.usage.completion_tokens, 42)
+      self.assertEqual(response.usage.total_tokens, 67)
+
+  def test_buffered_json_body_still_parses(self):
+    """A single buffered JSON body (non-SSE) must still parse (auto-detect)."""
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post
+      lm = anthropic.Claude46Opus(api_key='fake_key')
+      response = lm('hello')
+      self.assertRegex(response.text, 'hello.*')
+      self.assertEqual(response.usage.completion_tokens, 1)
+
+  def test_tool_use_input_json_reassembled(self):
+    """input_json_delta fragments reassemble into a parsed tool input dict."""
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"usage":{"input_tokens":5,"output_tokens":1}}}\n\n'
+        'event: content_block_start\n'
+        'data: {"type":"content_block_start","index":0,'
+        '"content_block":{"type":"tool_use","id":"t1","name":"calc",'
+        '"input":{}}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"input_json_delta","partial_json":"{\\"x\\":"}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"input_json_delta","partial_json":"7}"}}\n\n'
+        'event: content_block_stop\n'
+        'data: {"type":"content_block_stop","index":0}\n\n'
+        'event: message_delta\n'
+        'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},'
+        '"usage":{"output_tokens":9}}\n\n'
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    reassembled = lm._reassemble_sse(sse)
+    self.assertEqual(reassembled['content'][0]['input'], {'x': 7})
+    self.assertEqual(reassembled['stop_reason'], 'tool_use')
+    self.assertEqual(reassembled['usage']['output_tokens'], 9)
+
+  def test_malformed_stream_without_message_start_raises(self):
+    """An SSE stream missing message_start is an unusable 200 => retryable."""
+    sse = (
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"text_delta","text":"orphan"}}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    # A 200 whose body never produced a message is a transient streaming
+    # anomaly, not a permanent client error; it must be retryable.
+    with self.assertRaises(lf.TemporaryLMError):
+      lm._reassemble_sse(sse)
+    # And via the full parse path it surfaces (the retryable error propagates
+    # with max_attempts=1; type precision is asserted directly above).
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_sse_post(sse)
+      with self.assertRaises(Exception):
+        lm('hello', max_attempts=1)
+
+  def test_truncated_stream_without_message_stop_raises_retryable(self):
+    """Cleanly-closed-but-incomplete 200 (no message_stop) => retryable.
+
+    Defect (terminal sentinel): a stream carrying message_start +
+    content_block_delta but NO message_delta/message_stop leaves stop_reason
+    null. Such a truncated-but-200 response must be RETRYABLE, never silently
+    returned as truncated text with a low output_tokens count.
+    """
+    truncated = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"stop_reason":null,"stop_sequence":null,'
+        '"usage":{"input_tokens":10,"output_tokens":1}}}\n\n'
+        'event: content_block_start\n'
+        'data: {"type":"content_block_start","index":0,'
+        '"content_block":{"type":"text","text":""}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"text_delta","text":"partial answer"}}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    with self.assertRaises(lf.TemporaryLMError):
+      lm._reassemble_sse(truncated)
+
+  def test_in_stream_overloaded_error_is_retryable(self):
+    """In-stream `event: error` overloaded_error (HTTP 200) => retryable.
+
+    Defect (retryability): mirrors the buffered 529 -> TemporaryLMError
+    behavior so a transient Anthropic overload mid-stream stays retryable.
+    """
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"usage":{"input_tokens":3,"output_tokens":1}}}\n\n'
+        'event: error\n'
+        'data: {"type":"error","error":{"type":"overloaded_error",'
+        '"message":"Overloaded"}}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    with self.assertRaises(lf.TemporaryLMError):
+      lm._reassemble_sse(sse)
+
+  def test_in_stream_rate_limit_error_is_retryable(self):
+    """In-stream `event: error` rate_limit_error (HTTP 200) => RateLimitError.
+
+    Defect (retryability): mirrors the buffered 429 -> RateLimitError behavior.
+    """
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"usage":{"input_tokens":3,"output_tokens":1}}}\n\n'
+        'event: error\n'
+        'data: {"type":"error","error":{"type":"rate_limit_error",'
+        '"message":"Rate limited"}}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    with self.assertRaises(lf.RateLimitError):
+      lm._reassemble_sse(sse)
+
+  def test_empty_sse_200_is_retryable(self):
+    """A 200 SSE body with no events (keep-alives only) => retryable.
+
+    Defect (retryability): an empty/no-events SSE 200 must NOT be downgraded
+    to a permanent lf.LMError (which is what a bare ValueError becomes in
+    _parse_response); it is a transient anomaly and must be retried.
+    """
+    sse = ': keep-alive\n\nevent: ping\ndata: {"type":"ping"}\n\n'
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    with self.assertRaises(lf.TemporaryLMError):
+      lm._reassemble_sse(sse)
+
+  def test_tool_use_input_json_split_across_three_frames_reassembles(self):
+    """Adversarial re-verification that split tool-input JSON reassembles.
+
+    Splits the tool input JSON across THREE input_json_delta frames at awkward
+    boundaries (mid-key, mid-value). This probes whether the partial-JSON
+    accumulation defect is live; the accumulator must reconstruct the full
+    input dict.
+    """
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"usage":{"input_tokens":5,"output_tokens":1}}}\n\n'
+        'event: content_block_start\n'
+        'data: {"type":"content_block_start","index":0,'
+        '"content_block":{"type":"tool_use","id":"t1","name":"weather",'
+        '"input":{}}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"input_json_delta","partial_json":"{\\"unit\\""}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"input_json_delta","partial_json":":\\"C\\",\\"temp"}}'
+        '\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"input_json_delta","partial_json":"erature\\":21}"}}'
+        '\n\n'
+        'event: content_block_stop\n'
+        'data: {"type":"content_block_stop","index":0}\n\n'
+        'event: message_delta\n'
+        'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},'
+        '"usage":{"output_tokens":9}}\n\n'
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    reassembled = lm._reassemble_sse(sse)
+    self.assertEqual(
+        reassembled['content'][0]['input'], {'unit': 'C', 'temperature': 21}
+    )
+    self.assertEqual(reassembled['stop_reason'], 'tool_use')
+
+  def test_malformed_content_delta_does_not_silently_truncate(self):
+    """A malformed `data:` content delta must NOT be silently dropped.
+
+    Defect (terminal integrity / silent corruption): a well-formed Anthropic
+    SSE stream emits exactly one valid-JSON payload per `data:` line. If a
+    `content_block_delta` line is corrupt/truncated JSON, silently skipping it
+    drops that text fragment while `message_stop` + a non-null `stop_reason`
+    still arrive -- so the terminal sentinel passes and the reassembler would
+    return SILENTLY TRUNCATED text (here "Hello " instead of "Hello world").
+    The buffered path fails loudly on a malformed body (json.loads ->
+    ValueError -> LMError) and never returns partial content; the streaming
+    path must preserve that no-silent-corruption guarantee by raising a
+    RETRYABLE error instead of returning the truncated text.
+    """
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"stop_reason":null,"stop_sequence":null,'
+        '"usage":{"input_tokens":10,"output_tokens":1}}}\n\n'
+        'event: content_block_start\n'
+        'data: {"type":"content_block_start","index":0,'
+        '"content_block":{"type":"text","text":""}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"text_delta","text":"Hello "}}\n\n'
+        # Corrupt/truncated JSON payload (missing closing braces) that would
+        # have carried "world"; must not be silently discarded.
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"text_delta","text":"world"\n\n'
+        'event: content_block_stop\n'
+        'data: {"type":"content_block_stop","index":0}\n\n'
+        'event: message_delta\n'
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},'
+        '"usage":{"output_tokens":5}}\n\n'
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    with self.assertRaises(lf.TemporaryLMError):
+      lm._reassemble_sse(sse)
 
 
 if __name__ == '__main__':
