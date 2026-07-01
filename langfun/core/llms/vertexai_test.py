@@ -202,7 +202,7 @@ class VertexAIAnthropicTest(unittest.TestCase):
                 }],
                 'role': 'user',
             }],
-            'stream': False,
+            'stream': True,
             'temperature': 0.0,
             'top_k': 40,
         },
