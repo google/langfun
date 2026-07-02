@@ -893,7 +893,7 @@ class LanguageModel(component.Component):
   _MODEL_FACTORY: ClassVar[dict[str, Callable[..., 'LanguageModel']]] = {}
 
   @classmethod
-  def register(
+  def register(  # pyrefly: ignore[bad-override]
       cls,
       model_id_or_prefix: str, factory: Callable[..., 'LanguageModel']
   ) -> None:
@@ -1126,7 +1126,7 @@ class LanguageModel(component.Component):
 
       def _sample_with_retry():
         if self.cache is None:
-          results = self._sample(prompts)
+          results = self._sample(prompts)  # pyrefly: ignore[bad-argument-type]
         else:
           results = self._sample_with_cache_lookup(prompts, cache_seed)
 
@@ -1134,7 +1134,7 @@ class LanguageModel(component.Component):
           for sample in result.samples:
             if not sample.response.text:
               if self.cache is not None:
-                self.cache.delete(self, prompts[i], seed=cache_seed)
+                self.cache.delete(self, prompts[i], seed=cache_seed)  # pyrefly: ignore[bad-argument-type]
               raise EmptyGenerationError(
                   f'Empty generation encountered from model {self.model_id}.'
               )
@@ -1153,7 +1153,7 @@ class LanguageModel(component.Component):
       for prompt, result in zip(prompts, results):
 
         # Tag LM input.
-        prompt.tag(message_lib.Message.TAG_LM_INPUT)
+        prompt.tag(message_lib.Message.TAG_LM_INPUT)  # pyrefly: ignore[missing-attribute]
 
         for sample in result.samples:
           # Update metadata for response message.
@@ -1226,15 +1226,15 @@ class LanguageModel(component.Component):
       r = None
       # Query cache if cache_seed is not None.
       if cache_seed is not None:
-        r = self.cache.get(self, prompt, seed=cache_seed)
+        r = self.cache.get(self, prompt, seed=cache_seed)  # pyrefly: ignore[bad-argument-type]
 
       if r is None:
         request_to_result_index[len(requests)] = i
         requests.append(prompt)
       else:
         result = r.clone()
-        assert result.is_cached, result
-        results[i] = result
+        assert result.is_cached, result  # pyrefly: ignore[missing-attribute]
+        results[i] = result  # pyrefly: ignore[unsupported-operation]
 
     # Sample non-cache-hit prompts.
     if requests:
@@ -1452,10 +1452,10 @@ class LanguageModel(component.Component):
     request_start = time.time()
 
     with component.context(override_attrs=True, **kwargs):
-      scoring_results = self._score(prompt, completions)
+      scoring_results = self._score(prompt, completions)  # pyrefly: ignore[bad-argument-type]
       elapse = time.time() - request_start
       self._debug_score(
-          prompt, completions, scoring_results, call_counter, elapse
+          prompt, completions, scoring_results, call_counter, elapse  # pyrefly: ignore[bad-argument-type]
       )
       return scoring_results
 
