@@ -1326,5 +1326,110 @@ class RedTeamStreamingTest(unittest.TestCase):
       self.assertEqual(kwargs['request_deadline_ms'], 0)
 
 
+class InactivityVsTotalTimeoutTest(unittest.TestCase):
+  """Tests the inactivity vs total deadline split.
+
+  This split (a SHORT per-chunk inactivity bound vs a LONG total wall-clock
+  budget) is the core slow-but-live-generation fix. Real timescales
+  (120s inactivity / 4h total) are scaled down here so the tests run quickly;
+  the logic under test is identical.
+  """
+
+  def _make_lm(self, timeout=None, inactivity_timeout=None,
+               max_total_timeout=None):
+    return rest.REST(
+        api_endpoint='https://fake-api.com',
+        request=lambda x, o: dict(prompt=x.text),
+        result=lambda x: lf.LMSamplingResult(
+            [lf.LMSample(c) for c in x['content']]
+        ),
+        timeout=timeout,
+        inactivity_timeout=inactivity_timeout,
+        max_total_timeout=max_total_timeout,
+    )
+
+  def test_effective_timeouts_fall_back_to_timeout(self):
+    """When the new knobs are unset, both collapse to self.timeout (legacy)."""
+    lm = self._make_lm(timeout=900.0)
+    self.assertEqual(lm._effective_inactivity_timeout, 900.0)
+    self.assertEqual(lm._effective_total_timeout, 900.0)
+
+  def test_effective_timeouts_use_explicit_knobs(self):
+    """Explicit knobs override the timeout fallback independently."""
+    lm = self._make_lm(
+        timeout=900.0, inactivity_timeout=120.0, max_total_timeout=14400.0
+    )
+    self.assertEqual(lm._effective_inactivity_timeout, 120.0)
+    self.assertEqual(lm._effective_total_timeout, 14400.0)
+
+  def test_per_operation_read_timeout_uses_inactivity_not_total(self):
+    """The requests read timeout is the inactivity bound, not the total."""
+    lm = self._make_lm(
+        timeout=900.0, inactivity_timeout=120.0, max_total_timeout=14400.0
+    )
+    self.assertEqual(lm._per_operation_timeout, (60.0, 120.0))
+
+  def test_silent_stream_fails_fast_via_inactivity(self):
+    """A silent stream fails fast via the inactivity bound.
+
+    It must fail well before the (large) total budget would elapse.
+    """
+    lm = self._make_lm(inactivity_timeout=0.1, max_total_timeout=10.0)
+    valid_json = pg.to_json_str({'content': ['never finishes']}).encode()
+    half = len(valid_json) // 2
+    start = time.monotonic()
+    with mock.patch('requests.Session.post') as mock_post:
+      # Gap between chunks (0.3s) exceeds the 0.1s inactivity bound.
+      mock_post.side_effect = mock_streaming_post(
+          [valid_json[:half], valid_json[half:]], delay_per_chunk=0.3
+      )
+      with self.assertRaises(lf.TemporaryLMError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+    elapsed = time.monotonic() - start
+    self.assertIn('inactivity', str(ctx.exception).lower())
+    # Fast-fail: nowhere near the 10s total budget.
+    self.assertLess(elapsed, 5.0)
+
+  def test_steady_stream_past_old_timeout_still_succeeds(self):
+    """A steady stream past the OLD single-timeout wall still succeeds.
+
+    The total budget is large and each inter-chunk gap stays under the
+    inactivity bound. The legacy single timeout (0.3s) would have killed this
+    response, but with inactivity=0.2s and total=5s it completes.
+    """
+    old_single_timeout = 0.3
+    lm = self._make_lm(inactivity_timeout=0.2, max_total_timeout=5.0)
+    valid_json = pg.to_json_str({'content': ['streamed-done']}).encode()
+    # Split into 10 chunks emitted every 0.05s => ~0.5s total > 0.3s old wall.
+    n = 10
+    size = max(1, len(valid_json) // n)
+    chunks = [valid_json[i:i + size] for i in range(0, len(valid_json), size)]
+    start = time.monotonic()
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post(chunks, delay_per_chunk=0.05)
+      result = lm._sample_single(lf.UserMessage('hello'))
+    elapsed = time.monotonic() - start
+    self.assertEqual(result.samples[0].response.text, 'streamed-done')
+    # Proof it genuinely crossed the old single-timeout wall.
+    self.assertGreater(elapsed, old_single_timeout)
+
+  def test_total_deadline_uses_max_total_timeout(self):
+    """The total wall budget is governed by max_total_timeout.
+
+    A large inactivity bound does not prevent the total deadline from firing.
+    """
+    lm = self._make_lm(inactivity_timeout=10.0, max_total_timeout=0.2)
+    valid_json = pg.to_json_str({'content': ['too slow overall']}).encode()
+    half = len(valid_json) // 2
+    with mock.patch('requests.Session.post') as mock_post:
+      # Each gap (0.15s) < 10s inactivity, but cumulative 0.3s > 0.2s total.
+      mock_post.side_effect = mock_streaming_post(
+          [valid_json[:half], valid_json[half:]], delay_per_chunk=0.15
+      )
+      with self.assertRaises(lf.TemporaryLMError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+    self.assertIn('total deadline', str(ctx.exception).lower())
+
+
 if __name__ == '__main__':
   unittest.main()

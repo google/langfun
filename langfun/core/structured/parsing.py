@@ -41,6 +41,7 @@ class _ParseStructure(mapping.Mapping):
 class _ParseStructureJson(_ParseStructure):
   """Parses an object out from a NL text using JSON as the protocol."""
 
+  # pyrefly: ignore[bad-assignment]
   preamble = """
       Please help translate the last LM response into JSON based on the request and the schema:
 
@@ -57,6 +58,7 @@ class _ParseStructureJson(_ParseStructure):
 class _ParseStructurePython(_ParseStructure):
   """Parses an object out from a NL text using Python as the protocol."""
 
+  # pyrefly: ignore[bad-assignment]
   preamble = """
       Please help translate the last {{ input_title }} into {{ output_title}} based on {{ schema_title }}.
 
@@ -174,10 +176,10 @@ def parse(
   # Setting up context.
   call_context = dict(cache_seed=cache_seed, autofix=autofix)
   if lm is not None:
-    call_context['lm'] = lm
+    call_context['lm'] = lm  # pyrefly: ignore[bad-assignment]
   autofix_lm = autofix_lm or lm
   if autofix_lm is not None:
-    call_context['autofix_lm'] = autofix_lm
+    call_context['autofix_lm'] = autofix_lm  # pyrefly: ignore[bad-assignment]
   call_context.update(kwargs)
 
   output = t(input=message, **call_context)
@@ -314,7 +316,7 @@ def call(
     A string if `returns` is None or an instance of the return type.
   """
   # Call `lm` for natural response.
-  lm_output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)
+  lm_output = lf.LangFunc.from_value(prompt, **kwargs)(lm=lm)  # pyrefly: ignore[not-callable]
 
   if response_postprocess is not None:
     postprocessed_text = response_postprocess(lm_output.text)
@@ -329,7 +331,7 @@ def call(
     """Chain the source of the parsed output to the LM output."""
     parsing_message.root.source = lm_output
     parsing_message.tag('parsing-lm-output')
-    parsing_message.lm_input.tag('parsing-lm-input')
+    parsing_message.lm_input.tag('parsing-lm-input')  # pyrefly: ignore[missing-attribute]
 
   # Call `parsing_lm` for structured parsing.
   try:
@@ -337,7 +339,7 @@ def call(
         lm_output.text,
         schema,
         examples=parsing_examples,
-        lm=parsing_lm or lm,
+        lm=parsing_lm or lm,  # pyrefly: ignore[bad-argument-type]
         include_context=parsing_include_context,
         cache_seed=cache_seed,
         autofix=autofix,

@@ -69,18 +69,18 @@ class RandomChoice(lf.LanguageModel):
     if parent_non_default:
       for c in self.candidates:
         c.sampling_options.rebind(
-            parent_non_default, notify_parents=False, raise_on_no_change=False
+            parent_non_default, notify_parents=False, raise_on_no_change=False  # pyrefly: ignore[bad-argument-type]
         )
 
   @property
-  def model_id(self) -> str:
+  def model_id(self) -> str:  # pyrefly: ignore[bad-override]
     model_ids = ', '.join(
         sorted(c.model_id for c in self.candidates)
     )
     return f'RandomChoice({model_ids})'
 
   @property
-  def resource_id(self) -> str:
+  def resource_id(self) -> str:  # pyrefly: ignore[bad-override]
     resource_ids = ', '.join(
         sorted(c.resource_id for c in self.candidates)
     )
