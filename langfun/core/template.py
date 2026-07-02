@@ -524,8 +524,8 @@ class Template(
 
     # Carry metadata from fields.
     for k, v in self.sym_init_args.sym_items():
-      if k.startswith(_ADDITIONAL_METADATA_PREFIX):
-        metadata[k.removeprefix(_ADDITIONAL_METADATA_PREFIX)] = v
+      if k.startswith(_ADDITIONAL_METADATA_PREFIX):  # pyrefly: ignore[missing-attribute]
+        metadata[k.removeprefix(_ADDITIONAL_METADATA_PREFIX)] = v  # pyrefly: ignore[missing-attribute]
     return metadata
 
   #
@@ -562,7 +562,7 @@ class Template(
   def _sym_clone(self, *args, **kwargs) -> 'Template':
     copy = super()._sym_clone(*args, **kwargs)
     copy._referred_modalities = self._referred_modalities  # pylint: disable=protected-access
-    return copy
+    return copy  # pyrefly: ignore[bad-return]
 
   def __eq__(self, other: Any) -> bool:
     if isinstance(other, str):
@@ -669,7 +669,7 @@ class Template(
   ) -> 'Template':
     """Creates a template object from a value."""
     if isinstance(value, cls):
-      return value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter
+      return value.clone(override=kwargs) if kwargs else value  # pylint: disable=no-value-for-parameter  # pyrefly: ignore[bad-return]
     if isinstance(value, str):
       return cls(template_str=value, **kwargs)
     if isinstance(value, Template):
@@ -681,7 +681,7 @@ class Template(
     if message_lib.Message.is_convertible(type(value)):
       value = message_lib.Message.from_value(value)
     if isinstance(value, message_lib.Message):
-      for k, v in value.metadata.sym_items():  # pylint: disable=attribute-error
+      for k, v in value.metadata.sym_items():  # pylint: disable=attribute-error  # pyrefly: ignore[missing-attribute]
         kwargs[_ADDITIONAL_METADATA_PREFIX + k] = v
       t = cls(template_str=value.text, **kwargs)
       t._referred_modalities = value.referred_modalities
@@ -716,10 +716,10 @@ class Template(
       return view.complex_value(
           {k: v for k, v in self.sym_items()},
           name='fields',
-          root_path=root_path,
+          root_path=root_path,  # pyrefly: ignore[bad-argument-type]
           parent=self,
           exclude_keys=['template_str', 'clean'],
-          collapse_level=max(
+          collapse_level=max(  # pyrefly: ignore[bad-specialization]
               collapse_template_vars_level, collapse_level
           ) if collapse_level is not None else None,
           extra_flags=extra_flags,
@@ -773,7 +773,7 @@ class Template(
 
 # Register converter from str to LangFunc, therefore we can always
 # pass strs to attributes that accept LangFunc.
-pg.typing.register_converter(str, Template, Template)
+pg.typing.register_converter(str, Template, Template)  # pyrefly: ignore[bad-argument-type]
 
 
 @dataclasses.dataclass
@@ -854,10 +854,10 @@ class _UnresolvedExpression(pg.Object):
   def __rmod__(self, other: Any) -> '_UnresolvedExpression':
     return _UnresolvedExpression(f'{other!r} % {self.expression}')
 
-  def __eq__(self, other: Any) -> '_UnresolvedExpression':
+  def __eq__(self, other: Any) -> '_UnresolvedExpression':  # pyrefly: ignore[bad-override]
     return _UnresolvedExpression(f'{self.expression} == {other!r}')
 
-  def __ne__(self, other: Any) -> '_UnresolvedExpression':
+  def __ne__(self, other: Any) -> '_UnresolvedExpression':  # pyrefly: ignore[bad-override]
     return _UnresolvedExpression(f'{self.expression} != {other!r}')
 
   def __lt__(self, other: Any) -> '_UnresolvedExpression':
