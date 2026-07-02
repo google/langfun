@@ -70,7 +70,7 @@ class Modality(component.Component, pg.views.HtmlTreeView.Extension):
     capture_scope = get_modality_capture_context()
     if capture_scope is not None:
       capture_scope.capture(self)
-    return Modality.text_marker(self.id)
+    return Modality.text_marker(self.id)  # pyrefly: ignore[bad-argument-type]
 
   def __str_kwargs__(self) -> dict[str, Any]:
     # For modality objects, we don't want to use markdown format when they
@@ -225,7 +225,7 @@ class _ModalityCaptureContext:
 
   def capture(self, modality: Modality) -> None:
     """Captures the modality object."""
-    self._references[modality.id] = pg.Ref(modality)
+    self._references[modality.id] = pg.Ref(modality)  # pyrefly: ignore[unsupported-operation]
 
   @property
   def references(self) -> dict[str, pg.Ref[Modality]]:
