@@ -113,15 +113,15 @@ class OpenAIEmbeddingTest(unittest.TestCase):
 
   def test_text_embedding_3_small_defaults(self):
     model = openai.TextEmbedding3Small.__schema__.get_field('model')
-    self.assertEqual(model.default_value, 'text-embedding-3-small')
+    self.assertEqual(model.default_value, 'text-embedding-3-small')  # pyrefly: ignore[missing-attribute]
 
   def test_text_embedding_3_large_defaults(self):
     model = openai.TextEmbedding3Large.__schema__.get_field('model')
-    self.assertEqual(model.default_value, 'text-embedding-3-large')
+    self.assertEqual(model.default_value, 'text-embedding-3-large')  # pyrefly: ignore[missing-attribute]
 
   def test_text_embedding_ada_002_defaults(self):
     model = openai.TextEmbeddingAda002.__schema__.get_field('model')
-    self.assertEqual(model.default_value, 'text-embedding-ada-002')
+    self.assertEqual(model.default_value, 'text-embedding-ada-002')  # pyrefly: ignore[missing-attribute]
 
 
 if __name__ == '__main__':
