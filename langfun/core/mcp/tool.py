@@ -107,7 +107,7 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
     message = lf_message.ToolMessage.from_chunks(chunks)
     if result.structuredContent:
       message.metadata.update(result.structuredContent)
-    return message
+    return message  # pyrefly: ignore[bad-return]
 
   def __call__(
       self,
@@ -199,7 +199,7 @@ class McpTool(pg.Object, metaclass=_McpToolMeta):
       represents the defined tool.
     """
 
-    class _McpTool(cls):
+    class _McpTool(cls):  # pyrefly: ignore[invalid-inheritance]
       auto_schema = False
 
     tool_cls = _McpTool
@@ -234,7 +234,7 @@ class McpToolInput(pg.Object, metaclass=_McpToolInputMeta):
       A dynamically generated class that inherits from `McpToolInput`.
     """
 
-    class _McpToolInput(cls):
+    class _McpToolInput(cls):  # pyrefly: ignore[invalid-inheritance]
       pass
 
     input_cls = _McpToolInput
