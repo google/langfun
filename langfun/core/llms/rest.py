@@ -272,7 +272,7 @@ class REST(lf.LanguageModel):
         pass
       raise
     # Set internal cache so response.json() / response.content work normally.
-    response._content = b''.join(chunks)  # pylint: disable=protected-access
+    response._content = b''.join(chunks)  # pylint: disable=protected-access  # pyrefly: ignore[bad-assignment]
 
   # Content filtering patterns observed from various LLM providers.
   # These are best-effort substring heuristics derived from real API error
@@ -337,10 +337,10 @@ class REST(lf.LanguageModel):
       except (ValueError, KeyError) as e:
         raise lf.LMError(str(e)) from e
     else:
-      raise self._error(response.status_code, response.content)
+      raise self._error(response.status_code, response.content)  # pyrefly: ignore[bad-argument-type]
 
   @property
-  def max_concurrency(self) -> int | None:
+  def max_concurrency(self) -> int | None:  # pyrefly: ignore[bad-override]
     """Returns the max concurrency for this model."""
     rate_limits = self.model_info.rate_limits
     if rate_limits is not None:

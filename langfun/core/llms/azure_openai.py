@@ -90,7 +90,7 @@ class AzureOpenAI(openai.OpenAI):
     )
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     return self._api_endpoint
 
   @property

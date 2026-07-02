@@ -54,7 +54,7 @@ class AnthropicModelInfo(lf.ModelInfo):
     max_output_tokens_per_minute: int
 
     @property
-    def max_tokens_per_minute(self) -> int:
+    def max_tokens_per_minute(self) -> int:  # pyrefly: ignore[bad-override]
       return (self.max_input_tokens_per_minute
               + self.max_output_tokens_per_minute)
 
@@ -997,7 +997,7 @@ class Anthropic(rest.REST):
     self._api_key = api_key
 
   @property
-  def headers(self) -> dict[str, Any]:
+  def headers(self) -> dict[str, Any]:  # pyrefly: ignore[bad-override]
     return {
         'x-api-key': self._api_key,
         'anthropic-version': self.api_version,
@@ -1059,7 +1059,7 @@ class Anthropic(rest.REST):
     """Returns a dict as request arguments."""
     # Authropic requires `max_tokens` to be specified.
     max_tokens = (
-        options.max_tokens or self.model_info.context_length.max_output_tokens
+        options.max_tokens or self.model_info.context_length.max_output_tokens  # pyrefly: ignore[missing-attribute]
     )
     args = dict(
         model=self.model,
@@ -1120,7 +1120,7 @@ class Anthropic(rest.REST):
           args['max_tokens'] += budget
 
         # Ensure max_tokens does not exceed model's absolute hard capacity.
-        model_cap = self.model_info.context_length.max_output_tokens
+        model_cap = self.model_info.context_length.max_output_tokens  # pyrefly: ignore[missing-attribute]
         if args['max_tokens'] > model_cap:
           args['max_tokens'] = model_cap
 
@@ -1356,9 +1356,9 @@ class Anthropic(rest.REST):
     return message
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
-    if status_code == 413 and b'Prompt is too long' in content:
+    if status_code == 413 and b'Prompt is too long' in content:  # pyrefly: ignore[unsupported-operation]
       return lf.ContextLimitError(f'{status_code}: {content}')
-    if status_code == 400 and b'prompt is too long' in content:
+    if status_code == 400 and b'prompt is too long' in content:  # pyrefly: ignore[unsupported-operation]
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
 
