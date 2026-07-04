@@ -25,6 +25,32 @@ import langfun.core.structured as lf_structured
 import pyglove as pg
 
 
+_TIMING_KEYS = ('start_time', 'end_time', 'wall_clock_s')
+
+
+def _strip_timing(result):
+  """Removes non-deterministic per-leaf timing fields for stable eq checks.
+
+  `Evaluation.finalize()` now emits `start_time`/`end_time`/`wall_clock_s` into
+  every leaf result. Those wall-clock values are non-deterministic, so tests
+  that assert the full result dict must drop them before comparing. Their
+  presence and sanity are covered separately by `test_run_timing`.
+
+  Args:
+    result: The leaf result dict (or None) to strip timing fields from.
+
+  Returns:
+    A shallow copy of `result` without the timing fields, or None if `result`
+    is None.
+  """
+  if result is None:
+    return None
+  stripped = dict(result)
+  for key in _TIMING_KEYS:
+    stripped.pop(key, None)
+  return stripped
+
+
 # We put class definitions outside the functors just to make it easier
 # to refer to them in test.
 class Solution(pg.Object):
@@ -208,7 +234,7 @@ class EvaluationTest(unittest.TestCase):
     s = eval_set('run_test', 'query', schema_fn=answer_schema(), lm=lm)
     s.run()
     self.assertEqual(
-        s.result,
+        _strip_timing(s.result),
         dict(
             experiment_setup=dict(
                 id='Evaluation@e028b6e6',
@@ -229,9 +255,7 @@ class EvaluationTest(unittest.TestCase):
                 oop_failure_rate=0.5,
                 non_oop_failures=0,
                 non_oop_failure_rate=0.0,
-                failure_breakdown={
-                    'MappingError.SchemaError.TypeError': 1
-                }
+                failure_breakdown={'MappingError.SchemaError.TypeError': 1},
             ),
             usage=dict(
                 total_prompt_tokens=856,
@@ -274,6 +298,38 @@ class EvaluationTest(unittest.TestCase):
     self.assertEqual(len(summary['Evaluation']), 1)
     self.assertIsNotNone(summary['Evaluation'][0].experiment)
     self.assertIsNotNone(summary['Evaluation'][0].metrics)
+    # Per-leaf timing is propagated into the summary.json leaf entry too.
+    self.assertIsNotNone(summary['Evaluation'][0].start_time)
+    self.assertIsNotNone(summary['Evaluation'][0].end_time)
+    self.assertIsNotNone(summary['Evaluation'][0].wall_clock_s)
+
+  def test_run_timing(self):
+    lm = fake.StaticSequence([
+        'Solution(final_answer=2)',
+        '3',
+    ])
+    s = eval_set('run_timing_test', 'query', schema_fn=answer_schema(), lm=lm)
+    s.run()
+
+    # The in-memory result carries the per-leaf timing fields.
+    self.assertIsInstance(s.result.start_time, float)
+    self.assertIsInstance(s.result.end_time, float)
+    self.assertIsInstance(s.result.wall_clock_s, float)
+    self.assertGreaterEqual(s.result.end_time, s.result.start_time)
+    self.assertGreaterEqual(s.result.wall_clock_s, 0.0)
+    self.assertAlmostEqual(
+        s.result.wall_clock_s,
+        s.result.end_time - s.result.start_time,
+        places=3,
+    )
+
+    # And they are persisted into result.json on disk.
+    result_json = os.path.join(s.dir, base.Evaluation.RESULT_JSON)
+    self.assertTrue(os.path.exists(result_json))
+    loaded = pg.load(result_json)
+    self.assertEqual(loaded.start_time, s.result.start_time)
+    self.assertEqual(loaded.end_time, s.result.end_time)
+    self.assertEqual(loaded.wall_clock_s, s.result.wall_clock_s)
 
   def test_run_wihtout_save(self):
     lm = fake.StaticSequence([
@@ -320,7 +376,7 @@ class EvaluationTest(unittest.TestCase):
         filter=lambda x: x.method == 'query', dryrun=True, summary=False
     )
     self.assertEqual(
-        result,
+        {k: _strip_timing(v) for k, v in result.items()},
         {
             s.children[0].id: None,
             s.children[1].id: dict(
@@ -381,7 +437,7 @@ class EvaluationTest(unittest.TestCase):
     summary = s.run(verbose=True)
     self.assertEqual(len(summary.evaluations), 2)
     self.assertEqual(
-        s.result,
+        {k: _strip_timing(v) for k, v in s.result.items()},
         {
             s.children[0].id: dict(
                 experiment_setup=dict(
@@ -403,9 +459,7 @@ class EvaluationTest(unittest.TestCase):
                     oop_failure_rate=0.5,
                     non_oop_failures=0,
                     non_oop_failure_rate=0.0,
-                    failure_breakdown={
-                        'MappingError.SchemaError.TypeError': 1
-                    }
+                    failure_breakdown={'MappingError.SchemaError.TypeError': 1},
                 ),
                 usage=s.children[0].result.usage,
             ),
@@ -429,9 +483,7 @@ class EvaluationTest(unittest.TestCase):
                     oop_failure_rate=0.5,
                     non_oop_failures=0,
                     non_oop_failure_rate=0.0,
-                    failure_breakdown={
-                        'MappingError.SchemaError.TypeError': 1
-                    }
+                    failure_breakdown={'MappingError.SchemaError.TypeError': 1},
                 ),
                 usage=s.children[1].result.usage,
             ),
@@ -582,7 +634,9 @@ class SuiteTest(unittest.TestCase):
             usage=s.children[1].children[0].result.usage,
         ),
     }
-    self.assertEqual(s.result, expected)
+    self.assertEqual(
+        {k: _strip_timing(v) for k, v in s.result.items()}, expected
+    )
 
 
 class InputsFrom(unittest.TestCase):

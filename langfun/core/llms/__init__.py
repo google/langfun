@@ -193,6 +193,7 @@ from langfun.core.llms.anthropic import Claude3Haiku
 from langfun.core.llms.anthropic import Claude3Haiku_20240307
 
 from langfun.core.llms.vertexai import VertexAIAnthropic
+from langfun.core.llms.vertexai import VertexAIClaude48Opus
 from langfun.core.llms.vertexai import VertexAIClaude47Opus
 from langfun.core.llms.vertexai import VertexAIClaude46Opus
 from langfun.core.llms.vertexai import VertexAIClaude45Haiku_20251001

@@ -220,6 +220,12 @@ class Evaluable(lf.Component):
       pivot_field: str = 'lm',
       from_root: bool = True,
       timeout: int | None = None,
+      # Optional cap on how many leaf evaluations run concurrently. Defaults to
+      # None => unbounded (one worker per leaf), preserving current behavior.
+      max_leaf_concurrency: int | None = None,
+      # Minimum seconds between throttled intermediate summary.save() calls off
+      # the hot per-leaf path. The final summary flush is always unconditional.
+      summary_save_interval_s: float = 10.0,
       **kwargs,
   ) -> Union['Summary', pg.Dict]:
     """Run the evaluation, which fills and returns the result."""
@@ -296,6 +302,13 @@ class Evaluable(lf.Component):
     else:
       assert from_root
       summary_lock = threading.Lock()
+      # Debounce: throttle the O(all-leaves) summary re-render/save off the hot
+      # per-leaf completion path to at most one write per
+      # summary_save_interval_s seconds. The unconditional final flush below
+      # still guarantees a complete summary at the end of the run.
+      # `last_summary_save` is a 1-element list so the nested closure can mutate
+      # it under `summary_lock`.
+      last_summary_save = [0.0]
       def _run_group(arg: tuple[int, list[_LeafNode]]) -> None:
         overview_bar, leaf_group = arg
         for leaf in leaf_group:
@@ -314,10 +327,16 @@ class Evaluable(lf.Component):
                 **kwargs,
             )
             if should_save and summary:
+              now = time.time()
               with summary_lock:
-                summary.save(  # pyrefly: ignore[missing-attribute]
-                    os.path.join(self.root_dir, Evaluable.SUMMARY_HTML)  # pyrefly: ignore[no-matching-overload]
-                )
+                # Only re-render/save the (expensive, whole-tree) summary if
+                # enough time has elapsed since the last write. This keeps the
+                # per-leaf hot path O(1) instead of O(all-leaves).
+                if now - last_summary_save[0] >= summary_save_interval_s:
+                  summary.save(  # pyrefly: ignore[missing-attribute]
+                      os.path.join(self.root_dir, Evaluable.SUMMARY_HTML)  # pyrefly: ignore[no-matching-overload]
+                  )
+                  last_summary_save[0] = now
 
           # Signal sub-eval complete by setting the color green.
           lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)  # pyrefly: ignore[bad-argument-type]
@@ -357,7 +376,9 @@ class Evaluable(lf.Component):
               _run_group,
               [(overview_bar, group) for group in leaf_groups.values()],
               silence_on_errors=None,
-              max_workers=len(leaf_nodes),
+              # Fan out all leaves at once by default (max_workers == number of
+              # leaves); `max_leaf_concurrency`, when set, caps this.
+              max_workers=max_leaf_concurrency or len(leaf_nodes),
           ):
             pass
 
@@ -1118,6 +1139,11 @@ class Evaluation(Evaluable):
       timeout: int | None = None,
       **kwargs,
   ) -> None:
+    # Capture per-leaf wall-clock start (epoch seconds). Persisted via
+    # finalize() so downstream makespan / longest-trajectory analysis has real
+    # measured per-leaf timing (previously the harness persisted none).
+    self._start_time = time.time()
+
     # Setup examples.
     # Reset examples so it could be read from the input functor.
     self.__dict__.pop('examples', None)
@@ -1161,7 +1187,8 @@ class Evaluation(Evaluable):
         if self.dir and self.cache:
           self.cache.save()
 
-    # Summarize result.
+    # Capture per-leaf wall-clock end, then summarize result.
+    self._end_time = time.time()
     self._result = self.finalize()
     if verbose:
       lf.console.write(
@@ -1304,6 +1331,17 @@ class Evaluation(Evaluable):
     else:
       usage = None
 
+    # Per-leaf wall-clock timing (epoch seconds), populated by Evaluation._run.
+    # Values are None when finalize() runs outside a live run (e.g. a legacy
+    # result.json predating timing instrumentation), so loading old results is
+    # safe.
+    start_time = getattr(self, '_start_time', None)
+    end_time = getattr(self, '_end_time', None)
+    if start_time is not None and end_time is not None:
+      wall_clock_s = end_time - start_time
+    else:
+      wall_clock_s = None
+
     result = pg.Dict(
         experiment_setup=pg.Dict(
             id=self.id,
@@ -1325,6 +1363,9 @@ class Evaluation(Evaluable):
             failure_breakdown=self.failure_breakdown,
         ),
         usage=usage,
+        start_time=start_time,
+        end_time=end_time,
+        wall_clock_s=wall_clock_s,
     )
     return result
 
@@ -1972,6 +2013,15 @@ class Summary(pg.Object):
                 dir=entry.dir,
                 metrics=entry.result.metrics if entry.result else None,
                 usage=entry.result.usage if entry.result else None,
+                start_time=(
+                    entry.result.get('start_time') if entry.result else None
+                ),
+                end_time=(
+                    entry.result.get('end_time') if entry.result else None
+                ),
+                wall_clock_s=(
+                    entry.result.get('wall_clock_s') if entry.result else None
+                ),
             )
         )
       task_results[task.__name__] = results
