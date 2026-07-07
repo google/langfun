@@ -110,19 +110,19 @@ class CheckpointMonitor(base.RunnerBase):
       # This is not precise, but we at least notify example start.
       if not self.current_run.filter or self.current_run.filter(evaluation):
         self.on_experiment_start(evaluation)
-        self._set_prior_elapse_from_checkpoints(evaluation)
+        self._set_prior_elapse_from_checkpoints(evaluation)  # pyrefly: ignore[bad-argument-type]
 
         # Signal the start of the examples if we are not monitoring in-progress
         # files.
         if not self.monitor_inprogress_files:
           for example_id in self.current_run.examples_to_evaluate(evaluation):
-            self._mark_example_started(evaluation, example_id)
+            self._mark_example_started(evaluation, example_id)  # pyrefly: ignore[bad-argument-type]
 
         # Create the aggregation entries for polling.
         output_dir = self.current_run.output_dir(evaluation)
         self._aggregation_entries.append(
             self._AggregationEntry(
-                evaluation=evaluation,
+                evaluation=evaluation,  # pyrefly: ignore[bad-argument-type]
                 output_dir=output_dir,
                 ckpt_file_pattern=os.path.join(
                     output_dir, self.checkpoint_pattern
@@ -215,7 +215,7 @@ class CheckpointMonitor(base.RunnerBase):
               self._mark_example_started(entry.evaluation, example_id)
               entry.example_ids_inprogress.add(example_id)
 
-            self._aggregator_pool.submit(
+            self._aggregator_pool.submit(  # pyrefly: ignore[missing-attribute]
                 self._aggregate, entry, filepath, example_id, last_modified_time
             )
             pg.logging.info(
@@ -229,7 +229,7 @@ class CheckpointMonitor(base.RunnerBase):
     if self._error is None:
       self.on_run_complete()
     else:
-      self.on_run_abort(self._error)
+      self.on_run_abort(self._error)  # pyrefly: ignore[bad-argument-type]
 
   def _aggregate(
       self,
@@ -254,13 +254,13 @@ class CheckpointMonitor(base.RunnerBase):
       example = loaded_examples[-1]
       if (
           self.bypass_old_ckpt_files_with_non_oop_errors
-          and last_modified_time < self.ckpt_start_time
+          and last_modified_time < self.ckpt_start_time  # pyrefly: ignore[unsupported-operation]
           and example.error is not None
           and not example.error.tag.startswith('MappingError')
       ):
         entry.example_ids_being_aggregated.remove(example_id)
         entry.example_ids_to_be_aggregated.add(example_id)
-        self._ckpt_bypass_timestamp[ckpt_filepath] = last_modified_time
+        self._ckpt_bypass_timestamp[ckpt_filepath] = last_modified_time  # pyrefly: ignore[unsupported-operation]
         pg.logging.info(
             '[%s] Bypassing old checkpoint file with non-oop errors (%s) '
             'for example %d, last_modified_time: %s, ckpt_start_time: %s',
@@ -282,7 +282,7 @@ class CheckpointMonitor(base.RunnerBase):
       example = example_lib.Example(
           id=example_id,
           input=entry.evaluation.example_input_by_id(example_id),
-          error=error_info,
+          error=error_info,  # pyrefly: ignore[bad-argument-type]
       )
 
     # This will skip processing but still allow metrics to be collected.
@@ -363,7 +363,7 @@ class CheckpointMonitor(base.RunnerBase):
     total_elapse = 0.0
     for filepath in pg.io.glob(ckpt_file_pattern):
       last_modified_time = pg.io.getmtime(filepath)
-      if last_modified_time >= self.ckpt_start_time:
+      if last_modified_time >= self.ckpt_start_time:  # pyrefly: ignore[unsupported-operation]
         continue
       try:
         loaded_examples = evaluation.state.load(

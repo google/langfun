@@ -157,7 +157,7 @@ class GeminiModelInfo(lf.ModelInfo):
 
         # Add cost for output tokens
         cost += (
-            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
+            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k  # pyrefly: ignore[unsupported-operation]
             * usage.completion_tokens
         )
 
@@ -303,6 +303,32 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens=0.05,
             cost_per_1m_input_tokens=0.50,
             cost_per_1m_output_tokens=3.00,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2_000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 3.5 Flash
+    GeminiModelInfo(
+        model_id='gemini-3.5-flash',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 3.5 Flash: High-efficiency, low-latency multimodal'
+            ' model optimized for agentic workflows.'
+        ),
+        release_date=datetime.datetime(2026, 5, 19),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.15,
+            cost_per_1m_input_tokens=1.50,
+            cost_per_1m_output_tokens=9.00,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2_000,
@@ -896,11 +922,11 @@ class Gemini(rest.REST):
     return _SUPPORTED_MODELS_BY_ID[self.model]
 
   @classmethod
-  def dir(cls):
+  def dir(cls):  # pyrefly: ignore[bad-override]
     return [m.model_id for m in SUPPORTED_MODELS if m.in_service]
 
   @property
-  def headers(self):
+  def headers(self):  # pyrefly: ignore[bad-override]
     return {
         'Content-Type': 'application/json; charset=utf-8',
     }
@@ -915,7 +941,7 @@ class Gemini(rest.REST):
       if isinstance(chunk, lf_modalities.Mime):
         try:
           return chunk.make_compatible(
-              self.model_info.input_modalities + ['text/plain']
+              self.model_info.input_modalities + ['text/plain']  # pyrefly: ignore[unsupported-operation]
           )
         except lf.ModalityError as e:
           raise lf.ModalityError(f'Unsupported modality: {chunk!r}') from e
@@ -931,7 +957,7 @@ class Gemini(rest.REST):
     contents.append(
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
-    request['contents'] = contents
+    request['contents'] = contents  # pyrefly: ignore[bad-assignment]
     request['toolConfig'] = {
         'functionCallingConfig': {
             'mode': 'NONE',
@@ -964,8 +990,8 @@ class Gemini(rest.REST):
         )
       json_schema = pg.to_json(json_schema)
       config['responseSchema'] = json_schema
-      config['responseMimeType'] = 'application/json'
-      prompt.metadata.formatted_text = (
+      config['responseMimeType'] = 'application/json'  # pyrefly: ignore[bad-assignment]
+      prompt.metadata.formatted_text = (  # pyrefly: ignore[missing-attribute]
           prompt.text
           + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
           + pg.to_json_str(json_schema, json_indent=2)
@@ -977,7 +1003,7 @@ class Gemini(rest.REST):
     if options.thinking_level is not None:
       thinking_config_data['thinkingLevel'] = options.thinking_level
     if thinking_config_data:
-      config['thinkingConfig'] = thinking_config_data
+      config['thinkingConfig'] = thinking_config_data  # pyrefly: ignore[bad-assignment]
 
     # This is the new feature since Gemini 3.
     # Skip for image generation models as they don't support mediaResolution.
@@ -988,7 +1014,7 @@ class Gemini(rest.REST):
             self.response_modalities and 'IMAGE' in self.response_modalities
         )
     ):
-      config['mediaResolution'] = 'MEDIA_RESOLUTION_HIGH'
+      config['mediaResolution'] = 'MEDIA_RESOLUTION_HIGH'  # pyrefly: ignore[bad-assignment]
 
     if self.response_modalities:
       config['responseModalities'] = self.response_modalities
@@ -1036,10 +1062,10 @@ class Gemini(rest.REST):
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 400 and (
-        b'exceeds the maximum number of tokens' in content
-        or b'Reduce the input token count and try again.' in content
-        or b'Request payload size exceeds the limit' in content
-        or b'Request contains text fields that are too large' in content
+        b'exceeds the maximum number of tokens' in content  # pyrefly: ignore[unsupported-operation]
+        or b'Reduce the input token count and try again.' in content  # pyrefly: ignore[unsupported-operation]
+        or b'Request payload size exceeds the limit' in content  # pyrefly: ignore[unsupported-operation]
+        or b'Request contains text fields that are too large' in content  # pyrefly: ignore[unsupported-operation]
     ):
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
