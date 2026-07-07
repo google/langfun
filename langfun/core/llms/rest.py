@@ -87,6 +87,21 @@ class REST(lf.LanguageModel):
       ),
   ] = None
 
+  max_response_size: Annotated[
+      int | None,
+      (
+          'Maximum total size, in BYTES, of a single streamed response body. '
+          'Streaming responses are buffered fully in memory before parsing; '
+          'without a cap a runaway or pathologically large generation can grow '
+          'the buffer to tens of GB and OOM-kill the process (the time-based '
+          'bounds do not help when a server keeps streaming bytes steadily). '
+          'When the cumulative body would exceed this many bytes the response '
+          'is closed and a (non-retryable) `ResponseSizeLimitError` is raised. '
+          'Must be a positive integer when set. When None, no size cap is '
+          'enforced (historical behavior).'
+      ),
+  ] = None
+
   @functools.cached_property
   def _api_initialized(self) -> bool:
     """Returns whether the API is initialized."""
@@ -110,6 +125,11 @@ class REST(lf.LanguageModel):
   def _on_bound(self):
     super()._on_bound()
     self.__dict__.pop('_api_initialized', None)
+    if self.max_response_size is not None and self.max_response_size <= 0:
+      raise ValueError(
+          'max_response_size must be a positive integer or None; got '
+          f'{self.max_response_size!r}.'
+      )
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized
@@ -243,7 +263,9 @@ class REST(lf.LanguageModel):
     if response._content is not False:  # pylint: disable=protected-access,g-bool-id-comparison
       return
     inactivity = self._effective_inactivity_timeout
+    max_size = self.max_response_size
     chunks = []
+    total_bytes = 0
     last_chunk_time = time.monotonic()
     try:
       for chunk in response.iter_content(chunk_size=65536):
@@ -255,7 +277,22 @@ class REST(lf.LanguageModel):
               f'No response data received for {inactivity}s '
               '(inactivity timeout).'
           )
+        # Total-SIZE bound: the time-based bounds above do not fire while a
+        # server keeps streaming bytes steadily, so an unbounded (e.g. runaway)
+        # generation would otherwise buffer its entire body here and OOM-kill
+        # the process. Check BEFORE buffering the chunk so the buffered body
+        # never exceeds `max_response_size`, and fail fast with a NON-retryable
+        # error (`ResponseSizeLimitError` is an `LMError`, not a
+        # `RetryableLMError`) so retries do not re-stream the same oversized
+        # response. The `except BaseException` below closes the socket.
+        if max_size is not None and total_bytes + len(chunk) > max_size:
+          raise lf.ResponseSizeLimitError(
+              f'Response body exceeded max_response_size of {max_size} bytes '
+              f'(received {total_bytes} bytes before the chunk that would '
+              'exceed the limit).'
+          )
         chunks.append(chunk)
+        total_bytes += len(chunk)
         last_chunk_time = now
         # Total bound: absolute wall-clock budget for the whole response.
         if deadline is not None and now > deadline:

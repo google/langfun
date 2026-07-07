@@ -53,6 +53,17 @@ class ContentFilteredError(LMError):
   """Error raised when LLM output is blocked by content filtering policy."""
 
 
+class ResponseSizeLimitError(LMError):
+  """Error raised when a response body exceeds its configured size limit.
+
+  This is intentionally a NON-retryable `LMError` (not a `RetryableLMError`):
+  an oversized response is typically deterministic (e.g. a runaway generation),
+  so retrying would merely re-stream the same oversized body and waste
+  resources. Enforcing a size bound while reading a streamed response prevents
+  unbounded in-memory buffering (which can OOM-kill the process).
+  """
+
+
 class RetryableLMError(LMError):
   """Base class for LLM errors that can be solved by retrying."""
 

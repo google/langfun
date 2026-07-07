@@ -394,6 +394,129 @@ class TotalTimeoutTest(unittest.TestCase):
         lm._sample_single(lf.UserMessage('hello'))
 
 
+class MaxResponseSizeTest(unittest.TestCase):
+  """Tests for the total-response-size cap (OOM guard) via stream=True.
+
+  Regression coverage for a worker OOM where an unbounded streamed response
+  buffered its entire body into memory (tens of GB) because the time-based
+  bounds never fire while the server keeps streaming bytes steadily.
+  """
+
+  def _make_lm(self, max_response_size=None, timeout=120.0):
+    return rest.REST(
+        api_endpoint='https://fake-api.com',
+        request=lambda x, o: dict(prompt=x.text),
+        result=lambda x: lf.LMSamplingResult(
+            [lf.LMSample(c) for c in x['content']]
+        ),
+        timeout=timeout,
+        max_response_size=max_response_size,
+    )
+
+  def test_response_exceeding_max_size_raises_response_size_limit_error(self):
+    """A body larger than max_response_size fails with ResponseSizeLimitError."""
+    lm = self._make_lm(max_response_size=250)
+    chunks = [b'x' * 100] * 5  # 500 bytes total > 250 cap.
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post(chunks)
+      with self.assertRaises(lf.ResponseSizeLimitError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+      self.assertIn('max_response_size', str(ctx.exception))
+
+  def test_size_cap_error_is_catchable_as_lm_error(self):
+    """Backward-compat: existing `except lf.LMError` handlers still catch it."""
+    lm = self._make_lm(max_response_size=10)
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([b'x' * 100])
+      with self.assertRaises(lf.LMError):
+        lm._sample_single(lf.UserMessage('hello'))
+
+  def test_size_cap_error_is_non_retryable(self):
+    """The size-cap error must NOT be a RetryableLMError.
+
+    Retrying would re-stream the same oversized response (and with e.g.
+    max_attempts=80 that is catastrophic), so the cap has to fail fast.
+    """
+    lm = self._make_lm(max_response_size=10)
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([b'x' * 100])
+      with self.assertRaises(lf.LMError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+      self.assertNotIsInstance(ctx.exception, lf.RetryableLMError)
+
+  def test_response_within_max_size_ok(self):
+    """A body under the cap completes and parses normally."""
+    lm = self._make_lm(max_response_size=10_000_000)
+    valid_json = pg.to_json_str({'content': ['hello']}).encode()
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([valid_json])
+      result = lm._sample_single(lf.UserMessage('test'))
+      self.assertEqual(result.samples[0].response.text, 'hello')
+
+  def test_body_exactly_at_cap_is_allowed(self):
+    """A body whose total size equals the cap exactly must NOT be rejected."""
+    valid_json = pg.to_json_str({'content': ['hello']}).encode()
+    lm = self._make_lm(max_response_size=len(valid_json))
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([valid_json])
+      result = lm._sample_single(lf.UserMessage('test'))
+      self.assertEqual(result.samples[0].response.text, 'hello')
+
+  def test_buffer_is_strictly_bounded_and_socket_closed(self):
+    """The tripping chunk is not buffered and the socket is closed promptly.
+
+    Verifies the check-before-append behavior: iteration stops as soon as the
+    cap would be exceeded (so the buffer never grows past the cap), and the
+    response is closed to release the underlying socket.
+    """
+    consumed = []
+    closed = {'count': 0}
+
+    def _mock_post(url, json=None, timeout=None, stream=False, **kwargs):
+      del url, json, timeout, stream, kwargs
+      response = requests.Response()
+      response.status_code = 200
+      response.headers['Content-Type'] = 'application/json'
+
+      def _iter(chunk_size=1, decode_unicode=False):
+        del chunk_size, decode_unicode
+        # 10 chunks of 100 bytes; cap=250 should stop after 2 are buffered.
+        for i in range(10):
+          consumed.append(i)
+          yield b'x' * 100
+
+      response.iter_content = _iter
+      response._content = False
+      response.close = lambda: closed.__setitem__('count', closed['count'] + 1)
+      return response
+
+    lm = self._make_lm(max_response_size=250)
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = _mock_post
+      with self.assertRaises(lf.ResponseSizeLimitError):
+        lm._sample_single(lf.UserMessage('hello'))
+    # Only the chunks that fit under the cap (2 x 100 = 200 <= 250) plus the
+    # one that trips it (3rd) are pulled from the generator; the rest are not.
+    self.assertLessEqual(len(consumed), 3)
+    self.assertGreaterEqual(closed['count'], 1)
+
+  def test_none_disables_size_cap(self):
+    """max_response_size=None preserves historical (uncapped) behavior."""
+    lm = self._make_lm(max_response_size=None)
+    valid_json = pg.to_json_str({'content': ['hello' * 1000]}).encode()
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([valid_json])
+      result = lm._sample_single(lf.UserMessage('test'))
+      self.assertEqual(result.samples[0].response.text, 'hello' * 1000)
+
+  def test_non_positive_max_response_size_is_rejected(self):
+    """A non-positive cap is a misconfiguration and must be rejected at bind."""
+    for bad in (0, -1, -1024):
+      with self.subTest(max_response_size=bad):
+        with self.assertRaises(ValueError):
+          self._make_lm(max_response_size=bad)
+
+
 class AdversarialStreamingTest(unittest.TestCase):
   """Red-team tests: adversarial scenarios targeting stream+deadline logic.
 
