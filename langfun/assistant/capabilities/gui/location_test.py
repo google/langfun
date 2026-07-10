@@ -111,7 +111,7 @@ class BBoxTest(unittest.TestCase):
     self.assertNotIn(location.BBox(0, 0, 400, 500), bbox)
 
     with self.assertRaisesRegex(ValueError, 'Invalid tuple size'):
-      _ = (1, 2, 3) in bbox
+      _ = (1, 2, 3) in bbox  # pyrefly: ignore[unsupported-operation]
 
     with self.assertRaisesRegex(ValueError, 'Invalid type'):
       _ = 'abc' in bbox  # pytype: disable=unsupported-operands

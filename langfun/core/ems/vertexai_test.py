@@ -148,7 +148,7 @@ class VertexAIEmbeddingTest(unittest.TestCase):
 
   def test_gemini_embedding2_defaults(self):
     model = vertexai.VertexAIGeminiEmbedding2.__schema__.get_field('model')
-    self.assertEqual(model.default_value, 'gemini-embedding-2-preview')
+    self.assertEqual(model.default_value, 'gemini-embedding-2-preview')  # pyrefly: ignore[missing-attribute]
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_embedding_options_passthrough(self):
@@ -236,17 +236,17 @@ class VertexAIPredictAPITest(unittest.TestCase):
 
   def test_gemini_embedding1_defaults(self):
     model = vertexai.VertexAIGeminiEmbedding1.__schema__.get_field('model')
-    self.assertEqual(model.default_value, 'gemini-embedding-001')
+    self.assertEqual(model.default_value, 'gemini-embedding-001')  # pyrefly: ignore[missing-attribute]
 
   def test_text_embedding_005_defaults(self):
     model = vertexai.VertexAITextEmbedding005.__schema__.get_field('model')
-    self.assertEqual(model.default_value, 'text-embedding-005')
+    self.assertEqual(model.default_value, 'text-embedding-005')  # pyrefly: ignore[missing-attribute]
 
   def test_text_multilingual_embedding_002_defaults(self):
     model = vertexai.VertexAITextMultilingualEmbedding002.__schema__.get_field(
         'model'
     )
-    self.assertEqual(model.default_value, 'text-multilingual-embedding-002')
+    self.assertEqual(model.default_value, 'text-multilingual-embedding-002')  # pyrefly: ignore[missing-attribute]
 
 
 class VertexAIGoogleAuthMissingTest(unittest.TestCase):

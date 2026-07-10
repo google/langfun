@@ -49,7 +49,7 @@ class Scoring(base.Evaluation):
   @property
   def scored_link(self) -> str:
     """Returns the scored examples page."""
-    return self.link(os.path.join(self.dir, Scoring.SCORED_HTML))
+    return self.link(os.path.join(self.dir, Scoring.SCORED_HTML))  # pyrefly: ignore[no-matching-overload]
 
   @property
   def avg_score(self) -> float:
@@ -138,13 +138,13 @@ class Scoring(base.Evaluation):
               pg.Dict(input=input, output=output, score=score)
               for input, output, score, _ in self.scored
           ],
-          os.path.join(self.dir, Scoring.SCORED_JSON),
+          os.path.join(self.dir, Scoring.SCORED_JSON),  # pyrefly: ignore[no-matching-overload]
       )
 
     if report:
       pg.save(
           self._html([self._render_result, self._render_scored]),
-          os.path.join(self.dir, Scoring.SCORED_HTML),
+          os.path.join(self.dir, Scoring.SCORED_HTML),  # pyrefly: ignore[no-matching-overload]
           file_format='txt',
       )
 
