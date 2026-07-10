@@ -161,6 +161,12 @@ class Gemini31FlashLitePreview(GenAI):
   model = 'gemini-3.1-flash-lite-preview'
 
 
+class Gemini31FlashLite(GenAI):
+  """Gemini 3.1 Flash Lite model."""
+
+  model = 'gemini-3.1-flash-lite'
+
+
 class Gemini25FlashImagePreview(GenAI):
   """Gemini 2.5 Flash Image Preview model."""
   model = 'gemini-2.5-flash-image-preview'

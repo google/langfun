@@ -234,6 +234,28 @@ SUPPORTED_MODELS = [
             max_tokens_per_minute=4_000_000,
         ),
     ),
+    GeminiModelInfo(
+        model_id='gemini-3.1-flash-lite',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 3.1 Flash Lite.',
+        release_date=datetime.datetime(2026, 5, 7),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.025,
+            cost_per_1m_input_tokens=0.25,
+            cost_per_1m_output_tokens=1.5,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
     # Gemini 3 Pro Preview
     GeminiModelInfo(
         model_id='gemini-3-pro-preview',
