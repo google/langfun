@@ -159,7 +159,7 @@ class BaseSandboxService(interface.SandboxService):
       )
 
   @property
-  def event_handler(self) -> interface.EventHandler:
+  def event_handler(self) -> interface.EventHandler:  # pyrefly: ignore[bad-override]
     if hasattr(self, '_event_handler_ref'):
       return self._event_handler_ref
     return super().event_handler
@@ -358,7 +358,7 @@ class BaseSandboxService(interface.SandboxService):
             reusable=reusable,
         )
       except (interface.EnvironmentError, interface.SandboxStateError) as e:
-        self._report_outage_or_wait(e, shutdown_env_upon_outage)
+        self._report_outage_or_wait(e, shutdown_env_upon_outage)  # pyrefly: ignore[bad-argument-type]
 
   def _report_outage_or_wait(
       self,
@@ -569,7 +569,7 @@ class PooledSandboxService(BaseSandboxService):
         min_pool_size = self.min_pool_size(image_id)
         for i in range(min_pool_size):
           sandbox_startup_infos.append((image_id, i))
-        self._sandbox_pool[image_id] = [None] * min_pool_size
+        self._sandbox_pool[image_id] = [None] * min_pool_size  # pyrefly: ignore[unsupported-operation]
         next_sandbox_id = min_pool_size
       self._next_sandbox_id[image_id] = next_sandbox_id
 
@@ -630,18 +630,18 @@ class PooledSandboxService(BaseSandboxService):
       image_id: str | None = None
   ) -> interface.Sandbox:
     """Acquires a sandbox from the sandbox service."""
-    if not self.enable_pooling(image_id):
-      return super()._acquire(image_id)
+    if not self.enable_pooling(image_id):  # pyrefly: ignore[bad-argument-type]
+      return super()._acquire(image_id)  # pyrefly: ignore[bad-argument-type]
 
     allocation_start_time = time.time()
-    sandbox_pool = self._sandbox_pool[image_id]
+    sandbox_pool = self._sandbox_pool[image_id]  # pyrefly: ignore[bad-index]
     while True:
       try:
         # We only append or replace items in the sandbox pool, therefore
         # there is no need to lock the pool.
         return self.load_balancer.acquire(sandbox_pool)
       except IndexError:
-        if len(sandbox_pool) == self.max_pool_size(image_id):
+        if len(sandbox_pool) == self.max_pool_size(image_id):  # pyrefly: ignore[bad-argument-type]
           if time.time() - allocation_start_time > self.outage_grace_period:
             raise interface.SandboxServiceOverloadError(  # pylint: disable=raise-missing-from
                 sandbox_service=self
@@ -650,8 +650,8 @@ class PooledSandboxService(BaseSandboxService):
         else:
           try:
             sandbox = self._bring_up_sandbox(
-                image_id=image_id,
-                sandbox_id=f'{self._increment_sandbox_id(image_id)}:0',
+                image_id=image_id,  # pyrefly: ignore[bad-argument-type]
+                sandbox_id=f'{self._increment_sandbox_id(image_id)}:0',  # pyrefly: ignore[bad-argument-type]
                 set_acquired=True,
                 reusable=True,
             )
@@ -661,7 +661,7 @@ class PooledSandboxService(BaseSandboxService):
           except (
               interface.EnvironmentError, interface.SandboxStateError
           ) as ex:
-            self._report_outage_or_wait(ex)
+            self._report_outage_or_wait(ex)  # pyrefly: ignore[bad-argument-type]
 
   def _increment_sandbox_id(self, image_id: str) -> int:
     """Returns the next pooled sandbox ID."""

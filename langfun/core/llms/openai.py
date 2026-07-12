@@ -41,7 +41,7 @@ class OpenAIModelInfo(lf.ModelInfo):
       error_codes='https://platform.openai.com/docs/guides/error-codes',
   )
 
-  provider: Final[str] = 'OpenAI'  # pylint: disable=invalid-name
+  provider: Final[str] = 'OpenAI'  # pylint: disable=invalid-name  # pyrefly: ignore[bad-override]
 
 
 #
@@ -1160,7 +1160,7 @@ class OpenAI(openai_compatible.OpenAIResponsesAPI):
     return _SUPPORTED_MODELS_BY_MODEL_ID[self.model]
 
   @classmethod
-  def dir(cls):
+  def dir(cls):  # pyrefly: ignore[bad-override]
     return [s.model_id for s in SUPPORTED_MODELS if s.in_service]
 
   def _request_args(
