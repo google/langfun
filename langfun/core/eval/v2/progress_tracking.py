@@ -83,7 +83,7 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
       self, experiment: Experiment) -> lf.concurrent.ProgressBar:
     """Returns the progress of the experiment."""
     assert experiment.is_leaf
-    return self._leaf_progresses[experiment.id]
+    return self._leaf_progresses[experiment.id]  # pyrefly: ignore[bad-return]
 
   def on_run_start(
       self,
@@ -115,11 +115,11 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
   ) -> None:
     """Called when a runner is complete."""
     lf.concurrent.ProgressBar.update(
-        self._overall_progress,
+        self._overall_progress,  # pyrefly: ignore[bad-argument-type]
         color='green',
         status='ALL COMPLETED.',
     )
-    lf.concurrent.ProgressBar.uninstall(self._overall_progress)
+    lf.concurrent.ProgressBar.uninstall(self._overall_progress)  # pyrefly: ignore[bad-argument-type]
     self._overall_progress = None
     for progress in self._leaf_progresses.values():
       lf.concurrent.ProgressBar.uninstall(progress)
@@ -140,12 +140,12 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
     """Called when an evaluation is skipped."""
     if experiment.is_leaf:
       lf.concurrent.ProgressBar.update(
-          self.experiment_progress(experiment),
-          delta=experiment.progress.num_total,
+          self.experiment_progress(experiment),  # pyrefly: ignore[bad-argument-type]
+          delta=experiment.progress.num_total,  # pyrefly: ignore[bad-argument-type]
           status='Skipped.',
       )
       lf.concurrent.ProgressBar.update(
-          self._overall_progress,
+          self._overall_progress,  # pyrefly: ignore[bad-argument-type]
           status=f'Skipped {experiment.id}.',
       )
 
@@ -157,11 +157,11 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
     """Called when an evaluation is complete."""
     if experiment.is_leaf:
       lf.concurrent.ProgressBar.update(
-          self.experiment_progress(experiment),
+          self.experiment_progress(experiment),  # pyrefly: ignore[bad-argument-type]
           color='green',
       )
       lf.concurrent.ProgressBar.update(
-          self._overall_progress,
+          self._overall_progress,  # pyrefly: ignore[bad-argument-type]
           delta=1,
           status=f'{experiment.id} COMPLETED.',
       )
@@ -183,7 +183,7 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
     """Called when an evaluation example is skipped."""
     del runner, example
     lf.concurrent.ProgressBar.update(
-        self.experiment_progress(experiment),
+        self.experiment_progress(experiment),  # pyrefly: ignore[bad-argument-type]
         delta=1,
     )
 
@@ -195,7 +195,7 @@ class _TqdmProgressTracker(experiment_lib.Plugin):
   ) -> None:
     """Called when an evaluation example is complete."""
     lf.concurrent.ProgressBar.update(
-        self.experiment_progress(experiment),
+        self.experiment_progress(experiment),  # pyrefly: ignore[bad-argument-type]
         delta=1,
         status=self.status(experiment),
     )
