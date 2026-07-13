@@ -61,7 +61,7 @@ class Completion(lf.LangFunc):
       lm_response = super().__call__(**kwargs)
       if self.cache_response:
         self.rebind(lm_response=lm_response, skip_notification=True)
-    return lm_response
+    return lm_response  # pyrefly: ignore[bad-return]
 
   def clear_lm_response(self):
     """Clear LM response."""

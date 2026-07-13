@@ -98,7 +98,7 @@ class ParallelRunner(base.RunnerBase):
     for _, _, _ in lf.concurrent_map(
         _evaluate_item,
         items,
-        max_workers=self._max_workers(evaluation),
+        max_workers=self._max_workers(evaluation),  # pyrefly: ignore[bad-argument-type]
         timeout=self.timeout,
         silence_on_errors=None,
     ):
@@ -200,7 +200,7 @@ class MultiSliceParallelRunner(experiment_lib.Runner):
             f'Ignoring checkpointer: {plugin!r}.'
         )
       elif plugin.is_per_example():
-        worker_plugins.append(pg.Ref(plugin))
+        worker_plugins.append(pg.Ref(plugin))  # pyrefly: ignore[bad-argument-type]
       else:
         monitor_plugins.append(pg.Ref(plugin))
 

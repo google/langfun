@@ -68,6 +68,17 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_31_flash_lite(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    model = vertexai.VertexAIGemini31FlashLite(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-3.1-flash-lite')
+    # 3.x models default to 'global' location.
+    self.assertIn('global', model.api_endpoint)
+    del os.environ['VERTEXAI_PROJECT']
+    del os.environ['VERTEXAI_LOCATION']
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_multi_project_support(self):
     # Test single project (backward compatibility)
     model = vertexai.VertexAIGemini15Pro(
@@ -202,7 +213,7 @@ class VertexAIAnthropicTest(unittest.TestCase):
                 }],
                 'role': 'user',
             }],
-            'stream': False,
+            'stream': True,
             'temperature': 0.0,
             'top_k': 40,
         },
@@ -504,6 +515,47 @@ class VertexAIAnthropicTest(unittest.TestCase):
     # Verify vertexai fields
     self.assertEqual(req['anthropic_version'], 'vertex-2023-10-16')
     self.assertNotIn('model', req)
+
+  def test_lm_get_glm(self):
+    """GLM 5.2 spec resolves to VertexAIGLM in the langfun registry."""
+    self.assertIsInstance(
+        lf.LanguageModel.get('zai-org/glm-5.2-maas'),
+        vertexai.VertexAIGLM,
+    )
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_vertexai_glm_global_endpoint(self):
+    """GLM 5.2 at 'global' uses the location-agnostic host."""
+    model = vertexai.VertexAIGLM(
+        'zai-org/glm-5.2-maas', project='test', location='global'
+    )
+    self.assertTrue(model._api_initialized)
+    self.assertIn('https://aiplatform.googleapis.com', model.api_endpoint)
+    self.assertNotIn('global-aiplatform', model.api_endpoint)
+    self.assertIn(
+        '/locations/global/endpoints/openapi/chat/completions',
+        model.api_endpoint,
+    )
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_vertexai_glm_regional_endpoint(self):
+    """GLM 5.2 at a regional location uses the '{location}-' host prefix."""
+    model = vertexai.VertexAIGLM(
+        'zai-org/glm-5.2-maas', project='test', location='us-central1'
+    )
+    self.assertTrue(model._api_initialized)
+    self.assertIn(
+        'https://us-central1-aiplatform.googleapis.com', model.api_endpoint
+    )
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_vertexai_glm_request_model_passthrough(self):
+    """GLM model id keeps its publisher prefix (no 'meta/' prepended)."""
+    model = vertexai.VertexAIGLM(
+        'zai-org/glm-5.2-maas', project='test', location='global'
+    )
+    req = model.request(lf.UserMessage('hi'), lf.LMSamplingOptions())
+    self.assertEqual(req['model'], 'zai-org/glm-5.2-maas')
 
 
 if __name__ == '__main__':
