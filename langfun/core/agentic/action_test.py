@@ -29,7 +29,7 @@ class Bar(action_lib.Action):
   simulate_action_error: bool = False
   simulate_execution_time: float = 0
 
-  def call(self, session, *, lm, **kwargs):
+  def call(self, session, *, lm, **kwargs):  # pyrefly: ignore[bad-override]
     assert session.current_action.action is self
     session.info('Begin Bar')
     time.sleep(self.simulate_execution_time)
@@ -48,7 +48,7 @@ class Foo(action_lib.Action):
   simulate_execution_time: list[float] = [0, 0, 0, 0]
   max_bar_execution_time: float | None = None
 
-  def call(self, session, *, lm, **kwargs):
+  def call(self, session, *, lm, **kwargs):  # pyrefly: ignore[bad-override]
     assert session.current_action.action is self
     with session.track_phase('prepare'):
       session.info('Begin Foo', x=1)
@@ -190,7 +190,7 @@ class SessionTest(unittest.TestCase):
     self.assertEqual(result, 3)
     self.assertIsNone(foo.session)
     self.assertEqual(foo.state, [0, 1, 2])
-    self.assertIs(foo.invocation.state, foo.state)
+    self.assertIs(foo.invocation.state, foo.state)  # pyrefly: ignore[missing-attribute]
     self.assertEqual(foo.result, 3)
     self.assertEqual(
         foo.metadata, dict(note='foo', subtask_0=0, subtask_1=1, subtask_2=2)
@@ -615,11 +615,11 @@ class SessionTest(unittest.TestCase):
     session = action_lib.Session(event_handler=event_handler)
     other = session.clone()
     self.assertIsNot(session, other)
-    self.assertIs(other.event_handler, event_handler)
+    self.assertIs(other.event_handler, event_handler)  # pyrefly: ignore[missing-attribute]
 
     other = session.clone(deep=True)
     self.assertIsNot(session, other)
-    self.assertIsNot(other.event_handler, session.event_handler)
+    self.assertIsNot(other.event_handler, session.event_handler)  # pyrefly: ignore[missing-attribute]
 
   def test_log(self):
     session = action_lib.Session()
@@ -631,7 +631,7 @@ class SessionTest(unittest.TestCase):
 
   def test_as_message(self):
     session = action_lib.Session()
-    self.assertIn('agent@', session.id)
+    self.assertIn('agent@', session.id)  # pyrefly: ignore[bad-argument-type]
     self.assertIsInstance(session.as_message(), lf.AIMessage)
 
   def test_query_with_track_if(self):
@@ -663,7 +663,7 @@ class SessionTest(unittest.TestCase):
     """Regression test: PyGlove re-binding must not wipe thread-local state."""
 
     class Dummy(pg.Object):
-      session: pg.typing.Any()
+      session: pg.typing.Any()  # pyrefly: ignore[invalid-annotation]
 
     class DummyAction(action_lib.Action):
       def call(self, session, **kwargs):
