@@ -140,7 +140,7 @@ class MultiProcessingSandbox(BaseSandbox):
   @property
   def working_dir(self) -> str | None:
     """Returns the directory of the sandbox."""
-    return self._working_dir
+    return self._working_dir  # pyrefly: ignore[bad-return]
 
   def _setup(self) -> None:
     """Sets up the sandbox."""
