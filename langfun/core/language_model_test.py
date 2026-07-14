@@ -709,6 +709,40 @@ class LanguageModelTest(unittest.TestCase):
     self.assertEqual(result.text, 'valid response')
     self.assertEqual(lm.attempt_count, 2)
 
+  def test_empty_generation_cache_deletion(self):
+    cache = in_memory.InMemory()
+    prompt = message_lib.UserMessage('a')
+
+    class MockModelWithRecovery(MockModel):
+      def _sample(
+          self, prompts: list[message_lib.Message]
+      ) -> list[lm_lib.LMSamplingResult]:
+        return [
+            lm_lib.LMSamplingResult(
+                [lm_lib.LMSample(response='recovered')],
+                usage=lm_lib.LMSamplingUsage(100, 100, 200, 0, 1, 1.0),
+            )
+        ]
+
+    lm = MockModelWithRecovery(
+        cache=cache, max_attempts=2, retry_interval=0
+    )
+    cache.put(
+        lm,
+        prompt,
+        lm_lib.LMSamplingResult(
+            [lm_lib.LMSample(response='')],
+            usage=lm_lib.LMSamplingUsage(100, 0, 100, 0, 1, 1.0),
+            is_cached=True,
+        ),
+        seed=0,
+    )
+
+    res = lm.sample(['a'], cache_seed=0)[0]
+    self.assertEqual(res.samples[0].response.text, 'recovered')
+    cached = cache.get(lm, prompt, seed=0)
+    self.assertEqual(cached.samples[0].response.text, 'recovered')
+
   def test_estimate_max_concurrency(self):
     self.assertIsNone(lm_lib.LanguageModel.estimate_max_concurrency(None, None))
     self.assertEqual(

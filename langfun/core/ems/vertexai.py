@@ -130,9 +130,9 @@ class VertexAI(rest.REST):
   @property
   def _project(self) -> str:
     """Returns a project ID. Randomly selects from list if multiple."""
-    if len(self._projects) == 1:
-      return self._projects[0]
-    return random.choice(self._projects)
+    if len(self._projects) == 1:  # pyrefly: ignore[bad-argument-type]
+      return self._projects[0]  # pyrefly: ignore[unsupported-operation]
+    return random.choice(self._projects)  # pyrefly: ignore[bad-argument-type]
 
   def session(self):
     assert self._api_initialized
@@ -143,7 +143,7 @@ class VertexAI(rest.REST):
     return s
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     project = self._project
     return (
@@ -160,7 +160,7 @@ class VertexAI(rest.REST):
           import base64  # pylint: disable=g-import-not-at-top
 
           parts.append({
-              'inline_data': {
+              'inline_data': {  # pyrefly: ignore[bad-assignment]
                   'mime_type': 'image/png',
                   'data': base64.b64encode(modality.to_bytes()).decode('utf-8'),
               }
@@ -170,9 +170,9 @@ class VertexAI(rest.REST):
     request_body = {'content': {'parts': parts}}
     options = self.embedding_options
     if options.task_type is not None:
-      request_body['taskType'] = options.task_type
+      request_body['taskType'] = options.task_type  # pyrefly: ignore[bad-assignment]
     if options.output_dimensionality is not None:
-      request_body['outputDimensionality'] = options.output_dimensionality
+      request_body['outputDimensionality'] = options.output_dimensionality  # pyrefly: ignore[bad-assignment]
     return request_body
 
   def result(self, json_response: dict[str, Any]) -> lf.EmbeddingResult:
@@ -219,7 +219,7 @@ class VertexAIPredictAPI(VertexAI):
     if options.output_dimensionality is not None:
       parameters['outputDimensionality'] = options.output_dimensionality
     if parameters:
-      request_body['parameters'] = parameters
+      request_body['parameters'] = parameters  # pyrefly: ignore[bad-assignment]
     return request_body
 
   def result(self, json_response: dict[str, Any]) -> lf.EmbeddingResult:
