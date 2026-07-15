@@ -152,7 +152,7 @@ def generate_class(
 
   call_kwargs = dict(skip_lm=skip_lm)
   if lm is not None:
-    call_kwargs['lm'] = lm
+    call_kwargs['lm'] = lm  # pyrefly: ignore[bad-assignment]
   message = GenerateClass(
       input=prompt,
       context=name,
