@@ -511,6 +511,13 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
 # pylint: disable=invalid-name
 
 
+class VertexAIClaude5Opus(VertexAIAnthropic):
+  """Anthropic's Claude Opus 5 model on VertexAI."""
+
+  model = 'claude-opus-5'
+  location = 'global'
+
+
 class VertexAIClaude48Opus(VertexAIAnthropic):
   """Anthropic's Claude 4.8 Opus model on VertexAI."""
 

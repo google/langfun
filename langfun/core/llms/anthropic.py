@@ -139,6 +139,37 @@ SUPPORTED_MODELS = [
         ),
     ),
     AnthropicModelInfo(
+        model_id='claude-opus-5',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude Opus 5 model.',
+        # release_date and knowledge_cutoff intentionally omitted: Opus 5 is a
+        # dateless/pinned snapshot and neither date is doc-grounded. Both fields
+        # default to None (unknown), matching the convention used by most other
+        # entries in this list rather than shipping fabricated dates.
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_000_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5.0,
+            cost_per_1m_output_tokens=25.0,
+        ),
+        # UNVERIFIED: no public/internal doc grounds Opus 5 quota; these
+        # rate_limits are copied from the Opus 4.8 entry as a best-effort
+        # placeholder. Update once official Opus 5 limits are published.
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
         model_id='claude-haiku-4-5-20251001',
         provider='Anthropic',
         in_service=True,
@@ -1017,7 +1048,9 @@ class Anthropic(rest.REST):
   @property
   def _use_adaptive_thinking(self) -> bool:
     return self.model is not None and (
-        'claude-opus-4-7' in self.model_id or 'claude-opus-4-8' in self.model_id
+        'claude-opus-4-7' in self.model_id
+        or 'claude-opus-4-8' in self.model_id
+        or 'claude-opus-5' in self.model_id
     )
 
   def request(
@@ -1097,7 +1130,9 @@ class Anthropic(rest.REST):
             'type': 'adaptive',
         }
         if self.model is not None and (
-            'claude-opus-4-7' in self.model or 'claude-opus-4-8' in self.model
+            'claude-opus-4-7' in self.model
+            or 'claude-opus-4-8' in self.model
+            or 'claude-opus-5' in self.model
         ):
           args['thinking']['display'] = 'summarized'
 
@@ -1137,9 +1172,11 @@ class Anthropic(rest.REST):
       args.pop('top_k', None)
       args.pop('top_p', None)
 
-    # Claude Opus 4.7 and 4.8 do not support temperature, top_p, or top_k.
+    # Claude Opus 4.7, 4.8 and 5 do not support temperature, top_p, or top_k.
     if self.model is not None and (
-        'claude-opus-4-7' in self.model or 'claude-opus-4-8' in self.model
+        'claude-opus-4-7' in self.model
+        or 'claude-opus-4-8' in self.model
+        or 'claude-opus-5' in self.model
     ):
       args.pop('temperature', None)
       args.pop('top_k', None)
@@ -1368,6 +1405,12 @@ class Claude46(Anthropic):
 
 
 # pylint: disable=invalid-name
+class Claude5Opus(Anthropic):
+  """Claude Opus 5 model."""
+
+  model = 'claude-opus-5'
+
+
 class Claude48Opus(Anthropic):
   """Claude Opus 4.8 model."""
 
