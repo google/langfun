@@ -258,7 +258,7 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
       self.num_processed += other.num_processed
       self.num_failed += other.num_failed
       self.num_skipped += other.num_skipped
-      self.execution_summary.aggregate(other.execution_summary.breakdown)
+      self.execution_summary.aggregate(other.execution_summary.breakdown)  # pyrefly: ignore[bad-argument-type]
       self._prior_elapse += other.prior_elapse
 
   #
@@ -268,7 +268,7 @@ class Progress(pg.Object, pg.views.HtmlTreeView.Extension):
   def _duration_text(self) -> str:
     if self.start_time is None:
       return '00:00:00'
-    return str(datetime.timedelta(seconds=self.elapse)).split('.')[0]
+    return str(datetime.timedelta(seconds=self.elapse)).split('.')[0]  # pyrefly: ignore[bad-argument-type]
 
   def _time_tooltip(self) -> pg.Html.WritableTypes:
     time_info = pg.Dict(

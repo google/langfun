@@ -143,7 +143,7 @@ def _concurrent_sample(
   if pg.is_deterministic(sampling_space):
     num_examples = num_examples or None
     def repeat_example(example, num_examples=num_examples):
-      for _ in range(num_examples):
+      for _ in range(num_examples):  # pyrefly: ignore[bad-argument-type]
         yield example.clone()
     pg_sample_fn = repeat_example
 

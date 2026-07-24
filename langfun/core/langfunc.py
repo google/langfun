@@ -164,10 +164,10 @@ class LangFunc(template_lib.Template):
         self._cached_lm_input = lm_input
 
         # Send rendered text to LM.
-        lm_output = self.lm(lm_input, cache_seed=cache_seed)
+        lm_output = self.lm(lm_input, cache_seed=cache_seed)  # pyrefly: ignore[bad-argument-type]
 
         # Attach cache seed.
-        lm_input.metadata.cache_seed = cache_seed
+        lm_input.metadata.cache_seed = cache_seed  # pyrefly: ignore[missing-attribute]
 
         # Transform the output message.
         lm_output = self.transform_output(lm_output)
@@ -249,7 +249,7 @@ class LangFunc(template_lib.Template):
 
 # Register converter from str to LangFunc, therefore we can always
 # pass strs to attributes that accept LangFunc.
-pg.typing.register_converter(str, LangFunc, LangFunc)
+pg.typing.register_converter(str, LangFunc, LangFunc)  # pyrefly: ignore[bad-argument-type]
 
 
 #
