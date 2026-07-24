@@ -61,6 +61,47 @@ class REST(lf.LanguageModel):
       'The headers for the REST API.'
   ] = None
 
+  inactivity_timeout: Annotated[
+      float | None,
+      (
+          'Short per-chunk INACTIVITY bound in seconds. This is the maximum '
+          'time allowed to elapse between two successive received chunks (it '
+          'resets every time a chunk arrives). A genuinely dead connection '
+          'fast-fails after this window, while a live-but-slow generation '
+          'that keeps emitting bytes is NOT killed. When None, falls back to '
+          '`timeout`, preserving the historical single-timeout behavior. Used '
+          'both as the requests read timeout (socket idle) and as an in-loop '
+          'check in _read_response_with_deadline.'
+      ),
+  ] = None
+
+  max_total_timeout: Annotated[
+      float | None,
+      (
+          'Long TOTAL wall-clock budget in seconds for a single response. '
+          'This bounds the entire response duration regardless of how '
+          'steadily bytes arrive, letting a healthy multi-hour generation '
+          'complete. When None, falls back to `timeout`. Set this large '
+          '(e.g. 14400 for 4h) together with a small `inactivity_timeout` '
+          '(e.g. 120) to support slow-but-live long generations.'
+      ),
+  ] = None
+
+  max_response_size: Annotated[
+      int | None,
+      (
+          'Maximum total size, in BYTES, of a single streamed response body. '
+          'Streaming responses are buffered fully in memory before parsing; '
+          'without a cap a runaway or pathologically large generation can grow '
+          'the buffer to tens of GB and OOM-kill the process (the time-based '
+          'bounds do not help when a server keeps streaming bytes steadily). '
+          'When the cumulative body would exceed this many bytes the response '
+          'is closed and a (non-retryable) `ResponseSizeLimitError` is raised. '
+          'Must be a positive integer when set. When None, no size cap is '
+          'enforced (historical behavior).'
+      ),
+  ] = None
+
   @functools.cached_property
   def _api_initialized(self) -> bool:
     """Returns whether the API is initialized."""
@@ -84,6 +125,11 @@ class REST(lf.LanguageModel):
   def _on_bound(self):
     super()._on_bound()
     self.__dict__.pop('_api_initialized', None)
+    if self.max_response_size is not None and self.max_response_size <= 0:
+      raise ValueError(
+          'max_response_size must be a positive integer or None; got '
+          f'{self.max_response_size!r}.'
+      )
 
   def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
     assert self._api_initialized
@@ -94,9 +140,10 @@ class REST(lf.LanguageModel):
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
     try:
       with self.session() as session:
+        total_timeout = self._effective_total_timeout
         deadline = (
-            (time.monotonic() + self.timeout)
-            if self.timeout is not None
+            (time.monotonic() + total_timeout)
+            if total_timeout is not None
             else None
         )
         response = session.post(
@@ -144,50 +191,114 @@ class REST(lf.LanguageModel):
       raise lf.LMError(error_message) from e
 
   @property
+  def _effective_inactivity_timeout(self) -> float | None:
+    """Short per-chunk inactivity bound (resets on each received chunk).
+
+    Falls back to self.timeout when not explicitly configured, preserving the
+    historical single-timeout behavior for callers that only set `timeout`.
+    """
+    if self.inactivity_timeout is not None:
+      return self.inactivity_timeout
+    return self.timeout
+
+  @property
+  def _effective_total_timeout(self) -> float | None:
+    """Long total wall-clock budget for a single response.
+
+    Falls back to self.timeout when not explicitly configured.
+    """
+    if self.max_total_timeout is not None:
+      return self.max_total_timeout
+    return self.timeout
+
+  @property
   def _per_operation_timeout(self):
     """Per-operation (connect, read) timeout tuple for the requests library.
 
-    Splits self.timeout into separate connect and read timeouts:
-    - connect: bounded to 60s (no server needs more to accept a TCP connection)
-    - read: uses self.timeout (max wait for each chunk of response data)
-
-    This is the per-socket-read timeout. The total-request deadline is enforced
-    separately by _read_response_with_deadline.
+    - connect: bounded to 60s (no server needs more to accept a TCP
+      connection).
+    - read: the per-socket idle timeout == the inactivity bound. requests
+      raises ReadTimeout if no bytes arrive within this window, which is
+      exactly the dead-connection fast-fail we want. It does NOT bound the
+      total response time (that is enforced by _read_response_with_deadline).
     """
-    if self.timeout is None:
+    inactivity = self._effective_inactivity_timeout
+    if inactivity is None:
       return None
-    timeout = max(0.0, self.timeout)
-    return (min(60.0, timeout), timeout)
+    inactivity = max(0.0, inactivity)
+    return (min(60.0, inactivity), inactivity)
 
   def _read_response_with_deadline(
       self, response: requests.Response, deadline: float | None
   ) -> None:
-    """Reads response body, enforcing a total-request deadline.
+    """Reads response body, enforcing inactivity + total-request deadlines.
 
     When stream=True, session.post() returns after HTTP headers are received.
-    This method reads the body in chunks, checking the wall-clock deadline
-    between each chunk. If the deadline is exceeded, the response is closed
-    (which immediately closes the underlying socket) and TimeoutError is raised.
+    This method reads the body in chunks and enforces TWO independent bounds:
+
+    - Inactivity bound (short, `_effective_inactivity_timeout`): the maximum
+      time allowed BETWEEN two successive chunks. It resets every time a chunk
+      is received, so a live-but-slow generation that keeps emitting bytes is
+      never killed, while a genuinely dead connection fast-fails. This is also
+      enforced at the socket layer via the read timeout in
+      `_per_operation_timeout` (which covers the case where iter_content blocks
+      because the server sends nothing at all); the in-loop check below
+      additionally covers slow trickles observed between yielded chunks.
+    - Total bound (long, via `deadline`): the absolute wall-clock budget for
+      the whole response. Lets a healthy multi-hour generation complete.
+
+    If either bound is exceeded, the response is closed (which immediately
+    closes the underlying socket) and TimeoutError is raised.
 
     After successful read, sets response._content so that response.json()
     and response.content work normally for _parse_response().
 
     Args:
       response: A streaming requests.Response (from stream=True).
-      deadline: Monotonic clock deadline (from time.monotonic()), or None
-        to disable deadline enforcement.
+      deadline: Monotonic clock TOTAL deadline (from time.monotonic()), or
+        None to disable total-deadline enforcement.
     """
     # If body was already buffered (non-streaming or content pre-loaded),
     # there is nothing to read.
     if response._content is not False:  # pylint: disable=protected-access,g-bool-id-comparison
       return
+    inactivity = self._effective_inactivity_timeout
+    max_size = self.max_response_size
     chunks = []
+    total_bytes = 0
+    last_chunk_time = time.monotonic()
     try:
       for chunk in response.iter_content(chunk_size=65536):
-        chunks.append(chunk)
-        if deadline is not None and time.monotonic() > deadline:
+        now = time.monotonic()
+        # Inactivity bound: time since the previous chunk (or since the start
+        # of the read for the first chunk). Resets on every received chunk.
+        if inactivity is not None and now - last_chunk_time > inactivity:
           raise TimeoutError(
-              f'Response exceeded total deadline of {self.timeout}s'
+              f'No response data received for {inactivity}s '
+              '(inactivity timeout).'
+          )
+        # Total-SIZE bound: the time-based bounds above do not fire while a
+        # server keeps streaming bytes steadily, so an unbounded (e.g. runaway)
+        # generation would otherwise buffer its entire body here and OOM-kill
+        # the process. Check BEFORE buffering the chunk so the buffered body
+        # never exceeds `max_response_size`, and fail fast with a NON-retryable
+        # error (`ResponseSizeLimitError` is an `LMError`, not a
+        # `RetryableLMError`) so retries do not re-stream the same oversized
+        # response. The `except BaseException` below closes the socket.
+        if max_size is not None and total_bytes + len(chunk) > max_size:
+          raise lf.ResponseSizeLimitError(
+              f'Response body exceeded max_response_size of {max_size} bytes '
+              f'(received {total_bytes} bytes before the chunk that would '
+              'exceed the limit).'
+          )
+        chunks.append(chunk)
+        total_bytes += len(chunk)
+        last_chunk_time = now
+        # Total bound: absolute wall-clock budget for the whole response.
+        if deadline is not None and now > deadline:
+          raise TimeoutError(
+              'Response exceeded total deadline of '
+              f'{self._effective_total_timeout}s.'
           )
     except BaseException:
       # Close on any error to prevent TCP connection leaks. Protect close()
@@ -198,7 +309,7 @@ class REST(lf.LanguageModel):
         pass
       raise
     # Set internal cache so response.json() / response.content work normally.
-    response._content = b''.join(chunks)  # pylint: disable=protected-access
+    response._content = b''.join(chunks)  # pylint: disable=protected-access  # pyrefly: ignore[bad-assignment]
 
   # Content filtering patterns observed from various LLM providers.
   # These are best-effort substring heuristics derived from real API error
@@ -240,18 +351,33 @@ class REST(lf.LanguageModel):
       error_cls = lf.LMError
     return error_cls(f'{status_code}: {content}')
 
+  def _response_to_message_dict(self, response: requests.Response) -> Any:
+    """Converts an HTTP response into the message dict expected by `result`.
+
+    Default implementation assumes a single buffered JSON body. Subclasses
+    whose API returns a streamed (e.g. Server-Sent Events) body override this
+    to reassemble the full message dict before it reaches `result()`.
+
+    Args:
+      response: The HTTP response returned by the API.
+
+    Returns:
+      The parsed message dict to be passed to `result`.
+    """
+    return response.json()
+
   def _parse_response(self, response: requests.Response) -> lf.LMSamplingResult:
     """Parses the LLM response."""
     if response.status_code == 200:
       try:
-        return self.result(response.json())
+        return self.result(self._response_to_message_dict(response))
       except (ValueError, KeyError) as e:
         raise lf.LMError(str(e)) from e
     else:
-      raise self._error(response.status_code, response.content)
+      raise self._error(response.status_code, response.content)  # pyrefly: ignore[bad-argument-type]
 
   @property
-  def max_concurrency(self) -> int | None:
+  def max_concurrency(self) -> int | None:  # pyrefly: ignore[bad-override]
     """Returns the max concurrency for this model."""
     rate_limits = self.model_info.rate_limits
     if rate_limits is not None:

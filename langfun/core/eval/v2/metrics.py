@@ -250,7 +250,7 @@ class MetricBase(Metric):
           example_id, metric_metadata
       )
     else:
-      self._update_metric_values(example_id, metric_metadata)
+      self._update_metric_values(example_id, metric_metadata)  # pyrefly: ignore[bad-argument-count, bad-argument-type]
 
   @abc.abstractmethod
   def _compute_metric_metadata(
@@ -281,9 +281,9 @@ class MetricBase(Metric):
     assert error_tag is not None, (example_id, metric_metadata)
     self._error_breakdown[error_tag].append(example_id)
     if error_tag.startswith('MappingError'):
-      self.oop_errors.add(example_id, 1)
+      self.oop_errors.add(example_id, 1)  # pyrefly: ignore[missing-attribute]
     else:
-      self.non_oop_errors.add(example_id, 1)
+      self.non_oop_errors.add(example_id, 1)  # pyrefly: ignore[missing-attribute]
     self._error_breakdown[error_tag].append(example_id)
 
   def _oop_errors_breakdown(self) -> str | None:
@@ -356,7 +356,7 @@ class Match(MetricBase):
     metadata['is_correct'] = is_correct
     return metadata
 
-  def _update_metric_values(
+  def _update_metric_values(  # pyrefly: ignore[bad-override]
       self, example_id: int, metadata: dict[str, Any]
   ) -> None:
     """Update metric values based metric metadata."""
@@ -370,7 +370,7 @@ class Match(MetricBase):
 
   def values(self) -> list[metric_values.MetricValue]:
     """Returns all the values computed by this metric."""
-    return [
+    return [  # pyrefly: ignore[bad-return]
         self.matches,
         self.mismatches,
         self.oop_errors,
@@ -437,7 +437,7 @@ class Score(MetricBase):
     metadata['score'] = score
     return metadata
 
-  def _update_metric_values(
+  def _update_metric_values(  # pyrefly: ignore[bad-override]
       self, example_id: int, metadata: dict[str, Any]
   ) -> None:
     """Update metric values based metric metadata."""
@@ -447,7 +447,7 @@ class Score(MetricBase):
 
   def values(self) -> list[metric_values.MetricValue]:
     """Returns all the values computed by this metric."""
-    return [
+    return [  # pyrefly: ignore[bad-return]
         self.average_score,
         self.oop_errors,
         self.non_oop_errors
