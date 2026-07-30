@@ -509,7 +509,7 @@ class EventLogger(pg.Object, interface.EventHandler):
       styles: list[str] | None = None,
   ):
     message = self._maybe_colored(
-        message, color if error is None else 'red', styles=styles
+        message, color if error is None else 'red', styles=styles  # pyrefly: ignore[bad-argument-type]
     )
     if error is not None:
       pg.logging.error(message)
@@ -531,6 +531,6 @@ class ConsoleEventLogger(EventLogger):
   ):
     print(
         self._maybe_colored(
-            message, color if error is None else 'red', styles=styles
+            message, color if error is None else 'red', styles=styles  # pyrefly: ignore[bad-argument-type]
         )
     )
