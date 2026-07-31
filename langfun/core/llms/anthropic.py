@@ -1356,9 +1356,9 @@ class Anthropic(rest.REST):
             'overloaded_error': 529,
         }
         err = event.get('error') or {}
-        status = error_type_to_status.get(err.get('type'), 500)
+        status = error_type_to_status.get(err.get('type'), 500)  # pyrefly: ignore[no-matching-overload]
         # Anthropic._error inspects `content` as bytes, so encode it.
-        raise self._error(status, json.dumps(err or event).encode('utf-8'))
+        raise self._error(status, json.dumps(err or event).encode('utf-8'))  # pyrefly: ignore[bad-argument-type]
       elif etype == 'message_stop':
         saw_message_stop = True
       # 'ping' and other unrecognized events need no handling.

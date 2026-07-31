@@ -505,13 +505,13 @@ class Environment(AbstractEnvironment):
     if sandbox_service is not None:
       return self.sandboxes[sandbox_service]
     for sandbox_service in self.sandboxes.values():  # pyrefly: ignore[bad-assignment]
-      if image_id is None or image_id in sandbox_service.image_ids:
+      if image_id is None or image_id in sandbox_service.image_ids:  # pyrefly: ignore[missing-attribute]
         return sandbox_service  # pyrefly: ignore[bad-return]
 
     # Returns the first sandbox service that supports dynamic image loading
     # if image ID is not found in pre-configured image IDs.
     for sandbox_service in self.sandboxes.values():  # pyrefly: ignore[bad-assignment]
-      if sandbox_service.supports_dynamic_image_loading:
+      if sandbox_service.supports_dynamic_image_loading:  # pyrefly: ignore[missing-attribute]
         return sandbox_service  # pyrefly: ignore[bad-return]
     raise ValueError(
         f'Environment {self.id} does not serve image ID {image_id!r}.'
