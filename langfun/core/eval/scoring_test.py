@@ -23,6 +23,32 @@ from langfun.core.llms import fake
 import pyglove as pg
 
 
+_TIMING_KEYS = ('start_time', 'end_time', 'wall_clock_s')
+
+
+def _strip_timing(result):
+  """Removes non-deterministic per-leaf timing fields for stable eq checks.
+
+  `Evaluation.finalize()` now emits `start_time`/`end_time`/`wall_clock_s` into
+  every leaf result. Those wall-clock values are non-deterministic, so tests
+  that assert the full result dict must drop them before comparing. Their
+  presence and sanity are covered separately by `test_run_timing`.
+
+  Args:
+    result: The leaf result dict (or None) to strip timing fields from.
+
+  Returns:
+    A shallow copy of `result` without the timing fields, or None if `result`
+    is None.
+  """
+  if result is None:
+    return None
+  stripped = dict(result)
+  for key in _TIMING_KEYS:
+    stripped.pop(key, None)
+  return stripped
+
+
 @pg.functor()
 def float_list():
   return list[float]
@@ -77,7 +103,7 @@ class ScoringTest(unittest.TestCase):
     s = eval_set(lm=lm)
     self.assertEqual(s.avg_score, 0.0)
     s.run()
-    result_copy = s.result.copy()
+    result_copy = _strip_timing(s.result)
     del result_copy['experiment_setup']['id']
     self.assertEqual(
         result_copy,

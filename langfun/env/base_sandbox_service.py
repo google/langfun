@@ -37,15 +37,27 @@ class BaseSandboxService(interface.SandboxService):
     State transitions:
 
     +---------------+               +-----------+
-    |  <CREATED>    | --(start)---> |  ONLINE   | -(shutdown or outage detected)
-    +---------------+      |        +-----------+              |
-                           |        +-----------+              |
-                           +------> | <OFFLINE> | <------------+
-                                    +-----------+
+    |  <CREATED>    | --(start)---> |  ONLINE   | ---(shutdown)---+
+    +---------------+      |        +-----------+                 |
+                           |          ^        |                  |
+                           |          |        (outage detected)  |
+                           |     (backend      |                  |
+                           |      returns)     v                  v
+                           |        +-------------+       +-------------+
+                           +------> | <SUSPENDED> | ----> |  <OFFLINE>  |
+                                    +-------------+       +-------------+
+                                              (shutdown)
+
+    A backend outage suspends the service instead of terminating it: all
+    sandboxes are released and the service stops serving (`is_online` is
+    False), but the next `acquire()` re-enters service once the backend is
+    reachable again. This avoids the "bogus RUNNING" state where a process
+    stays up while its service can never serve again.
     """
     CREATED = 'created'
     ONLINE = 'online'
     SHUTTING_DOWN = 'shutting_down'
+    SUSPENDED = 'suspended'
     OFFLINE = 'offline'
 
   #
@@ -122,6 +134,23 @@ class BaseSandboxService(interface.SandboxService):
     """
     return True, dict()
 
+  @property
+  def transient_outage_errors(self) -> tuple[type[BaseException], ...]:
+    """Backend-specific errors to be treated as transient service outage.
+
+    Subclasses that talk to a remote backend should declare the errors raised
+    while establishing that connection (e.g. backend discovery or RPC errors).
+    Such errors are typically raised by the backend client library, hence they
+    are neither `interface.EnvironmentError` nor `interface.SandboxStateError`,
+    and without being declared here they would escape the outage retry loop and
+    crash the hosting process.
+
+    Returns:
+      A tuple of exception types treated as a transient outage of the backend.
+      Note that the outage is still bounded by `outage_grace_period`.
+    """
+    return ()
+
   #
   # Base class implementation.
   #
@@ -134,8 +163,17 @@ class BaseSandboxService(interface.SandboxService):
     self._housekeep_counter = 0
     self._start_time = None
     self._offline_start_time = None
+    self._resume_lock = threading.Lock()
     self._check_image_ids()
     self._check_feature_requirements()
+
+  @property
+  def _outage_errors(self) -> tuple[type[BaseException], ...]:
+    """Returns all error types that indicate a (transient) service outage."""
+    return (
+        interface.EnvironmentError,
+        interface.SandboxStateError,
+    ) + tuple(self.transient_outage_errors)
 
   def _check_image_ids(self) -> None:
     """Checks image ids. Subclass could override this method."""
@@ -159,7 +197,7 @@ class BaseSandboxService(interface.SandboxService):
       )
 
   @property
-  def event_handler(self) -> interface.EventHandler:
+  def event_handler(self) -> interface.EventHandler:  # pyrefly: ignore[bad-override]
     if hasattr(self, '_event_handler_ref'):
       return self._event_handler_ref
     return super().event_handler
@@ -231,12 +269,31 @@ class BaseSandboxService(interface.SandboxService):
       raise e
 
   def shutdown(self) -> None:
-    """Shuts down the sandbox service.
+    """Shuts down the sandbox service for good.
 
     This method should not raise any exceptions.
     """
+    if self._status is self.Status.SUSPENDED:
+      # Resources have already been released upon suspension, so we only need
+      # to move the service to its terminal status.
+      self._set_status(self.Status.OFFLINE)
+      return
+    self._teardown(self.Status.OFFLINE)
+
+  def suspend(self) -> None:
+    """Suspends the sandbox service upon a backend outage.
+
+    Unlike `shutdown`, which is terminal, a suspended service releases its
+    resources but can re-enter service (see `_resume`) once the backend is
+    reachable again.
+    """
+    self._teardown(self.Status.SUSPENDED)
+
+  def _teardown(self, final_status: Status) -> None:
+    """Releases the resources of the service and moves it to `final_status`."""
     if self._status in (
         self.Status.SHUTTING_DOWN,
+        self.Status.SUSPENDED,
         self.Status.OFFLINE,
     ):
       return
@@ -247,10 +304,41 @@ class BaseSandboxService(interface.SandboxService):
     shutting_down_time = time.time()
     try:
       self._shutdown()
+      self._set_status(final_status)
       self.on_shutdown(duration=time.time() - shutting_down_time)
     except BaseException as e:  # pylint: disable=broad-except
+      self._set_status(final_status)
       self.on_shutdown(duration=time.time() - shutting_down_time, error=e)
       raise e
+
+  def _resume(self) -> None:
+    """Re-enters service after a suspension caused by a backend outage.
+
+    Raises:
+      interface.SandboxServiceOutageError: If the backend is still unreachable
+        after `outage_grace_period`. The service remains suspended in that
+        case, so that a later `acquire()` can try again.
+    """
+    with self._resume_lock:
+      if self._status is not self.Status.SUSPENDED:
+        return
+
+      pg.logging.warning(
+          '[%s] Sandbox service is resuming from suspension.', self.id
+      )
+      # This is a new outage episode: the bring-up below is bounded by a fresh
+      # `outage_grace_period` instead of inheriting the exhausted budget of the
+      # episode that caused the suspension.
+      self._offline_start_time = None
+      self._set_status(self.Status.CREATED)
+      try:
+        self.start()
+      except BaseException:
+        # `start` has already released partially created resources. Fall back
+        # to SUSPENDED (instead of the terminal OFFLINE) so that the service
+        # can be resumed again when the backend returns.
+        self._set_status(self.Status.SUSPENDED)
+        raise
 
   def acquire(
       self,
@@ -271,6 +359,12 @@ class BaseSandboxService(interface.SandboxService):
       interface.SandboxServiceOverloadError: If the max pool size is reached and
         the grace period has passed.
     """
+    if self._status is self.Status.SUSPENDED:
+      # The service lost its backend earlier. Try to re-enter service, which
+      # raises `SandboxServiceOutageError` if the backend is still unreachable
+      # after the grace period.
+      self._resume()
+
     if not self.is_online:
       raise interface.SandboxServiceOutageError(
           f'Sandbox service {self.id} is not alive.',
@@ -315,7 +409,7 @@ class BaseSandboxService(interface.SandboxService):
       if set_acquired:
         sandbox.set_acquired()
       return sandbox
-    except (interface.EnvironmentError, interface.SandboxStateError) as e:
+    except self._outage_errors as e:
       env_error = e
       raise e
     finally:
@@ -357,18 +451,20 @@ class BaseSandboxService(interface.SandboxService):
             set_acquired=set_acquired,
             reusable=reusable,
         )
-      except (interface.EnvironmentError, interface.SandboxStateError) as e:
+      except self._outage_errors as e:
         self._report_outage_or_wait(e, shutdown_env_upon_outage)
 
   def _report_outage_or_wait(
       self,
-      error: interface.SandboxStateError,
+      error: BaseException,
       shutdown_env_upon_outage: bool = True
   ):
     """Raises error if the grace period has passed or wait for retry."""
     if self.offline_duration > self.outage_grace_period:
       if shutdown_env_upon_outage:
-        self.shutdown()
+        # Suspend instead of shutting down for good: the service releases its
+        # resources now, but can re-enter service when the backend returns.
+        self.suspend()
       raise interface.SandboxServiceOutageError(
           sandbox_service=self,
           offline_duration=self.offline_duration,
@@ -377,7 +473,17 @@ class BaseSandboxService(interface.SandboxService):
 
   def _housekeep_loop(self) -> None:
     """Housekeeping loop for the sandbox service."""
-    while self._status not in (self.Status.SHUTTING_DOWN, self.Status.OFFLINE):
+    # `self._housekeep_thread` identifies the current service episode: a
+    # resumed service starts a new housekeeping thread, so the loop of the
+    # previous episode must not keep running against the new one.
+    while (
+        self._status not in (
+            self.Status.SHUTTING_DOWN,
+            self.Status.SUSPENDED,
+            self.Status.OFFLINE,
+        )
+        and threading.current_thread() is self._housekeep_thread
+    ):
       housekeep_start_time = time.time()
 
       # Replace dead sandboxes.
@@ -397,7 +503,7 @@ class BaseSandboxService(interface.SandboxService):
             ),
             **housekeep_output
         )
-        self.shutdown()
+        self.suspend()
 
   #
   # Event handlers subclasses can override.
@@ -569,7 +675,7 @@ class PooledSandboxService(BaseSandboxService):
         min_pool_size = self.min_pool_size(image_id)
         for i in range(min_pool_size):
           sandbox_startup_infos.append((image_id, i))
-        self._sandbox_pool[image_id] = [None] * min_pool_size
+        self._sandbox_pool[image_id] = [None] * min_pool_size  # pyrefly: ignore[unsupported-operation]
         next_sandbox_id = min_pool_size
       self._next_sandbox_id[image_id] = next_sandbox_id
 
@@ -630,18 +736,18 @@ class PooledSandboxService(BaseSandboxService):
       image_id: str | None = None
   ) -> interface.Sandbox:
     """Acquires a sandbox from the sandbox service."""
-    if not self.enable_pooling(image_id):
-      return super()._acquire(image_id)
+    if not self.enable_pooling(image_id):  # pyrefly: ignore[bad-argument-type]
+      return super()._acquire(image_id)  # pyrefly: ignore[bad-argument-type]
 
     allocation_start_time = time.time()
-    sandbox_pool = self._sandbox_pool[image_id]
+    sandbox_pool = self._sandbox_pool[image_id]  # pyrefly: ignore[bad-index]
     while True:
       try:
         # We only append or replace items in the sandbox pool, therefore
         # there is no need to lock the pool.
         return self.load_balancer.acquire(sandbox_pool)
       except IndexError:
-        if len(sandbox_pool) == self.max_pool_size(image_id):
+        if len(sandbox_pool) == self.max_pool_size(image_id):  # pyrefly: ignore[bad-argument-type]
           if time.time() - allocation_start_time > self.outage_grace_period:
             raise interface.SandboxServiceOverloadError(  # pylint: disable=raise-missing-from
                 sandbox_service=self
@@ -650,17 +756,15 @@ class PooledSandboxService(BaseSandboxService):
         else:
           try:
             sandbox = self._bring_up_sandbox(
-                image_id=image_id,
-                sandbox_id=f'{self._increment_sandbox_id(image_id)}:0',
+                image_id=image_id,  # pyrefly: ignore[bad-argument-type]
+                sandbox_id=f'{self._increment_sandbox_id(image_id)}:0',  # pyrefly: ignore[bad-argument-type]
                 set_acquired=True,
                 reusable=True,
             )
             # Append is atomic and does not require locking.
             sandbox_pool.append(sandbox)
             return sandbox
-          except (
-              interface.EnvironmentError, interface.SandboxStateError
-          ) as ex:
+          except self._outage_errors as ex:
             self._report_outage_or_wait(ex)
 
   def _increment_sandbox_id(self, image_id: str) -> int:

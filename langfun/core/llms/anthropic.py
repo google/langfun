@@ -15,6 +15,7 @@
 
 import datetime
 import functools
+import json
 import os
 from typing import Annotated, Any, Literal
 
@@ -53,7 +54,7 @@ class AnthropicModelInfo(lf.ModelInfo):
     max_output_tokens_per_minute: int
 
     @property
-    def max_tokens_per_minute(self) -> int:
+    def max_tokens_per_minute(self) -> int:  # pyrefly: ignore[bad-override]
       return (self.max_input_tokens_per_minute
               + self.max_output_tokens_per_minute)
 
@@ -131,6 +132,37 @@ SUPPORTED_MODELS = [
             cost_per_1m_input_tokens=5.0,
             cost_per_1m_output_tokens=25.0,
         ),
+        rate_limits=AnthropicModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_input_tokens_per_minute=1_000_000,
+            max_output_tokens_per_minute=400_000,
+        ),
+    ),
+    AnthropicModelInfo(
+        model_id='claude-opus-5',
+        provider='Anthropic',
+        in_service=True,
+        description='Claude Opus 5 model.',
+        # release_date and knowledge_cutoff intentionally omitted: Opus 5 is a
+        # dateless/pinned snapshot and neither date is doc-grounded. Both fields
+        # default to None (unknown), matching the convention used by most other
+        # entries in this list rather than shipping fabricated dates.
+        input_modalities=(
+            AnthropicModelInfo.INPUT_IMAGE_TYPES
+            + AnthropicModelInfo.INPUT_DOC_TYPES
+        ),
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_000_000,
+            max_output_tokens=128_000,
+        ),
+        pricing=lf.ModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=5.0,
+            cost_per_1m_output_tokens=25.0,
+        ),
+        # UNVERIFIED: no public/internal doc grounds Opus 5 quota; these
+        # rate_limits are copied from the Opus 4.8 entry as a best-effort
+        # placeholder. Update once official Opus 5 limits are published.
         rate_limits=AnthropicModelInfo.RateLimits(
             max_requests_per_minute=2000,
             max_input_tokens_per_minute=1_000_000,
@@ -996,7 +1028,7 @@ class Anthropic(rest.REST):
     self._api_key = api_key
 
   @property
-  def headers(self) -> dict[str, Any]:
+  def headers(self) -> dict[str, Any]:  # pyrefly: ignore[bad-override]
     return {
         'x-api-key': self._api_key,
         'anthropic-version': self.api_version,
@@ -1016,7 +1048,9 @@ class Anthropic(rest.REST):
   @property
   def _use_adaptive_thinking(self) -> bool:
     return self.model is not None and (
-        'claude-opus-4-7' in self.model_id or 'claude-opus-4-8' in self.model_id
+        'claude-opus-4-7' in self.model_id
+        or 'claude-opus-4-8' in self.model_id
+        or 'claude-opus-5' in self.model_id
     )
 
   def request(
@@ -1058,12 +1092,20 @@ class Anthropic(rest.REST):
     """Returns a dict as request arguments."""
     # Authropic requires `max_tokens` to be specified.
     max_tokens = (
-        options.max_tokens or self.model_info.context_length.max_output_tokens
+        options.max_tokens or self.model_info.context_length.max_output_tokens  # pyrefly: ignore[missing-attribute]
     )
     args = dict(
         model=self.model,
         max_tokens=max_tokens,
-        stream=False,
+        # Stream the response. Without this, Vertex/Anthropic buffers the
+        # ENTIRE response and emits a single JSON blob only at completion, so
+        # no bytes flow until the generation finishes -- any generation that
+        # needs longer than the read timeout to produce its first (and only)
+        # byte dies with a read timeout. With stream=True the server emits
+        # Server-Sent Events incrementally; _reassemble_sse() below rebuilds
+        # the full message + usage, and rest.py's inactivity/total deadline
+        # split lets a slow-but-live generation run for hours.
+        stream=True,
     )
     if options.stop:
       args['stop_sequences'] = options.stop
@@ -1088,7 +1130,9 @@ class Anthropic(rest.REST):
             'type': 'adaptive',
         }
         if self.model is not None and (
-            'claude-opus-4-7' in self.model or 'claude-opus-4-8' in self.model
+            'claude-opus-4-7' in self.model
+            or 'claude-opus-4-8' in self.model
+            or 'claude-opus-5' in self.model
         ):
           args['thinking']['display'] = 'summarized'
 
@@ -1111,7 +1155,7 @@ class Anthropic(rest.REST):
           args['max_tokens'] += budget
 
         # Ensure max_tokens does not exceed model's absolute hard capacity.
-        model_cap = self.model_info.context_length.max_output_tokens
+        model_cap = self.model_info.context_length.max_output_tokens  # pyrefly: ignore[missing-attribute]
         if args['max_tokens'] > model_cap:
           args['max_tokens'] = model_cap
 
@@ -1128,9 +1172,11 @@ class Anthropic(rest.REST):
       args.pop('top_k', None)
       args.pop('top_p', None)
 
-    # Claude Opus 4.7 and 4.8 do not support temperature, top_p, or top_k.
+    # Claude Opus 4.7, 4.8 and 5 do not support temperature, top_p, or top_k.
     if self.model is not None and (
-        'claude-opus-4-7' in self.model or 'claude-opus-4-8' in self.model
+        'claude-opus-4-7' in self.model
+        or 'claude-opus-4-8' in self.model
+        or 'claude-opus-5' in self.model
     ):
       args.pop('temperature', None)
       args.pop('top_k', None)
@@ -1140,10 +1186,10 @@ class Anthropic(rest.REST):
       args.update(options.extras)
     return args
 
-  def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
-    message = lf.Message.from_value(json, format='anthropic')
-    input_tokens = json['usage']['input_tokens']
-    output_tokens = json['usage']['output_tokens']
+  def result(self, response_json: dict[str, Any]) -> lf.LMSamplingResult:
+    message = lf.Message.from_value(response_json, format='anthropic')
+    input_tokens = response_json['usage']['input_tokens']
+    output_tokens = response_json['usage']['output_tokens']
     return lf.LMSamplingResult(
         [lf.LMSample(message)],
         usage=lf.LMSamplingUsage(
@@ -1153,10 +1199,203 @@ class Anthropic(rest.REST):
         ),
     )
 
+  def _response_to_message_dict(self, response: Any) -> dict[str, Any]:
+    """Builds the buffered Anthropic message dict consumed by `result`.
+
+    With body `stream=True`, Vertex/Anthropic returns a Server-Sent Events
+    body instead of a single JSON object. This reassembles that event stream
+    back into the exact same dict shape the non-streaming Messages API would
+    have returned (`role`, `content` blocks, `stop_reason`, `usage`), so that
+    `result()` (and `lf.Message.from_value(..., format='anthropic')`) stay
+    correct and unchanged.
+
+    For robustness (and to keep buffered-JSON unit tests working), a body that
+    is already a single JSON object is parsed directly.
+
+    Args:
+      response: The streaming (or buffered) HTTP response from the API.
+
+    Returns:
+      The reassembled Anthropic message dict (role/content/stop_reason/usage).
+    """
+    raw = response.content
+    text = raw.decode('utf-8') if isinstance(raw, (bytes, bytearray)) else raw
+    stripped = text.lstrip()
+    # A buffered (non-streamed) JSON body starts with '{'. An SSE body starts
+    # with an 'event:' / 'data:' line.
+    if stripped.startswith('{'):
+      return json.loads(text)
+    return self._reassemble_sse(text)
+
+  def _reassemble_sse(self, text: str) -> dict[str, Any]:
+    """Reassembles an Anthropic Messages SSE stream into a message dict.
+
+    Handles the Anthropic streaming event sequence:
+      message_start -> (content_block_start,
+                        content_block_delta*, content_block_stop)* ->
+      message_delta -> message_stop
+
+    Rebuilds full text/thinking content AND token usage:
+    - message_start: provides the message skeleton incl. input_tokens.
+    - content_block_start: initializes a content block at its index.
+    - content_block_delta: appends text_delta / thinking_delta /
+      signature_delta / input_json_delta fragments to that block.
+    - content_block_stop: finalizes any accumulated tool-use JSON.
+    - message_delta: carries the final stop_reason and usage.output_tokens.
+    - message_stop: terminator.
+
+    Args:
+      text: The full Server-Sent Events response body as text.
+
+    Returns:
+      The reassembled Anthropic message dict, equivalent to the non-streaming
+      Messages API response.
+    """
+    message: dict[str, Any] | None = None
+    blocks: dict[int, dict[str, Any]] = {}
+    json_buffers: dict[int, str] = {}
+    final_usage: dict[str, Any] = {}
+    saw_message_stop = False
+
+    for raw_line in text.splitlines():
+      line = raw_line.strip()
+      if not line.startswith('data:'):
+        continue
+      data_str = line[len('data:') :].strip()
+      if not data_str or data_str == '[DONE]':
+        continue
+      try:
+        event = json.loads(data_str)
+      except json.JSONDecodeError as e:
+        # A well-formed Anthropic SSE stream emits exactly one valid-JSON
+        # payload per `data:` line; keep-alives are comment (`:`) or
+        # `event: ping` lines (skipped by the `data:` check above) and
+        # `[DONE]`/empty payloads are handled above. A `data:` line that
+        # fails to parse here is therefore a CORRUPT/TRUNCATED event, not a
+        # benign keep-alive. Silently `continue`-ing would drop that
+        # fragment -- and if it was a content_block_delta, the reconstructed
+        # text would be silently truncated while message_stop/stop_reason
+        # still arrive, defeating the terminal sentinel below. The buffered
+        # path fails loudly on a malformed body (json.loads -> ValueError ->
+        # LMError) and never returns partial content; preserve that
+        # no-silent-corruption guarantee here by raising a RETRYABLE error
+        # (mid-stream corruption is transient, matching the empty-stream and
+        # truncated-stream guards).
+        raise lf.TemporaryLMError(
+            'Anthropic SSE stream contained a malformed data event '
+            f'({data_str[:120]!r}); cannot guarantee complete content, '
+            'retrying.'
+        ) from e
+      etype = event.get('type')
+
+      if etype == 'message_start':
+        message = dict(event['message'])
+        message['content'] = []
+      elif etype == 'content_block_start':
+        idx = event['index']
+        block = dict(event.get('content_block', {}))
+        blocks[idx] = block
+        if block.get('type') == 'tool_use':
+          json_buffers[idx] = ''
+      elif etype == 'content_block_delta':
+        idx = event['index']
+        delta = event.get('delta', {})
+        dtype = delta.get('type')
+        block = blocks.setdefault(idx, {})
+        if dtype == 'text_delta':
+          block.setdefault('type', 'text')
+          block['text'] = block.get('text', '') + delta.get('text', '')
+        elif dtype == 'thinking_delta':
+          block.setdefault('type', 'thinking')
+          block['thinking'] = block.get('thinking', '') + delta.get(
+              'thinking', ''
+          )
+        elif dtype == 'signature_delta':
+          block['signature'] = block.get('signature', '') + delta.get(
+              'signature', ''
+          )
+        elif dtype == 'input_json_delta':
+          json_buffers[idx] = json_buffers.get(idx, '') + delta.get(
+              'partial_json', ''
+          )
+      elif etype == 'content_block_stop':
+        idx = event['index']
+        buf = json_buffers.get(idx)
+        if buf:
+          try:
+            blocks[idx]['input'] = json.loads(buf)
+          except json.JSONDecodeError:
+            blocks[idx]['input'] = {}
+      elif etype == 'message_delta':
+        delta = event.get('delta', {})
+        if message is not None:
+          for key in ('stop_reason', 'stop_sequence'):
+            if key in delta:
+              message[key] = delta[key]
+        usage = event.get('usage')
+        if usage:
+          final_usage.update(usage)
+      elif etype == 'error':
+        # An in-stream `error` event arrives on an HTTP 200 body. Map the
+        # Anthropic error type to the equivalent HTTP status and reuse the
+        # buffered-path classification (self._error) so transient failures
+        # (overloaded_error -> 529 -> TemporaryLMError; rate_limit_error ->
+        # 429 -> RateLimitError; api_error -> 500 -> TemporaryLMError) stay
+        # RETRYABLE, while genuinely permanent ones (invalid_request_error ->
+        # 400) remain permanent. A bare ValueError/lf.LMError here would be
+        # downgraded to a PERMANENT error by _parse_response and silently lose
+        # the retry the buffered 529/429 path already gets.
+        error_type_to_status = {
+            'invalid_request_error': 400,
+            'authentication_error': 401,
+            'permission_error': 403,
+            'not_found_error': 404,
+            'request_too_large': 413,
+            'rate_limit_error': 429,
+            'api_error': 500,
+            'overloaded_error': 529,
+        }
+        err = event.get('error') or {}
+        status = error_type_to_status.get(err.get('type'), 500)  # pyrefly: ignore[no-matching-overload]
+        # Anthropic._error inspects `content` as bytes, so encode it.
+        raise self._error(status, json.dumps(err or event).encode('utf-8'))  # pyrefly: ignore[bad-argument-type]
+      elif etype == 'message_stop':
+        saw_message_stop = True
+      # 'ping' and other unrecognized events need no handling.
+
+    if message is None:
+      # A 200 whose SSE body never produced a message_start (empty body, only
+      # keep-alives, or a dropped/garbled stream) is a transient anomaly, not a
+      # permanent client error. Raise a RETRYABLE error -- a bare ValueError
+      # here would be downgraded to a permanent lf.LMError by _parse_response.
+      raise lf.TemporaryLMError(
+          'Anthropic SSE stream produced no message (empty body or no '
+          'message_start event); retrying.'
+      )
+    # Assemble content blocks in index order.
+    message['content'] = [blocks[i] for i in sorted(blocks)]
+    # Merge usage: message_start carries input_tokens (and an initial
+    # output_tokens); message_delta carries the FINAL output_tokens.
+    usage = dict(message.get('usage') or {})
+    usage.update(final_usage)
+    message['usage'] = usage
+    # TERMINAL SENTINEL: only accept a stream that actually completed. A
+    # cleanly-closed-but-incomplete 200 (no message_stop, or stop_reason still
+    # null because message_delta never arrived) would otherwise be returned as
+    # silently truncated text with an under-counted output_tokens. Require BOTH
+    # the message_stop terminator AND a non-null stop_reason; otherwise raise a
+    # RETRYABLE error so the request is retried rather than silently accepted.
+    if not saw_message_stop or message.get('stop_reason') is None:
+      raise lf.TemporaryLMError(
+          'Anthropic SSE stream ended without a terminal message_stop and a '
+          'non-null stop_reason (truncated/incomplete 200 response); retrying.'
+      )
+    return message
+
   def _error(self, status_code: int, content: str) -> lf.LMError:
-    if status_code == 413 and b'Prompt is too long' in content:
+    if status_code == 413 and b'Prompt is too long' in content:  # pyrefly: ignore[unsupported-operation]
       return lf.ContextLimitError(f'{status_code}: {content}')
-    if status_code == 400 and b'prompt is too long' in content:
+    if status_code == 400 and b'prompt is too long' in content:  # pyrefly: ignore[unsupported-operation]
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
 
@@ -1166,6 +1405,12 @@ class Claude46(Anthropic):
 
 
 # pylint: disable=invalid-name
+class Claude5Opus(Anthropic):
+  """Claude Opus 5 model."""
+
+  model = 'claude-opus-5'
+
+
 class Claude48Opus(Anthropic):
   """Claude Opus 4.8 model."""
 
