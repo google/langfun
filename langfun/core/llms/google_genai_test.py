@@ -44,6 +44,13 @@ class GenAITest(unittest.TestCase):
     )
     del os.environ['GOOGLE_API_KEY']
 
+  def test_gemini_31_flash_lite(self):
+    os.environ['GOOGLE_API_KEY'] = 'abc'
+    lm = google_genai.Gemini31FlashLite()
+    self.assertEqual(lm.model_id, 'gemini-3.1-flash-lite')
+    self.assertEqual(lm.resource_id, 'google_genai://gemini-3.1-flash-lite')
+    del os.environ['GOOGLE_API_KEY']
+
   def test_lm_get(self):
     self.assertIsInstance(
         lf.LanguageModel.get('google_genai://gemini-1.5-pro'),

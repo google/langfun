@@ -27,6 +27,40 @@ TestingFeature = test_utils.TestingFeature
 TestingEventHandler = test_utils.TestingEventHandler
 
 
+class BackendConnectError(RuntimeError):
+  """Simulates a backend-specific connection error (e.g. an RPC failure).
+
+  Such errors are raised by the backend client library, therefore they are
+  neither `interface.EnvironmentError` nor `interface.SandboxStateError`.
+  """
+
+
+class FlakyBackendSandboxService(TestingSandboxService):
+  """A service whose backend connection fails before a sandbox is created.
+
+  This reproduces backends (e.g. Xbox) that establish their client connection
+  lazily while creating the first sandbox, where a transient connection failure
+  must not escape the outage retry loop.
+  """
+
+  num_connect_failures: int = 0
+  __test__ = False
+
+  def _on_bound(self) -> None:
+    super()._on_bound()
+    self._connect_attempts = 0
+
+  @property
+  def transient_outage_errors(self) -> tuple[type[BaseException], ...]:
+    return (BackendConnectError,)
+
+  def _create_sandbox(self, **kwargs):
+    self._connect_attempts += 1
+    if self._connect_attempts <= self.num_connect_failures:
+      raise BackendConnectError('Backend is not reachable.')
+    return super()._create_sandbox(**kwargs)
+
+
 class PooledSandboxServiceTests(unittest.TestCase):
 
   def test_basics(self):
@@ -548,6 +582,190 @@ class PooledSandboxServiceTests(unittest.TestCase):
           break
         time.sleep(0.5)
       self.assertFalse(env.ss.is_online)
+
+  def test_transient_backend_error_enters_outage_retry(self):
+    env = Environment(
+        sandboxes={
+            'ss': FlakyBackendSandboxService(
+                features={'test_feature': TestingFeature()},
+                num_connect_failures=1000,
+                pool_size=0,
+                outage_grace_period=0.3,
+                outage_retry_interval=0.05,
+            )
+        }
+    )
+    with env:
+      # The backend-connect error must be absorbed by the outage retry loop
+      # and surfaced as an outage error once the grace period has passed,
+      # instead of escaping to the caller.
+      with self.assertRaises(interface.SandboxServiceOutageError):
+        env.ss.acquire()
+
+  def test_transient_backend_error_recovers_within_grace_period(self):
+    env = Environment(
+        sandboxes={
+            'ss': FlakyBackendSandboxService(
+                features={'test_feature': TestingFeature()},
+                num_connect_failures=2,
+                pool_size=0,
+                outage_grace_period=30.0,
+                outage_retry_interval=0.01,
+            )
+        }
+    )
+    with env:
+      sb = env.ss.acquire()
+      self.assertEqual(sb.status, interface.Sandbox.Status.ACQUIRED)
+      self.assertTrue(env.ss.is_online)
+
+  def test_outage_suspends_and_resumes_on_acquire(self):
+    env = Environment(
+        sandboxes={
+            'ss': TestingSandboxService(
+                features={'test_feature': TestingFeature()},
+                pool_size=0,
+                outage_grace_period=0.3,
+                outage_retry_interval=0.05,
+            )
+        }
+    )
+    with env:
+      # Simulate a mid-run backend loss.
+      env.ss.features.test_feature.rebind(
+          simulate_setup_error=interface.SandboxStateError,
+          skip_notification=True,
+      )
+      with self.assertRaises(interface.SandboxServiceOutageError):
+        env.ss.acquire()
+
+      # Bounded give-up: the service stops serving after the grace period.
+      self.assertFalse(env.ss.is_online)
+      self.assertEqual(
+          env.ss.status,
+          base_sandbox_service.BaseSandboxService.Status.SUSPENDED
+      )
+
+      # The backend returns: the service must re-enter service instead of
+      # staying permanently offline while the process keeps running.
+      env.ss.features.test_feature.rebind(
+          simulate_setup_error=None, skip_notification=True
+      )
+      sb = env.ss.acquire()
+      self.assertEqual(sb.status, interface.Sandbox.Status.ACQUIRED)
+      self.assertTrue(env.ss.is_online)
+
+  def test_outage_suspends_and_resumes_on_housekeeping(self):
+    env = Environment(
+        sandboxes={
+            'ss': TestingSandboxService(
+                features={'test_feature': TestingFeature()},
+                pool_size=1,
+                proactive_session_setup=True,
+                outage_grace_period=0.3,
+                outage_retry_interval=0.05,
+                sandbox_keepalive_interval=0.1,
+                housekeep_interval=0.1,
+            )
+        }
+    )
+    with env:
+      # Simulate a mid-run backend loss: the in-pool sandbox dies and cannot
+      # be replaced.
+      env.ss.features.test_feature.rebind(
+          simulate_setup_error=interface.SandboxStateError,
+          skip_notification=True,
+      )
+      with self.assertRaises(interface.SandboxStateError):
+        with env.sandbox() as sb:
+          sb.shell('bad command', raise_error=interface.SandboxStateError)
+
+      # Wait for the terminal status instead of `is_online`, which already
+      # flips to False when `_teardown` enters SHUTTING_DOWN, i.e. before the
+      # final status is assigned.
+      suspended = base_sandbox_service.BaseSandboxService.Status.SUSPENDED
+      deadline = time.time() + 10
+      while time.time() < deadline and env.ss.status is not suspended:
+        time.sleep(0.05)
+      self.assertEqual(env.ss.status, suspended)
+      self.assertFalse(env.ss.is_online)
+
+      # The backend returns.
+      env.ss.features.test_feature.rebind(
+          simulate_setup_error=None, skip_notification=True
+      )
+      sb = env.ss.acquire()
+      self.assertEqual(sb.status, interface.Sandbox.Status.ACQUIRED)
+      self.assertTrue(env.ss.is_online)
+
+  def test_resume_failure_keeps_service_suspended(self):
+    env = Environment(
+        sandboxes={
+            'ss': FlakyBackendSandboxService(
+                features={'test_feature': TestingFeature()},
+                pool_size=1,
+                outage_grace_period=0.3,
+                outage_retry_interval=0.05,
+            )
+        }
+    )
+    with env:
+      # The backend goes away after a healthy start, and the service gives up
+      # on it past the grace period.
+      env.ss.rebind(num_connect_failures=1000, skip_notification=True)
+      env.ss.suspend()
+      self.assertEqual(
+          env.ss.status,
+          base_sandbox_service.BaseSandboxService.Status.SUSPENDED
+      )
+
+      # Resuming against a still-dead backend must fail back *into* SUSPENDED
+      # rather than into the terminal OFFLINE that `start()` leaves behind on
+      # failure, otherwise the first unlucky retry would strand the service
+      # for the rest of the process lifetime.
+      with self.assertRaises(interface.SandboxServiceOutageError):
+        env.ss.acquire()
+      self.assertEqual(
+          env.ss.status,
+          base_sandbox_service.BaseSandboxService.Status.SUSPENDED
+      )
+      self.assertFalse(env.ss.is_online)
+
+      # The backend returns: a service that already failed to resume once must
+      # still be resumable.
+      env.ss.rebind(num_connect_failures=0, skip_notification=True)
+      sb = env.ss.acquire()
+      self.assertEqual(sb.status, interface.Sandbox.Status.ACQUIRED)
+      self.assertTrue(env.ss.is_online)
+
+  def test_resume_is_noop_when_service_is_no_longer_suspended(self):
+    env = Environment(
+        sandboxes={
+            'ss': TestingSandboxService(
+                features={'test_feature': TestingFeature()},
+                pool_size=1,
+                outage_grace_period=0.3,
+                outage_retry_interval=0.05,
+            )
+        }
+    )
+    with env:
+      # Concurrent `acquire()` callers can all observe SUSPENDED before any of
+      # them takes `_resume_lock`; every caller but the winner of that race
+      # must then find the service already back in business and do nothing.
+      # Restarting a running service would trip the CREATED assertion in
+      # `start()` and orphan the pool the winner just built.
+      self.assertTrue(env.ss.is_online)
+      start_time = env.ss._start_time  # pylint: disable=protected-access
+      pool = env.ss._sandbox_pool['test_image']  # pylint: disable=protected-access
+
+      env.ss._resume()  # pylint: disable=protected-access
+
+      self.assertTrue(env.ss.is_online)
+      self.assertEqual(env.ss._start_time, start_time)  # pylint: disable=protected-access
+      self.assertIs(
+          env.ss._sandbox_pool['test_image'], pool  # pylint: disable=protected-access
+      )
 
   def test_base_sandbox_service_housekeep_cycle(self):
     class BareSandboxService(base_sandbox_service.BaseSandboxService):
