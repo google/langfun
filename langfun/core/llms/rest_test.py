@@ -394,6 +394,129 @@ class TotalTimeoutTest(unittest.TestCase):
         lm._sample_single(lf.UserMessage('hello'))
 
 
+class MaxResponseSizeTest(unittest.TestCase):
+  """Tests for the total-response-size cap (OOM guard) via stream=True.
+
+  Regression coverage for a worker OOM where an unbounded streamed response
+  buffered its entire body into memory (tens of GB) because the time-based
+  bounds never fire while the server keeps streaming bytes steadily.
+  """
+
+  def _make_lm(self, max_response_size=None, timeout=120.0):
+    return rest.REST(
+        api_endpoint='https://fake-api.com',
+        request=lambda x, o: dict(prompt=x.text),
+        result=lambda x: lf.LMSamplingResult(
+            [lf.LMSample(c) for c in x['content']]
+        ),
+        timeout=timeout,
+        max_response_size=max_response_size,
+    )
+
+  def test_response_exceeding_max_size_raises_response_size_limit_error(self):
+    """A body larger than max_response_size fails with ResponseSizeLimitError."""
+    lm = self._make_lm(max_response_size=250)
+    chunks = [b'x' * 100] * 5  # 500 bytes total > 250 cap.
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post(chunks)
+      with self.assertRaises(lf.ResponseSizeLimitError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+      self.assertIn('max_response_size', str(ctx.exception))
+
+  def test_size_cap_error_is_catchable_as_lm_error(self):
+    """Backward-compat: existing `except lf.LMError` handlers still catch it."""
+    lm = self._make_lm(max_response_size=10)
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([b'x' * 100])
+      with self.assertRaises(lf.LMError):
+        lm._sample_single(lf.UserMessage('hello'))
+
+  def test_size_cap_error_is_non_retryable(self):
+    """The size-cap error must NOT be a RetryableLMError.
+
+    Retrying would re-stream the same oversized response (and with e.g.
+    max_attempts=80 that is catastrophic), so the cap has to fail fast.
+    """
+    lm = self._make_lm(max_response_size=10)
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([b'x' * 100])
+      with self.assertRaises(lf.LMError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+      self.assertNotIsInstance(ctx.exception, lf.RetryableLMError)
+
+  def test_response_within_max_size_ok(self):
+    """A body under the cap completes and parses normally."""
+    lm = self._make_lm(max_response_size=10_000_000)
+    valid_json = pg.to_json_str({'content': ['hello']}).encode()
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([valid_json])
+      result = lm._sample_single(lf.UserMessage('test'))
+      self.assertEqual(result.samples[0].response.text, 'hello')
+
+  def test_body_exactly_at_cap_is_allowed(self):
+    """A body whose total size equals the cap exactly must NOT be rejected."""
+    valid_json = pg.to_json_str({'content': ['hello']}).encode()
+    lm = self._make_lm(max_response_size=len(valid_json))
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([valid_json])
+      result = lm._sample_single(lf.UserMessage('test'))
+      self.assertEqual(result.samples[0].response.text, 'hello')
+
+  def test_buffer_is_strictly_bounded_and_socket_closed(self):
+    """The tripping chunk is not buffered and the socket is closed promptly.
+
+    Verifies the check-before-append behavior: iteration stops as soon as the
+    cap would be exceeded (so the buffer never grows past the cap), and the
+    response is closed to release the underlying socket.
+    """
+    consumed = []
+    closed = {'count': 0}
+
+    def _mock_post(url, json=None, timeout=None, stream=False, **kwargs):
+      del url, json, timeout, stream, kwargs
+      response = requests.Response()
+      response.status_code = 200
+      response.headers['Content-Type'] = 'application/json'
+
+      def _iter(chunk_size=1, decode_unicode=False):
+        del chunk_size, decode_unicode
+        # 10 chunks of 100 bytes; cap=250 should stop after 2 are buffered.
+        for i in range(10):
+          consumed.append(i)
+          yield b'x' * 100
+
+      response.iter_content = _iter
+      response._content = False
+      response.close = lambda: closed.__setitem__('count', closed['count'] + 1)
+      return response
+
+    lm = self._make_lm(max_response_size=250)
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = _mock_post
+      with self.assertRaises(lf.ResponseSizeLimitError):
+        lm._sample_single(lf.UserMessage('hello'))
+    # Only the chunks that fit under the cap (2 x 100 = 200 <= 250) plus the
+    # one that trips it (3rd) are pulled from the generator; the rest are not.
+    self.assertLessEqual(len(consumed), 3)
+    self.assertGreaterEqual(closed['count'], 1)
+
+  def test_none_disables_size_cap(self):
+    """max_response_size=None preserves historical (uncapped) behavior."""
+    lm = self._make_lm(max_response_size=None)
+    valid_json = pg.to_json_str({'content': ['hello' * 1000]}).encode()
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post([valid_json])
+      result = lm._sample_single(lf.UserMessage('test'))
+      self.assertEqual(result.samples[0].response.text, 'hello' * 1000)
+
+  def test_non_positive_max_response_size_is_rejected(self):
+    """A non-positive cap is a misconfiguration and must be rejected at bind."""
+    for bad in (0, -1, -1024):
+      with self.subTest(max_response_size=bad):
+        with self.assertRaises(ValueError):
+          self._make_lm(max_response_size=bad)
+
+
 class AdversarialStreamingTest(unittest.TestCase):
   """Red-team tests: adversarial scenarios targeting stream+deadline logic.
 
@@ -1324,6 +1447,111 @@ class RedTeamStreamingTest(unittest.TestCase):
       _, kwargs = mock_trawler.call_args
       self.assertEqual(kwargs['fetch_timeout_ms'], 0)
       self.assertEqual(kwargs['request_deadline_ms'], 0)
+
+
+class InactivityVsTotalTimeoutTest(unittest.TestCase):
+  """Tests the inactivity vs total deadline split.
+
+  This split (a SHORT per-chunk inactivity bound vs a LONG total wall-clock
+  budget) is the core slow-but-live-generation fix. Real timescales
+  (120s inactivity / 4h total) are scaled down here so the tests run quickly;
+  the logic under test is identical.
+  """
+
+  def _make_lm(self, timeout=None, inactivity_timeout=None,
+               max_total_timeout=None):
+    return rest.REST(
+        api_endpoint='https://fake-api.com',
+        request=lambda x, o: dict(prompt=x.text),
+        result=lambda x: lf.LMSamplingResult(
+            [lf.LMSample(c) for c in x['content']]
+        ),
+        timeout=timeout,
+        inactivity_timeout=inactivity_timeout,
+        max_total_timeout=max_total_timeout,
+    )
+
+  def test_effective_timeouts_fall_back_to_timeout(self):
+    """When the new knobs are unset, both collapse to self.timeout (legacy)."""
+    lm = self._make_lm(timeout=900.0)
+    self.assertEqual(lm._effective_inactivity_timeout, 900.0)
+    self.assertEqual(lm._effective_total_timeout, 900.0)
+
+  def test_effective_timeouts_use_explicit_knobs(self):
+    """Explicit knobs override the timeout fallback independently."""
+    lm = self._make_lm(
+        timeout=900.0, inactivity_timeout=120.0, max_total_timeout=14400.0
+    )
+    self.assertEqual(lm._effective_inactivity_timeout, 120.0)
+    self.assertEqual(lm._effective_total_timeout, 14400.0)
+
+  def test_per_operation_read_timeout_uses_inactivity_not_total(self):
+    """The requests read timeout is the inactivity bound, not the total."""
+    lm = self._make_lm(
+        timeout=900.0, inactivity_timeout=120.0, max_total_timeout=14400.0
+    )
+    self.assertEqual(lm._per_operation_timeout, (60.0, 120.0))
+
+  def test_silent_stream_fails_fast_via_inactivity(self):
+    """A silent stream fails fast via the inactivity bound.
+
+    It must fail well before the (large) total budget would elapse.
+    """
+    lm = self._make_lm(inactivity_timeout=0.1, max_total_timeout=10.0)
+    valid_json = pg.to_json_str({'content': ['never finishes']}).encode()
+    half = len(valid_json) // 2
+    start = time.monotonic()
+    with mock.patch('requests.Session.post') as mock_post:
+      # Gap between chunks (0.3s) exceeds the 0.1s inactivity bound.
+      mock_post.side_effect = mock_streaming_post(
+          [valid_json[:half], valid_json[half:]], delay_per_chunk=0.3
+      )
+      with self.assertRaises(lf.TemporaryLMError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+    elapsed = time.monotonic() - start
+    self.assertIn('inactivity', str(ctx.exception).lower())
+    # Fast-fail: nowhere near the 10s total budget.
+    self.assertLess(elapsed, 5.0)
+
+  def test_steady_stream_past_old_timeout_still_succeeds(self):
+    """A steady stream past the OLD single-timeout wall still succeeds.
+
+    The total budget is large and each inter-chunk gap stays under the
+    inactivity bound. The legacy single timeout (0.3s) would have killed this
+    response, but with inactivity=0.2s and total=5s it completes.
+    """
+    old_single_timeout = 0.3
+    lm = self._make_lm(inactivity_timeout=0.2, max_total_timeout=5.0)
+    valid_json = pg.to_json_str({'content': ['streamed-done']}).encode()
+    # Split into 10 chunks emitted every 0.05s => ~0.5s total > 0.3s old wall.
+    n = 10
+    size = max(1, len(valid_json) // n)
+    chunks = [valid_json[i:i + size] for i in range(0, len(valid_json), size)]
+    start = time.monotonic()
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = mock_streaming_post(chunks, delay_per_chunk=0.05)
+      result = lm._sample_single(lf.UserMessage('hello'))
+    elapsed = time.monotonic() - start
+    self.assertEqual(result.samples[0].response.text, 'streamed-done')
+    # Proof it genuinely crossed the old single-timeout wall.
+    self.assertGreater(elapsed, old_single_timeout)
+
+  def test_total_deadline_uses_max_total_timeout(self):
+    """The total wall budget is governed by max_total_timeout.
+
+    A large inactivity bound does not prevent the total deadline from firing.
+    """
+    lm = self._make_lm(inactivity_timeout=10.0, max_total_timeout=0.2)
+    valid_json = pg.to_json_str({'content': ['too slow overall']}).encode()
+    half = len(valid_json) // 2
+    with mock.patch('requests.Session.post') as mock_post:
+      # Each gap (0.15s) < 10s inactivity, but cumulative 0.3s > 0.2s total.
+      mock_post.side_effect = mock_streaming_post(
+          [valid_json[:half], valid_json[half:]], delay_per_chunk=0.15
+      )
+      with self.assertRaises(lf.TemporaryLMError) as ctx:
+        lm._sample_single(lf.UserMessage('hello'))
+    self.assertIn('total deadline', str(ctx.exception).lower())
 
 
 if __name__ == '__main__':
