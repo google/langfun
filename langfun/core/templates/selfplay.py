@@ -42,7 +42,7 @@ class SelfPlay(Conversation):
       output = self.step(**kwargs)
       if output is None:
         break
-    return self._last_response
+    return self._last_response  # pyrefly: ignore[bad-return]
 
   def step(self, **kwargs) -> lf.Message | None:
     """Play the next step and return the response."""

@@ -291,12 +291,12 @@ class Action(pg.Object):
         # Early terminate the action if the execution time is exceeded.
         session.check_execution_time()
         result = self.call(session=session, **kwargs)
-        self._invocation.end(result)
+        self._invocation.end(result)  # pyrefly: ignore[missing-attribute]
       except BaseException as e:
         error = pg.ErrorInfo.from_exception(e)
-        self._invocation.end(result=None, error=error)
+        self._invocation.end(result=None, error=error)  # pyrefly: ignore[missing-attribute]
         if self._session is not None:
-          self._session.end(result=None, error=error)
+          self._session.end(result=None, error=error)  # pyrefly: ignore[bad-argument-type]
         raise
 
     if self._session is not None:
@@ -393,7 +393,7 @@ class ExecutionUnit(pg.Object):
     def __str__(self) -> str:
       return self.to_str()
 
-    def __eq__(self, other: 'ExecutionUnit.Position') -> bool:
+    def __eq__(self, other: 'ExecutionUnit.Position') -> bool:  # pyrefly: ignore[bad-override]
       if isinstance(other, ExecutionUnit.Position):
         return self.indices() == other.indices()
       if isinstance(other, tuple):
@@ -402,7 +402,7 @@ class ExecutionUnit(pg.Object):
         return str(self) == other
       return False
 
-    def __ne__(self, other: 'ExecutionUnit.Position') -> bool:
+    def __ne__(self, other: 'ExecutionUnit.Position') -> bool:  # pyrefly: ignore[bad-override]
       return not self == other
 
     def __hash__(self) -> int:
@@ -434,10 +434,10 @@ class ExecutionUnit(pg.Object):
     """Returns the execution position of the action."""
     parent_trace = self.sym_ancestor(lambda x: isinstance(x, ExecutionTrace))
     while parent_trace is not None:
-      parent_position = parent_trace.position
+      parent_position = parent_trace.position  # pyrefly: ignore[missing-attribute]
       if parent_position is not None:
         return ExecutionUnit.Position(
-            parent_position, parent_trace.indexof(self, ExecutionUnit)
+            parent_position, parent_trace.indexof(self, ExecutionUnit)  # pyrefly: ignore[missing-attribute]
         )
       parent_trace = parent_trace.sym_ancestor(
           lambda x: isinstance(x, ExecutionTrace)
@@ -666,37 +666,37 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
   @property
   def queries(self) -> list[lf_structured.QueryInvocation]:
     """Returns queries from the sequence."""
-    return list(self._iter_children(lf_structured.QueryInvocation))
+    return list(self._iter_children(lf_structured.QueryInvocation))  # pyrefly: ignore[bad-return]
 
   @property
   def actions(self) -> list['ActionInvocation']:
     """Returns action invocations from the sequence."""
-    return list(self._iter_children(ActionInvocation))
+    return list(self._iter_children(ActionInvocation))  # pyrefly: ignore[bad-return]
 
   @property
   def execution_units(self) -> list[ExecutionUnit]:
     """Returns parallel executions from the sequence."""
-    return list(self._iter_children(ExecutionUnit))
+    return list(self._iter_children(ExecutionUnit))  # pyrefly: ignore[bad-return]
 
   @property
   def logs(self) -> list[lf.logging.LogEntry]:
     """Returns logs from the sequence."""
-    return list(self._iter_children(lf.logging.LogEntry))
+    return list(self._iter_children(lf.logging.LogEntry))  # pyrefly: ignore[bad-return]
 
   @property
   def all_queries(self) -> list[lf_structured.QueryInvocation]:
     """Returns all queries from current trace and its child execution items."""
-    return list(self._iter_subtree(lf_structured.QueryInvocation))
+    return list(self._iter_subtree(lf_structured.QueryInvocation))  # pyrefly: ignore[bad-return]
 
   @property
   def all_actions(self) -> list['ActionInvocation']:
     """Returns all actions from current trace and its child execution items."""
-    return list(self._iter_subtree(ActionInvocation))
+    return list(self._iter_subtree(ActionInvocation))  # pyrefly: ignore[bad-return]
 
   @property
   def all_logs(self) -> list[lf.logging.LogEntry]:
     """Returns all logs from current trace and its child execution items."""
-    return list(self._iter_subtree(lf.logging.LogEntry))
+    return list(self._iter_subtree(lf.logging.LogEntry))  # pyrefly: ignore[bad-return]
 
   def _iter_children(
       self, item_cls: Type[Any] | tuple[Type[Any], ...]
@@ -775,7 +775,7 @@ class ExecutionTrace(pg.Object, pg.views.html.HtmlTreeView.Extension):
       sub_task_label = self._execution_item_label(item)
       self._time_badge.update(
           text=sub_task_label.text,
-          tooltip=sub_task_label.tooltip.content,
+          tooltip=sub_task_label.tooltip.content,  # pyrefly: ignore[missing-attribute]
           add_class=['running'],
           remove_class=['not-started'],
       )
@@ -1244,7 +1244,7 @@ class ActionInvocation(ExecutionUnit, pg.views.html.HtmlTreeView.Extension):
   @property
   def parent_action(self) -> Optional['ActionInvocation']:
     """Returns the parent action invocation."""
-    return self.sym_ancestor(lambda x: isinstance(x, ActionInvocation))
+    return self.sym_ancestor(lambda x: isinstance(x, ActionInvocation))  # pyrefly: ignore[bad-return]
 
   @property
   def max_remaining_execution_time(self) -> float | None:
@@ -1825,7 +1825,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
     else:
       event_handler = self.event_handler
     other._event_handler = event_handler  # pylint: disable=protected-access
-    return other
+    return other  # pyrefly: ignore[bad-return]
 
   #
   # Shortcut methods for accessing the root action invocation.
@@ -1992,7 +1992,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         metadata = actions[-1].metadata
       else:
         result, error, metadata = None, None, None
-    self.end(result, error, metadata)
+    self.end(result, error, metadata)  # pyrefly: ignore[bad-argument-type]
 
   #
   # Context-manager for information tracking.
@@ -2224,7 +2224,7 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
         _map_single,
         parallel_inputs,
         max_workers=max_workers,
-        timeout=self._child_max_execution_time(timeout),
+        timeout=self._child_max_execution_time(timeout),  # pyrefly: ignore[bad-argument-type]
         max_duration=max_duration,
         silence_on_errors=silence_on_errors,
         ordered=ordered,
