@@ -28,9 +28,9 @@ from langfun.core import message as _message_lib
 
 # Override the `images`, `videos` and `audios` properties of `Message` to
 # return the modalities of the corresponding types.
-_message_lib.Message.images = property(lambda self: self.modalities(Image))
-_message_lib.Message.videos = property(lambda self: self.modalities(Video))
-_message_lib.Message.audios = property(lambda self: self.modalities(Audio))
+_message_lib.Message.images = property(lambda self: self.modalities(Image))  # pyrefly: ignore[bad-assignment]
+_message_lib.Message.videos = property(lambda self: self.modalities(Video))  # pyrefly: ignore[bad-assignment]
+_message_lib.Message.audios = property(lambda self: self.modalities(Audio))  # pyrefly: ignore[bad-assignment]
 
 # pylint: enable=g-import-not-at-top
 # pylint: enable=g-bad-import-order
