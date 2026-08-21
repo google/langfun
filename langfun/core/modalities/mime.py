@@ -207,10 +207,10 @@ class Mime(lf.Modality):
 
   def to_bytes(self) -> bytes:
     if self.content is not None:
-      return self.content
+      return self.content  # pyrefly: ignore[bad-return]
 
-    self.rebind(content=self.download(self.uri), skip_notification=True)
-    return self.content
+    self.rebind(content=self.download(self.uri), skip_notification=True)  # pyrefly: ignore[bad-argument-type]
+    return self.content  # pyrefly: ignore[bad-return]
 
   @property
   def content_uri(self) -> str:
@@ -235,7 +235,7 @@ class Mime(lf.Modality):
       if 'youtube.com/watch' in uri:
         return Custom(mime='text/html', uri=uri, **kwargs)
       content = cls.download(uri)
-      mime = _detect_mime_type(content)
+      mime = _detect_mime_type(content)  # pyrefly: ignore[bad-argument-type]
       return cls.class_from_mime_type(mime)(uri=uri, content=content, **kwargs)
     return cls(uri=uri, content=None, **kwargs)
 
@@ -260,7 +260,7 @@ class Mime(lf.Modality):
   def from_bytes(cls, content: bytes | str, **kwargs) -> 'Mime':
     if cls is Mime:
       return cls.class_from_mime_type(
-          _detect_mime_type(content)
+          _detect_mime_type(content)  # pyrefly: ignore[bad-argument-type]
       )(content=content, **kwargs)
     return cls(content=content, **kwargs)
 
@@ -283,7 +283,7 @@ class Mime(lf.Modality):
       assert content is not None
       return content
 
-  def _html_tree_view_content(
+  def _html_tree_view_content(  # pyrefly: ignore[bad-override]
       self,
       **kwargs) -> str:
     return self._raw_html()

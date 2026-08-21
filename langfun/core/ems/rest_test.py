@@ -27,7 +27,7 @@ def mock_requests_post(url: str, json: dict[str, Any], **kwargs):
   del url, kwargs
   response = requests.Response()
   response.status_code = 200
-  response._content = pg.to_json_str({
+  response._content = pg.to_json_str({  # pyrefly: ignore[bad-assignment]
       'embedding': [0.1, 0.2, 0.3],
       'input_text': json.get('text', ''),
   }).encode()
@@ -39,7 +39,7 @@ def mock_requests_post_error(status_code):
     del url, json, kwargs
     response = requests.Response()
     response.status_code = status_code
-    response._content = b'error'
+    response._content = b'error'  # pyrefly: ignore[bad-assignment]
     return response
   return _mock_requests
 
