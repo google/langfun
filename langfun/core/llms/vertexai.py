@@ -863,6 +863,7 @@ def _register_vertexai_models():
   lf.LanguageModel.register('claude-opus-4-7@latest', anthropic.Anthropic)
   lf.LanguageModel.register('claude-opus-4-8', VertexAIClaude48Opus)
   lf.LanguageModel.register('claude-opus-4-8@latest', anthropic.Anthropic)
+  lf.LanguageModel.register('claude-opus-5', VertexAIClaude5Opus)
 
   for m in LLAMA_MODELS:
     lf.LanguageModel.register(m.model_id, VertexAILlama)
