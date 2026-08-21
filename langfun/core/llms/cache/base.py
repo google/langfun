@@ -136,7 +136,7 @@ class LMCacheBase(lf.LMCache):
   def _sym_clone(self, deep: bool, memo: Any = None) -> 'LMCacheBase':
     v = super()._sym_clone(deep, memo)
     v._stats = self._stats  # pylint: disable=protected-access
-    return v
+    return v  # pyrefly: ignore[bad-return]
 
 
 def default_key(lm: lf.LanguageModel, prompt: lf.Message, seed: int) -> Any:
