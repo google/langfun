@@ -789,6 +789,176 @@ class AnthropicTest(unittest.TestCase):
     )
 
 
+class EffortConfigHonestyTest(unittest.TestCase):
+  """Tests that thinking-effort config never diverges from the wire silently.
+
+  Two config surfaces feed the Anthropic effort knob:
+    * `Anthropic.effort` (model-level, vocabulary low..max), and
+    * `LMSamplingOptions.reasoning_effort` (per-call, cross-provider,
+      vocabulary low..high).
+  Whenever the configured effort cannot reach the API unchanged -- because the
+  per-call knob downgrades it, or because the request takes a code path that
+  does not carry effort at all -- the model must say so out loud instead of
+  quietly sending something else.
+  """
+
+  def _warning_logs(self):
+    """Captures warnings emitted through langfun's logging primitive.
+
+    Returns:
+      An `assertLogs` context manager bound to the exact logger object that
+      `pg.logging.warning` writes to. Binding to the logger object (rather
+      than the root logger) keeps the assertion hermetic regardless of which
+      logger PyGlove is configured with in a given environment.
+    """
+    return self.assertLogs(pg.logging.get_logger(), level='WARNING')
+
+  def _no_warning_logs(self):
+    return self.assertNoLogs(pg.logging.get_logger(), level='WARNING')
+
+  # --- B1: per-call `reasoning_effort` must not silently downgrade `effort`.
+
+  def test_reasoning_effort_downgrade_warns_and_names_both_values(self):
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=True, effort='max')
+    with self._warning_logs() as logs:
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='high')
+      )
+    # Per-call precedence is preserved (blessed behavior), but it is loud.
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+    message = '\n'.join(logs.output)
+    self.assertIn("reasoning_effort='high'", message)
+    self.assertIn("effort='max'", message)
+
+  def test_reasoning_effort_upgrade_is_silent(self):
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=True, effort='low')
+    with self._no_warning_logs():
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='high')
+      )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+
+  def test_reasoning_effort_equal_tier_is_silent(self):
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=True, effort='low')
+    with self._no_warning_logs():
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='low')
+      )
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  def test_reasoning_effort_over_default_effort_is_silent(self):
+    """A class default is not a user decision, so overriding it is not news."""
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=True)
+    self.assertEqual(lm.effort, 'high')
+    with self._no_warning_logs():
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='low')
+      )
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  # --- B1: the wide vocabulary stays reachable through `effort`.
+
+  def test_xhigh_and_max_reachable_via_model_effort(self):
+    for effort in ('xhigh', 'max'):
+      with self.subTest(effort=effort):
+        lm = anthropic.Claude5Opus(api_key='fake', thinking=True, effort=effort)
+        args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+        self.assertEqual(args['output_config'], {'effort': effort})
+
+  # --- B2: an explicit `effort` must never be dropped silently.
+
+  def test_explicit_effort_dropped_on_non_adaptive_model_warns(self):
+    lm = anthropic.Claude46Opus(api_key='fake', thinking=True, effort='max')
+    with self._warning_logs() as logs:
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, max_thinking_tokens=1024)
+      )
+    # Existing behavior is untouched: manual budget, no effort on the wire.
+    self.assertEqual(
+        args['thinking'], {'type': 'enabled', 'budget_tokens': 1024}
+    )
+    self.assertNotIn('output_config', args)
+    message = '\n'.join(logs.output)
+    self.assertIn("effort='max'", message)
+    self.assertIn('ignored', message)
+
+  def test_explicit_effort_dropped_when_thinking_off_warns(self):
+    lm = anthropic.Claude5Opus(api_key='fake', effort='max')
+    self.assertIsNone(lm.thinking)
+    with self._warning_logs() as logs:
+      args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('output_config', args)
+    message = '\n'.join(logs.output)
+    self.assertIn("effort='max'", message)
+    self.assertIn('ignored', message)
+
+  def test_explicit_effort_dropped_when_thinking_disabled_warns(self):
+    """`thinking=False` wins over `max_thinking_tokens`, so effort is dropped.
+
+    This is the sub-case that keeps the warning text honest: the thinking gate
+    is off while `max_thinking_tokens` IS set, so the message must state the
+    real reason (the gate is off) and must not claim that
+    `max_thinking_tokens` is unset.
+    """
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=False, effort='max')
+    with self._warning_logs() as logs:
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, max_thinking_tokens=4096)
+      )
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('output_config', args)
+    message = '\n'.join(logs.output)
+    self.assertIn("effort='max'", message)
+    self.assertIn('thinking is off for this request', message)
+    self.assertNotIn('`max_thinking_tokens` is unset', message)
+
+  def test_default_effort_with_thinking_off_is_silent(self):
+    """The overwhelmingly common path must stay quiet, or nobody reads logs."""
+    lm = anthropic.Claude5Opus(api_key='fake')
+    with self._no_warning_logs():
+      args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('output_config', args)
+
+  def test_effort_none_is_silent(self):
+    """`effort=None` asks for no effort at all; dropping it is not divergence."""
+    lm = anthropic.Claude5Opus(api_key='fake', effort=None)
+    with self._no_warning_logs():
+      args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('output_config', args)
+
+  def test_explicit_effort_consumed_by_adaptive_path_is_silent(self):
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=True, effort='max')
+    with self._no_warning_logs():
+      args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['output_config'], {'effort': 'max'})
+
+  def test_explicit_effort_consumed_via_max_thinking_tokens_backcompat(self):
+    """`max_thinking_tokens` implies thinking=True, so effort is consumed."""
+    lm = anthropic.Claude5Opus(api_key='fake', effort='max')
+    with self._no_warning_logs():
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, max_thinking_tokens=1024)
+      )
+    self.assertEqual(args['output_config'], {'effort': 'max'})
+
+  def test_effort_rebound_after_construction_is_honored(self):
+    """Divergence detection is value-based, so `rebind` is covered too."""
+    lm = anthropic.Claude5Opus(api_key='fake', thinking=True)
+    lm.rebind(effort='max', skip_notification=True, raise_on_no_change=False)
+    with self._warning_logs() as logs:
+      args = lm._request_args(
+          lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='low')
+      )
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+    self.assertIn("effort='max'", '\n'.join(logs.output))
+
+  def test_invalid_reasoning_effort_still_fails_loud(self):
+    """Guards the existing loud path: bad per-call vocabulary must raise."""
+    with self.assertRaises(ValueError):
+      lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='max')
+
+
 class Claude48OpusTest(unittest.TestCase):
   """Tests for Claude Opus 4.8 model support."""
 

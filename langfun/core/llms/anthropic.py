@@ -891,6 +891,20 @@ SUPPORTED_MODELS = [
 _SUPPORTED_MODELS_BY_MODEL_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 
+# Thinking-effort tiers ordered from cheapest to deepest. Anthropic's own
+# vocabulary (`Anthropic.effort`) is a superset of the cross-provider
+# `LMSamplingOptions.reasoning_effort` vocabulary (low/medium/high), so the two
+# config surfaces can disagree; this ordering is what lets us tell an
+# (acceptable) upgrade apart from a (reportable) downgrade.
+_EFFORT_TIERS: dict[str, int] = {
+    'low': 0,
+    'medium': 1,
+    'high': 2,
+    'xhigh': 3,
+    'max': 4,
+}
+
+
 def _apply_cache_breakpoints(
     request: dict[str, Any],
     *,
@@ -1011,7 +1025,9 @@ class Anthropic(rest.REST):
   effort: Annotated[
       Literal['low', 'medium', 'high', 'xhigh', 'max'] | None,
       'Thinking depth for models supporting extended thinking (low, medium,'
-      + ' high, xhigh, max).',
+      + ' high, xhigh, max). It reaches the API only when thinking is enabled'
+      + ' on a model with adaptive thinking; a configured value that cannot be'
+      + ' honored is reported instead of being dropped.',
   ] = 'high'
 
   def _on_bound(self):
@@ -1051,6 +1067,84 @@ class Anthropic(rest.REST):
         'claude-opus-4-7' in self.model_id
         or 'claude-opus-4-8' in self.model_id
         or 'claude-opus-5' in self.model_id
+    )
+
+  @property
+  def _effort_is_user_configured(self) -> bool:
+    """Returns True if `effort` was set to something other than its default.
+
+    Detection is value-based (`pg.Object.sym_nondefault`) rather than
+    init-based, so both `Claude5Opus(effort='max')` and a later
+    `rebind(effort='max')` count as user intent. An `effort` that merely
+    happens to equal the class default is treated as "not configured": it
+    carries no user decision, so reporting on it would be noise.
+    """
+    return 'effort' in self.sym_nondefault()
+
+  def _resolve_effort(self, options: lf.LMSamplingOptions) -> str | None:
+    """Resolves the effective thinking effort from the two config surfaces.
+
+    Per-call `reasoning_effort` keeps precedence over the model-level `effort`
+    (existing, documented behavior). The addition here is honesty: when that
+    precedence silently *lowers* a user-configured effort -- the cross-provider
+    `reasoning_effort` vocabulary tops out at 'high', so it can never express
+    'xhigh'/'max' -- we say so instead of quietly shipping the weaker setting.
+
+    Args:
+      options: The sampling options of the current call.
+
+    Returns:
+      The effort to send to the API, or None if no effort should be sent.
+    """
+    per_call_effort = options.reasoning_effort
+    if per_call_effort is None:
+      return self.effort
+
+    if (
+        self.effort is not None
+        and self._effort_is_user_configured
+        and _EFFORT_TIERS[self.effort] > _EFFORT_TIERS[per_call_effort]
+    ):
+      pg.logging.warning(
+          '[%s] Per-call `reasoning_effort=%r` takes precedence over the '
+          'configured `effort=%r`, downgrading the thinking effort of this '
+          'request; the effective effort is %r. `reasoning_effort` is a '
+          'cross-provider setting limited to low/medium/high and cannot '
+          "express %r's %r. Drop `reasoning_effort` (or raise it) to keep the "
+          'configured effort.',
+          self.model_id,
+          per_call_effort,
+          self.effort,
+          per_call_effort,
+          self.__class__.__name__,
+          self.effort,
+      )
+    return per_call_effort
+
+  def _warn_effort_ignored(self, reason: str) -> None:
+    """Reports a user-configured `effort` that this request will not send.
+
+    `effort` only reaches the API through the adaptive-thinking path, which is
+    gated on both `thinking` being enabled and the model supporting adaptive
+    thinking. Whenever a configured effort falls outside that path it used to
+    vanish without a trace; now it is reported. This warns rather than raises
+    so that existing, blessed configurations (e.g. a manual-budget model
+    carrying a leftover `effort`) keep working.
+
+    Args:
+      reason: Why the effort cannot be honored, phrased to complete the
+        sentence 'is ignored because ...'.
+    """
+    if self.effort is None or not self._effort_is_user_configured:
+      return
+    pg.logging.warning(
+        '[%s] Configured `effort=%r` is ignored because %s, so this request '
+        'is sent without an effort setting. Remove `effort`, or use a model '
+        'with adaptive thinking enabled, to avoid a silent mismatch between '
+        'your configuration and the request.',
+        self.model_id,
+        self.effort,
+        reason,
     )
 
   def request(
@@ -1136,10 +1230,14 @@ class Anthropic(rest.REST):
         ):
           args['thinking']['display'] = 'summarized'
 
-        effort = options.reasoning_effort or self.effort
+        effort = self._resolve_effort(options)
         if effort:
           args['output_config'] = {'effort': effort}
       else:
+        self._warn_effort_ignored(
+            f'{self.model_id} does not support adaptive thinking and uses a '
+            'manual thinking budget (`max_thinking_tokens`) instead'
+        )
         budget = options.max_thinking_tokens
         if budget is None:
           # Default to 50% of the total capacity, ensuring at least 1024.
@@ -1171,6 +1269,11 @@ class Anthropic(rest.REST):
       args.pop('temperature', None)
       args.pop('top_k', None)
       args.pop('top_p', None)
+    else:
+      self._warn_effort_ignored(
+          'thinking is off for this request (`thinking` is False, or unset '
+          'with no `max_thinking_tokens`), and effort only applies to thinking'
+      )
 
     # Claude Opus 4.7, 4.8 and 5 do not support temperature, top_p, or top_k.
     if self.model is not None and (
