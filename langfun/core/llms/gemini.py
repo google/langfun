@@ -24,6 +24,31 @@ from langfun.core.llms import rest
 import pyglove as pg
 
 
+class GeminiEmptyGenerationError(lf.LMError):
+  """Gemini returned a candidate with no answer content, deterministically.
+
+  Three response signatures produce an answer-less candidate as an EXPECTED
+  function of the request rather than as a transient server fault:
+
+  * ``finishReason == 'MAX_TOKENS'`` with no non-thought part -- thinking
+    consumed the shared decode budget before a single answer token was
+    emitted.
+  * ``finishReason == 'STOP'`` with ``candidatesTokenCount == 0`` -- the model
+    terminated normally after emitting nothing at all.
+  * no ``content`` on the candidate at all (absent or null) -- nothing was
+    generated, so there is not even an empty message to parse.
+
+  All three are reproduced by re-sending the same request, so this subclasses
+  the NON-retryable ``lf.LMError`` -- deliberately NOT
+  ``lf.EmptyGenerationError`` / ``lf.RetryableLMError``. Without this, the
+  first two reach ``LanguageModel.sample()`` as empty text, which raises the
+  retryable ``lf.EmptyGenerationError`` and re-sends the full prompt up to
+  ``max_attempts`` times -- burning quota and latency only to fail with an
+  opaque error -- while the third escapes as a bare ``KeyError('content')``.
+  Mirrors ``beyond_api.BeyondThinkingBudgetExhaustedError``.
+  """
+
+
 class GeminiModelInfo(lf.ModelInfo):
   """Gemini model info."""
 
@@ -157,7 +182,7 @@ class GeminiModelInfo(lf.ModelInfo):
 
         # Add cost for output tokens
         cost += (
-            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
+            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k  # pyrefly: ignore[unsupported-operation]
             * usage.completion_tokens
         )
 
@@ -225,6 +250,28 @@ SUPPORTED_MODELS = [
         ),
         pricing=GeminiModelInfo.Pricing(
             # https://ai.google.dev/gemini-api/docs/pricing#gemini-3.1-flash-lite-preview
+            cost_per_1m_cached_input_tokens=0.025,
+            cost_per_1m_input_tokens=0.25,
+            cost_per_1m_output_tokens=1.5,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    GeminiModelInfo(
+        model_id='gemini-3.1-flash-lite',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description='Gemini 3.1 Flash Lite.',
+        release_date=datetime.datetime(2026, 5, 7),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.025,
             cost_per_1m_input_tokens=0.25,
             cost_per_1m_output_tokens=1.5,
@@ -303,6 +350,58 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens=0.05,
             cost_per_1m_input_tokens=0.50,
             cost_per_1m_output_tokens=3.00,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2_000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 3.5 Flash
+    GeminiModelInfo(
+        model_id='gemini-3.5-flash',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 3.5 Flash: High-efficiency, low-latency multimodal'
+            ' model optimized for agentic workflows.'
+        ),
+        release_date=datetime.datetime(2026, 5, 19),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.15,
+            cost_per_1m_input_tokens=1.50,
+            cost_per_1m_output_tokens=9.00,
+        ),
+        rate_limits=lf.ModelInfo.RateLimits(
+            max_requests_per_minute=2_000,
+            max_tokens_per_minute=4_000_000,
+        ),
+    ),
+    # Gemini 3.7 Flash
+    GeminiModelInfo(
+        model_id='gemini-3.7-flash',
+        in_service=True,
+        provider=pg.oneof(['Google GenAI', 'VertexAI']),
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 3.7 Flash: High-efficiency, low-latency multimodal'
+            ' model optimized for agentic workflows.'
+        ),
+        release_date=datetime.datetime(2026, 8, 13),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.075,
+            cost_per_1m_input_tokens=0.75,
+            cost_per_1m_output_tokens=3.75,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2_000,
@@ -896,11 +995,11 @@ class Gemini(rest.REST):
     return _SUPPORTED_MODELS_BY_ID[self.model]
 
   @classmethod
-  def dir(cls):
+  def dir(cls):  # pyrefly: ignore[bad-override]
     return [m.model_id for m in SUPPORTED_MODELS if m.in_service]
 
   @property
-  def headers(self):
+  def headers(self):  # pyrefly: ignore[bad-override]
     return {
         'Content-Type': 'application/json; charset=utf-8',
     }
@@ -915,7 +1014,7 @@ class Gemini(rest.REST):
       if isinstance(chunk, lf_modalities.Mime):
         try:
           return chunk.make_compatible(
-              self.model_info.input_modalities + ['text/plain']
+              self.model_info.input_modalities + ['text/plain']  # pyrefly: ignore[unsupported-operation]
           )
         except lf.ModalityError as e:
           raise lf.ModalityError(f'Unsupported modality: {chunk!r}') from e
@@ -931,7 +1030,7 @@ class Gemini(rest.REST):
     contents.append(
         prompt.as_format('gemini', chunk_preprocessor=modality_conversion)
     )
-    request['contents'] = contents
+    request['contents'] = contents  # pyrefly: ignore[bad-assignment]
     request['toolConfig'] = {
         'functionCallingConfig': {
             'mode': 'NONE',
@@ -964,8 +1063,8 @@ class Gemini(rest.REST):
         )
       json_schema = pg.to_json(json_schema)
       config['responseSchema'] = json_schema
-      config['responseMimeType'] = 'application/json'
-      prompt.metadata.formatted_text = (
+      config['responseMimeType'] = 'application/json'  # pyrefly: ignore[bad-assignment]
+      prompt.metadata.formatted_text = (  # pyrefly: ignore[missing-attribute]
           prompt.text
           + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
           + pg.to_json_str(json_schema, json_indent=2)
@@ -977,7 +1076,7 @@ class Gemini(rest.REST):
     if options.thinking_level is not None:
       thinking_config_data['thinkingLevel'] = options.thinking_level
     if thinking_config_data:
-      config['thinkingConfig'] = thinking_config_data
+      config['thinkingConfig'] = thinking_config_data  # pyrefly: ignore[bad-assignment]
 
     # This is the new feature since Gemini 3.
     # Skip for image generation models as they don't support mediaResolution.
@@ -988,7 +1087,7 @@ class Gemini(rest.REST):
             self.response_modalities and 'IMAGE' in self.response_modalities
         )
     ):
-      config['mediaResolution'] = 'MEDIA_RESOLUTION_HIGH'
+      config['mediaResolution'] = 'MEDIA_RESOLUTION_HIGH'  # pyrefly: ignore[bad-assignment]
 
     if self.response_modalities:
       config['responseModalities'] = self.response_modalities
@@ -1005,13 +1104,6 @@ class Gemini(rest.REST):
           'happens occasionally, and retrying should fix it. '
       )
 
-    messages = []
-    for candidate in candidates:
-      message = lf.Message.from_value(candidate['content'], format='gemini')
-      if finish_reason := candidate.get('finishReason'):
-        message.metadata['finish_reason'] = finish_reason
-      messages.append(message)
-
     usage = json['usageMetadata']
     # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.
     # Therefore, we use 0 as the default value.
@@ -1020,6 +1112,25 @@ class Gemini(rest.REST):
     thinking_tokens = usage.get('thoughtsTokenCount', 0)
     total_tokens = usage.get('totalTokenCount', 0)
     cached_tokens = usage.get('cachedContentTokenCount', 0)
+
+    messages = []
+    for candidate in candidates:
+      finish_reason = candidate.get('finishReason')
+      content = candidate.get('content')
+      if content is None:
+        raise self._no_answer_error(
+            'the candidate carries no content at all',
+            finish_reason,
+            output_tokens,
+            thinking_tokens,
+        )
+      message = lf.Message.from_value(content, format='gemini')
+      if finish_reason:
+        message.metadata['finish_reason'] = finish_reason
+      self._check_answer_present(
+          message, finish_reason, output_tokens, thinking_tokens
+      )
+      messages.append(message)
 
     return lf.LMSamplingResult(
         [lf.LMSample(message) for message in messages],
@@ -1034,12 +1145,88 @@ class Gemini(rest.REST):
         ),
     )
 
+  def _check_answer_present(
+      self,
+      message: lf.Message,
+      finish_reason: str | None,
+      output_tokens: int,
+      thinking_tokens: int,
+  ) -> None:
+    """Fails fast when a parsed candidate carries no answer, deterministically.
+
+    Only the two token-budget signatures documented on
+    `GeminiEmptyGenerationError` are reclassified here; its third signature
+    (no `content` at all) is caught by `result()` before parsing. Every other
+    answer-less case (an unrelated `finishReason`, a function-call-only
+    candidate that did emit tokens, a missing `finishReason`) is left alone so
+    the pre-existing retryable `lf.EmptyGenerationError` path keeps handling it
+    -- those may genuinely be transient.
+
+    Args:
+      message: The parsed candidate. Its text holds the non-thought answer
+        content (thought parts are routed to `message.thought`), so empty text
+        means no answer was returned.
+      finish_reason: The candidate's `finishReason`, if any.
+      output_tokens: Response-level `candidatesTokenCount`. With `n > 1` this
+        aggregates all candidates, which only makes the `STOP` check stricter
+        (never falsely positive).
+      thinking_tokens: Response-level `thoughtsTokenCount`, for diagnostics.
+
+    Raises:
+      GeminiEmptyGenerationError: If the candidate is deterministically
+        answer-less.
+    """
+    if message.text:
+      return
+
+    if finish_reason == 'MAX_TOKENS':
+      cause = (
+          'the decode budget was exhausted before any answer token was '
+          f'emitted ({thinking_tokens} thinking tokens were produced)'
+      )
+    elif finish_reason == 'STOP' and output_tokens == 0:
+      cause = 'the model stopped without emitting any output token'
+    else:
+      return
+
+    raise self._no_answer_error(
+        cause, finish_reason, output_tokens, thinking_tokens
+    )
+
+  def _no_answer_error(
+      self,
+      cause: str,
+      finish_reason: str | None,
+      output_tokens: int,
+      thinking_tokens: int,
+  ) -> GeminiEmptyGenerationError:
+    """Builds the error reported for a deterministically answer-less candidate.
+
+    Args:
+      cause: A phrase completing 'returned no answer content: ...', naming
+        which signature was matched.
+      finish_reason: The candidate's `finishReason`, if any.
+      output_tokens: Response-level `candidatesTokenCount`.
+      thinking_tokens: Response-level `thoughtsTokenCount`.
+
+    Returns:
+      The error to raise, carrying the diagnosis and the knobs to change.
+    """
+    return GeminiEmptyGenerationError(
+        f'Model {self.model_id} returned no answer content: {cause} '
+        f'(finishReason={finish_reason}, candidatesTokenCount={output_tokens}, '
+        f'thoughtsTokenCount={thinking_tokens}). This is determined by the '
+        'request, so retrying it as-is would reproduce the same result. '
+        'Consider raising `max_tokens`, lowering the thinking budget '
+        '(`max_thinking_tokens` / `thinking_level`), or shortening the prompt.'
+    )
+
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 400 and (
-        b'exceeds the maximum number of tokens' in content
-        or b'Reduce the input token count and try again.' in content
-        or b'Request payload size exceeds the limit' in content
-        or b'Request contains text fields that are too large' in content
+        b'exceeds the maximum number of tokens' in content  # pyrefly: ignore[unsupported-operation]
+        or b'Reduce the input token count and try again.' in content  # pyrefly: ignore[unsupported-operation]
+        or b'Request payload size exceeds the limit' in content  # pyrefly: ignore[unsupported-operation]
+        or b'Request contains text fields that are too large' in content  # pyrefly: ignore[unsupported-operation]
     ):
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)

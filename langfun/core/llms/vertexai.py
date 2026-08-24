@@ -170,9 +170,9 @@ class VertexAI(rest.REST):
   @property
   def _project(self) -> str:
     """Returns a project ID. Randomly selects from list if multiple provided."""
-    if len(self._projects) == 1:
-      return self._projects[0]
-    return random.choice(self._projects)
+    if len(self._projects) == 1:  # pyrefly: ignore[bad-argument-type]
+      return self._projects[0]  # pyrefly: ignore[unsupported-operation]
+    return random.choice(self._projects)  # pyrefly: ignore[bad-argument-type]
 
   def session(self):
     assert self._api_initialized
@@ -236,7 +236,7 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
   location = 'us-central1'
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     project = self._project
     return (
@@ -247,7 +247,7 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 
   @functools.cached_property
   def model_info(self) -> gemini.GeminiModelInfo:
-    return super().model_info.clone(override=dict(provider='VertexAI'))
+    return super().model_info.clone(override=dict(provider='VertexAI'))  # pyrefly: ignore[bad-return]
 
 
 #
@@ -294,10 +294,31 @@ class VertexAIGemini3FlashPreview(VertexAIGemini):  # pylint: disable=invalid-na
   location = 'global'
 
 
+class VertexAIGemini35Flash(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3.5 Flash GA model launched on 05/19/2026."""
+
+  model = 'gemini-3.5-flash'
+  location = 'global'
+
+
+class VertexAIGemini37Flash(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3.7 Flash GA model launched on 08/13/2026."""
+
+  model = 'gemini-3.7-flash'
+  location = 'global'
+
+
 class VertexAIGemini31FlashLitePreview(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 3.1 Flash Lite Preview model."""
 
   model = 'gemini-3.1-flash-lite-preview'
+  location = 'global'
+
+
+class VertexAIGemini31FlashLite(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 3.1 Flash Lite model."""
+
+  model = 'gemini-3.1-flash-lite'
   location = 'global'
 
 
@@ -463,13 +484,13 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
     return mi
 
   @property
-  def headers(self):
+  def headers(self):  # pyrefly: ignore[bad-override]
     return {
         'Content-Type': 'application/json; charset=utf-8',
     }
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     project = self._project
     model_id = str(self.model).removesuffix('@latest')
     host = (
@@ -495,6 +516,13 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
 
 
 # pylint: disable=invalid-name
+
+
+class VertexAIClaude5Opus(VertexAIAnthropic):
+  """Anthropic's Claude Opus 5 model on VertexAI."""
+
+  model = 'claude-opus-5'
+  location = 'global'
 
 
 class VertexAIClaude48Opus(VertexAIAnthropic):
@@ -672,7 +700,7 @@ class VertexAILlama(VertexAI, openai_compatible.OpenAIChatCompletionAPI):
     return _LLAMA_MODELS_BY_MODEL_ID[self.model]
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     project = self._project
     return (
@@ -786,7 +814,7 @@ class VertexAIMistral(VertexAI, openai_compatible.OpenAIChatCompletionAPI):
     return _MISTRAL_MODELS_BY_MODEL_ID[self.model]
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     project = self._project
     return (
@@ -835,6 +863,7 @@ def _register_vertexai_models():
   lf.LanguageModel.register('claude-opus-4-7@latest', anthropic.Anthropic)
   lf.LanguageModel.register('claude-opus-4-8', VertexAIClaude48Opus)
   lf.LanguageModel.register('claude-opus-4-8@latest', anthropic.Anthropic)
+  lf.LanguageModel.register('claude-opus-5', VertexAIClaude5Opus)
 
   for m in LLAMA_MODELS:
     lf.LanguageModel.register(m.model_id, VertexAILlama)

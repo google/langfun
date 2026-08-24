@@ -14,15 +14,18 @@
 """Tests for VertexAI models."""
 
 import os
+from typing import Any
 import unittest
 from unittest import mock
 
 from google import auth
 from google.auth import exceptions
 import langfun.core as lf
+from langfun.core.llms import gemini
 from langfun.core.llms import rest
 from langfun.core.llms import vertexai
 import pyglove as pg
+import requests
 
 
 class VertexAITest(unittest.TestCase):
@@ -55,6 +58,17 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_37_flash(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    model = vertexai.VertexAIGemini37Flash(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-3.7-flash')
+    # 3.x models default to 'global' location.
+    self.assertIn('global', model.api_endpoint)
+    del os.environ['VERTEXAI_PROJECT']
+    del os.environ['VERTEXAI_LOCATION']
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_31_flash_lite_preview(self):
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'
@@ -62,6 +76,17 @@ class VertexAITest(unittest.TestCase):
     self.assertEqual(
         model.resource_id, 'vertexai://gemini-3.1-flash-lite-preview'
     )
+    # 3.x models default to 'global' location.
+    self.assertIn('global', model.api_endpoint)
+    del os.environ['VERTEXAI_PROJECT']
+    del os.environ['VERTEXAI_LOCATION']
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_31_flash_lite(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    model = vertexai.VertexAIGemini31FlashLite(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-3.1-flash-lite')
     # 3.x models default to 'global' location.
     self.assertIn('global', model.api_endpoint)
     del os.environ['VERTEXAI_PROJECT']
@@ -202,7 +227,7 @@ class VertexAIAnthropicTest(unittest.TestCase):
                 }],
                 'role': 'user',
             }],
-            'stream': False,
+            'stream': True,
             'temperature': 0.0,
             'top_k': 40,
         },
@@ -504,6 +529,132 @@ class VertexAIAnthropicTest(unittest.TestCase):
     # Verify vertexai fields
     self.assertEqual(req['anthropic_version'], 'vertex-2023-10-16')
     self.assertNotIn('model', req)
+
+
+def _vertex_response(
+    parts: list[dict[str, Any]],
+    finish_reason: str,
+    *,
+    candidates_token_count: int,
+    thoughts_token_count: int = 0,
+) -> dict[str, Any]:
+  """Builds a Vertex `generateContent` response body with one candidate."""
+  return {
+      'candidates': [{
+          'content': {'role': 'model', 'parts': parts},
+          'finishReason': finish_reason,
+      }],
+      'usageMetadata': {
+          'promptTokenCount': 12,
+          'candidatesTokenCount': candidates_token_count,
+          'thoughtsTokenCount': thoughts_token_count,
+          'totalTokenCount': (
+              12 + candidates_token_count + thoughts_token_count
+          ),
+      },
+  }
+
+
+class VertexAIEmptyGenerationTest(unittest.TestCase):
+  """Tests the guard against deterministically answer-less generations.
+
+  These exercise the real Vertex route (`VertexAIGemini31ProPreview` ->
+  `VertexAIGemini` -> `gemini.Gemini.result()`) end to end, with only the HTTP
+  POST faked, so they cover both the classification and the retry behavior.
+  """
+
+  def _fake_post(self, response_json: dict[str, Any]) -> tuple[list[Any], Any]:
+    """Returns (call log, POST side effect) serving `response_json` forever."""
+    calls = []
+
+    def _post(*args, **kwargs):
+      del args, kwargs
+      calls.append(1)
+      response = requests.Response()
+      response.status_code = 200
+      response._content = pg.to_json_str(response_json).encode()  # pylint: disable=protected-access
+      return response
+
+    return calls, _post
+
+  def _lm(self) -> vertexai.VertexAIGemini31ProPreview:
+    # `retry_interval=0` keeps a (regressed) retry loop fast instead of
+    # sleeping through exponential backoff.
+    return vertexai.VertexAIGemini31ProPreview(
+        project='abc', max_attempts=5, retry_interval=0
+    )
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_thought_only_max_tokens_is_not_resent(self):
+    """Thinking ate the decode budget: fail after exactly ONE request.
+
+    This is the retry-storm regression guard: the generation is deterministic
+    for a given prompt, so re-sending it can only reproduce it.
+    """
+    calls, post = self._fake_post(
+        _vertex_response(
+            [{'text': 'Let me think about this...', 'thought': True}],
+            'MAX_TOKENS',
+            candidates_token_count=0,
+            thoughts_token_count=8192,
+        )
+    )
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = post
+      with self.assertRaises(RuntimeError):
+        self._lm()('hello')
+    self.assertEqual(len(calls), 1)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_thought_only_max_tokens_raises_non_retryable_error(self):
+    _, post = self._fake_post(
+        _vertex_response(
+            [{'text': 'Let me think about this...', 'thought': True}],
+            'MAX_TOKENS',
+            candidates_token_count=0,
+            thoughts_token_count=8192,
+        )
+    )
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = post
+      with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+        self._lm()('hello')
+    message = str(ctx.exception)
+    self.assertIn('MAX_TOKENS', message)
+    self.assertIn('gemini-3.1-pro-preview', message)
+    self.assertIn('max_tokens', message)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_stop_with_zero_output_tokens_is_not_resent(self):
+    """finish_reason=STOP with 0 candidate tokens is also deterministic."""
+    calls, post = self._fake_post(
+        _vertex_response([], 'STOP', candidates_token_count=0)
+    )
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = post
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
+        self._lm()('hello')
+    self.assertEqual(len(calls), 1)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_normal_generation_unaffected(self):
+    """Control: a generation with answer text still returns normally."""
+    calls, post = self._fake_post(
+        _vertex_response(
+            [
+                {'text': 'thinking', 'thought': True},
+                {'text': 'the answer'},
+            ],
+            'STOP',
+            candidates_token_count=3,
+            thoughts_token_count=100,
+        )
+    )
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = post
+      response = self._lm()('hello')
+    self.assertEqual(response.text, 'the answer')
+    self.assertEqual(len(calls), 1)
 
 
 if __name__ == '__main__':
