@@ -71,7 +71,7 @@ class JsonPromptingProtocol(base.PromptingProtocol):
             f'"{v}"' if isinstance(v, str) else repr(v)
             for v in node.values))
       elif isinstance(node, pg.typing.PrimitiveType):
-        x = node.value_type.__name__
+        x = node.value_type.__name__  # pyrefly: ignore[missing-attribute]
         if isinstance(node, pg.typing.Number):
           params = []
           if node.min_value is not None:
