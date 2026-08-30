@@ -77,9 +77,9 @@ class Coordinate(pg.Object):
     Returns:
       A random coordinate.
     """
-    rand = rand or random
-    x = rand.randint(bound.left, bound.right)
-    y = rand.randint(bound.top, bound.bottom)
+    rand = rand or random  # pyrefly: ignore[bad-assignment]
+    x = rand.randint(bound.left, bound.right)  # pyrefly: ignore[missing-attribute]
+    y = rand.randint(bound.top, bound.bottom)  # pyrefly: ignore[missing-attribute]
     return cls(x, y)
 
   def distance_to(self, point: 'Coordinate') -> float:
@@ -241,19 +241,19 @@ class BBox(pg.Object):
     if min_width > bound.width or min_height > bound.height:
       raise ValueError('Minimum width or height is larger than the bound.')
 
-    rand = rand or random
+    rand = rand or random  # pyrefly: ignore[bad-assignment]
 
     max_width = min(max_width, bound.width)
     max_height = min(max_height, bound.height)
 
-    width = rand.randint(min_width, max_width)
-    height = rand.randint(min_height, max_height)
+    width = rand.randint(min_width, max_width)  # pyrefly: ignore[missing-attribute]
+    height = rand.randint(min_height, max_height)  # pyrefly: ignore[missing-attribute]
 
     max_left = bound.right - width
     max_top = bound.bottom - height
 
-    left = rand.randint(bound.left, max_left)
-    top = rand.randint(bound.top, max_top)
+    left = rand.randint(bound.left, max_left)  # pyrefly: ignore[missing-attribute]
+    top = rand.randint(bound.top, max_top)  # pyrefly: ignore[missing-attribute]
 
     right = left + width
     bottom = top + height

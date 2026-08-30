@@ -77,12 +77,12 @@ class Matching(base.Evaluation):
   @property
   def matches_link(self) -> str:
     """Returns the link to the matches page."""
-    return self.link(os.path.join(self.dir, Matching.MATCHES_HTML))
+    return self.link(os.path.join(self.dir, Matching.MATCHES_HTML))  # pyrefly: ignore[no-matching-overload]
 
   @property
   def mismatches_link(self) -> str:
     """Returns the link to the mismatches page."""
-    return self.link(os.path.join(self.dir, Matching.MISMATCHES_HTML))
+    return self.link(os.path.join(self.dir, Matching.MISMATCHES_HTML))  # pyrefly: ignore[no-matching-overload]
 
   def _reset(self) -> None:
     super()._reset()
@@ -178,12 +178,12 @@ class Matching(base.Evaluation):
     if report:
       pg.save(
           self._html([self._render_result, self._render_matches]),
-          os.path.join(self.dir, Matching.MATCHES_HTML),
+          os.path.join(self.dir, Matching.MATCHES_HTML),  # pyrefly: ignore[no-matching-overload]
           file_format='txt',
       )
       pg.save(
           self._html([self._render_result, self._render_mismatches]),
-          os.path.join(self.dir, Matching.MISMATCHES_HTML),
+          os.path.join(self.dir, Matching.MISMATCHES_HTML),  # pyrefly: ignore[no-matching-overload]
           file_format='txt',
       )
 
