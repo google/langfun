@@ -162,7 +162,7 @@ class EmbeddingModel(component.Component):
   _MODEL_FACTORY: ClassVar[dict[str, Callable[..., 'EmbeddingModel']]] = {}
 
   @classmethod
-  def register(
+  def register(  # pyrefly: ignore[bad-override]
       cls,
       model_id_or_prefix: str, factory: Callable[..., 'EmbeddingModel']
   ) -> None:

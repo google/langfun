@@ -171,13 +171,13 @@ class Veo(vertexai.VertexAI):
     return _SUPPORTED_MODELS_BY_ID[self.model]
 
   @property
-  def headers(self):
+  def headers(self):  # pyrefly: ignore[bad-override]
     return {
         'Content-Type': 'application/json; charset=utf-8',
     }
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     return (
         f'https://{self._location}-aiplatform.googleapis.com/v1/projects/'
@@ -200,11 +200,11 @@ class Veo(vertexai.VertexAI):
             f'got {len(prompt.images)}.'
         )
       first_frame = prompt.images[0]
-      instance['image'] = self._encode_image(first_frame)
+      instance['image'] = self._encode_image(first_frame)  # pyrefly: ignore[bad-argument-type]
 
       if len(prompt.images) > 1:
         last_frame = prompt.images[1]
-        instance['lastFrame'] = self._encode_image(last_frame)
+        instance['lastFrame'] = self._encode_image(last_frame)  # pyrefly: ignore[bad-argument-type]
 
     parameters: dict[str, Any] = {
         'durationSeconds': self.duration_seconds,

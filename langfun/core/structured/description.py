@@ -29,6 +29,7 @@ class _DescribeStructure(mapping.Mapping):
   context_title = 'CONTEXT_FOR_DESCRIPTION'
   output_title = 'NATURAL_LANGUAGE_TEXT'
 
+  # pyrefly: ignore[bad-assignment]
   preamble = """
       Please help describe {{ input_title }} in natural language.
 

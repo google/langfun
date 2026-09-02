@@ -120,7 +120,7 @@ class MappingExample(lf.NaturalLanguageFormattable,
   """
 
   input: pg.typing.Annotated[
-      pg.typing.Any(transform=schema_lib.mark_missing),
+      pg.typing.Any(transform=schema_lib.mark_missing),  # pyrefly: ignore[bad-instantiation]
       (
           'The input object of the mapping. It could be either a natural '
           'language-based string, or a Python object.'
@@ -462,9 +462,9 @@ class Mapping(lf.LangFunc):
       lm_output.result = self.postprocess_result(self.parse_result(lm_output))
     except Exception as e:  # pylint: disable=broad-exception-caught
       if (self.lm.cache is not None
-          and lm_output.lm_input.cache_seed is not None):
+          and lm_output.lm_input.cache_seed is not None):  # pyrefly: ignore[missing-attribute]
         success = self.lm.cache.delete(
-            self.lm, lm_output.lm_input, lm_output.lm_input.cache_seed
+            self.lm, lm_output.lm_input, lm_output.lm_input.cache_seed  # pyrefly: ignore[bad-argument-type]
         )
         assert success
       if self.default == lf.RAISE_IF_HAS_ERROR:
