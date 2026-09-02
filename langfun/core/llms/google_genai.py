@@ -161,6 +161,12 @@ class Gemini37Flash(GenAI):
   model = 'gemini-3.7-flash'
 
 
+class Gemini38Flash(GenAI):
+  """Gemini 3.8 Flash GA model."""
+
+  model = 'gemini-3.8-flash'
+
+
 class Gemini31FlashLitePreview(GenAI):
   """Gemini 3.1 Flash Lite Preview model."""
 
