@@ -322,7 +322,7 @@ def class_dependencies(
   if inspect.isclass(value_or_spec) or isinstance(
       value_or_spec, pg.typing.ValueSpec
   ):
-    value_or_spec = (value_or_spec,)
+    value_or_spec = (value_or_spec,)  # pyrefly: ignore[bad-assignment]
 
   if isinstance(value_or_spec, tuple):
     value_specs = []
@@ -334,7 +334,7 @@ def class_dependencies(
       else:
         raise TypeError(f'Unsupported spec type: {v!r}')
   else:
-    value_specs = _top_level_object_specs_from_value(value_or_spec)
+    value_specs = _top_level_object_specs_from_value(value_or_spec)  # pyrefly: ignore[bad-argument-type]
 
   seen = set()
   dependencies = []

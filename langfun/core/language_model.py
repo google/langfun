@@ -1255,7 +1255,7 @@ class LanguageModel(component.Component):
 
       # Combine cached results and newly requested results.
       for i, (prompt, result) in enumerate(zip(requests, requested_results)):
-        results[request_to_result_index[i]] = result
+        results[request_to_result_index[i]] = result  # pyrefly: ignore[unsupported-operation]
 
         # Carry the cache seed in response message.
         for sample in result.samples:
@@ -1265,7 +1265,7 @@ class LanguageModel(component.Component):
           self.cache.put(
               self,
               prompt,
-              result.clone(override=dict(is_cached=True)),
+              result.clone(override=dict(is_cached=True)),  # pyrefly: ignore[bad-argument-type]
               seed=cache_seed
           )
     return results  # pytype: disable=bad-return-type
