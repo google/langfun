@@ -131,7 +131,7 @@ class Evaluation(experiment_lib.Experiment):
     return self.is_deterministic
 
   @functools.cached_property
-  def children(self) -> list['Evaluation']:
+  def children(self) -> list['Evaluation']:  # pyrefly: ignore[bad-override]
     """Returns the children tasks."""
     if self.is_leaf:
       return []
@@ -153,7 +153,7 @@ class Evaluation(experiment_lib.Experiment):
 
   def example_input_by_id(self, example_id: int) -> Any:
     """Returns the example from the inputs by ID."""
-    assert example_id <= len(self.example_inputs), example_id
+    assert example_id <= len(self.example_inputs), example_id  # pyrefly: ignore[bad-argument-type]
     return self._example_input_by_id[example_id]
 
   @functools.cached_property
@@ -170,7 +170,7 @@ class Evaluation(experiment_lib.Experiment):
     if not isinstance(num_examples, int):
       it = self.example_inputs
       if hasattr(it, '__len__'):
-        num_examples = len(it)
+        num_examples = len(it)  # pyrefly: ignore[bad-argument-type]
       else:
         num_examples = len(list(it))
     return num_examples
@@ -349,7 +349,7 @@ class Evaluation(experiment_lib.Experiment):
       except BaseException as e:  # pylint: disable=broad-except
         if raise_if_has_error:
           raise
-        example.error = pg.ErrorInfo.from_exception(e)
+        example.error = pg.ErrorInfo.from_exception(e)  # pyrefly: ignore[bad-assignment]
 
   #
   # Handling evaluation scheduling.
@@ -461,7 +461,7 @@ class Evaluation(experiment_lib.Experiment):
   ):
     if not self.is_leaf:
       return super()._html_tree_view_content(
-          view=view, extra_flags=extra_flags, **kwargs
+          view=view, extra_flags=extra_flags, **kwargs  # pyrefly: ignore[bad-argument-type]
       )
 
     extra_flags = extra_flags or {}
@@ -719,6 +719,7 @@ class Evaluation(experiment_lib.Experiment):
     for example in in_progress_examples:
       if example.newly_processed:
         logs.append(
+            # pyrefly: ignore[unsupported-operation]
             f'Example {example.id}: In progress for '
             f'{current_time - example.start_time:.2f} seconds.'
         )
@@ -894,7 +895,7 @@ class EvaluationState:
     for example in example_lib.Example.iter_ckpts(
         state_file,
         example_input_by_id=example_input_by_id,
-        load_example_metadata=load_example_metadata,
+        load_example_metadata=load_example_metadata,  # pyrefly: ignore[bad-argument-type]
     ):
       if filter is not None and not filter(example):
         continue

@@ -220,6 +220,12 @@ class Evaluable(lf.Component):
       pivot_field: str = 'lm',
       from_root: bool = True,
       timeout: int | None = None,
+      # Optional cap on how many leaf evaluations run concurrently. Defaults to
+      # None => unbounded (one worker per leaf), preserving current behavior.
+      max_leaf_concurrency: int | None = None,
+      # Minimum seconds between throttled intermediate summary.save() calls off
+      # the hot per-leaf path. The final summary flush is always unconditional.
+      summary_save_interval_s: float = 10.0,
       **kwargs,
   ) -> Union['Summary', pg.Dict]:
     """Run the evaluation, which fills and returns the result."""
@@ -228,7 +234,7 @@ class Evaluable(lf.Component):
     if dryrun:
       self.dryrun(filter=filter, verbose=False, debug=debug)
 
-    summary = self.summary(pivot_field) if from_root and summary else None
+    summary = self.summary(pivot_field) if from_root and summary else None  # pyrefly: ignore[bad-assignment]
     should_save = bool(save and self.dir)
 
     if self.is_leaf:
@@ -247,7 +253,7 @@ class Evaluable(lf.Component):
       ):
         if show_progress:
           lf.concurrent.ProgressBar.update(
-              progress_bar, status='LOADING SAVED RESULTS...', color='yellow'
+              progress_bar, status='LOADING SAVED RESULTS...', color='yellow'  # pyrefly: ignore[bad-argument-type]
           )
         if self.try_load_result():
           run_status = 'CACHED'
@@ -259,12 +265,12 @@ class Evaluable(lf.Component):
       if self.result:
         if show_progress:
           lf.concurrent.ProgressBar.update(
-              progress_bar, delta=self.num_examples
+              progress_bar, delta=self.num_examples  # pyrefly: ignore[bad-argument-type]
           )
       else:
         self._run(
             start=start,
-            end=end,
+            end=end,  # pyrefly: ignore[bad-argument-type]
             debug=debug,
             dryrun=dryrun,
             verbose=verbose,
@@ -277,7 +283,7 @@ class Evaluable(lf.Component):
         if should_save:
           if show_progress:
             lf.concurrent.ProgressBar.update(
-                progress_bar, status='SAVING RESULTS...', color='yellow'
+                progress_bar, status='SAVING RESULTS...', color='yellow'  # pyrefly: ignore[bad-argument-type]
             )
 
           # Save evaluation results.
@@ -285,17 +291,24 @@ class Evaluable(lf.Component):
 
           # Save summary if present.
           if summary:
-            summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
+            summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))  # pyrefly: ignore[missing-attribute, no-matching-overload]
 
       if show_progress:
         lf.concurrent.ProgressBar.update(
-            progress_bar,
+            progress_bar,  # pyrefly: ignore[bad-argument-type]
             status=self._completion_status(run_status),
             color='green',
         )
     else:
       assert from_root
       summary_lock = threading.Lock()
+      # Debounce: throttle the O(all-leaves) summary re-render/save off the hot
+      # per-leaf completion path to at most one write per
+      # summary_save_interval_s seconds. The unconditional final flush below
+      # still guarantees a complete summary at the end of the run.
+      # `last_summary_save` is a 1-element list so the nested closure can mutate
+      # it under `summary_lock`.
+      last_summary_save = [0.0]
       def _run_group(arg: tuple[int, list[_LeafNode]]) -> None:
         overview_bar, leaf_group = arg
         for leaf in leaf_group:
@@ -308,33 +321,42 @@ class Evaluable(lf.Component):
                 debug=debug,
                 dryrun=False,
                 verbose=verbose,
-                show_progress=leaf.progress_bar,
+                show_progress=leaf.progress_bar,  # pyrefly: ignore[bad-argument-type]
                 summary=False,
                 from_root=False,
                 **kwargs,
             )
             if should_save and summary:
+              now = time.time()
               with summary_lock:
-                summary.save(
-                    os.path.join(self.root_dir, Evaluable.SUMMARY_HTML)
-                )
+                # Only re-render/save the (expensive, whole-tree) summary if
+                # enough time has elapsed since the last write. This keeps the
+                # per-leaf hot path O(1) instead of O(all-leaves).
+                if now - last_summary_save[0] >= summary_save_interval_s:
+                  summary.save(  # pyrefly: ignore[missing-attribute]
+                      os.path.join(self.root_dir, Evaluable.SUMMARY_HTML)  # pyrefly: ignore[no-matching-overload]
+                  )
+                  last_summary_save[0] = now
 
           # Signal sub-eval complete by setting the color green.
-          lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
+          lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)  # pyrefly: ignore[bad-argument-type]
           lf.concurrent.ProgressBar.update(overview_bar, 1, {
               'LastCompleted': leaf.node.id
           })
 
-      # NOTE(daiyip): Run leaf nodes grouped by model resource id. This allows
-      # evaluations using the same resource to run sequentially, which favors
-      # completing evaluations over running evaluations sparsely.
+      # NOTE: Fan out all independent leaf evaluations concurrently. Each leaf
+      # is placed in its own group (keyed by its unique leaf id) and the run is
+      # dispatched with max_workers == number of leaves, so every leaf can be
+      # in flight at once. Per-model backpressure is still enforced by the
+      # LM-level rate-limit semaphore (Layer C, keyed by resource_id), which
+      # remains the only cap on concurrent requests to a given model.
       filter = filter or (lambda x: True)
       leaf_nodes: list[_LeafNode] = []
       leaf_groups: dict[str, list[_LeafNode]] = collections.defaultdict(list)
 
       for i, leaf in enumerate(self.leaf_nodes):
         node = _LeafNode(index=i + 1, node=leaf, enabled=filter(leaf))
-        leaf_groups[leaf.lm.resource_id].append(node)
+        leaf_groups[leaf.id].append(node)
         leaf_nodes.append(node)
 
       if leaf_groups:
@@ -346,7 +368,7 @@ class Evaluable(lf.Component):
               f'[#{leaf.index} - {leaf.node.id}]',
               total=leaf.node.num_examples if leaf.enabled else 0,
               color='cyan' if leaf.enabled else 'yellow',
-              status=None if leaf.enabled else 'SKIPPED.')
+              status=None if leaf.enabled else 'SKIPPED.')  # pyrefly: ignore[bad-argument-type]
 
         # Run leaf groups in parallel.
         try:
@@ -354,7 +376,10 @@ class Evaluable(lf.Component):
               _run_group,
               [(overview_bar, group) for group in leaf_groups.values()],
               silence_on_errors=None,
-              max_workers=len(leaf_groups)):
+              # Fan out all leaves at once by default (max_workers == number of
+              # leaves); `max_leaf_concurrency`, when set, caps this.
+              max_workers=max_leaf_concurrency or len(leaf_nodes),
+          ):
             pass
 
           # Save results for non-leaf nodes.
@@ -373,7 +398,7 @@ class Evaluable(lf.Component):
                 overview_bar, status='FINALIZING SUMMARY...'
             )
 
-            summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))
+            summary.save(os.path.join(self.root_dir, Evaluable.SUMMARY_HTML))  # pyrefly: ignore[missing-attribute, no-matching-overload]
 
             lf.console.write(
                 f'({self.summary_link})',
@@ -391,7 +416,7 @@ class Evaluable(lf.Component):
           # for leaf in leaf_nodes:
           #   lf.concurrent.ProgressBar.uninstall(leaf.progress_bar)
           lf.concurrent.ProgressBar.uninstall(overview_bar)
-    return summary or self.result
+    return summary or self.result  # pyrefly: ignore[bad-return]
 
   @abc.abstractmethod
   def _run(
@@ -439,11 +464,11 @@ class Evaluable(lf.Component):
   ) -> None:
     # Save experiment definition.
     if definition:
-      pg.save(self, os.path.join(self.dir, Evaluable.EXPERIMENT_JSON))
+      pg.save(self, os.path.join(self.dir, Evaluable.EXPERIMENT_JSON))  # pyrefly: ignore[no-matching-overload]
 
     # Save evaluation result.
     if result:
-      pg.save(self.result, os.path.join(self.dir, Evaluation.RESULT_JSON))
+      pg.save(self.result, os.path.join(self.dir, Evaluation.RESULT_JSON))  # pyrefly: ignore[no-matching-overload]
 
   def _html(
       self,
@@ -470,6 +495,7 @@ class Evaluable(lf.Component):
       )
     if include_cache_stats and self.is_deterministic:
       s.write(
+          # pyrefly: ignore[missing-attribute]
           '<h2> Cache Stats </h2>'
           '<div style="white-space:pre;padding:10px;color:#3254a8;'
           f'background-color:#EEEEEE">{self.result.cache_stats}</div>'
@@ -493,7 +519,7 @@ class Evaluable(lf.Component):
       if i != len(links) - 1:
         # Add a right triangle symbol.
         s.write(' &#9656 ')
-    s.write(f' [<a href="{self.link(self.dir)}">Directory</a>]')
+    s.write(f' [<a href="{self.link(self.dir)}">Directory</a>]')  # pyrefly: ignore[bad-argument-type]
 
   def _render_index_page(self, s: io.StringIO) -> None:
     self._render_result(s)
@@ -532,7 +558,7 @@ class Evaluable(lf.Component):
 
   def _render_dryrun_output(self, s: io.StringIO) -> None:
     s.write('<h2> Dry Run </h2>')
-    self._render_message(self.dryrun_output, s)
+    self._render_message(self.dryrun_output, s)  # pyrefly: ignore[bad-argument-type]
 
   def _render_message(self, message: lf.Message, s: io.StringIO) -> None:
     s.write(
@@ -564,7 +590,7 @@ class Evaluable(lf.Component):
   def try_load_result(self) -> bool:
     """Try loads result from file if it's not loaded."""
     if self.result is None:
-      result_json = os.path.join(self.dir, Evaluable.RESULT_JSON)
+      result_json = os.path.join(self.dir, Evaluable.RESULT_JSON)  # pyrefly: ignore[no-matching-overload]
       if pg.io.path_exists(result_json):
         self._result = pg.load(result_json)
         return True
@@ -603,7 +629,7 @@ class Suite(Evaluable):
         if k not in ('id', 'children')
     }
     for child in self.children:
-      child.rebind(overrides, notify_parents=False)
+      child.rebind(overrides, notify_parents=False)  # pyrefly: ignore[bad-argument-type]
     self.__dict__.pop('hash', None)
 
   @functools.cached_property
@@ -825,7 +851,7 @@ class Evaluation(Evaluable):
   @functools.cached_property
   def oop_failures(self) -> list[tuple[Any, lf_structured.MappingError]]:
     """Returns the OOP failures."""
-    return [item for item in self.failures
+    return [item for item in self.failures  # pyrefly: ignore[bad-return]
             if isinstance(item[1], lf_structured.MappingError)]
 
   @property
@@ -1042,7 +1068,7 @@ class Evaluation(Evaluable):
       **kwargs,
   ) -> None:
     # We make a copy to avoid pollute the state of current object.
-    copy: Evaluation = self.clone()
+    copy: Evaluation = self.clone()  # pyrefly: ignore[bad-assignment]
 
     # Set the example for dryrun.
     example = example or copy.examples[0]
@@ -1113,6 +1139,11 @@ class Evaluation(Evaluable):
       timeout: int | None = None,
       **kwargs,
   ) -> None:
+    # Capture per-leaf wall-clock start (epoch seconds). Persisted via
+    # finalize() so downstream makespan / longest-trajectory analysis has real
+    # measured per-leaf timing (previously the harness persisted none).
+    self._start_time = time.time()
+
     # Setup examples.
     # Reset examples so it could be read from the input functor.
     self.__dict__.pop('examples', None)
@@ -1156,7 +1187,8 @@ class Evaluation(Evaluable):
         if self.dir and self.cache:
           self.cache.save()
 
-    # Summarize result.
+    # Capture per-leaf wall-clock end, then summarize result.
+    self._end_time = time.time()
     self._result = self.finalize()
     if verbose:
       lf.console.write(
@@ -1198,7 +1230,7 @@ class Evaluation(Evaluable):
       )
     else:
       assert self.method == 'complete', self.method
-      assert isinstance(self.schema.spec, pg.typing.Object), self.schema
+      assert isinstance(self.schema.spec, pg.typing.Object), self.schema  # pyrefly: ignore[missing-attribute]
       # TODO(daiyip): Currently multi-modal inputs within the prompt for
       # completion is not supported.
       input_value = self.schema.spec.cls.partial(prompt.render().text)
@@ -1240,9 +1272,9 @@ class Evaluation(Evaluable):
     status.update(self._eval_status(progress))
 
     if progress.last_error is not None:
-      status['LastError'] = progress.last_error_str()
+      status['LastError'] = progress.last_error_str()  # pyrefly: ignore[bad-assignment]
     if progress.timeit_summary:
-      status['TimeIt'] = progress.timeit_summary_str()
+      status['TimeIt'] = progress.timeit_summary_str()  # pyrefly: ignore[bad-assignment]
     return status
 
   def _eval_status(self, progress: lf.concurrent.Progress) -> dict[str, Any]:
@@ -1299,6 +1331,17 @@ class Evaluation(Evaluable):
     else:
       usage = None
 
+    # Per-leaf wall-clock timing (epoch seconds), populated by Evaluation._run.
+    # Values are None when finalize() runs outside a live run (e.g. a legacy
+    # result.json predating timing instrumentation), so loading old results is
+    # safe.
+    start_time = getattr(self, '_start_time', None)
+    end_time = getattr(self, '_end_time', None)
+    if start_time is not None and end_time is not None:
+      wall_clock_s = end_time - start_time
+    else:
+      wall_clock_s = None
+
     result = pg.Dict(
         experiment_setup=pg.Dict(
             id=self.id,
@@ -1320,6 +1363,9 @@ class Evaluation(Evaluable):
             failure_breakdown=self.failure_breakdown,
         ),
         usage=usage,
+        start_time=start_time,
+        end_time=end_time,
+        wall_clock_s=wall_clock_s,
     )
     return result
 
@@ -1333,7 +1379,7 @@ class Evaluation(Evaluable):
         definition,
         self.hash,
         '',
-        lambda: self.link(self.dir),
+        lambda: self.link(self.dir),  # pyrefly: ignore[bad-argument-type]
     )
     if self.result is None:
       s.write(
@@ -1355,7 +1401,7 @@ class Evaluation(Evaluable):
 
   def _render_summary_usage(self, s: io.StringIO) -> None:
     """Renders usage in HTML."""
-    usage = self.result.usage
+    usage = self.result.usage  # pyrefly: ignore[missing-attribute]
     total = usage.total_prompt_tokens + usage.total_completion_tokens
     s.write(
         '&nbsp;<a title="'
@@ -1407,7 +1453,7 @@ class Evaluation(Evaluable):
         oop_failure_title,
         self._format_rate(m.oop_failure_rate),
         f'color:magenta{extra_style}',
-        lambda: self.oop_failures_link,
+        lambda: self.oop_failures_link,  # pyrefly: ignore[bad-argument-type]
     )
     s.write(' | ')
 
@@ -1430,7 +1476,7 @@ class Evaluation(Evaluable):
         non_oop_failure_title,
         self._format_rate(m.non_oop_failure_rate),
         f'color:red{extra_style}',
-        lambda: self.non_oop_failures_link,
+        lambda: self.non_oop_failures_link,  # pyrefly: ignore[bad-argument-type]
     )
 
   def _format_rate(self, rate: float) -> str:
@@ -1505,7 +1551,7 @@ class Evaluation(Evaluable):
               include_def=True,
               include_cache_stats=True,
           ),
-          os.path.join(self.dir, Evaluable.INDEX_HTML),
+          os.path.join(self.dir, Evaluable.INDEX_HTML),  # pyrefly: ignore[no-matching-overload]
           file_format='txt',
       )
 
@@ -1515,11 +1561,11 @@ class Evaluation(Evaluable):
               pg.Dict(input=input, error=_format_error(error))
               for input, error in self.oop_failures
           ],
-          os.path.join(self.dir, Evaluation.OOP_FAILURES_JSON),
+          os.path.join(self.dir, Evaluation.OOP_FAILURES_JSON),  # pyrefly: ignore[no-matching-overload]
       )
       pg.save(
           self._html([self._render_result, self._render_oop_failures]),
-          os.path.join(self.dir, Evaluation.OOP_FAILURES_HTML),
+          os.path.join(self.dir, Evaluation.OOP_FAILURES_HTML),  # pyrefly: ignore[no-matching-overload]
           file_format='txt',
       )
       pg.save(
@@ -1527,11 +1573,11 @@ class Evaluation(Evaluable):
               pg.Dict(input=input, error=_format_error(error))
               for input, error in self.non_oop_failures
           ],
-          os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_JSON),
+          os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_JSON),  # pyrefly: ignore[no-matching-overload]
       )
       pg.save(
           self._html([self._render_result, self._render_non_oop_failures]),
-          os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_HTML),
+          os.path.join(self.dir, Evaluation.NON_OOP_FAILURES_HTML),  # pyrefly: ignore[no-matching-overload]
           file_format='txt',
       )
 
@@ -1544,7 +1590,7 @@ class Evaluation(Evaluable):
         '<td>Schema</td>'
         '<td>Additional Args</td>'
     )
-    if self.result.usage:
+    if self.result.usage:  # pyrefly: ignore[missing-attribute]
       s.write('<td>Usage</td>')
     s.write('<td>OOP Failures</td>')
     s.write('<td>Non-OOP Failures</td>')
@@ -1573,7 +1619,7 @@ class Evaluation(Evaluable):
         f'{_html_repr(self.additional_args, compact=False)}</td>'
     )
     # Usage.
-    if self.result.usage:
+    if self.result.usage:  # pyrefly: ignore[missing-attribute]
       s.write('<td>')
       self._render_summary_usage(s)
       s.write('</td>')
@@ -1627,14 +1673,15 @@ class Evaluation(Evaluable):
         '<table style="border:1px solid">'
         '<tr class="header"><td>Error type</td><td>Stats</td></tr>'
     )
-    error_regex = re.compile(error_regex)
-    if self.result.metrics.failure_breakdown:
-      for name, count in self.result.metrics.failure_breakdown.items():
-        if not error_regex.match(name):
+    error_regex = re.compile(error_regex)  # pyrefly: ignore[bad-assignment]
+    if self.result.metrics.failure_breakdown:  # pyrefly: ignore[missing-attribute]
+      for name, count in self.result.metrics.failure_breakdown.items():  # pyrefly: ignore[missing-attribute]
+        if not error_regex.match(name):  # pyrefly: ignore[missing-attribute]
           continue
 
         link = f'<a href="#{name}">{name}</a>'
-        error_rate = self._format_rate(count / self.result.metrics.total)
+        error_rate = self._format_rate(count / self.result.metrics.total)  # pyrefly: ignore[missing-attribute]
+        # pyrefly: ignore[missing-attribute]
         stats = (f'<span style="color:{error_color}">{error_rate} '
                  f'({count}/{self.result.metrics.total})</span>')
         s.write(f'<tr><td>{link}</td><td>{stats})</td></tr>')
@@ -1647,7 +1694,7 @@ class Evaluation(Evaluable):
     failures_by_error = collections.defaultdict(list)
     for example, error in self.failures:
       error_name = _error_key(error)
-      if error_regex.match(error_name):
+      if error_regex.match(error_name):  # pyrefly: ignore[missing-attribute]
         failures_by_error[error_name].append((example, error))
 
     for error_key, failures in failures_by_error.items():
@@ -1696,10 +1743,10 @@ def inputs_from(path: str | list[str], **kwargs) -> list[Any]:
       import pandas as pd  # pylint: disable=g-import-not-at-top
       dataset_df = pd.read_csv(path, **kwargs)
       dataset = []
-      for i in range(dataset_df.shape[0]):
+      for i in range(dataset_df.shape[0]):  # pyrefly: ignore[missing-attribute]
         row = {}
-        for col in dataset_df.columns:
-          row[col] = dataset_df.iloc[i][col]
+        for col in dataset_df.columns:  # pyrefly: ignore[missing-attribute]
+          row[col] = dataset_df.iloc[i][col]  # pyrefly: ignore[missing-attribute]
         dataset.append(row)
       return dataset
     else:
@@ -1860,7 +1907,7 @@ class Summary(pg.Object):
 
     @classmethod
     def from_evaluations(
-        cls, evaluations: list['Summary.Entry'], pivot_field: str = 'lm'
+        cls, evaluations: list['Summary.Entry'], pivot_field: str = 'lm'  # pyrefly: ignore[missing-attribute]
     ) -> 'Summary.Table':
       """Creates a table from a list of evaluations."""
 
@@ -1966,6 +2013,15 @@ class Summary(pg.Object):
                 dir=entry.dir,
                 metrics=entry.result.metrics if entry.result else None,
                 usage=entry.result.usage if entry.result else None,
+                start_time=(
+                    entry.result.get('start_time') if entry.result else None
+                ),
+                end_time=(
+                    entry.result.get('end_time') if entry.result else None
+                ),
+                wall_clock_s=(
+                    entry.result.get('wall_clock_s') if entry.result else None
+                ),
             )
         )
       task_results[task.__name__] = results
@@ -1992,7 +2048,7 @@ class Summary(pg.Object):
             for x in lf.concurrent_execute(
                 Evaluable.from_dir,
                 [
-                    os.path.join(root_dir, i)
+                    os.path.join(root_dir, i)  # pyrefly: ignore[no-matching-overload]
                     for i in _iter_dirs(root_dir, filter)
                 ],
             )
@@ -2124,7 +2180,7 @@ def _error_key(error: Exception) -> str:
   error_names = []
   while error is not None:
     error_names.append(error.__class__.__name__)
-    error = getattr(error, 'cause', None)
+    error = getattr(error, 'cause', None)  # pyrefly: ignore[bad-assignment]
   return '.'.join(error_names)
 
 
@@ -2329,7 +2385,7 @@ def get(
 
   suite = Suite(matches, root_dir=root_dir)
   if patches:
-    suite = pg.patch(suite, patches)
+    suite = pg.patch(suite, patches)  # pyrefly: ignore[bad-argument-type]
 
   if isinstance(filter, str):
     regex = re.compile(filter)

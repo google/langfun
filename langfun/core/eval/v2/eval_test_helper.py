@@ -58,7 +58,7 @@ class TestLLM(llms.Fake):
     )
 
   @property
-  def resource_id(self) -> str:
+  def resource_id(self) -> str:  # pyrefly: ignore[bad-override]
     return f'test_llm:{self.offset}'
 
 
@@ -197,7 +197,7 @@ class TestPlugin(experiment_lib.Plugin):
   ) -> None:
     del runner
     with pg.notify_on_change(False), self._lock:
-      self.started_experiments.append(pg.Ref(experiment))
+      self.started_experiments.append(pg.Ref(experiment))  # pyrefly: ignore[bad-argument-type]
 
   def on_experiment_skipped(
       self,
@@ -206,7 +206,7 @@ class TestPlugin(experiment_lib.Plugin):
   ) -> None:
     del runner
     with pg.notify_on_change(False), self._lock:
-      self.skipped_experiments.append(pg.Ref(experiment))
+      self.skipped_experiments.append(pg.Ref(experiment))  # pyrefly: ignore[bad-argument-type]
 
   def on_experiment_complete(
       self,
@@ -215,7 +215,7 @@ class TestPlugin(experiment_lib.Plugin):
   ) -> None:
     del runner
     with pg.notify_on_change(False), self._lock:
-      self.completed_experiments.append(pg.Ref(experiment))
+      self.completed_experiments.append(pg.Ref(experiment))  # pyrefly: ignore[bad-argument-type]
 
   def on_example_start(
       self,

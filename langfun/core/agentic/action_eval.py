@@ -80,7 +80,7 @@ class ActionEvalV1(lf_eval.Matching):
   """
   # We override the schema and prompt to dummy values since they are not used.
   schema_fn = _dummy_schema()
-  prompt = '<unused>'
+  prompt = '<unused>'  # pyrefly: ignore[bad-assignment]
 
   def process(self, example: pg.Dict, **kwargs):
     action = example.action
@@ -130,7 +130,7 @@ class ActionEvalV1(lf_eval.Matching):
         example_idx for example_idx, *_ in self.mismatches
     ])
     for example_idx in mismatched_ids:
-      url = os.path.join(self.dir, f'example_{example_idx}.html')
+      url = os.path.join(self.dir, f'example_{example_idx}.html')  # pyrefly: ignore[no-matching-overload]
       if first_url is None:
         first_url = url
       s.write(
@@ -152,7 +152,7 @@ class ActionEvalV1(lf_eval.Matching):
         example_idx for example_idx, *_ in self.matches
     ])
     for example_idx in matched_ids:
-      url = os.path.join(self.dir, f'example_{example_idx}.html')
+      url = os.path.join(self.dir, f'example_{example_idx}.html')  # pyrefly: ignore[no-matching-overload]
       if first_url is None:
         first_url = url
       s.write(

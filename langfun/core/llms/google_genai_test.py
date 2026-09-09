@@ -35,6 +35,20 @@ class GenAITest(unittest.TestCase):
     self.assertEqual(lm.resource_id, 'google_genai://gemini-1.5-pro-001')
     del os.environ['GOOGLE_API_KEY']
 
+  def test_gemini_37_flash(self):
+    os.environ['GOOGLE_API_KEY'] = 'abc'
+    lm = google_genai.Gemini37Flash()
+    self.assertEqual(lm.model_id, 'gemini-3.7-flash')
+    self.assertEqual(lm.resource_id, 'google_genai://gemini-3.7-flash')
+    del os.environ['GOOGLE_API_KEY']
+
+  def test_gemini_38_flash(self):
+    os.environ['GOOGLE_API_KEY'] = 'abc'
+    lm = google_genai.Gemini38Flash()
+    self.assertEqual(lm.model_id, 'gemini-3.8-flash')
+    self.assertEqual(lm.resource_id, 'google_genai://gemini-3.8-flash')
+    del os.environ['GOOGLE_API_KEY']
+
   def test_gemini_31_flash_lite_preview(self):
     os.environ['GOOGLE_API_KEY'] = 'abc'
     lm = google_genai.Gemini31FlashLitePreview()
@@ -42,6 +56,13 @@ class GenAITest(unittest.TestCase):
     self.assertEqual(
         lm.resource_id, 'google_genai://gemini-3.1-flash-lite-preview'
     )
+    del os.environ['GOOGLE_API_KEY']
+
+  def test_gemini_31_flash_lite(self):
+    os.environ['GOOGLE_API_KEY'] = 'abc'
+    lm = google_genai.Gemini31FlashLite()
+    self.assertEqual(lm.model_id, 'gemini-3.1-flash-lite')
+    self.assertEqual(lm.resource_id, 'google_genai://gemini-3.1-flash-lite')
     del os.environ['GOOGLE_API_KEY']
 
   def test_lm_get(self):

@@ -36,7 +36,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
     return self._metric_collection.get_counter(
         name=name,
         description=description,
-        parameters=parameters,
+        parameters=parameters,  # pyrefly: ignore[bad-argument-type]
     )
 
   def _get_scalar(
@@ -46,7 +46,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
       parameters: dict[str, type[str]] | None = None,
   ) -> pg.monitoring.Metric:
     return self._metric_collection.get_scalar(
-        name=name, description=description, parameters=parameters
+        name=name, description=description, parameters=parameters  # pyrefly: ignore[bad-argument-type]
     )
 
   def _get_distribution(
@@ -56,7 +56,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
       parameters: dict[str, type[str]] | None = None,
   ) -> pg.monitoring.Metric:
     return self._metric_collection.get_distribution(
-        name=name, description=description, parameters=parameters
+        name=name, description=description, parameters=parameters  # pyrefly: ignore[bad-argument-type]
     )
 
   def _error_tag(self, error: BaseException | None) -> str:
@@ -478,7 +478,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
       **kwargs
   ) -> None:
     """Called when the environment is housekeeping."""
-    self._environment_housekeep_duration_ms.record(
+    self._environment_housekeep_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
         environment_id=str(environment.id),
@@ -502,7 +502,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
         sandbox_service_name=sandbox_service.id.name,
         error=self._error_tag(error),
     )
-    self._sandbox_service_start_duration_ms.record(
+    self._sandbox_service_start_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
         environment_id=env_id,
@@ -510,7 +510,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
         error=self._error_tag(error),
     )
     if error is None:
-      self._sandbox_service_count.increment(
+      self._sandbox_service_count.increment(  # pyrefly: ignore[missing-attribute]
           app=self.app,
           environment_id=env_id,
           sandbox_service_name=sandbox_service.id.name,
@@ -535,21 +535,21 @@ class MetricWriter(pg.Object, interface.EventHandler):
         sandbox_service_name=sandbox_service.id.name,
         error=self._error_tag(error),
     )
-    self._sandbox_service_shutdown_duration_ms.record(
+    self._sandbox_service_shutdown_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
         environment_id=env_id,
         sandbox_service_name=sandbox_service.id.name,
         error=self._error_tag(error),
     )
-    self._sandbox_service_lifetime_ms.record(
+    self._sandbox_service_lifetime_ms.record(  # pyrefly: ignore[missing-attribute]
         int(lifetime * 1000),
         app=self.app,
         environment_id=env_id,
         sandbox_service_name=sandbox_service.id.name,
         error=self._error_tag(error),
     )
-    self._sandbox_service_count.increment(
+    self._sandbox_service_count.increment(  # pyrefly: ignore[missing-attribute]
         delta=-1,
         app=self.app,
         environment_id=env_id,
@@ -576,7 +576,7 @@ class MetricWriter(pg.Object, interface.EventHandler):
         sandbox_service_name=sandbox_service.id.name,
         error=self._error_tag(error),
     )
-    self._sandbox_service_housekeep_duration_ms.record(
+    self._sandbox_service_housekeep_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
         environment_id=env_id,
@@ -592,14 +592,14 @@ class MetricWriter(pg.Object, interface.EventHandler):
   ) -> None:
     self._sandbox_start.increment(
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
-    self._sandbox_start_duration_ms.record(
+    self._sandbox_start_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
@@ -611,25 +611,25 @@ class MetricWriter(pg.Object, interface.EventHandler):
       new_status: interface.Sandbox.Status,
       span: float,
   ) -> None:
-    self._sandbox_status_duration_ms.record(
+    self._sandbox_status_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(span * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         status=old_status.value,
     )
     if old_status != interface.Sandbox.Status.CREATED:
-      self._sandbox_count.increment(
+      self._sandbox_count.increment(  # pyrefly: ignore[missing-attribute]
           delta=-1,
           app=self.app,
-          environment_id=str(sandbox.environment.id),
+          environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
           image_id=sandbox.image_id,
           status=old_status.value,
       )
     if new_status != interface.Sandbox.Status.OFFLINE:
-      self._sandbox_count.increment(
+      self._sandbox_count.increment(  # pyrefly: ignore[missing-attribute]
           app=self.app,
-          environment_id=str(sandbox.environment.id),
+          environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
           image_id=sandbox.image_id,
           status=new_status.value,
       )
@@ -643,21 +643,21 @@ class MetricWriter(pg.Object, interface.EventHandler):
   ) -> None:
     self._sandbox_shutdown.increment(
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
-    self._sandbox_shutdown_duration_ms.record(
+    self._sandbox_shutdown_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
-    self._sandbox_lifetime_ms.record(
+    self._sandbox_lifetime_ms.record(  # pyrefly: ignore[missing-attribute]
         int(lifetime * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
@@ -670,10 +670,10 @@ class MetricWriter(pg.Object, interface.EventHandler):
       error: BaseException | None,
   ) -> None:
     """Called when a sandbox session starts."""
-    self._sandbox_session_start_duration_ms.record(
+    self._sandbox_session_start_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
@@ -687,17 +687,17 @@ class MetricWriter(pg.Object, interface.EventHandler):
       error: BaseException | None,
   ) -> None:
     """Called when a sandbox session ends."""
-    self._sandbox_session_end_duration_ms.record(
+    self._sandbox_session_end_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
-    self._sandbox_session_lifetime_ms.record(
+    self._sandbox_session_lifetime_ms.record(  # pyrefly: ignore[missing-attribute]
         int(lifetime * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
@@ -714,15 +714,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     """Called when a sandbox activity is performed."""
     self._sandbox_activity.increment(
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         activity=name,
         error=self._error_tag(error),
     )
-    self._sandbox_activity_duration_ms.record(
+    self._sandbox_activity_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         activity=name,
         error=self._error_tag(error),
@@ -739,14 +739,14 @@ class MetricWriter(pg.Object, interface.EventHandler):
     """Called when a sandbox feature is housekeeping."""
     self._sandbox_housekeep.increment(
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
-    self._sandbox_housekeep_duration_ms.record(
+    self._sandbox_housekeep_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(sandbox.environment.id),
+        environment_id=str(sandbox.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=sandbox.image_id,
         error=self._error_tag(error),
     )
@@ -761,15 +761,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_setup.increment(
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
     )
-    self._feature_setup_duration_ms.record(
+    self._feature_setup_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
@@ -785,15 +785,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_teardown.increment(
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
     )
-    self._feature_teardown_duration_ms.record(
+    self._feature_teardown_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
@@ -810,15 +810,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_setup_session.increment(
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
     )
-    self._feature_setup_session_duration_ms.record(
+    self._feature_setup_session_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
@@ -835,15 +835,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_teardown_session.increment(
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
     )
-    self._feature_teardown_session_duration_ms.record(
+    self._feature_teardown_session_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
@@ -862,15 +862,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_activity.increment(
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         activity=name,
         error=self._error_tag(error),
     )
-    self._feature_activity_duration_ms.record(
+    self._feature_activity_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         activity=name,
         error=self._error_tag(error),
@@ -888,15 +888,15 @@ class MetricWriter(pg.Object, interface.EventHandler):
     image_id = feature.sandbox.image_id if feature.sandbox else ''
     self._feature_housekeep.increment(
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),
     )
-    self._feature_housekeep_duration_ms.record(
+    self._feature_housekeep_duration_ms.record(  # pyrefly: ignore[missing-attribute]
         int(duration * 1000),
         app=self.app,
-        environment_id=str(feature.environment.id),
+        environment_id=str(feature.environment.id),  # pyrefly: ignore[missing-attribute]
         image_id=image_id,
         feature_name=feature.name,
         error=self._error_tag(error),

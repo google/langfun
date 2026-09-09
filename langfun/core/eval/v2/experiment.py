@@ -304,8 +304,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     """Returns all the experiment nodes in the subtree (including self)."""
     nodes = [self]
     for child in self.children:
-      nodes.extend(child.nodes)
-    return nodes
+      nodes.extend(child.nodes)  # pyrefly: ignore[bad-argument-type]
+    return nodes  # pyrefly: ignore[bad-return]
 
   @functools.cached_property
   def leaf_nodes(self) -> list['Experiment']:
@@ -329,8 +329,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
       return []
     nodes = [self]
     for child in self.children:
-      nodes.extend(child.nonleaf_nodes)
-    return nodes
+      nodes.extend(child.nonleaf_nodes)  # pyrefly: ignore[bad-argument-type]
+    return nodes  # pyrefly: ignore[bad-return]
 
   @functools.cached_property
   def parent(self) -> Optional['Experiment']:
@@ -471,7 +471,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
     """
     if plugins is not None:
       kwargs['plugins'] = plugins
-    runner = Runner.create(
+    runner = Runner.create(  # pyrefly: ignore[bad-assignment]
         runner,
         current_run=Run(
             root_dir=root_dir,
@@ -493,8 +493,8 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         ),
         **kwargs
     )
-    runner.run()
-    return runner.current_run
+    runner.run()  # pyrefly: ignore[missing-attribute]
+    return runner.current_run  # pyrefly: ignore[missing-attribute]
 
   def run_preconfigured(
       self,
@@ -612,7 +612,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
         **kwargs
     )
 
-  def _html_tree_view_content(
+  def _html_tree_view_content(  # pyrefly: ignore[bad-override]
       self,
       *,
       view,
@@ -779,13 +779,13 @@ class RunId(pg.Object):
             '`root_dir` must be provided for `latest` or `new` run ID.'
         )
       if run_id == 'latest':
-        run_id = cls.get_latest(root_dir)
+        run_id = cls.get_latest(root_dir)  # pyrefly: ignore[bad-assignment]
         if run_id is None:
           raise ValueError(
               f'There are no previous runs under the root directory: '
               f'{root_dir}. Consider running the experiment using `new` as id.'
           )
-        return run_id
+        return run_id  # pyrefly: ignore[bad-return]
       if run_id == 'new':
         return cls.new(root_dir)
       return cls.get_latest(root_dir) or cls.new()

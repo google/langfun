@@ -61,7 +61,7 @@ def _parse_value_spec(value) -> pg.typing.ValueSpec:
       spec = pg.typing.ValueSpec.from_annotation(v, auto_typing=True)
       if isinstance(
           spec,
-          (
+          (  # pyrefly: ignore[invalid-argument]
               pg.typing.Any,
               pg.typing.Callable,
               pg.typing.Tuple,
@@ -397,13 +397,13 @@ def class_dependencies(
         _fill_dependencies(v, include_subclasses)
 
   for value_spec in value_specs:
-    _fill_dependencies(value_spec, include_subclasses)
+    _fill_dependencies(value_spec, include_subclasses)  # pyrefly: ignore[bad-argument-type]
   return dependencies
 
 
 def schema_spec(noneable: bool = False) -> pg.typing.ValueSpec:  # pylint: disable=unused-argument
   if typing.TYPE_CHECKING:
-    return Any
+    return Any  # pyrefly: ignore[bad-return]
   return pg.typing.Object(
       Schema, transform=Schema.from_value, is_noneable=noneable
   )  # pylint: disable=unreachable-code
@@ -419,7 +419,7 @@ def annotation(
   child_annotation_kwargs = dict(
       strict=strict, allowed_dependencies=allowed_dependencies
   )
-  if isinstance(vs, pg.typing.Any):
+  if isinstance(vs, pg.typing.Any):  # pyrefly: ignore[invalid-argument]
     return 'Any'
   elif isinstance(vs, pg.typing.Enum):
     candidate_str = ', '.join([repr(v) for v in vs.values])
