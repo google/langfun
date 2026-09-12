@@ -13,8 +13,13 @@
 # limitations under the License.
 """Template test."""
 import inspect
+import os
+import pathlib
+import tempfile
 from typing import Any
 import unittest
+
+import jinja2
 
 from langfun.core import component
 from langfun.core import message as message_lib
@@ -709,6 +714,31 @@ class TemplateRenderEventTest(unittest.TestCase):
     l.render(name='ballon')
     self.assertEqual(render_events, ['The science of ballon'])
     self.assertEqual(render_stacks, [[l]])
+
+
+class SecurityTest(unittest.TestCase):
+  """Regression tests for jinja2.Template being unsandboxed (SSTI/RCE)."""
+
+  def test_ssti_payload_cannot_reach_builtins(self):
+    canary = pathlib.Path(tempfile.gettempdir()) / f'lf_ssti_test_{os.getpid()}'
+    if canary.exists():
+      canary.unlink()
+    canary_path = str(canary).replace('\\', '/')
+    payload = (
+        "{{ cycler.__init__.__globals__['__builtins__']"
+        f"['open']('{canary_path}', 'w').write('hit') }}}}"
+    )
+    try:
+      with self.assertRaises(jinja2.exceptions.SecurityError):
+        Template(payload).render()
+      self.assertFalse(
+          canary.exists(),
+          'Template render() executed the payload and wrote a file -- '
+          'the sandboxed environment failed to block it.',
+      )
+    finally:
+      if canary.exists():
+        canary.unlink()
 
 
 class HtmlTest(unittest.TestCase):
