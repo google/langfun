@@ -61,10 +61,10 @@ class BoundingBoxTest(unittest.TestCase):
 
     # Test the `to_gui_bbox` method
     gui_bbox = bbox.to_gui_bbox()
-    self.assertEqual(gui_bbox.x, 10)
-    self.assertEqual(gui_bbox.y, 20)
-    self.assertEqual(gui_bbox.right, 50)
-    self.assertEqual(gui_bbox.bottom, 80)
+    self.assertEqual(gui_bbox.x, 10)  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(gui_bbox.y, 20)  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(gui_bbox.right, 50)  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(gui_bbox.bottom, 80)  # pyrefly: ignore[missing-attribute]
 
   def test_simple_json(self):
     json_text = '{"search button": [10, 20, 100, 200]}'
@@ -72,7 +72,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(800, 600)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_multiple_objects(self):
     json_text = (
@@ -82,7 +82,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(800, 600)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_nested_json(self):
     json_text = (
@@ -93,7 +93,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(800, 600)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_json_in_code_block(self):
     json_text = '```\n{"search button": [10, 20, 100, 200]}\n```'
@@ -101,7 +101,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(800, 600)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_extract_json_candidate_from_text(self):
     test_cases = [
@@ -174,7 +174,7 @@ class BoundingBoxTest(unittest.TestCase):
     json_text = '```json\n[\n  {"box_2d": [61, 22, 160, 95]}\n]\n```'
     expected = {'box_2d': (22, 61, 95, 160)}
     result = bounding_box_parser.parse_and_convert_json(json_text)
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_dict_with_label(self):
     json_text = """```json
@@ -186,7 +186,7 @@ class BoundingBoxTest(unittest.TestCase):
     expected = {'box_2d': (328, 820, 352, 872)}
     result = bounding_box_parser.parse_and_convert_json(json_text)
     print('result: ', result)
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_invalid_json(self):
     json_text = 'This is not a valid JSON'
@@ -218,13 +218,13 @@ class BoundingBoxTest(unittest.TestCase):
     json_text = '[10, 20, 100, 200]'
     expected = {'element': (20, 10, 200, 100)}
     result = bounding_box_parser.parse_and_convert_json(json_text)
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_default_screen_size(self):
     json_text = '{"button": [10, 20, 100, 200]}'
     expected = {'button': (20, 10, 200, 100)}
     result = bounding_box_parser.parse_and_convert_json(json_text)
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_float_numbers(self):
     json_text = '{"button": [10.5, 20.2, 100.7, 200.9]}'
@@ -232,7 +232,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(1000, 1000)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_type_error_handling(self):
     json_text = '{"button": ["text", 20, 100, 200]}'
@@ -269,7 +269,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(1000, 1000)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_none_values(self):
     json_text = '{"button": [null, 20, 100, 200]}'
@@ -290,7 +290,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(1000, 1000)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_different_string_formats(self):
     # Newlines
@@ -299,7 +299,7 @@ class BoundingBoxTest(unittest.TestCase):
     result = bounding_box_parser.parse_and_convert_json(
         json_text, screen_size=(800, 600)
     )
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
   def test_deeply_nested_json(self):
     json_text = (
@@ -307,7 +307,7 @@ class BoundingBoxTest(unittest.TestCase):
     )
     expected = {'button': (20, 10, 200, 100)}
     result = bounding_box_parser.parse_and_convert_json(json_text)
-    self.assert_bbox_equal(expected, result)
+    self.assert_bbox_equal(expected, result)  # pyrefly: ignore[bad-argument-type]
 
 if __name__ == '__main__':
   unittest.main()

@@ -33,7 +33,7 @@ class GroqModelInfo(lf.ModelInfo):
       error_codes='https://console.groq.com/docs/errors',
   )
 
-  provider: Final[str] = 'Groq'  # pylint: disable=invalid-name
+  provider: Final[str] = 'Groq'  # pylint: disable=invalid-name  # pyrefly: ignore[bad-override]
 
 
 SUPPORTED_MODELS = [

@@ -383,7 +383,7 @@ class BulkCheckpointer(Checkpointer):
     """Closes the checkpoint file."""
     if not experiment.is_leaf:
       return
-    assert experiment.id in self._sequence_writer
+    assert experiment.id in self._sequence_writer  # pyrefly: ignore[not-iterable]
     with self._lock:
       if self._sequence_writer is not None:
         # Make sure the writer is closed without delay so the file will be
@@ -402,9 +402,9 @@ class BulkCheckpointer(Checkpointer):
       example: Example,
   ) -> None:
     """Saves the example to the checkpoint file."""
-    assert experiment.id in self._sequence_writer
+    assert experiment.id in self._sequence_writer  # pyrefly: ignore[not-iterable]
     def _save_example(example: Example):
-      writer = self._sequence_writer[experiment.id]
+      writer = self._sequence_writer[experiment.id]  # pyrefly: ignore[unsupported-operation]
       try:
         writer.add(example)
         experiment.info(
@@ -463,7 +463,7 @@ class SequenceWriter:
       if self._sequence_writer is None:
         return
       self._sequence_writer.close()
-      self._sequence_writer = None
+      self._sequence_writer = None  # pyrefly: ignore[bad-assignment]
       pg.io.rename(self._tmp_path, self._path)
 
   def __enter__(self):

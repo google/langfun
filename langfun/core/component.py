@@ -77,7 +77,7 @@ class Component(pg.ContextualObject):
         continue
       attr_value = getattr(cls, attr_name)
       if isinstance(attr_value, pg.Inferentiable):
-        value_spec = pg.typing.Any()
+        value_spec = pg.typing.Any()  # pyrefly: ignore[bad-instantiation]
       elif isinstance(attr_value, Component):
         value_spec = pg.typing.Object(Component)
       else:

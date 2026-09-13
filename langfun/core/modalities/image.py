@@ -113,7 +113,7 @@ class Image(mime.Mime):
         img.save(buf, format=pil_format)
       finally:
         os.chdir(cwd)
-    return self.from_bytes(buf.getvalue())
+    return self.from_bytes(buf.getvalue())  # pyrefly: ignore[bad-return]
 
   @classmethod
   def from_pil_image(cls, img: PILImage) -> 'Image':  # pytype: disable=invalid-annotation
@@ -127,4 +127,4 @@ class Image(mime.Mime):
         img.save(buf, format='PNG')
       finally:
         os.chdir(cwd)
-    return cls.from_bytes(buf.getvalue())
+    return cls.from_bytes(buf.getvalue())  # pyrefly: ignore[bad-return]
