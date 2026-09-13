@@ -95,13 +95,14 @@ class LfQuery(mapping.Mapping):
       if version_dict is None:
         version_dict = {}
         cls._OOP_PROMPT_MAP[protocol] = version_dict
-      dest_cls = version_dict.get(cls.version)
+      dest_cls = version_dict.get(cls.version)  # pyrefly: ignore[missing-attribute]
       if dest_cls is not None and dest_cls.__type_name__ != cls.__type_name__:
         raise ValueError(
+            # pyrefly: ignore[missing-attribute]
             f'Version {cls.version} is already registered for {dest_cls!r} '
             f'under protocol {protocol!r}. Please use a different version.'
         )
-      version_dict[cls.version] = cls
+      version_dict[cls.version] = cls  # pyrefly: ignore[missing-attribute]
 
   @classmethod
   def from_protocol(cls, protocol: str) -> Type['LfQuery']:
@@ -143,6 +144,7 @@ class LfQuery(mapping.Mapping):
 class _LfQueryJsonV1(LfQuery):
   """Query a structured value using JSON as the protocol."""
 
+  # pyrefly: ignore[bad-assignment]
   preamble = """
       Please respond to the last {{ input_title }} with {{ output_title}} according to {{ schema_title }}:
 
@@ -169,6 +171,7 @@ class _LfQueryJsonV1(LfQuery):
 class _LfQueryPythonV1(LfQuery):
   """Query a structured value using Python as the protocol."""
 
+  # pyrefly: ignore[bad-assignment]
   preamble = """
       Please respond to the last {{ input_title }} with {{ output_title }} according to {{ schema_title }}.
 
@@ -222,6 +225,7 @@ class _LfQueryPythonV1(LfQuery):
 class _LfQueryPythonV2(LfQuery):
   """Query a structured value using Python as the protocol."""
 
+  # pyrefly: ignore[bad-assignment]
   preamble = """
       Please respond to the last {{ input_title }} with {{ output_title }} only according to {{ schema_title }}.
 
@@ -563,7 +567,7 @@ def query(
     # Query with structured output.
     query_cls = LfQuery.from_protocol(protocol)
     if ':' not in protocol:
-      protocol = f'{protocol}:{query_cls.version}'
+      protocol = f'{protocol}:{query_cls.version}'  # pyrefly: ignore[missing-attribute]
 
   # `skip_lm`` is True when `lf.query_prompt` is called.
   # and `prompt` is `pg.MISSING_VALUE` when `lf.query_output` is called.
@@ -625,7 +629,7 @@ def query(
     try:
       if query_cls is None:
         # Query with natural language output.
-        output_message = lf.LangFunc.from_value(query_input, **kwargs)(
+        output_message = lf.LangFunc.from_value(query_input, **kwargs)(  # pyrefly: ignore[not-callable]
             lm=lm, cache_seed=cache_seed, skip_lm=skip_lm
         )
         if response_postprocess:
@@ -758,7 +762,7 @@ def query_and_reduce(
   Returns:
     The reduced output from multiple `lf.query` calls.
   """
-  results = query(prompt, schema, lm=lm, num_samples=num_samples, **kwargs)
+  results = query(prompt, schema, lm=lm, num_samples=num_samples, **kwargs)  # pyrefly: ignore[bad-argument-type]
   if isinstance(results, list):
     results = reduce(results)
   return results
@@ -893,7 +897,7 @@ def query_reward(
       query_output(response, output_cls),
       mapping_example.input,
       mapping_example.output,
-      mapping_example.metadata,
+      mapping_example.metadata,  # pyrefly: ignore[bad-argument-type]
   )
 
 
@@ -1077,12 +1081,12 @@ class QueryInvocation(pg.Object, pg.views.HtmlTreeView.Extension):
       if self.schema is not None:
         try:
           output = query_output(
-              lm_response, self.schema,
+              lm_response, self.schema,  # pyrefly: ignore[bad-argument-type]
               default=self.default, protocol=self.protocol
           )
         except mapping.MappingError as e:
           output = None
-          error = pg.ErrorInfo.from_exception(e)
+          error = pg.ErrorInfo.from_exception(e)  # pyrefly: ignore[bad-assignment]
         self._output = output
       else:
         assert lm_response is not None

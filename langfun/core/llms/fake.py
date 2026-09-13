@@ -123,7 +123,7 @@ class StaticMapping(Fake):
   ]
 
   def _response_from(self, prompt: lf.Message) -> lf.Message:
-    return lf.AIMessage.from_value(self.mapping[prompt])
+    return lf.AIMessage.from_value(self.mapping[prompt])  # pyrefly: ignore[bad-index]
 
 
 @lf.use_init_args(['sequence'])

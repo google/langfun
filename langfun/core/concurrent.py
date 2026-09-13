@@ -81,14 +81,14 @@ class RetryError(RuntimeError):
         f'Last error: {self.errors[-1]}'
     )
 
-  def __eq__(self, other: 'RetryError') -> bool:
+  def __eq__(self, other: 'RetryError') -> bool:  # pyrefly: ignore[bad-override]
     if not isinstance(other, RetryError):
       return False
     return (self.func is other.func
             and self.errors == other.errors
             and self.wait_intervals == other.wait_intervals)
 
-  def __ne__(self, other: 'RetryError') -> bool:
+  def __ne__(self, other: 'RetryError') -> bool:  # pyrefly: ignore[bad-override]
     return not self.__eq__(other)
 
   def __hash__(self) -> int:
@@ -151,7 +151,7 @@ def with_retry(
         func,
         args,
         kwargs,
-        retry_on_errors=retry_on_errors,
+        retry_on_errors=retry_on_errors,  # pyrefly: ignore[bad-argument-type]
         max_attempts=max_attempts,
         retry_interval=retry_interval,
         exponential_backoff=exponential_backoff,
@@ -249,7 +249,7 @@ def concurrent_execute(
         Job(
             func,
             (inputs,),
-            retry_on_errors=retry_on_errors,
+            retry_on_errors=retry_on_errors,  # pyrefly: ignore[bad-argument-type]
             max_attempts=max_attempts,
             retry_interval=retry_interval,
             exponential_backoff=exponential_backoff,
@@ -380,7 +380,7 @@ class Job:
     retry_entries = []
     wait_interval = 0
     while True:
-      with pg.catch_errors(self.retry_on_errors) as error_context:
+      with pg.catch_errors(self.retry_on_errors) as error_context:  # pyrefly: ignore[bad-argument-type]
         begin_time = time.time()
         self.result = self.func(*self.args, **self.kwargs)
 
@@ -799,7 +799,7 @@ def concurrent_map(
     job = Job(
         func,
         (inputs,),
-        retry_on_errors=retry_on_errors,
+        retry_on_errors=retry_on_errors,  # pyrefly: ignore[bad-argument-type]
         max_attempts=max_attempts,
         retry_interval=retry_interval,
         exponential_backoff=exponential_backoff,
@@ -830,7 +830,7 @@ def concurrent_map(
 
       if progress.timeit_summary:
         status['TimeIt'] = progress.timeit_summary_str()
-      ProgressBar.update(bar_id, delta=1, status=status)
+      ProgressBar.update(bar_id, delta=1, status=status)  # pyrefly: ignore[bad-argument-type]
 
   deadline = time.time() + max_duration if max_duration else None
 
@@ -943,7 +943,7 @@ def concurrent_map(
         ProgressBar.refresh()
   finally:
     if show_progress and not external_bar:
-      ProgressBar.uninstall(bar_id)
+      ProgressBar.uninstall(bar_id)  # pyrefly: ignore[bad-argument-type]
 
     if shutdown_after_finish:
       executor.shutdown(

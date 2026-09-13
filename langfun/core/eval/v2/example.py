@@ -100,7 +100,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
     )
 
   @classmethod
-  def from_json(
+  def from_json(  # pyrefly: ignore[bad-override]
       cls,
       json_value: dict[str, Any],
       *,
@@ -111,7 +111,7 @@ class Example(pg.JSONConvertible, pg.views.HtmlTreeView.Extension):
     """Creates an example from the JSON representation."""
     example_id = json_value.get('id')
     if example_input_by_id:
-      example_input = example_input_by_id(example_id)
+      example_input = example_input_by_id(example_id)  # pyrefly: ignore[bad-argument-type]
     else:
       example_input = json_value.pop('input', pg.MISSING_VALUE)
       if example_input is not pg.MISSING_VALUE:

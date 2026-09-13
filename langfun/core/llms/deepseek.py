@@ -33,7 +33,7 @@ class DeepSeekModelInfo(lf.ModelInfo):
       error_codes='https://api-docs.deepseek.com/quick_start/error_codes',
   )
 
-  provider: Final[str] = 'DeepSeek'  # pylint: disable=invalid-name
+  provider: Final[str] = 'DeepSeek'  # pylint: disable=invalid-name  # pyrefly: ignore[bad-override]
 
   api_model_name: Annotated[
       str,
@@ -169,7 +169,7 @@ class DeepSeek(openai_compatible.OpenAIChatCompletionAPI):
     return args
 
   @classmethod
-  def dir(cls):
+  def dir(cls):  # pyrefly: ignore[bad-override]
     return [m.model_id for m in SUPPORTED_MODELS if m.in_service]
 
 

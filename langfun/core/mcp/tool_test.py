@@ -95,8 +95,8 @@ class McpToolTest(unittest.TestCase):
     s = tool_cls.__schema__
     self.assertEqual(list(s.fields.keys()), ['a', 'b'])
     self.assertEqual(repr(tool_cls), "<tool-class 'MyTool'>")
-    self.assertEqual(s.fields['a'].description, 'Integer a.')
-    self.assertEqual(s.fields['b'].description, 'String b.')
+    self.assertEqual(s.fields['a'].description, 'Integer a.')  # pyrefly: ignore[bad-index]
+    self.assertEqual(s.fields['b'].description, 'String b.')  # pyrefly: ignore[bad-index]
 
     self.assertEqual(
         tool_cls.python_definition(markdown=True),

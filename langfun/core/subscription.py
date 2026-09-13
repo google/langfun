@@ -97,7 +97,7 @@ class _EventManager:
 
     for subscriber in subscriber_list:
       for sender in senders:
-        func(subscriber, sender)
+        func(subscriber, sender)  # pyrefly: ignore[bad-argument-type]
 
   def _sender_info(
       self, sender: Union[Any, Type[Any], None]
@@ -190,7 +190,7 @@ class _EventManager:
   ) -> None:
     """Subscribes one or a list subscribers to one or a list of senders."""
     return self._map_sender_subscriber(
-        self._subscribe,
+        self._subscribe,  # pyrefly: ignore[bad-argument-type]
         sender_or_senders=sender,
         subscriber_or_subscribers=subscriber,
     )
@@ -204,7 +204,7 @@ class _EventManager:
   ) -> None:
     """Unsubscribes one or a list subscribers from one or a list of senders."""
     return self._map_sender_subscriber(
-        self._unsubscribe,
+        self._unsubscribe,  # pyrefly: ignore[bad-argument-type]
         sender_or_senders=sender,
         subscriber_or_subscribers=subscriber,
     )
@@ -230,7 +230,7 @@ class _EventManager:
     # Yield type_level subscribers.
     for registered_type, subscriber_list in self._sender_type_registry.items():
       if isinstance(sender, registered_type) or (
-          sender is None and issubclass(sender_type, registered_type)
+          sender is None and issubclass(sender_type, registered_type)  # pyrefly: ignore[bad-argument-type]
       ):
         for subscriber in subscriber_list:
           if id(subscriber) not in visited:
