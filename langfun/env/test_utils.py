@@ -167,19 +167,19 @@ class TestingFeature(base_feature.BaseFeature):
       self._sandbox.shell(code, raise_error=raise_error)
 
   def _raise_error(self, message, error_type: Type[BaseException], **kwargs):
-    self._sandbox._raise_error(message, error_type, **kwargs)  # pylint: disable=protected-access
+    self._sandbox._raise_error(message, error_type, **kwargs)  # pylint: disable=protected-access  # pyrefly: ignore[missing-attribute]
 
   def _setup(self) -> None:
     if self.simulate_setup_error:
       self._raise_error(f'{self.name} setup error', self.simulate_setup_error)
-    self.sandbox.shell(f'"{self.name}" setup')
+    self.sandbox.shell(f'"{self.name}" setup')  # pyrefly: ignore[missing-attribute]
 
   def _teardown(self) -> None:
     if self.simulate_teardown_error:
       self._raise_error(
           f'{self.name} teardown error', self.simulate_teardown_error
       )
-    self.sandbox.shell(f'"{self.name}" teardown')
+    self.sandbox.shell(f'"{self.name}" teardown')  # pyrefly: ignore[missing-attribute]
 
   def _setup_session(self) -> None:
     if self.setup_session_delay > 0:
@@ -189,24 +189,24 @@ class TestingFeature(base_feature.BaseFeature):
       self._raise_error(
           'Feature session setup error', self.simulate_setup_session_error
       )
-    self.sandbox.shell(f'"{self.name}" setup session')
+    self.sandbox.shell(f'"{self.name}" setup session')  # pyrefly: ignore[missing-attribute]
 
   def _teardown_session(self) -> None:
     if self.simulate_teardown_session_error:
       self._raise_error(
           'Feature session teardown error', self.simulate_teardown_session_error
       )
-    self.sandbox.shell(f'"{self.name}" teardown session')
+    self.sandbox.shell(f'"{self.name}" teardown session')  # pyrefly: ignore[missing-attribute]
     if self.call_end_session_on_teardown_session:
-      self.sandbox.end_session()
+      self.sandbox.end_session()  # pyrefly: ignore[missing-attribute]
 
   @interface.log_activity()
   def num_shell_calls(self) -> int:
-    return len(self.sandbox._shell_history)  # pylint: disable=protected-access
+    return len(self.sandbox._shell_history)  # pylint: disable=protected-access  # pyrefly: ignore[missing-attribute]
 
   @interface.log_activity()
   def bad_shell_call(self) -> None:
-    self.sandbox.shell('bad command', raise_error=RuntimeError)
+    self.sandbox.shell('bad command', raise_error=RuntimeError)  # pyrefly: ignore[missing-attribute]
 
   @interface.log_activity()
   def show_session_id(self):
@@ -224,7 +224,7 @@ class TestingFeature(base_feature.BaseFeature):
   @contextlib.contextmanager
   def my_service(self) -> Iterator[Service]:
     try:
-      self._service = TestingFeature.Service(sandbox=self.sandbox)
+      self._service = TestingFeature.Service(sandbox=self.sandbox)  # pyrefly: ignore[bad-argument-type]
       yield self._service
     finally:
       self._service = None

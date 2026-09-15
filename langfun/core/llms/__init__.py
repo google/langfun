@@ -42,7 +42,10 @@ from langfun.core.llms.azure_openai import AzureOpenAI
 
 # Gemini models.
 from langfun.core.llms.google_genai import GenAI
+from langfun.core.llms.google_genai import Gemini38Flash
+from langfun.core.llms.google_genai import Gemini37Flash
 from langfun.core.llms.google_genai import Gemini31ProPreview
+from langfun.core.llms.google_genai import Gemini31FlashLite
 from langfun.core.llms.google_genai import Gemini3ProPreview
 from langfun.core.llms.google_genai import Gemini3FlashPreview
 from langfun.core.llms.google_genai import Gemini25Pro
@@ -95,9 +98,13 @@ from langfun.core.llms.vertexai import VertexAIGemini25Pro
 from langfun.core.llms.vertexai import VertexAIGemini25Flash
 from langfun.core.llms.vertexai import VertexAIGemini25FlashImagePreview
 from langfun.core.llms.vertexai import VertexAIGemini31ProPreview
+from langfun.core.llms.vertexai import VertexAIGemini31FlashLite
 from langfun.core.llms.vertexai import VertexAIGemini3ProPreview
 from langfun.core.llms.vertexai import VertexAIGemini3ProImagePreview
 from langfun.core.llms.vertexai import VertexAIGemini3FlashPreview
+from langfun.core.llms.vertexai import VertexAIGemini35Flash
+from langfun.core.llms.vertexai import VertexAIGemini37Flash
+from langfun.core.llms.vertexai import VertexAIGemini38Flash
 
 # Veo video generation models.
 from langfun.core.llms.veo import Veo
@@ -168,6 +175,8 @@ from langfun.core.llms.openai import Gpt35
 
 # Anthropic models.
 
+from langfun.core.llms.anthropic import Claude5Opus
+from langfun.core.llms.anthropic import Claude48Opus
 from langfun.core.llms.anthropic import Claude47Opus
 from langfun.core.llms.anthropic import Claude46
 from langfun.core.llms.anthropic import Claude46Opus
@@ -192,6 +201,8 @@ from langfun.core.llms.anthropic import Claude3Haiku
 from langfun.core.llms.anthropic import Claude3Haiku_20240307
 
 from langfun.core.llms.vertexai import VertexAIAnthropic
+from langfun.core.llms.vertexai import VertexAIClaude5Opus
+from langfun.core.llms.vertexai import VertexAIClaude48Opus
 from langfun.core.llms.vertexai import VertexAIClaude47Opus
 from langfun.core.llms.vertexai import VertexAIClaude46Opus
 from langfun.core.llms.vertexai import VertexAIClaude45Haiku_20251001

@@ -259,7 +259,7 @@ class BaseSandbox(interface.Sandbox):
   @property
   def is_shutting_down(self) -> bool:
     """Returns True if the sandbox is shutting down."""
-    return self._status == self.Status.SHUTTING_DOWN or (
+    return self._status == self.Status.SHUTTING_DOWN or (  # pyrefly: ignore[bad-return]
         self._state_errors and self._status == self.Status.EXITING_SESSION
     )
 
@@ -824,6 +824,6 @@ class BaseSandbox(interface.Sandbox):
         sandbox=self,
         session_id=session_id,
         duration=duration,
-        lifetime=time.time() - self._session_start_time,
+        lifetime=time.time() - self._session_start_time,  # pyrefly: ignore[unsupported-operation]
         error=error,
     )

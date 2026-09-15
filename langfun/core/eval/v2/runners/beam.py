@@ -300,7 +300,7 @@ class BeamRunner(base.RunnerBase):
           example_ids = range(1, evaluation.num_examples + 1)
         inputs = [
             example_lib.Example(id=i, input=evaluation.example_input_by_id(i))
-            for i in example_ids
+            for i in example_ids  # pyrefly: ignore[not-iterable]
         ]
         if self.current_run.shuffle_inputs:
           random.shuffle(inputs)
@@ -321,7 +321,7 @@ class BeamRunner(base.RunnerBase):
             )
             | f'Evaluate-{evaluation.id}'
             >> beam.ParDo(
-                _EvaluateFn(
+                _EvaluateFn(  # pyrefly: ignore[not-callable]
                     pg.to_json_str(leaf_node_runner),
                     ckpt_format=self.ckpt_format,
                     concurrent_startup_delay=self.concurrent_startup_delay,

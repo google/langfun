@@ -106,7 +106,7 @@ class _CompleteStructure(mapping.Mapping):
     value_specs = tuple(
         [v.value_spec for v in schema_lib.Missing.find_missing(value).values()]
     )
-    return schema_lib.class_dependencies(value_specs, include_subclasses=True)
+    return schema_lib.class_dependencies(value_specs, include_subclasses=True)  # pyrefly: ignore[bad-argument-type]
 
   def class_defs_repr(self, value: Any) -> str | None:
     return schema_lib.class_definitions(

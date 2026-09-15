@@ -24,6 +24,32 @@ from langfun.core.agentic import action_eval
 import pyglove as pg
 
 
+_TIMING_KEYS = ('start_time', 'end_time', 'wall_clock_s')
+
+
+def _strip_timing(result):
+  """Removes non-deterministic per-leaf timing fields for stable eq checks.
+
+  `Evaluation.finalize()` now emits `start_time`/`end_time`/`wall_clock_s` into
+  every leaf result. Those wall-clock values are non-deterministic, so tests
+  that assert the full result dict must drop them before comparing. Their
+  presence and sanity are covered separately by `test_run_timing`.
+
+  Args:
+    result: The leaf result dict (or None) to strip timing fields from.
+
+  Returns:
+    A shallow copy of `result` without the timing fields, or None if `result`
+    is None.
+  """
+  if result is None:
+    return None
+  stripped = dict(result)
+  for key in _TIMING_KEYS:
+    stripped.pop(key, None)
+  return stripped
+
+
 class Foo(action_lib.Action):
   x: int
 
@@ -69,7 +95,7 @@ class ActionEvalV1Test(unittest.TestCase):
     s = FooEval()
     result = s.run(summary=False)
     self.assertEqual(
-        result,
+        _strip_timing(result),
         dict(
             experiment_setup=dict(
                 id=s.id,

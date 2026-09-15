@@ -232,7 +232,7 @@ class HtmlReporter(experiment_lib.Plugin):
               current_run=run, interactive=False, card_view=True,
           )
       )
-      with self._summary_lock:
+      with self._summary_lock:  # pyrefly: ignore[bad-context-manager]
         html.save(os.path.join(run.output_root, _SUMMARY_FILE))
 
     if force or (time.time() - self._last_summary_time > self.summary_interval):
@@ -263,7 +263,7 @@ class HtmlReporter(experiment_lib.Plugin):
                   card_view=False,
               ),
           )
-          with self._experiment_index_lock[experiment.id]:
+          with self._experiment_index_lock[experiment.id]:  # pyrefly: ignore[unsupported-operation]
             html.save(index_html_path)
           experiment.info(
               f'Updated {index_html_path!r} in {t.elapse:.2f} seconds.',
@@ -279,7 +279,7 @@ class HtmlReporter(experiment_lib.Plugin):
         time.time() - self._last_experiment_report_time[experiment.id]
         > self.experiment_report_interval
     ):
-      self._last_experiment_report_time[experiment.id] = time.time()
+      self._last_experiment_report_time[experiment.id] = time.time()  # pyrefly: ignore[unsupported-operation]
       if background:
         runner.background_run(_save)
       else:

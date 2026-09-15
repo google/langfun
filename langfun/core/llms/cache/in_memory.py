@@ -147,7 +147,7 @@ class InMemory(base.LMCacheBase):
   def _sym_clone(self, deep: bool, memo: Any = None) -> 'InMemory':
     v = super()._sym_clone(deep, memo)
     v._cache = self._cache  # pylint: disable=protected-access
-    return v
+    return v  # pyrefly: ignore[bad-return]
 
   def save(self, path: str | None = None) -> None:
     """Saves the in-memory cache."""
