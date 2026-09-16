@@ -41,7 +41,7 @@ class OpenAIChatCompletionAPI(rest.REST):
   ] = ''
 
   @property
-  def headers(self) -> dict[str, Any]:
+  def headers(self) -> dict[str, Any]:  # pyrefly: ignore[bad-override]
     return {
         'Content-Type': 'application/json'
     }
@@ -95,7 +95,7 @@ class OpenAIChatCompletionAPI(rest.REST):
               json_schema=output_schema,
           )
       )
-      prompt.metadata.formatted_text = (
+      prompt.metadata.formatted_text = (  # pyrefly: ignore[missing-attribute]
           prompt.text
           + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
           + pg.to_json_str(request_args['response_format'], json_indent=2)
@@ -195,7 +195,7 @@ class OpenAIChatCompletionAPI(rest.REST):
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if (status_code == 413
-        or (status_code == 400 and b'string_above_max_length' in content)):
+        or (status_code == 400 and b'string_above_max_length' in content)):  # pyrefly: ignore[unsupported-operation]
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
 
@@ -235,7 +235,7 @@ class OpenAIResponsesAPI(OpenAIChatCompletionAPI):
     if output_schema is not None:
       output_schema['type'] = 'json_schema'
       request_args.update(text=dict(format=output_schema))
-      prompt.metadata.formatted_text = (
+      prompt.metadata.formatted_text = (  # pyrefly: ignore[missing-attribute]
           prompt.text
           + '\n\n [RESPONSE FORMAT (not part of prompt)]\n'
           + pg.to_json_str(request_args['text'], json_indent=2)

@@ -23,6 +23,7 @@ from langfun.core.templates.completion import Completion
 class Conversation(Completion):
   """LM-based conversation."""
 
+  # pyrefly: ignore[bad-assignment]
   prompt = """
       {%- if preamble -%}
       {{ preamble }}

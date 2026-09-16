@@ -708,7 +708,7 @@ class Feature(lf.Component):
         return None
       if self.container_id is None:
         return os.path.join(root_dir, _make_path_compatible(self.feature_name))
-      return os.path.join(
+      return os.path.join(  # pyrefly: ignore[no-matching-overload]
           self.container_id.working_dir(root_dir),
           _make_path_compatible(self.feature_name)
       )
@@ -778,7 +778,7 @@ class Feature(lf.Component):
   def id(self) -> Id:
     """Returns the identifier of the feature."""
     if self.is_sandbox_based:
-      return Feature.Id(self.sandbox.id, self.name)
+      return Feature.Id(self.sandbox.id, self.name)  # pyrefly: ignore[missing-attribute]
     if self.environment is not None:
       return Feature.Id(self.environment.id, self.name)
     return Feature.Id(None, pg.utils.camel_to_snake(self.__class__.__name__))
@@ -913,7 +913,7 @@ class Feature(lf.Component):
   def session_id(self) -> str | None:
     """Returns the current user session identifier."""
     if self.is_sandbox_based:
-      return self.sandbox.session_id
+      return self.sandbox.session_id  # pyrefly: ignore[missing-attribute]
     return self._non_sandbox_based_session_id
 
   @contextlib.contextmanager
@@ -986,7 +986,7 @@ class Sandbox(lf.Component):
       """Returns the download directory for the sandbox."""
       if root_dir is None:
         return None
-      return os.path.join(
+      return os.path.join(  # pyrefly: ignore[no-matching-overload]
           self.service_id.working_dir(root_dir),
           _make_path_compatible(self.image_id),
           _make_path_compatible(self.sandbox_id)
@@ -1392,7 +1392,7 @@ class SandboxService(lf.Component):
         return None
       if self.environment_id is None:
         return os.path.join(root_dir, self.name)
-      return os.path.join(self.environment_id.working_dir(root_dir), self.name)
+      return os.path.join(self.environment_id.working_dir(root_dir), self.name)  # pyrefly: ignore[no-matching-overload]
 
   image_ids: Annotated[
       list[str],
@@ -1482,7 +1482,7 @@ class SandboxService(lf.Component):
   @functools.cached_property
   def environment(self) -> Optional['AbstractEnvironment']:
     """Returns the containing environment."""
-    return self.sym_ancestor(lambda v: isinstance(v, AbstractEnvironment))
+    return self.sym_ancestor(lambda v: isinstance(v, AbstractEnvironment))  # pyrefly: ignore[bad-return]
 
   @functools.cached_property
   def name(self) -> str:
@@ -2076,15 +2076,15 @@ class AbstractEnvironment(lf.Component):
     """Returns the sandbox service for the given image ID."""
     if sandbox_service is not None:
       return self.sandboxes[sandbox_service]
-    for sandbox_service in self.sandboxes.values():
-      if image_id is None or image_id in sandbox_service.image_ids:
-        return sandbox_service
+    for sandbox_service in self.sandboxes.values():  # pyrefly: ignore[bad-assignment]
+      if image_id is None or image_id in sandbox_service.image_ids:  # pyrefly: ignore[missing-attribute]
+        return sandbox_service  # pyrefly: ignore[bad-return]
 
     # Returns the first sandbox service that supports dynamic image loading
     # if image ID is not found in pre-configured image IDs.
-    for sandbox_service in self.sandboxes.values():
-      if sandbox_service.supports_dynamic_image_loading:
-        return sandbox_service
+    for sandbox_service in self.sandboxes.values():  # pyrefly: ignore[bad-assignment]
+      if sandbox_service.supports_dynamic_image_loading:  # pyrefly: ignore[missing-attribute]
+        return sandbox_service  # pyrefly: ignore[bad-return]
     raise ValueError(
         f'Environment {self.id} does not serve image ID {image_id!r}.'
     )
@@ -2229,7 +2229,7 @@ def treat_as_sandbox_state_error(
         # Execute the service function.
         return func(self, *args, **kwargs)
       except BaseException as e:
-        if pg.match_error(e, errors):
+        if pg.match_error(e, errors):  # pyrefly: ignore[bad-argument-type]
           state_error = SandboxStateError(
               'Sandbox encountered an unexpected error executing '
               f'`{func.__name__}` (args={args!r}, kwargs={kwargs!r}): {e}',

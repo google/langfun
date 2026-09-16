@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for Gemini API."""
 
+import base64
 import datetime
 from typing import Any
 import unittest
@@ -416,6 +417,187 @@ class GeminiTest(unittest.TestCase):
               'top_p=1.0, top_k=20, max_tokens=1024, stop=\n.'
           ),
       )
+
+
+class GeminiEmptyGenerationTest(unittest.TestCase):
+  """Tests `Gemini.result()` classification of answer-less generations."""
+
+  def _model(self) -> gemini.Gemini:
+    return gemini.Gemini('gemini-3.1-pro-preview', api_endpoint='')
+
+  def _response(
+      self,
+      parts: list[dict[str, Any]] | None,
+      finish_reason: str | None,
+      *,
+      candidates_token_count: int,
+      thoughts_token_count: int = 0,
+  ) -> dict[str, Any]:
+    """Builds a single-candidate response payload.
+
+    Args:
+      parts: The candidate's content parts. `None` omits the enclosing
+        `content` key entirely, the shape a service may return when it has no
+        answer at all.
+      finish_reason: The candidate's `finishReason`, omitted when None.
+      candidates_token_count: Response-level `candidatesTokenCount`.
+      thoughts_token_count: Response-level `thoughtsTokenCount`.
+
+    Returns:
+      A response payload accepted by `Gemini.result()`.
+    """
+    candidate: dict[str, Any] = {}
+    if parts is not None:
+      candidate['content'] = {'role': 'model', 'parts': parts}
+    if finish_reason is not None:
+      candidate['finishReason'] = finish_reason
+    return {
+        'candidates': [candidate],
+        'usageMetadata': {
+            'promptTokenCount': 12,
+            'candidatesTokenCount': candidates_token_count,
+            'thoughtsTokenCount': thoughts_token_count,
+            'totalTokenCount': (
+                12 + candidates_token_count + thoughts_token_count
+            ),
+        },
+    }
+
+  def test_error_is_not_retryable(self):
+    """The new error must stay OUT of the retryable error hierarchy."""
+    self.assertTrue(
+        issubclass(gemini.GeminiEmptyGenerationError, lf.LMError)
+    )
+    self.assertFalse(
+        issubclass(gemini.GeminiEmptyGenerationError, lf.RetryableLMError)
+    )
+    self.assertFalse(
+        issubclass(gemini.GeminiEmptyGenerationError, lf.EmptyGenerationError)
+    )
+
+  def test_thought_only_max_tokens_raises(self):
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response(
+              [{'text': 'thinking...', 'thought': True}],
+              'MAX_TOKENS',
+              candidates_token_count=0,
+              thoughts_token_count=8192,
+          )
+      )
+    message = str(ctx.exception)
+    self.assertIn('MAX_TOKENS', message)
+    self.assertIn('8192', message)
+
+  def test_no_content_max_tokens_raises(self):
+    """MAX_TOKENS with no parts at all is equally deterministic."""
+    with self.assertRaises(gemini.GeminiEmptyGenerationError):
+      self._model().result(
+          self._response([], 'MAX_TOKENS', candidates_token_count=0)
+      )
+
+  def test_stop_with_zero_output_tokens_raises(self):
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response([], 'STOP', candidates_token_count=0)
+      )
+    self.assertIn('STOP', str(ctx.exception))
+
+  def test_missing_content_raises(self):
+    """A candidate with no `content` key must not surface as a raw KeyError."""
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response(
+              None,
+              'MAX_TOKENS',
+              candidates_token_count=0,
+              thoughts_token_count=61,
+          )
+      )
+    message = str(ctx.exception)
+    # A bare KeyError stringifies to just "'content'", carrying no diagnosis.
+    self.assertNotEqual(message, "'content'")
+    self.assertIn('content', message)
+    self.assertIn('MAX_TOKENS', message)
+    self.assertIn('61', message)
+    self.assertIn(self._model().model_id, message)
+
+  def test_null_content_raises(self):
+    """A present-but-null `content` is just as unparseable as a missing one."""
+    with self.assertRaises(gemini.GeminiEmptyGenerationError):
+      self._model().result({
+          'candidates': [{'content': None, 'finishReason': 'STOP'}],
+          'usageMetadata': {'promptTokenCount': 12},
+      })
+
+  def test_missing_content_raises_under_unrelated_finish_reason(self):
+    """The guard is unconditional: there is no answer to fall back to.
+
+    Unlike an empty-but-present `content`, a missing one cannot be parsed into
+    a message at all, so it can never reach the retryable path -- the pre-fix
+    code crashed here. Reporting it stays non-retryable by construction.
+    """
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response(None, 'SAFETY', candidates_token_count=0)
+      )
+    self.assertIn('SAFETY', str(ctx.exception))
+
+  def test_answer_text_is_never_flagged(self):
+    """Control: any non-thought answer text short-circuits the guard."""
+    result = self._model().result(
+        self._response(
+            [{'text': 'thinking', 'thought': True}, {'text': 'answer'}],
+            'MAX_TOKENS',
+            candidates_token_count=2,
+            thoughts_token_count=100,
+        )
+    )
+    self.assertEqual(result.samples[0].response.text, 'answer')
+
+  def test_modality_only_answer_is_never_flagged(self):
+    """Control: an image-only answer is real output, not an empty generation."""
+    result = self._model().result(
+        self._response(
+            [{
+                'inlineData': {
+                    'data': base64.b64encode(example_image).decode(),
+                    'mimeType': 'image/png',
+                }
+            }],
+            'STOP',
+            candidates_token_count=0,
+        )
+    )
+    self.assertNotEqual(result.samples[0].response.text, '')
+
+  def test_stop_with_output_tokens_stays_on_legacy_path(self):
+    """Empty text but tokens were emitted: not our deterministic signature.
+
+    E.g. a function-call-only candidate. Left untouched so the pre-existing
+    retryable `EmptyGenerationError` path keeps handling it.
+    """
+    result = self._model().result(
+        self._response(
+            [{'functionCall': {'name': 'f', 'args': {}}}],
+            'STOP',
+            candidates_token_count=7,
+        )
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_other_finish_reason_stays_on_legacy_path(self):
+    """Empty text under an unrelated finish reason is not reclassified."""
+    result = self._model().result(
+        self._response([], 'SAFETY', candidates_token_count=0)
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_missing_finish_reason_stays_on_legacy_path(self):
+    result = self._model().result(
+        self._response([], None, candidates_token_count=0)
+    )
+    self.assertEqual(result.samples[0].response.text, '')
 
 
 if __name__ == '__main__':

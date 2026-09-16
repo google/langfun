@@ -89,11 +89,11 @@ class OpenAI(rest.REST):
     )
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     return 'https://api.openai.com/v1/embeddings'
 
   @property
-  def headers(self) -> dict[str, Any]:
+  def headers(self) -> dict[str, Any]:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     headers = {
         'Content-Type': 'application/json',
@@ -115,7 +115,7 @@ class OpenAI(rest.REST):
     }
     options = self.embedding_options
     if options.output_dimensionality is not None:
-      request_body['dimensions'] = options.output_dimensionality
+      request_body['dimensions'] = options.output_dimensionality  # pyrefly: ignore[bad-assignment]
     return request_body
 
   def result(self, json_response: dict[str, Any]) -> lf.EmbeddingResult:

@@ -101,7 +101,7 @@ class RunnerBase(Runner):
         self._background_last_error = e
 
     if self.max_background_threads > 0:
-      with self._io_pool_lock:
+      with self._io_pool_lock:  # pyrefly: ignore[bad-context-manager]
         if self._io_pool is not None:
           self._io_pool.submit(_background_run, *args, **kwargs)
     else:
@@ -147,7 +147,7 @@ class RunnerBase(Runner):
       plugin.on_experiment_start(self, experiment)
 
     if experiment.is_leaf:
-      self._set_prior_elapse(experiment)
+      self._set_prior_elapse(experiment)  # pyrefly: ignore[bad-argument-type]
 
     if experiment.is_leaf:
       pg.io.mkdirs(self.current_run.output_dir(experiment))
@@ -293,12 +293,12 @@ class RunnerBase(Runner):
           f'in {example.elapse:.2f} seconds.'
       )
 
-    experiment.usage_summary.merge(example.usage_summary)
-    experiment.progress.update_execution_summary(example.execution_status)
+    experiment.usage_summary.merge(example.usage_summary)  # pyrefly: ignore[bad-argument-type]
+    experiment.progress.update_execution_summary(example.execution_status)  # pyrefly: ignore[bad-argument-type]
 
     parent = experiment.parent
     while parent is not None:
-      parent.usage_summary.merge(example.usage_summary)
+      parent.usage_summary.merge(example.usage_summary)  # pyrefly: ignore[bad-argument-type]
       parent = parent.parent
 
     for plugin in self._all_plugins(experiment):
@@ -338,11 +338,11 @@ class RunnerBase(Runner):
 
       # Evaluate the leaf evaluations if not skipped.
       with lf.use_settings(**global_settings):
-        self._run(targets)
+        self._run(targets)  # pyrefly: ignore[bad-argument-type]
 
       self.on_run_complete()
     except BaseException as e:  # pylint: disable=broad-except
-      self.on_run_abort(e)
+      self.on_run_abort(e)  # pyrefly: ignore[bad-argument-type]
       raise e
     finally:
       if cache is not None:
@@ -350,9 +350,9 @@ class RunnerBase(Runner):
 
       # Wait for the background tasks to finish.
       if self.max_background_threads > 0:
-        with self._io_pool_lock:
+        with self._io_pool_lock:  # pyrefly: ignore[bad-context-manager]
           self._io_pool, io_pool = None, self._io_pool
-        io_pool.shutdown(wait=True)
+        io_pool.shutdown(wait=True)  # pyrefly: ignore[missing-attribute]
 
   @abc.abstractmethod
   def _run(self, evaluations: list[Evaluation]) -> None:
@@ -382,7 +382,7 @@ class RunnerBase(Runner):
         if self.current_run.shuffle_inputs:
           items = list(items)
           random.shuffle(items)
-        self._evaluate_items(evaluation, items)
+        self._evaluate_items(evaluation, items)  # pyrefly: ignore[bad-argument-type]
 
       if cache:
         self.background_run(cache.save)

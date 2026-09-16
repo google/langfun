@@ -56,11 +56,11 @@ class LlamaCppRemote(openai_compatible.OpenAIChatCompletionAPI):
   ] = ''
 
   @property
-  def api_endpoint(self) -> str:
+  def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     return self.url + '/completion'
 
   @property
-  def model_id(self) -> str:
+  def model_id(self) -> str:  # pyrefly: ignore[bad-override]
     """Returns a string to identify the model."""
     return f'LLaMAC++({self.model or ""})'
 

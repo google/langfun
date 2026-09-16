@@ -32,7 +32,7 @@ class NaturalLanguageFormattable(pg.Formattable):
   ) -> str:
     if natural_language:
       return self.natural_language_format()
-    return super().format(*args, **kwargs)
+    return super().format(*args, **kwargs)  # pyrefly: ignore[missing-attribute]
 
   def __str__(self):
     return self.natural_language_format()

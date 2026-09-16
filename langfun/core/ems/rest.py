@@ -142,4 +142,4 @@ class REST(lf.EmbeddingModel):
     if response.status_code == 200:
       return self.result(response.json())
     else:
-      raise self._error(response.status_code, response.content)
+      raise self._error(response.status_code, response.content)  # pyrefly: ignore[bad-argument-type]

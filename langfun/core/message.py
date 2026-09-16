@@ -202,13 +202,13 @@ class Message(
     metadata = metadata or {}
     metadata.update(kwargs)
     if isinstance(referred_modalities, list):
-      referred_modalities = {m.id: pg.Ref(m) for m in referred_modalities}
+      referred_modalities = {m.id: pg.Ref(m) for m in referred_modalities}  # pyrefly: ignore[bad-assignment]
 
       # Auto-append text markers for modalities not yet referenced in the
       # text, so they are included in the LM prompt. This only applies to the
       # list input path; dict users explicitly manage the text themselves.
-      for modality_id in referred_modalities:
-        marker = modality.Modality.text_marker(modality_id)
+      for modality_id in referred_modalities:  # pyrefly: ignore[not-iterable]
+        marker = modality.Modality.text_marker(modality_id)  # pyrefly: ignore[bad-argument-type]
         if marker not in text:
           text += f'\n{marker}'
 
@@ -312,7 +312,7 @@ class Message(
   @classmethod
   def convertible_types(cls) -> list[str]:
     """Returns supported types for message conversion."""
-    return MessageConverter.convertible_types()
+    return MessageConverter.convertible_types()  # pyrefly: ignore[bad-return]
 
   #
   # Unified interface for accessing text, result and metadata.
@@ -340,7 +340,7 @@ class Message(
     if key_path == Message.PATH_TEXT:
       self.rebind({key_path: value}, raise_on_no_change=False)
     else:
-      self.metadata.rebind({key_path: value}, raise_on_no_change=False)
+      self.metadata.rebind({key_path: value}, raise_on_no_change=False)  # pyrefly: ignore[missing-attribute]
 
   def get(self, key_path: str | pg.KeyPath, default: Any = None) -> Any:
     """Gets text or metadata by key path.
@@ -360,7 +360,7 @@ class Message(
     if key_path == Message.PATH_TEXT:
       return self.text
     else:
-      return self.metadata.sym_get(key_path, default, use_inferred=True)
+      return self.metadata.sym_get(key_path, default, use_inferred=True)  # pyrefly: ignore[missing-attribute]
 
   #
   # API for accessing the structured result and error.
@@ -434,7 +434,7 @@ class Message(
 
     # Rebind will trigger _on_change, which inserts the updates
     # to current message' updates.
-    self.rebind(delta, raise_on_no_change=False)
+    self.rebind(delta, raise_on_no_change=False)  # pyrefly: ignore[bad-argument-type]
 
   #
   # API for supporting modalities.
@@ -573,7 +573,7 @@ class Message(
           last_char = None
       else:
         assert isinstance(chunk, modality.Modality), chunk
-        fused_text.write(modality.Modality.text_marker(chunk.id))
+        fused_text.write(modality.Modality.text_marker(chunk.id))  # pyrefly: ignore[bad-argument-type]
         last_char = modality.Modality.REF_END[-1]
         # Make a reference if the chunk is already owned by another object
         # to avoid copy.
@@ -1009,7 +1009,7 @@ class _MessageConverterRegistry:
 
   def get_by_type(self, t: Type[Any], **kwargs) -> 'MessageConverter':
     """Returns a message converter for the given type."""
-    t = self._type_to_converters[t]
+    t = self._type_to_converters[t]  # pyrefly: ignore[bad-assignment]
     if not t:
       raise TypeError(
           f'Cannot convert Message to {t!r}.'
@@ -1019,7 +1019,7 @@ class _MessageConverterRegistry:
           f'More than one converters found for output type {t!r}. '
           f'Please specify one for this conversion: {[x.FORMAT_ID for x in t]}.'
       )
-    return t[0](**kwargs)
+    return t[0](**kwargs)  # pyrefly: ignore[unsupported-operation]
 
   def get_by_format(self, format: str, **kwargs) -> 'MessageConverter':   # pylint: disable=redefined-builtin
     """Returns a message converter for the given format."""
