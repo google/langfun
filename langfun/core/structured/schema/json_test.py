@@ -104,6 +104,11 @@ bar"]
         """,
         ['foo\nbar'])
 
+  def test_parse_with_escaped_backslash(self):
+    # A string value ending with a literal backslash must not be mistaken for
+    # an escaped closing quote. `{"result": "C:\\"}` parses to `C:\`.
+    self.assert_parse_value('{"result": "C:\\\\"}', 'C:\\')
+
   def test_parse_with_malformated_json(self):
     with self.assertRaisesRegex(
         json.JsonError, 'No JSON dict in the output'
