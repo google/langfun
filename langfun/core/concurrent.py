@@ -166,6 +166,193 @@ def with_retry(
   return _func
 
 
+# Process-wide ceiling on the number of live hedge replica threads, so that
+# hedging cannot multiply the concurrency of a program beyond its intent.
+#
+# 64 is twice the default fan-out width of this module: `concurrent_execute`
+# and `concurrent_map` both default to `max_workers=32`, and
+# `LanguageModel.max_concurrency` defaults to None, which leaves those 32
+# workers as the bound on a default fan-out. A fully saturated default
+# fan-out can therefore hedge every one of its 32 in-flight calls once, with
+# the same budget again held in reserve for nested or concurrent fan-outs.
+_MAX_HEDGE_THREADS = 64
+_hedge_thread_quota = threading.Semaphore(_MAX_HEDGE_THREADS)
+
+
+def with_hedging(
+    func: Callable[..., Any],
+    hedge_after: float,
+    max_hedges: int = 1,
+    on_hedge: Callable[[int], None] | None = None,
+) -> Callable[..., Any]:
+  """Decorator-like function to add request hedging to a function.
+
+  Hedging bounds the tail latency of a slow call by issuing duplicate
+  executions of it while the original call is still outstanding, and taking
+  the first result that succeeds. It is the parallel counterpart of
+  `with_retry`, which re-attempts a failed call serially.
+
+  Example:
+
+  ```
+  responsive_function = lf.with_hedging(slow_function, hedge_after=300)
+  responsive_function(x)
+  ```
+
+  Hedging goes outside retry, so that each replica owns its own retry ladder:
+
+  ```
+  lf.with_hedging(
+      lf.with_retry(f, ValueError, max_attempts=5),
+      hedge_after=300,
+      max_hedges=3,
+  )
+  ```
+
+  The inverse nesting re-runs the whole hedged group on failure, which is
+  almost never wanted.
+
+  Replicas run on daemon threads that inherit the caller's contextual
+  overrides. A process-wide ceiling caps how many replica threads may be live
+  at once; when it is saturated a hedge is skipped rather than blocking the
+  primary call, because hedging is an optimization and must never make a call
+  worse. For the same reason, if no thread can be started at all, the call
+  runs inline on the caller's thread.
+
+  Hedging pays off only when all of the following hold: the call is idempotent
+  and free of side effects; `func` does not mutate its arguments (unlike the
+  serial attempts of `with_retry`, replicas share one set of argument objects
+  concurrently); latency does not depend on the payload, so that a replica is
+  an independent draw from the same distribution; and the bottleneck is not
+  admission control, where a duplicate merely takes another call's slot. With
+  `hedge_after` set near the p99 latency, the extra request rate is ~1-2%.
+
+  Args:
+    func: The function to add request hedging to. It must tolerate concurrent
+      re-execution, since replicas run alongside the original call.
+    hedge_after: Number of seconds a call may stay outstanding before a
+      duplicate execution is issued. A value <= 0 disables hedging, in which
+      case `func` is called inline on the caller's thread.
+    max_hedges: Max number of duplicate executions to issue beyond the original
+      call, e.g. 1 issues at most one duplicate. This is a ceiling on
+      concurrent executions, not a deadline: once it is reached, the wrapper
+      keeps waiting on whatever is still in flight. A value <= 0 disables
+      hedging, in which case `func` is called inline on the caller's thread.
+    on_hedge: An optional callback invoked with the 1-based ordinal of each
+      duplicate execution when it is issued, for counting or logging. It should
+      not raise; exceptions raised by it are logged and suppressed, because the
+      callback is observability-only and must never fail a call that would
+      otherwise succeed.
+
+  Returns:
+    A function with the same signature of `func`, but with request hedging
+    capability. It returns the result of the first execution that succeeds, or
+    raises the original call's error if every execution fails.
+  """
+
+  def _func(*args, **kwargs) -> Any:
+    # Off switch: stay on the caller's thread, so the wrapped function behaves
+    # identically to the unwrapped one.
+    if hedge_after <= 0 or max_hedges <= 0:
+      return func(*args, **kwargs)
+
+    # Capture the caller's contextual overrides here, on the caller's thread:
+    # `pg.with_contextual_override` snapshots the thread-local overrides at
+    # wrap time, so wrapping must not be deferred to a spawned thread.
+    call = pg.with_contextual_override(func)
+
+    def spawn(quota: threading.Semaphore | None):
+      """Runs `call` on a daemon thread, reporting the outcome via a future."""
+      future = concurrent.futures.Future()
+
+      def _run() -> None:
+        try:
+          result = call(*args, **kwargs)
+        except BaseException as e:  # pylint: disable=broad-except
+          future.set_exception(e)
+        else:
+          future.set_result(result)
+        finally:
+          if quota is not None:
+            quota.release()
+
+      # Daemon threads, never a thread pool: a pool registers an atexit hook
+      # that joins its workers, which would hold the process open for exactly
+      # as long as the abandoned replica that hedging exists to escape.
+      thread = threading.Thread(target=_run, daemon=True)
+      try:
+        thread.start()
+      except BaseException:
+        if quota is not None:
+          quota.release()
+        raise
+      return future
+
+    try:
+      primary = spawn(None)
+    except RuntimeError:
+      # No thread could be started: fall back to the caller's own thread, so
+      # that wrapping a function can never fail a call that would have
+      # succeeded unwrapped.
+      return func(*args, **kwargs)
+
+    pending = {primary}
+    issued = 0
+    # Absolute clock: `wait` also returns when an attempt fails, and restarting
+    # a relative timer there would delay the next re-issue by a full interval,
+    # precisely for the flaky call this guard exists to bound.
+    deadline = time.monotonic() + hedge_after
+
+    while pending:
+      timeout = (
+          None if issued >= max_hedges else max(0, deadline - time.monotonic())
+      )
+      done, pending = concurrent.futures.wait(
+          pending,
+          timeout=timeout,
+          return_when=concurrent.futures.FIRST_COMPLETED,
+      )
+      for attempt in done:
+        if attempt.exception() is None:
+          # First to succeed wins: a fast failure must not turn a good reply
+          # into an error.
+          return attempt.result()
+
+      if pending and issued < max_hedges and time.monotonic() >= deadline:
+        # Hedging is an optimization, so it must never make a call worse: when
+        # the ceiling is saturated or no thread can be spawned, the duplicate
+        # is skipped instead of blocking or failing the original call.
+        replica = None
+        if _hedge_thread_quota.acquire(blocking=False):
+          try:
+            replica = spawn(_hedge_thread_quota)
+          except RuntimeError:
+            replica = None
+        if replica is not None:
+          pending.add(replica)
+          issued += 1
+          if on_hedge is not None:
+            try:
+              on_hedge(issued)
+            except Exception as e:  # pylint: disable=broad-except
+              # `on_hedge` is observability-only, so its failure must not fail
+              # a call that would have succeeded unwrapped, nor withdraw the
+              # replica that has already been issued.
+              pg.logging.warning(
+                  f'Calling {on_hedge!r} for hedge {issued} of {func!r} '
+                  f'encountered {e!r}, ignored.'
+              )
+        # The clock restarts even when the duplicate was skipped, so that a
+        # saturated ceiling does not spin this loop.
+        deadline = time.monotonic() + hedge_after
+
+    # Every attempt failed: surface the primary's error so that failure
+    # semantics match the unwrapped call.
+    return primary.result()
+
+  return _func
+
+
 class RetryEntry(pg.Object):
   """Retry entry."""
 

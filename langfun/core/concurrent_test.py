@@ -21,12 +21,14 @@ import io
 import sys
 import threading
 import time
+from typing import Any
 import unittest
 from unittest import mock
 import weakref
 
 from langfun.core import component
 from langfun.core import concurrent
+from langfun.core import language_model as lm_lib
 import pyglove as pg
 
 
@@ -176,6 +178,639 @@ class RetryTest(unittest.TestCase):
     self.assertIsInstance(job.retry_entries[0].error, ValueError)
     self.assertIsInstance(job.retry_entries[1].error, ValueError)
     self.assertIsNone(job.retry_entries[2].error)
+
+
+# Hang guard only: a correct `with_hedging` satisfies every case below in
+# milliseconds, so this limit is reached only when something deadlocks.
+_HEDGE_TIMEOUT = 30.0
+
+# A `hedge_after` no test can outlive, used to prove that no hedge fires.
+_NEVER_HEDGE = 60.0
+
+# A `hedge_after` short enough that a hedge fires promptly.
+_HEDGE_SOON = 0.01
+
+# Window for asserting that something never happens. At `_HEDGE_SOON` it spans
+# 50 re-issue boundaries.
+_NEGATIVE_WINDOW = 0.5
+
+
+class _Attempt:
+  """A single execution of the function wrapped by `with_hedging`."""
+
+  def __init__(self, ordinal: int, args, kwargs):
+    self.ordinal = ordinal
+    self.thread = threading.current_thread()
+    self.daemon = self.thread.daemon
+    self.args = args
+    self.kwargs = kwargs
+    self.completed = False
+
+
+class _AttemptLog:
+  """Thread-safe log of the attempts made by a hedged call."""
+
+  def __init__(self):
+    self._lock = threading.Lock()
+    self._started = {}
+    self.records = []
+
+  def record(self, args=(), kwargs=None) -> _Attempt:
+    """Logs the calling thread as a new attempt and returns its record."""
+    with self._lock:
+      attempt = _Attempt(len(self.records) + 1, args, kwargs or {})
+      self.records.append(attempt)
+    self._event(attempt.ordinal).set()
+    return attempt
+
+  def started(self, ordinal: int, timeout: float) -> bool:
+    """Returns True if attempt `ordinal` started within `timeout` seconds."""
+    return self._event(ordinal).wait(timeout)
+
+  def _event(self, ordinal: int) -> threading.Event:
+    with self._lock:
+      event = self._started.get(ordinal)
+      if event is None:
+        event = threading.Event()
+        self._started[ordinal] = event
+      return event
+
+  def __len__(self) -> int:
+    with self._lock:
+      return len(self.records)
+
+
+class _FakeLM(lm_lib.LanguageModel):
+  """An LM that echoes the prompt, so usage accounting is real but hermetic."""
+
+  def _sample(self, prompts: list[Any]) -> list[lm_lib.LMSamplingResult]:
+    return [
+        lm_lib.LMSamplingResult(
+            [lm_lib.LMSample(response=prompt.text, score=1.0)],
+            usage=lm_lib.LMSamplingUsage(
+                prompt_tokens=10, completion_tokens=20, total_tokens=30
+            ),
+        )
+        for prompt in prompts
+    ]
+
+  @property
+  def model_info(self) -> lm_lib.ModelInfo:
+    return lm_lib.ModelInfo(model_id='fake-lm')
+
+
+class HedgingTest(unittest.TestCase):
+  """Tests for `with_hedging`.
+
+  These tests are event-driven rather than sleep-based: attempts park on
+  `threading.Event` objects that the test releases, and every wait carries a
+  timeout so that a hang fails loudly instead of stalling the test runner.
+  """
+
+  def setUp(self):
+    super().setUp()
+    self.attempts = _AttemptLog()
+    self.hedges = []
+    # Released on teardown, so attempts parked for the duration of a test can
+    # exit and hand back their thread quota.
+    self.blocked = threading.Event()
+    self.addCleanup(self.blocked.set)
+    # Give each test its own thread quota, so attempts still winding down from
+    # an earlier test cannot influence this one.
+    # pylint: disable=protected-access
+    quota = mock.patch.object(
+        concurrent,
+        '_hedge_thread_quota',
+        threading.Semaphore(concurrent._MAX_HEDGE_THREADS),
+    )
+    # pylint: enable=protected-access
+    quota.start()
+    self.addCleanup(quota.stop)
+
+  def park(self, event: threading.Event | None = None) -> None:
+    """Parks the calling attempt until the test releases it."""
+    (event or self.blocked).wait(timeout=_HEDGE_TIMEOUT)
+
+  def call_async(self, func) -> futures.Future[Any]:
+    """Calls `func()` on a helper thread, so that the test can drive events."""
+    future = futures.Future()
+
+    def _run():
+      try:
+        future.set_result(func())
+      except BaseException as e:  # pylint: disable=broad-except
+        future.set_exception(e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return future
+
+  def fail_thread_start_after(
+      self, healthy_starts: int, refused: threading.Event | None = None
+  ):
+    """Returns a patch making `Thread.start` raise after `healthy_starts`."""
+    real_thread = threading.Thread
+    lock = threading.Lock()
+    created = [0]
+
+    def refuse_to_start():
+      if refused is not None:
+        refused.set()
+      raise RuntimeError("can't start new thread")
+
+    def make_thread(*args, target=None, **kwargs):
+      thread = real_thread(*args, target=target, **kwargs)
+      with lock:
+        created[0] += 1
+        healthy = created[0] <= healthy_starts
+      if not healthy:
+        thread.start = mock.Mock(side_effect=refuse_to_start)
+      return thread
+
+    return mock.patch.object(threading, 'Thread', side_effect=make_thread)
+
+  def test_fast_call_costs_one_request(self):
+    def func():
+      return self.attempts.record().ordinal
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_NEVER_HEDGE,
+        max_hedges=5,
+        on_hedge=self.hedges.append,
+    )
+    # A call answered under the threshold costs exactly one request, however
+    # large the hedge budget is.
+    self.assertEqual(hedged(), 1)
+    self.assertEqual(len(self.attempts), 1)
+    self.assertEqual(self.hedges, [])
+
+  def test_hedge_is_issued_once_the_threshold_elapses(self):
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park()
+        attempt.completed = True
+        return 'primary'
+      return 'hedge-1'
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=1,
+        on_hedge=self.hedges.append,
+    )
+    self.assertEqual(hedged(), 'hedge-1')
+    self.assertEqual(len(self.attempts), 2)
+    self.assertEqual(self.hedges, [1])
+    self.assertFalse(self.attempts.records[0].completed)
+
+  def test_hedge_is_reissued_at_every_boundary(self):
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal <= 3:
+        self.park()
+        attempt.completed = True
+        return 'parked'
+      return 'answered'
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=3,
+        on_hedge=self.hedges.append,
+    )
+    # Each replica is an independent draw, so re-issuing at every boundary is
+    # what makes the probability of a slow call decay with the budget.
+    self.assertEqual(hedged(), 'answered')
+    self.assertEqual(len(self.attempts), 4)
+    self.assertEqual(self.hedges, [1, 2, 3])
+    for attempt in self.attempts.records[:3]:
+      self.assertFalse(attempt.completed)
+
+  def test_hedge_budget_is_a_hard_ceiling(self):
+    primary_release = threading.Event()
+    self.addCleanup(primary_release.set)
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park(primary_release)
+        return 'primary'
+      self.park()
+      return 'hedge-1'
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=1,
+        on_hedge=self.hedges.append,
+    )
+    result = self.call_async(hedged)
+    self.assertTrue(self.attempts.started(2, _HEDGE_TIMEOUT))
+    # Both attempts stay outstanding well past the next boundary, and no
+    # further replica is issued once the budget is spent.
+    self.assertFalse(self.attempts.started(3, _NEGATIVE_WINDOW))
+    self.assertEqual(len(self.attempts), 2)
+    primary_release.set()
+    self.assertEqual(result.result(timeout=_HEDGE_TIMEOUT), 'primary')
+    self.assertEqual(len(self.attempts), 2)
+    self.assertEqual(self.hedges, [1])
+
+  def test_exhausted_budget_still_answers(self):
+    primary_release = threading.Event()
+    self.addCleanup(primary_release.set)
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park(primary_release)
+        return 'primary'
+      self.park()
+      return 'hedge-1'
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1
+    )
+    result = self.call_async(hedged)
+    self.assertTrue(self.attempts.started(2, _HEDGE_TIMEOUT))
+    # The budget is a ceiling on replicas, not a deadline: with it spent the
+    # wrapper keeps waiting on what is in flight instead of giving up.
+    self.assertFalse(result.done())
+    primary_release.set()
+    self.assertEqual(result.result(timeout=_HEDGE_TIMEOUT), 'primary')
+    self.assertEqual(len(self.attempts), 2)
+
+  def test_late_replica_wins_over_running_attempts(self):
+    answers = [object(), object(), object()]
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal <= 2:
+        self.park()
+        attempt.completed = True
+      return answers[attempt.ordinal - 1]
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=2
+    )
+    # The last replica answers while the earlier attempts are still running.
+    self.assertIs(hedged(), answers[2])
+    self.assertEqual(len(self.attempts), 3)
+    for attempt in self.attempts.records[:2]:
+      self.assertFalse(attempt.completed)
+
+  def test_failing_replica_does_not_abort_a_live_call(self):
+    primary_release = threading.Event()
+    self.addCleanup(primary_release.set)
+    replica_failed = threading.Event()
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park(primary_release)
+        return 'primary'
+      replica_failed.set()
+      raise ValueError('replica failed')
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=1,
+        on_hedge=self.hedges.append,
+    )
+    result = self.call_async(hedged)
+    self.assertTrue(replica_failed.wait(_HEDGE_TIMEOUT))
+    primary_release.set()
+    # First to succeed wins, not first to finish: a fast failure must not turn
+    # a good reply into an error.
+    self.assertEqual(result.result(timeout=_HEDGE_TIMEOUT), 'primary')
+    self.assertEqual(len(self.attempts), 2)
+    self.assertEqual(self.hedges, [1])
+
+  def test_all_failures_raise_the_primary_error(self):
+    primary_release = threading.Event()
+    self.addCleanup(primary_release.set)
+    replica_failed = threading.Event()
+    failures = []
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park(primary_release)
+        failures.append('primary')
+        raise KeyError('primary failed')
+      failures.append('replica')
+      replica_failed.set()
+      raise ValueError('replica failed')
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1
+    )
+    result = self.call_async(hedged)
+    self.assertTrue(replica_failed.wait(_HEDGE_TIMEOUT))
+    primary_release.set()
+    # Failure semantics match the unwrapped call, so the error raised is the
+    # primary's even though it is not the first one seen.
+    with self.assertRaisesRegex(KeyError, 'primary failed'):
+      result.result(timeout=_HEDGE_TIMEOUT)
+    self.assertEqual(failures, ['replica', 'primary'])
+
+  def test_non_positive_hedge_after_runs_inline(self):
+    for hedge_after in [0, -1]:
+      with self.subTest(hedge_after=hedge_after):
+        self.attempts = _AttemptLog()
+        hedged = concurrent.with_hedging(
+            lambda: self.attempts.record().ordinal,
+            hedge_after=hedge_after,
+            max_hedges=5,
+            on_hedge=self.hedges.append,
+        )
+        self.assertEqual(hedged(), 1)
+        self.assertEqual(len(self.attempts), 1)
+        self.assertIs(
+            self.attempts.records[0].thread, threading.current_thread()
+        )
+    self.assertEqual(self.hedges, [])
+
+  def test_non_positive_max_hedges_runs_inline(self):
+    for max_hedges in [0, -1]:
+      with self.subTest(max_hedges=max_hedges):
+        self.attempts = _AttemptLog()
+        hedged = concurrent.with_hedging(
+            lambda: self.attempts.record().ordinal,
+            hedge_after=_HEDGE_SOON,
+            max_hedges=max_hedges,
+            on_hedge=self.hedges.append,
+        )
+        self.assertEqual(hedged(), 1)
+        self.assertEqual(len(self.attempts), 1)
+        self.assertIs(
+            self.attempts.records[0].thread, threading.current_thread()
+        )
+    self.assertEqual(self.hedges, [])
+
+  def test_arguments_reach_every_replica(self):
+    payload = ['shared']
+
+    def func(*args, **kwargs):
+      attempt = self.attempts.record(args, kwargs)
+      if attempt.ordinal <= 2:
+        self.park()
+        return None
+      return 'answered'
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=2
+    )
+    self.assertEqual(hedged(payload, 2, key='value'), 'answered')
+    self.assertEqual(len(self.attempts), 3)
+    for attempt in self.attempts.records:
+      self.assertEqual(attempt.args, (payload, 2))
+      self.assertEqual(attempt.kwargs, {'key': 'value'})
+      # Replicas share one set of argument objects, they are not copied.
+      self.assertIs(attempt.args[0], payload)
+
+  def test_composes_with_with_retry(self):
+    lock = threading.Lock()
+    calls_per_thread = collections.defaultdict(int)
+
+    def flaky():
+      attempt = self.attempts.record()
+      with lock:
+        calls_per_thread[attempt.thread] += 1
+        rung = calls_per_thread[attempt.thread]
+      if rung == 1:
+        raise ValueError('first rung of this replica ladder')
+      if attempt.thread is self.attempts.records[0].thread:
+        self.park()
+        return 'primary'
+      return 'answered'
+
+    hedged = concurrent.with_hedging(
+        concurrent.with_retry(
+            flaky, ValueError, max_attempts=2, retry_interval=0
+        ),
+        hedge_after=_HEDGE_SOON,
+        max_hedges=1,
+    )
+    # Hedging outside retry gives each replica its own retry ladder, and still
+    # bounds the call while the other ladder is parked on its second rung.
+    self.assertEqual(hedged(), 'answered')
+    self.assertEqual(len(self.attempts), 4)
+    self.assertEqual(len(calls_per_thread), 2)
+    self.assertEqual(sorted(calls_per_thread.values()), [2, 2])
+
+  def test_replicas_run_on_daemon_threads(self):
+    caller = threading.current_thread()
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park()
+        return 'primary'
+      return 'hedge-1'
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1
+    )
+    self.assertEqual(hedged(), 'hedge-1')
+    self.assertEqual(len(self.attempts), 2)
+    for attempt in self.attempts.records:
+      # A thread pool would register an atexit hook joining its workers, which
+      # would hold the process open for as long as the abandoned attempt runs.
+      self.assertTrue(attempt.daemon)
+      self.assertIsNot(attempt.thread, caller)
+
+  def test_contextual_override_reaches_every_attempt(self):
+    observed = {}
+
+    def func():
+      attempt = self.attempts.record()
+      observed[attempt.ordinal] = (A(1).y, component.context_value('y'))
+      if attempt.ordinal == 1:
+        self.park()
+        return 'primary'
+      return 'hedge-1'
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1
+    )
+    with component.context(y=7):
+      self.assertEqual(hedged(), 'hedge-1')
+    # Overrides are per-thread, so they reach the attempts only because they
+    # are captured on the caller's thread when the call starts.
+    self.assertEqual(observed, {1: (7, 7), 2: (7, 7)})
+
+  def test_override_attrs_reaches_every_attempt(self):
+    observed = {}
+
+    def func():
+      attempt = self.attempts.record()
+      override = component.get_contextual_override('x')
+      observed[attempt.ordinal] = (A(1).x, override.override_attrs)
+      if attempt.ordinal == 1:
+        self.park()
+        return 'primary'
+      return 'hedge-1'
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1
+    )
+    # `x` already has a value, so only `override_attrs` replaces it, and the
+    # flag itself has to survive the thread hop for that to happen.
+    with component.context(x=5, override_attrs=True):
+      self.assertEqual(hedged(), 'hedge-1')
+    self.assertEqual(observed, {1: (5, True), 2: (5, True)})
+
+  def test_saturated_thread_ceiling_skips_the_hedge(self):
+    primary_release = threading.Event()
+    self.addCleanup(primary_release.set)
+
+    def func():
+      self.attempts.record()
+      self.park(primary_release)
+      return 'primary'
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=3,
+        on_hedge=self.hedges.append,
+    )
+    with mock.patch.object(
+        concurrent, '_hedge_thread_quota', threading.Semaphore(0)
+    ):
+      result = self.call_async(hedged)
+      self.assertTrue(self.attempts.started(1, _HEDGE_TIMEOUT))
+      # Hedging is an optimization: a saturated ceiling skips the duplicate
+      # rather than making the primary wait for a permit.
+      self.assertFalse(self.attempts.started(2, _NEGATIVE_WINDOW))
+      self.assertEqual(self.hedges, [])
+      primary_release.set()
+      self.assertEqual(result.result(timeout=_HEDGE_TIMEOUT), 'primary')
+    self.assertEqual(len(self.attempts), 1)
+
+  def test_hedge_thread_start_failure_skips_the_hedge(self):
+    permits = 2
+    quota = threading.Semaphore(permits)
+    refused = threading.Event()
+    waited = []
+
+    def func():
+      self.attempts.record()
+      waited.append(refused.wait(_HEDGE_TIMEOUT))
+      return 'primary'
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=1,
+        on_hedge=self.hedges.append,
+    )
+    with mock.patch.object(concurrent, '_hedge_thread_quota', quota):
+      # The first thread is the primary; every later one refuses to start.
+      with self.fail_thread_start_after(1, refused):
+        self.assertEqual(hedged(), 'primary')
+    self.assertEqual(waited, [True])
+    self.assertEqual(len(self.attempts), 1)
+    self.assertEqual(self.hedges, [])
+    # A permit taken for a replica that never started is handed back, so the
+    # ceiling does not leak away over time.
+    for _ in range(permits):
+      self.assertTrue(quota.acquire(blocking=False))
+    self.assertFalse(quota.acquire(blocking=False))
+
+  def test_primary_thread_start_failure_runs_inline(self):
+    caller = threading.get_ident()
+    ran_on = []
+
+    def func():
+      self.attempts.record()
+      ran_on.append(threading.get_ident())
+      return 'primary'
+
+    hedged = concurrent.with_hedging(
+        func,
+        hedge_after=_HEDGE_SOON,
+        max_hedges=1,
+        on_hedge=self.hedges.append,
+    )
+    # Hedging is an optimization, so it must never make a call worse: when not
+    # even the primary can get a thread, the call runs inline on the caller's
+    # thread instead of failing a call that would have succeeded unwrapped.
+    with self.fail_thread_start_after(0):
+      self.assertEqual(hedged(), 'primary')
+    self.assertEqual(ran_on, [caller])
+    self.assertEqual(len(self.attempts), 1)
+    self.assertEqual(self.hedges, [])
+
+  def test_on_hedge_error_does_not_break_the_call(self):
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park()
+        return 'primary'
+      return 'hedge-1'
+
+    def on_hedge(ordinal: int) -> None:
+      self.hedges.append(ordinal)
+      raise RuntimeError('on_hedge failed')
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1, on_hedge=on_hedge
+    )
+    # `on_hedge` is observability-only, so a callback that raises must neither
+    # fail a call that would have succeeded unwrapped nor withdraw the replica
+    # it was notified about. The failure is logged instead of surfaced.
+    with self.assertLogs(pg.logging.get_logger(), level='WARNING') as logs:
+      self.assertEqual(hedged(), 'hedge-1')
+    self.assertEqual(len(self.attempts), 2)
+    self.assertEqual(self.hedges, [1])
+    self.assertIn('on_hedge failed', '\n'.join(logs.output))
+
+  def test_usage_tracking_and_context_reach_the_winning_replica(self):
+    caller = threading.get_ident()
+    lm = _FakeLM()
+    observed = {}
+    # Held until the assertions are done, so the replica is the only attempt
+    # that can win and the primary's value can never be mistaken for it.
+    primary_release = threading.Event()
+    self.addCleanup(primary_release.set)
+
+    def func():
+      attempt = self.attempts.record()
+      if attempt.ordinal == 1:
+        self.park(primary_release)
+        return 'primary'
+      observed['override'] = (A(1).y, component.context_value('y'))
+      observed['thread'] = threading.get_ident()
+      return lm('hedge-1').text
+
+    hedged = concurrent.with_hedging(
+        func, hedge_after=_HEDGE_SOON, max_hedges=1
+    )
+    # `track_usages` installs its tracker as a thread-local override, exactly
+    # like `y`, so usage is accounted only because the caller's overrides are
+    # captured when the call starts and replayed on the replica's thread.
+    with lm_lib.track_usages() as usages:
+      with component.context(y=7):
+        self.assertEqual(hedged(), 'hedge-1')
+
+    # One request, from the replica: the parked primary never reached the LM.
+    self.assertEqual(
+        usages.uncached.breakdown,
+        {'fake-lm': lm_lib.LMSamplingUsage(10, 20, 30, 0, 1)},
+    )
+    self.assertEqual(observed['override'], (7, 7))
+    self.assertNotEqual(observed['thread'], caller)
+    self.assertEqual(len(self.attempts), 2)
+
+    # Drain the primary here rather than at teardown, so that the assertion
+    # below proves the abandoned attempt actually unwinds.
+    primary_release.set()
+    primary = self.attempts.records[0].thread
+    primary.join(timeout=_HEDGE_TIMEOUT)
+    self.assertFalse(primary.is_alive())
 
 
 class ConcurrentExecuteTest(unittest.TestCase):
