@@ -25,7 +25,7 @@ from unittest import mock
 import langfun.core as lf
 from langfun.core import modalities as lf_modalities
 from langfun.core.llms import anthropic
-from langfun.core.llms import vertexai  # pylint: disable=unused-import
+from langfun.core.llms import vertexai
 import pyglove as pg
 import requests
 
@@ -1108,6 +1108,197 @@ class Claude48OpusTest(unittest.TestCase):
     with mock.patch('requests.Session.post') as mock_request:
       mock_request.side_effect = mock_requests_post
       lm = anthropic.Claude48Opus(api_key='fake_key', thinking=False)
+      response = lm('hello')
+      self.assertIn('hello', response.text)
+      # Verify sampling params are stripped (temperature/top_k/top_p = None)
+      self.assertIn('temperature=None', response.text)
+      self.assertIn('top_k=None', response.text)
+      self.assertIn('top_p=None', response.text)
+
+
+class Claude55OpusTest(unittest.TestCase):
+  """Tests for Claude Opus 5.5 model support."""
+
+  def test_opus55_basics(self):
+    """Test Claude Opus 5.5 basic instantiation."""
+    lm = anthropic.Claude55Opus(api_key='fake')
+    self.assertEqual(lm.model_id, 'claude-opus-5-5')
+    self.assertTrue(lm._use_adaptive_thinking)
+
+  def test_opus55_model_info(self):
+    """Test Claude Opus 5.5 model info is registered."""
+    opus_entries = [
+        info
+        for info in anthropic.SUPPORTED_MODELS
+        if info.model_id == 'claude-opus-5-5'
+    ]
+    self.assertEqual(len(opus_entries), 1)
+    entry = opus_entries[0]
+    self.assertEqual(entry.provider, 'Anthropic')
+    self.assertTrue(entry.in_service)
+    self.assertEqual(entry.context_length.max_input_tokens, 1_000_000)
+    self.assertEqual(entry.context_length.max_output_tokens, 128_000)
+    # Opus 5.5 is cheaper than every earlier Opus entry: the 4.5-5 rows carry
+    # 0.5 / 5.0 / 25.0, the Claude 3/4 Opus rows 1.5 / 15 / 75. Pinning the
+    # vendor-published numbers here makes a sibling-row copy-paste fail loudly.
+    self.assertEqual(entry.pricing.cost_per_1m_cached_input_tokens, 0.2)
+    self.assertEqual(entry.pricing.cost_per_1m_input_tokens, 4.0)
+    self.assertEqual(entry.pricing.cost_per_1m_output_tokens, 20.0)
+
+  def test_opus55_has_no_vertexai_alias_row(self):
+    """Opus 5.5 is registered bare-only, mirroring its predecessor Opus 5.
+
+    `claude-opus-5-5@latest` is deliberately NOT registered. Vertex AI publishes
+    this model under a single version, `claude-opus-5-5@default`, and exposes no
+    `latest` version for it. An `@latest` row would therefore ship an
+    unverifiable model id plus unverified rate limits, so Opus 5.5 mirrors
+    `claude-opus-5`, which is also bare-only.
+    """
+    self.assertEqual(
+        [
+            info
+            for info in anthropic.SUPPORTED_MODELS
+            if info.model_id == 'claude-opus-5-5@latest'
+        ],
+        [],
+    )
+    # With no VertexAI alias row, `VertexAIAnthropic.model_info` falls back to
+    # the Anthropic-direct row -- exactly the behaviour of `VertexAIClaude5Opus`
+    # today. The endpoint is unaffected because it is built from `model`.
+    model_info = vertexai.VertexAIClaude55Opus(project='test').model_info
+    self.assertEqual(model_info.model_id, 'claude-opus-5-5')
+    self.assertEqual(model_info.provider, 'Anthropic')
+
+  def test_opus55_exported_from_llms_package(self):
+    """Pins the Opus 5.5 exports on the `langfun.core.llms` package.
+
+    `Claude55Opus` and `VertexAIClaude55Opus` must stay importable directly from
+    `langfun.core.llms`, not only from the modules that define them. Dropping
+    either export line is a breaking change for callers, so it fails here.
+    """
+    from langfun.core import llms as lf_llms  # pylint: disable=g-import-not-at-top
+
+    self.assertIs(lf_llms.Claude55Opus, anthropic.Claude55Opus)
+    self.assertIs(lf_llms.VertexAIClaude55Opus, vertexai.VertexAIClaude55Opus)
+
+  def test_thinking_param_true_adaptive_opus_5_5(self):
+    """Claude 5.5 + thinking=True -> adaptive thinking with summarized display."""
+    lm = anthropic.Claude55Opus(api_key='fake', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1000, temperature=0.5)
+    )
+    self.assertEqual(
+        args['thinking'], {'type': 'adaptive', 'display': 'summarized'}
+    )
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_opus55_no_thinking_removes_sampling_params(self):
+    """Opus 5.5 strips temperature/top_k/top_p even with thinking=False."""
+    lm = anthropic.Claude55Opus(api_key='fake', thinking=False)
+    args = lm._request_args(
+        lf.LMSamplingOptions(
+            max_tokens=1000, temperature=0.5, top_k=40, top_p=0.9
+        )
+    )
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_opus55_default_strips_sampling_params(self):
+    """Opus 5.5 strips temperature/top_k/top_p even without thinking."""
+    lm = anthropic.Claude55Opus(api_key='fake')
+    args = lm._request_args(
+        lf.LMSamplingOptions(
+            max_tokens=1000, temperature=0.7, top_k=40, top_p=0.9
+        )
+    )
+    self.assertNotIn('thinking', args)
+    self.assertNotIn('temperature', args)
+    self.assertNotIn('top_k', args)
+    self.assertNotIn('top_p', args)
+
+  def test_opus55_effort_max(self):
+    """Test Opus 5.5 with effort='max'."""
+    lm = anthropic.Claude55Opus(api_key='fake', effort='max', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['output_config'], {'effort': 'max'})
+
+  def test_opus55_effort_medium(self):
+    """Test Opus 5.5 with effort='medium'."""
+    lm = anthropic.Claude55Opus(api_key='fake', effort='medium', thinking=True)
+    args = lm._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(args['output_config'], {'effort': 'medium'})
+
+  def test_opus55_reasoning_effort_overrides_model_effort(self):
+    """reasoning_effort in sampling options overrides model-level effort."""
+    lm = anthropic.Claude55Opus(api_key='fake', effort='high', thinking=True)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024, reasoning_effort='low')
+    )
+    self.assertEqual(args['output_config'], {'effort': 'low'})
+
+  def test_opus55_no_effort(self):
+    """Test Opus 5.5 with effort=None."""
+    lm = anthropic.Claude55Opus(api_key='fake', effort=None)
+    args = lm._request_args(
+        lf.LMSamplingOptions(max_tokens=1024, max_thinking_tokens=1024)
+    )
+    self.assertNotIn('output_config', args)
+
+  def test_opus55_thinking_options_adaptive(self):
+    """Claude 5.5 with thinking options uses adaptive mode."""
+    lm = anthropic.Claude55Opus(api_key='fake')
+    args = lm._request_args(
+        lf.LMSamplingOptions(
+            max_thinking_tokens=1024, max_tokens=1000, temperature=0.5
+        )
+    )
+    self.assertEqual(
+        args['thinking'], {'type': 'adaptive', 'display': 'summarized'}
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+    self.assertEqual(args['max_tokens'], 1000)
+    self.assertNotIn('temperature', args)
+
+  def test_model_uri_instantiation_opus_5_5(self):
+    """Test LLM instantiation from model URI for Claude Opus 5.5."""
+    model = lf.LanguageModel.get('claude-opus-5-5?api_key=test_key')
+    self.assertIsInstance(model, anthropic.Anthropic)
+    self.assertTrue(model._use_adaptive_thinking)
+    self.assertEqual(model.effort, 'high')
+
+  def test_model_uri_instantiation_opus_5_5_with_thinking(self):
+    """Test Opus 5.5 model URI with thinking=true."""
+    model = lf.LanguageModel.get(
+        'claude-opus-5-5?api_key=test_key&thinking=true'
+    )
+    self.assertTrue(model.thinking)
+    self.assertTrue(model._use_adaptive_thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertEqual(
+        args['thinking'],
+        {'type': 'adaptive', 'display': 'summarized'},
+    )
+    self.assertEqual(args['output_config'], {'effort': 'high'})
+
+  def test_model_uri_instantiation_opus_5_5_no_thinking(self):
+    """Test Opus 5.5 model URI with thinking=false."""
+    model = lf.LanguageModel.get(
+        'claude-opus-5-5?api_key=test_key&thinking=false'
+    )
+    self.assertFalse(model.thinking)
+    args = model._request_args(lf.LMSamplingOptions(max_tokens=1024))
+    self.assertNotIn('thinking', args)
+    # Opus 5.5 still strips temperature/top_k/top_p
+    self.assertNotIn('temperature', args)
+
+  def test_opus55_call_e2e(self):
+    """End-to-end call test for Claude Opus 5.5."""
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_requests_post
+      lm = anthropic.Claude55Opus(api_key='fake_key', thinking=False)
       response = lm('hello')
       self.assertIn('hello', response.text)
       # Verify sampling params are stripped (temperature/top_k/top_p = None)

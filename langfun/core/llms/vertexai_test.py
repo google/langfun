@@ -284,6 +284,35 @@ class VertexAIAnthropicTest(unittest.TestCase):
         anthropic.Anthropic,
     )
 
+  def test_lm_get_opus_5_5_resolves_vertexai(self):
+    """Bare `claude-opus-5-5` resolves to VertexAI; no `@latest` id exists.
+
+    `_register_vertexai_models` only auto-registers rows whose provider is
+    'VertexAI', and the `claude-opus-5-5` row declares provider='Anthropic',
+    so without the explicit override the bare id would fall through to the
+    direct `anthropic.Anthropic` class. That regression shipped once for Opus 5
+    and had to be repaired afterwards; pin it so it cannot recur.
+
+    Unlike Opus 4.6/4.7/4.8, Opus 5.5 registers no `@latest` alias: Vertex AI
+    publishes only `claude-opus-5-5@default`, so the `@latest` id is
+    unverifiable. Opus 5.5 mirrors `claude-opus-5` instead.
+    """
+    self.assertIsInstance(
+        lf.LanguageModel.get('claude-opus-5-5'),
+        vertexai.VertexAIClaude55Opus,
+    )
+    with self.assertRaises(ValueError):
+      lf.LanguageModel.get('claude-opus-5-5@latest')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_vertexai_claude55_opus_global_default(self):
+    """Verifies that Opus 5.5 defaults to 'global' and uses correct host."""
+    model = vertexai.VertexAIClaude55Opus(project='test')
+    self.assertEqual(model.location, 'global')
+    self.assertTrue(model._api_initialized)
+    self.assertIn('https://aiplatform.googleapis.com', model.api_endpoint)
+    self.assertNotIn('global-aiplatform', model.api_endpoint)
+
   def test_thinking_param_true_adaptive_vertexai(self):
     """VertexAI Claude 4.7 + thinking=True -> adaptive thinking."""
     lm = vertexai.VertexAIClaude47Opus(
