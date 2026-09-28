@@ -18,6 +18,7 @@ import os
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 import langfun.core as lf
 from langfun.core.llms import fake
@@ -309,6 +310,62 @@ class InMemoryLMCacheTest(unittest.TestCase):
     pg.io.writefile(path, 'bad_content')
     cache3 = in_memory.InMemory(path)
     self.assertEqual(len(cache3), 0)
+
+  def test_save_after_removing_loaded_entries(self):
+    for operation in ('delete', 'expire', 'reset_model', 'reset_all'):
+      for use_clone in (False, True):
+        with self.subTest(operation=operation, use_clone=use_clone):
+          with tempfile.TemporaryDirectory() as tmp_dir:
+            path = os.path.join(tmp_dir, 'cache.json')
+            cache = in_memory.InMemory(
+                ttl=-1 if operation == 'expire' else None
+            )
+            lm = fake.Echo(cache=cache)
+            other_lm = fake.StaticResponse('other', cache=cache)
+            lm('a')
+            other_lm('b')
+            cache.save(path)
+
+            loaded = in_memory.InMemory(path)
+            changed = loaded.clone() if use_clone else loaded
+            if operation == 'delete':
+              self.assertTrue(changed.delete(lm, lf.UserMessage('a'), seed=0))
+            elif operation == 'expire':
+              self.assertIsNone(changed.get(lm, lf.UserMessage('a'), seed=0))
+            elif operation == 'reset_model':
+              changed.reset(lm.model_id)
+            else:
+              changed.reset()
+
+            expected_count = 0 if operation == 'reset_all' else 1
+            self.assertEqual(len(loaded), expected_count)
+            self.assertEqual(loaded.stats.num_updates, 0)
+            loaded.save()
+
+            restored = in_memory.InMemory(path)
+            self.assertEqual(len(restored), expected_count)
+            self.assertEqual(list(restored.keys(lm.model_id)), [])
+            if expected_count:
+              self.assertEqual(len(list(restored.keys(other_lm.model_id))), 1)
+            self.assertEqual(loaded.stats.num_deletes, 2 - expected_count)
+
+  def test_save_without_mutations_does_not_rewrite(self):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+      path = os.path.join(tmp_dir, 'cache.json')
+      cache = in_memory.InMemory()
+      lm = fake.Echo(cache=cache)
+      lm('a')
+      cache.save(path)
+      loaded = in_memory.InMemory(path)
+      self.assertIsNotNone(loaded.get(lm, lf.UserMessage('a'), seed=0))
+      self.assertFalse(loaded.delete(lm, lf.UserMessage('missing'), seed=0))
+      loaded.reset('missing-model')
+
+      with mock.patch.object(pg, 'save', wraps=pg.save) as save:
+        loaded.save()
+      save.assert_not_called()
+      self.assertEqual(loaded.stats.num_updates, 0)
+      self.assertEqual(loaded.stats.num_deletes, 0)
 
 
 class LmCacheTest(unittest.TestCase):
