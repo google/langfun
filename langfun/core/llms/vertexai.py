@@ -253,6 +253,13 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 #
 # Production models.
 #
+class VertexAIGemini4Pro(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 4 Pro model."""
+
+  model = 'gemini-4-pro'
+  location = 'global'
+
+
 class VertexAIGemini31ProPreview(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 3.1 Pro Preview model launched on 02/19/2026."""
 

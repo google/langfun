@@ -58,6 +58,17 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_pro(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    model = vertexai.VertexAIGemini4Pro(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-pro')
+    # Gemini 4 models default to 'global' location.
+    self.assertIn('global', model.api_endpoint)
+    del os.environ['VERTEXAI_PROJECT']
+    del os.environ['VERTEXAI_LOCATION']
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_37_flash(self):
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'

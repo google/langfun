@@ -207,6 +207,27 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
+    # Gemini 4 Pro
+    GeminiModelInfo(
+        model_id='gemini-4-pro',
+        in_service=True,
+        provider='VertexAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 4 Pro: Multimodal model for complex reasoning and agentic'
+            ' workflows. Availability is limited: the model must be enabled for'
+            ' the calling project, and a project without access gets a'
+            ' not-found error rather than a permission error.'
+        ),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=32_768,
+        ),
+        # release_date, knowledge_cutoff, pricing and rate_limits are
+        # intentionally omitted: no published values exist for this model yet.
+        # All four default to None (unknown), not copied from a different row.
+    ),
     # Gemini 3.1 Pro Preview
     GeminiModelInfo(
         model_id='gemini-3.1-pro-preview',
