@@ -556,13 +556,16 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
             pg.views.html.controls.Label(
                 title,
                 link=link,
-                tooltip=pg.format(  # pytype: disable=wrong-arg-types
+                tooltip=pg.format(
                     self,
                     verbose=False,
                     use_inferred=True,
                     hide_default_values=True,
                     exclude_keys=(
-                        'root_dir', 'plugins', 'progress', 'usage_summary'
+                        'root_dir',
+                        'plugins',
+                        'progress',
+                        'usage_summary',
                     ),
                 ),
                 css_classes=['experiment-name'],
@@ -572,7 +575,9 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
                 '[dir]',
                 link=dir_link,
                 css_classes=['experiment-dir'],
-            ) if dir_link is not None else None,
+            )
+            if dir_link is not None
+            else None,
             # Progress bar.
             self.progress.to_html(
                 extra_flags=dict(interactive=interactive),
@@ -582,7 +587,7 @@ class Experiment(lf.Component, pg.views.HtmlTreeView.Extension):
                 extra_flags=dict(as_badge=True, interactive=interactive)
             ),
         ],
-        css_classes=['experiment-summary']
+        css_classes=['experiment-summary'],
     )
 
   def _html_tree_view_summary(
