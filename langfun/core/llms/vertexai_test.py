@@ -58,6 +58,31 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_pro(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = vertexai.VertexAIGemini4Pro(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-pro')
+    # Gemini 4 models default to 'global' location.
+    self.assertIn('global', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_pro_string_id_resolves_to_global(self):
+    # The bare string id must resolve to VertexAIGemini4Pro, not the generic
+    # VertexAIGemini, so it keeps the `global` location pin.
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = lf.LanguageModel.get('gemini-4-pro')
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Pro)
+    self.assertIn('global', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_37_flash(self):
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'
