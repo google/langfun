@@ -450,7 +450,7 @@ class Message(
   ) -> list[modality.Modality]:
     """Returns the modality objects referred in the message."""
     if inspect.isclass(filter) and issubclass(filter, modality.Modality):
-      filter_fn = lambda v: isinstance(v, filter)  # pytype: disable=wrong-arg-types
+      filter_fn = lambda v: isinstance(v, filter)
     elif filter is None:
       filter_fn = lambda v: True
     else:

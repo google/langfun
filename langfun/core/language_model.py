@@ -511,10 +511,10 @@ class LMSamplingUsage(pg.Object):
 
 class UsageNotAvailable(LMSamplingUsage):
   """Usage information not available."""
-  prompt_tokens: pg.typing.Int(0).freeze()       # pytype: disable=invalid-annotation
-  completion_tokens: pg.typing.Int(0).freeze()   # pytype: disable=invalid-annotation
-  total_tokens: pg.typing.Int(0).freeze()        # pytype: disable=invalid-annotation
-  estimated_cost: pg.typing.Float(default=None, is_noneable=True).freeze()    # pytype: disable=invalid-annotation
+  prompt_tokens: pg.typing.Int(0).freeze()  # pyrefly: ignore[invalid-annotation]
+  completion_tokens: pg.typing.Int(0).freeze()  # pyrefly: ignore[invalid-annotation]
+  total_tokens: pg.typing.Int(0).freeze()  # pyrefly: ignore[invalid-annotation]
+  estimated_cost: pg.typing.Float(default=None, is_noneable=True).freeze()  # pyrefly: ignore[invalid-annotation]
 
   def __add__(self, other: Optional['LMSamplingUsage']) -> 'UsageNotAvailable':
     if other is None:
@@ -1255,7 +1255,7 @@ class LanguageModel(component.Component):
 
       # Combine cached results and newly requested results.
       for i, (prompt, result) in enumerate(zip(requests, requested_results)):
-        results[request_to_result_index[i]] = result  # pyrefly: ignore[unsupported-operation]
+        results[request_to_result_index[i]] = result
 
         # Carry the cache seed in response message.
         for sample in result.samples:
@@ -1268,7 +1268,7 @@ class LanguageModel(component.Component):
               result.clone(override=dict(is_cached=True)),  # pyrefly: ignore[bad-argument-type]
               seed=cache_seed
           )
-    return results  # pytype: disable=bad-return-type
+    return results  # pyrefly: ignore[bad-return]
 
   @abc.abstractmethod
   def _sample(

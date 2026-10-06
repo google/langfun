@@ -120,7 +120,6 @@ class LogEntry(pg.Object, pg.views.HtmlTreeView.Extension):
         **kwargs,
     )
 
-  # pytype: disable=annotation-type-mismatch
   def _html_tree_view_content(
       self,
       view: pg.views.HtmlTreeView,
@@ -130,7 +129,6 @@ class LogEntry(pg.Object, pg.views.HtmlTreeView.Extension):
       extra_flags: dict[str, Any] | None = None,
       **kwargs
   ) -> pg.Html:
-    # pytype: enable=annotation-type-mismatch
     extra_flags = extra_flags if extra_flags is not None else {}
     collapse_log_metadata_level: int | None = extra_flags.get(
         'collapse_log_metadata_level', None
