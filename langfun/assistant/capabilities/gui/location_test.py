@@ -114,7 +114,7 @@ class BBoxTest(unittest.TestCase):
       _ = (1, 2, 3) in bbox  # pyrefly: ignore[unsupported-operation]
 
     with self.assertRaisesRegex(ValueError, 'Invalid type'):
-      _ = 'abc' in bbox  # pytype: disable=unsupported-operands
+      _ = 'abc' in bbox  # pyrefly: ignore[unsupported-operation]
 
   def test_intersects(self):
     bbox = location.BBox(100, 50, 300, 450)

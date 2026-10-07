@@ -69,7 +69,7 @@ class Image(mime.Mime):
     img = pil_open(io.BytesIO(self.to_bytes()))
     return img.size
 
-  def to_pil_image(self) -> PILImage:   # pytype: disable=invalid-annotation
+  def to_pil_image(self) -> PILImage:
     return pil_open(io.BytesIO(self.to_bytes()))
 
   def _is_compatible(self, mime_types: Iterable[str]) -> bool:
@@ -116,7 +116,7 @@ class Image(mime.Mime):
     return self.from_bytes(buf.getvalue())  # pyrefly: ignore[bad-return]
 
   @classmethod
-  def from_pil_image(cls, img: PILImage) -> 'Image':  # pytype: disable=invalid-annotation
+  def from_pil_image(cls, img: PILImage) -> 'Image':
     buf = io.BytesIO()
     try:
       img.save(buf, format='PNG')
