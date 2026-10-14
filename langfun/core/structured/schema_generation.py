@@ -183,7 +183,7 @@ def default_classgen_examples() -> list[mapping.MappingExample]:
     output: float
 
   class Solution(pg.Object):
-    steps: list[Step]  # pytype: disable=invalid-annotation
+    steps: list[Step]
     result: float
 
   return [

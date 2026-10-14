@@ -53,10 +53,8 @@ import pyglove as pg
 
 try:
   # pylint: disable=g-import-not-at-top
-  # pytype: disable=import-error
-  import apache_beam as beam
-  from apache_beam.options import pipeline_options
-  # pytype: enable=import-error
+  import apache_beam as beam  # pyrefly: ignore[missing-import]
+  from apache_beam.options import pipeline_options  # pyrefly: ignore[missing-import]
   # pylint: enable=g-import-not-at-top
 except ImportError:
   beam = None

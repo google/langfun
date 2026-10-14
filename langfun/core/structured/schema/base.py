@@ -523,7 +523,7 @@ class PromptingProtocol(metaclass=abc.ABCMeta):
     protocol_cls = cls._PROTOCOLS.get(name)
     if protocol_cls is None:
       raise ValueError(f'Unsupported protocol: {name}.')
-    return protocol_cls()  # pytype: disable=not-instantiable
+    return protocol_cls()
 
   @abc.abstractmethod
   def schema_repr(self, schema: Schema) -> str:

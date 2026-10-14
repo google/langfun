@@ -1743,10 +1743,10 @@ def inputs_from(path: str | list[str], **kwargs) -> list[Any]:
       import pandas as pd  # pylint: disable=g-import-not-at-top
       dataset_df = pd.read_csv(path, **kwargs)
       dataset = []
-      for i in range(dataset_df.shape[0]):  # pyrefly: ignore[missing-attribute]
+      for i in range(dataset_df.shape[0]):
         row = {}
-        for col in dataset_df.columns:  # pyrefly: ignore[missing-attribute]
-          row[col] = dataset_df.iloc[i][col]  # pyrefly: ignore[missing-attribute]
+        for col in dataset_df.columns:
+          row[col] = dataset_df.iloc[i][col]
         dataset.append(row)
       return dataset
     else:

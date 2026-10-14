@@ -88,9 +88,7 @@ def run_with_correction(
   """
   # Delay import at runtime to avoid circular depenency.
   # pylint: disable=g-import-not-at-top
-  # pytype: disable=import-error
-  from langfun.core.structured import querying
-  # pytype: enable=import-error
+  from langfun.core.structured import querying  # pyrefly: ignore[missing-import]
   # pylint: enable=g-import-not-at-top
 
   if max_attempts == 0:
