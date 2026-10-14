@@ -99,6 +99,19 @@ class RestTest(unittest.TestCase):
       )
       self.assertIsInstance(response.usage, lf.UsageNotAvailable)
 
+  def test_network_error_while_building_request_is_retryable(self):
+    def request(prompt, options):
+      del prompt, options
+      raise requests.exceptions.ConnectionError('Connection reset by peer')
+
+    lm = rest.REST(
+        api_endpoint='https://fake-api.com',
+        request=request,
+        result=lambda x: lf.LMSamplingResult([]),
+    )
+    with self.assertRaises(lf.TemporaryLMError):
+      lm._sample_single(lf.UserMessage('hello'))
+
   def test_call_errors(self):
     for status_code, error_type, error_message in [
         (429, 'rate_limit', 'Rate limit exceeded.'),

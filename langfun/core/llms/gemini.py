@@ -15,6 +15,7 @@
 
 import datetime
 import functools
+import re
 from typing import Annotated, Any
 
 import langfun.core as lf
@@ -22,6 +23,7 @@ from langfun.core import modalities as lf_modalities
 from langfun.core.data.conversion import gemini as gemini_conversion  # pylint: disable=unused-import
 from langfun.core.llms import rest
 import pyglove as pg
+import requests
 
 
 class GeminiEmptyGenerationError(lf.LMError):
@@ -207,6 +209,27 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
+    # Gemini 4 Argon
+    GeminiModelInfo(
+        model_id='gemini-4-argon',
+        in_service=True,
+        provider='VertexAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 4 Argon: Multimodal model for complex reasoning and'
+            ' agentic workflows.'
+        ),
+        release_date=datetime.datetime(2026, 10, 13),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        # pricing, rate_limits and knowledge_cutoff are left unset, so they
+        # default to None, which callers already read as "unknown". Launch
+        # pricing is introductory and scheduled to rise, so pinning a rate here
+        # would go stale with no signal to the reader.
+    ),
     # Gemini 3.1 Pro Preview
     GeminiModelInfo(
         model_id='gemini-3.1-pro-preview',
@@ -990,6 +1013,62 @@ SUPPORTED_MODELS = [
 
 _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
+# A 1M-token budget needs about 32 hops of 32K tokens; the cap only stops a
+# server that keeps returning CONTINUATION without ever finishing.
+_MAX_CONTINUATION_HOPS = 64
+
+
+def _gemini_major_version(model_id: str) -> int:
+  """Returns N for a `gemini-N...` model ID, or 0 for unversioned IDs."""
+  match = re.match(r'gemini-(\d+)', model_id)
+  return int(match.group(1)) if match else 0
+
+
+def _continues_text(part: dict[str, Any], next_part: dict[str, Any]) -> bool:
+  """Returns True if `next_part` continues the text or thought of `part`."""
+  return (
+      isinstance(part.get('text'), str)
+      and isinstance(next_part.get('text'), str)
+      and bool(part.get('thought')) == bool(next_part.get('thought'))
+  )
+
+
+def _merge_continuation_hops(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+  """Merges the responses of a continued generation into a single response.
+
+  Parts are concatenated in order, re-joining a text part that a hop boundary
+  split, since `Message.from_chunks` would otherwise insert a separator there.
+  Token counts are summed, as every hop is billed. All other fields, e.g.
+  `finishReason`, come from the last hop.
+
+  Args:
+    payloads: Single-candidate `generateContent` responses, in hop order.
+
+  Returns:
+    A `generateContent` response combining all hops.
+  """
+  parts = []
+  usage = {}
+  for payload in payloads:
+    content = payload['candidates'][0].get('content') or {}
+    hop_parts = list(content.get('parts') or [])
+    if parts and hop_parts and _continues_text(parts[-1], hop_parts[0]):
+      first = hop_parts.pop(0)
+      parts[-1] = {
+          **parts[-1],
+          **first,
+          'text': parts[-1]['text'] + first['text'],
+      }
+    parts.extend(hop_parts)
+    for key, value in (payload.get('usageMetadata') or {}).items():
+      if isinstance(value, int):
+        value += usage.get(key, 0)
+      usage[key] = value
+  last = payloads[-1]
+  candidate = dict(last['candidates'][0])
+  candidate['content'] = dict(candidate.get('content') or {}, parts=parts)
+  return dict(last, candidates=[candidate], usageMetadata=usage)
+
 
 @pg.use_init_args(['model'])
 class Gemini(rest.REST):
@@ -1029,6 +1108,77 @@ class Gemini(rest.REST):
     return {
         'Content-Type': 'application/json; charset=utf-8',
     }
+
+  def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
+    """Samples a prompt, resuming a generation cut at the per-request cap."""
+    with self._as_lm_errors():
+      request = self.request(prompt, self.sampling_options)
+      # Resolved once so that all requests of a generation go to the same
+      # project; `api_endpoint` may pick a different project on each call.
+      endpoint = self.api_endpoint
+      response = self._post(request, endpoint)
+      hops: list[dict[str, Any]] = []
+      # Retried here rather than by `_sample()`, which would restart from hop 0.
+      post_continuation = lf.with_retry(
+          self._post_continuation,
+          retry_on_errors=lf.RetryableLMError,
+          max_attempts=self.max_attempts,
+          retry_interval=self.retry_interval,
+          exponential_backoff=self.exponential_backoff,
+          max_retry_interval=self.max_retry_interval,
+      )
+      while (hop := self._continuation_hop(response)) is not None:
+        hops.append(hop)
+        if len(hops) == _MAX_CONTINUATION_HOPS:
+          raise lf.LMError(
+              f'Model {self.model_id} did not finish within '
+              f'{_MAX_CONTINUATION_HOPS} requests.'
+          )
+        # Long decode: each hop resends the original request plus the token.
+        response = post_continuation(
+            dict(
+                request,
+                continuationToken=hop['candidates'][0]['continuationToken'],
+            ),
+            endpoint,
+        )
+      if not hops:
+        return self._parse_response(response)
+      try:
+        final = self._response_to_message_dict(response)
+        if final.get('candidates'):
+          final = _merge_continuation_hops(hops + [final])
+        return self.result(final)
+      except (ValueError, KeyError) as e:
+        raise lf.LMError(str(e)) from e
+
+  def _post_continuation(
+      self, request: dict[str, Any], endpoint: str
+  ) -> requests.Response:
+    """POSTs a continuation request, raising if it was not successful."""
+    response = self._post(request, endpoint)
+    if response.status_code != 200:
+      raise self._error(response.status_code, response.content)  # pyrefly: ignore[bad-argument-type]
+    return response
+
+  def _continuation_hop(
+      self, response: requests.Response
+  ) -> dict[str, Any] | None:
+    """Returns the payload of `response` if it stopped to be continued."""
+    if response.status_code != 200:
+      return None
+    try:
+      payload = self._response_to_message_dict(response)
+    except ValueError:
+      return None
+    candidates = payload.get('candidates') or []
+    if (
+        len(candidates) == 1
+        and candidates[0].get('finishReason') == 'CONTINUATION'
+        and candidates[0].get('continuationToken')
+    ):
+      return payload
+    return None
 
   def request(
       self, prompt: lf.Message, sampling_options: lf.LMSamplingOptions
@@ -1104,10 +1254,9 @@ class Gemini(rest.REST):
     if thinking_config_data:
       config['thinkingConfig'] = thinking_config_data  # pyrefly: ignore[bad-assignment]
 
-    # This is the new feature since Gemini 3.
-    # Skip for image generation models as they don't support mediaResolution.
+    # Supported since Gemini 3, except by lite and image generation models.
     if (
-        self.model_id.startswith('gemini-3')
+        _gemini_major_version(self.model_id) >= 3
         and 'lite' not in self.model_id
         and not (
             self.response_modalities and 'IMAGE' in self.response_modalities

@@ -58,6 +58,124 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = vertexai.VertexAIGemini4Argon(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-argon')
+    # Gemini 4 models default to 'global', overriding the environment.
+    self.assertEqual(model.location, 'global')
+    self.assertIn('global', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_string_id_resolves_to_global(self):
+    # The bare string id must resolve to VertexAIGemini4Argon, not the generic
+    # VertexAIGemini, so it keeps the `global` location pin.
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = lf.LanguageModel.get('gemini-4-argon')
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Argon)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-argon')
+    self.assertIn('global', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_model_uri(self):
+    model = lf.LanguageModel.get(
+        'gemini-4-argon?project=lf-agent&location=global&max_attempts=80'
+        '&timeout=300&exponential_backoff=False&thinking_level=high'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Argon)
+    self.assertEqual(model.project, 'lf-agent')
+    self.assertEqual(model.max_attempts, 80)
+    self.assertEqual(model.timeout, 300)
+    self.assertFalse(model.exponential_backoff)
+    self.assertEqual(model.sampling_options.thinking_level, 'high')
+    self.assertEqual(model.sampling_options.max_tokens, 65_536)
+    self.assertEqual(
+        model.api_endpoint,
+        'https://aiplatform.googleapis.com/v1beta1/projects/lf-agent/'
+        'locations/global/publishers/google/models/gemini-4-argon:'
+        'generateContent',
+    )
+    config = model.request(lf.UserMessage('hi'), model.sampling_options)[
+        'generationConfig'
+    ]
+    self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'high'})
+    self.assertEqual(config['maxOutputTokens'], 65_536)
+    self.assertEqual(config['mediaResolution'], 'MEDIA_RESOLUTION_HIGH')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_model_uri_overrides_defaults(self):
+    model = lf.LanguageModel.get(
+        'gemini-4-argon?project=lf-agent&thinking_level=medium'
+        '&max_tokens=131072&api_version=v1'
+    )
+    self.assertEqual(model.sampling_options.thinking_level, 'medium')
+    self.assertEqual(model.sampling_options.max_tokens, 131_072)
+    self.assertEqual(model.timeout, 900)
+    self.assertIn('aiplatform.googleapis.com/v1/projects/', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_resumes_continuation_on_one_project(self):
+    hops = [
+        {
+            'candidates': [{
+                'content': {'role': 'model', 'parts': [{'text': ''}]},
+                'finishReason': 'CONTINUATION',
+                'continuationToken': 'token-1',
+            }],
+            'usageMetadata': {
+                'promptTokenCount': 12,
+                'thoughtsTokenCount': 32_765,
+                'totalTokenCount': 32_777,
+            },
+        },
+        {
+            'candidates': [{
+                'content': {'role': 'model', 'parts': [{'text': '42'}]},
+                'finishReason': 'STOP',
+            }],
+            'usageMetadata': {
+                'promptTokenCount': 12,
+                'candidatesTokenCount': 1,
+                'totalTokenCount': 13,
+            },
+        },
+    ]
+    calls = []
+
+    def post(url, json, **kwargs):
+      del kwargs
+      calls.append((url, json))
+      response = requests.Response()
+      response.status_code = 200
+      response._content = pg.to_json_str(hops[len(calls) - 1]).encode()  # pylint: disable=protected-access
+      return response
+
+    picks = []
+
+    def alternate(projects):
+      picks.append(projects)
+      return projects[(len(picks) - 1) % len(projects)]
+
+    with (
+        mock.patch.object(vertexai.random, 'choice', side_effect=alternate),
+        mock.patch('requests.Session.post', side_effect=post),
+    ):
+      response = vertexai.VertexAIGemini4Argon(project='p1,p2')('hi')
+    self.assertEqual(response.text, '42')
+    self.assertEqual(len(calls), 2)
+    self.assertIn('/v1beta1/projects/p1/', calls[0][0])
+    self.assertEqual(calls[1][0], calls[0][0])
+    self.assertEqual(calls[1][1]['continuationToken'], 'token-1')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_37_flash(self):
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'
@@ -172,10 +290,10 @@ class VertexAITest(unittest.TestCase):
     ):
       with (
           mock.patch.object(auth, 'default') as mock_auth,
-          mock.patch.object(rest.REST, '_sample_single') as mock_sample_single,
+          mock.patch.object(rest.REST, '_post') as mock_post,
       ):
         mock_auth.return_value = mock.MagicMock(), None
-        mock_sample_single.side_effect = _auth_refresh_error
+        mock_post.side_effect = _auth_refresh_error
         model = vertexai.VertexAIGemini15Pro(
             project='abc', location='us-central1', max_attempts=1
         )

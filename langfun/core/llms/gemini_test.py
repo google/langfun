@@ -293,6 +293,30 @@ class GeminiTest(unittest.TestCase):
     )
     self.assertIsNone(config.get('mediaResolution'))
 
+  def test_media_resolution_for_gemini4(self):
+    model = gemini.Gemini('gemini-4-argon', api_endpoint='')
+    config = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(),
+    )
+    self.assertEqual(config.get('mediaResolution'), 'MEDIA_RESOLUTION_HIGH')
+
+  def test_no_media_resolution_for_unversioned_model(self):
+    model = gemini.Gemini('gemini-exp-1206', api_endpoint='')
+    config = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(),
+    )
+    self.assertIsNone(config.get('mediaResolution'))
+
+  def test_thinking_level_medium(self):
+    model = gemini.Gemini('gemini-4-argon', api_endpoint='')
+    config = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(thinking_level='medium'),
+    )
+    self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'medium'})
+
   def test_request_tool_config(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
     request = model.request(
@@ -598,6 +622,232 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
         self._response([], None, candidates_token_count=0)
     )
     self.assertEqual(result.samples[0].response.text, '')
+
+
+def _hop(
+    parts: list[dict[str, Any]],
+    finish_reason: str,
+    *,
+    token: str | None = None,
+    candidates_token_count: int = 0,
+    thoughts_token_count: int = 0,
+) -> dict[str, Any]:
+  """Returns a single-candidate `generateContent` response payload."""
+  candidate = {
+      'content': {'role': 'model', 'parts': parts},
+      'finishReason': finish_reason,
+  }
+  if token is not None:
+    candidate['continuationToken'] = token
+  return {
+      'candidates': [candidate],
+      'usageMetadata': {
+          'promptTokenCount': 10,
+          'candidatesTokenCount': candidates_token_count,
+          'thoughtsTokenCount': thoughts_token_count,
+          'totalTokenCount': 10 + candidates_token_count + thoughts_token_count,
+      },
+  }
+
+
+class GeminiContinuationTest(unittest.TestCase):
+  """Tests resuming generations stopped with finishReason=CONTINUATION."""
+
+  def _serve(
+      self, *responses: dict[str, Any] | int
+  ) -> tuple[list[dict[str, Any]], Any]:
+    """Returns (sent requests, POST side effect) serving `responses` in order.
+
+    Args:
+      *responses: Payloads to return with HTTP 200, or HTTP error codes. The
+        last one is served again for any extra request.
+    """
+    sent = []
+
+    def post(url, json, **kwargs):
+      del url, kwargs
+      sent.append(json)
+      served = responses[min(len(sent), len(responses)) - 1]
+      response = requests.Response()
+      if isinstance(served, int):
+        response.status_code = served
+        response._content = b'Error.'
+      else:
+        response.status_code = 200
+        response._content = pg.to_json_str(served).encode()
+      return response
+
+    return sent, post
+
+  def _lm(self) -> gemini.Gemini:
+    return gemini.Gemini(
+        'gemini-4-argon', api_endpoint='', max_attempts=3, retry_interval=0
+    )
+
+  def test_follows_continuation_until_stop(self):
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'Plan.', 'thought': True}, {'text': 'Hello, wor'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=4,
+            thoughts_token_count=100,
+        ),
+        _hop([{'text': 'ld!'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello, world!')
+    self.assertEqual(response.metadata.thought, 'Plan.')
+    self.assertEqual(response.metadata.finish_reason, 'STOP')
+    self.assertEqual(response.metadata.usage.prompt_tokens, 20)
+    self.assertEqual(response.metadata.usage.completion_tokens, 6)
+    self.assertEqual(response.metadata.usage.total_tokens, 126)
+    self.assertEqual(
+        response.metadata.usage.completion_tokens_details['thinking_tokens'],
+        100,
+    )
+    self.assertEqual(len(sent), 2)
+    self.assertNotIn('continuationToken', sent[0])
+    self.assertEqual(sent[1], dict(sent[0], continuationToken='token-1'))
+
+  def test_thought_only_hop_is_continued_not_resent(self):
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'CONTINUATION',
+            token='token-1',
+            thoughts_token_count=32_765,
+        ),
+        _hop(
+            [{'text': 'The answer is 42.', 'thoughtSignature': 'sig'}],
+            'STOP',
+            candidates_token_count=6,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'The answer is 42.')
+    self.assertEqual(len(sent), 2)
+
+  def test_budget_exhausted_after_continuation_is_not_resent(self):
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'Thinking...', 'thought': True}],
+            'CONTINUATION',
+            token='token-1',
+            thoughts_token_count=32_768,
+        ),
+        _hop(
+            [{'text': ' still thinking', 'thought': True}],
+            'MAX_TOKENS',
+            thoughts_token_count=32_768,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaisesRegex(
+          gemini.GeminiEmptyGenerationError, 'thoughtsTokenCount=65536'
+      ):
+        self._lm()('hi')
+    self.assertEqual(len(sent), 2)
+
+  def test_failed_continuation_hop_is_retried_in_place(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello, wor'}], 'CONTINUATION', token='token-1'),
+        503,
+        _hop([{'text': 'ld!'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello, world!')
+    self.assertEqual(len(sent), 3)
+    self.assertEqual(sent[1], sent[2])
+    self.assertEqual(sent[2]['continuationToken'], 'token-1')
+
+  def test_continuation_hop_retries_are_bounded(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello, wor'}], 'CONTINUATION', token='token-1'),
+        503,
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(lf.concurrent.RetryError):
+        self._lm()._sample_single(lf.UserMessage('hi'))
+    # The first hop plus `max_attempts` tries of the second one.
+    self.assertEqual(len(sent), 4)
+
+  def test_continuation_hop_permanent_error_is_not_retried(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello, wor'}], 'CONTINUATION', token='token-1'),
+        400,
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaisesRegex(lf.LMError, '400'):
+        self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertEqual(len(sent), 2)
+
+  def test_final_hop_without_candidates_raises_retryable_error(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello, wor'}], 'CONTINUATION', token='token-1'),
+        {'usageMetadata': {'promptTokenCount': 10}},
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(lf.TemporaryLMError):
+        self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertEqual(len(sent), 2)
+
+  def test_stop_is_a_single_request(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2)
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello!')
+    self.assertEqual(len(sent), 1)
+
+  def test_continuation_without_token_is_not_followed(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello, wor'}], 'CONTINUATION', candidates_token_count=4)
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello, wor')
+    self.assertEqual(len(sent), 1)
+
+  def test_multiple_candidates_are_not_continued(self):
+    payload = _hop([{'text': 'A'}], 'CONTINUATION', token='token-1')
+    payload['candidates'].append({
+        'content': {'role': 'model', 'parts': [{'text': 'B'}]},
+        'finishReason': 'CONTINUATION',
+        'continuationToken': 'token-2',
+    })
+    sent, post = self._serve(payload)
+    with mock.patch('requests.Session.post', side_effect=post):
+      result = self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertEqual([s.response.text for s in result.samples], ['A', 'B'])
+    self.assertEqual(len(sent), 1)
+
+  def test_network_error_while_building_request_is_retryable(self):
+    with mock.patch.object(
+        gemini.Gemini,
+        '_generation_config',
+        side_effect=requests.exceptions.ConnectionError(
+            'Connection reset by peer'
+        ),
+    ):
+      with self.assertRaises(lf.TemporaryLMError):
+        self._lm()._sample_single(lf.UserMessage('hi'))
+
+  def test_stops_after_max_continuation_hops(self):
+    sent, post = self._serve(
+        _hop([{'text': 'x'}], 'CONTINUATION', token='token-1')
+    )
+    with mock.patch.object(gemini, '_MAX_CONTINUATION_HOPS', 3):
+      with mock.patch('requests.Session.post', side_effect=post):
+        with self.assertRaisesRegex(
+            lf.LMError, 'did not finish within 3 requests'
+        ):
+          self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertEqual(len(sent), 3)
 
 
 if __name__ == '__main__':

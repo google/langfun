@@ -13,9 +13,10 @@
 # limitations under the License.
 """Base class for language models through REST APIs."""
 
+import contextlib
 import functools
 import time
-from typing import Annotated, Any, Callable
+from typing import Annotated, Any, Callable, Iterator
 
 import langfun.core as lf
 # Placeholder for Google-internal internet access import.
@@ -138,22 +139,36 @@ class REST(lf.LanguageModel):
     )
 
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
+    with self._as_lm_errors():
+      return self._parse_response(
+          self._post(self.request(prompt, self.sampling_options))
+      )
+
+  def _post(
+      self, request: dict[str, Any], endpoint: str | None = None
+  ) -> requests.Response:
+    """POSTs `request` to `endpoint` (default: `api_endpoint`), read fully."""
+    with self._as_lm_errors(), self.session() as session:
+      total_timeout = self._effective_total_timeout
+      deadline = (
+          (time.monotonic() + total_timeout)
+          if total_timeout is not None
+          else None
+      )
+      response = session.post(
+          endpoint or self.api_endpoint,
+          json=request,
+          timeout=self._per_operation_timeout,
+          stream=True,
+      )
+      self._read_response_with_deadline(response, deadline)
+      return response
+
+  @contextlib.contextmanager
+  def _as_lm_errors(self) -> Iterator[None]:
+    """Maps network errors raised in the block to `lf.LMError`s."""
     try:
-      with self.session() as session:
-        total_timeout = self._effective_total_timeout
-        deadline = (
-            (time.monotonic() + total_timeout)
-            if total_timeout is not None
-            else None
-        )
-        response = session.post(
-            self.api_endpoint,
-            json=self.request(prompt, self.sampling_options),
-            timeout=self._per_operation_timeout,
-            stream=True,
-        )
-        self._read_response_with_deadline(response, deadline)
-        return self._parse_response(response)
+      yield
     except (
         requests.exceptions.Timeout,
         requests.exceptions.ReadTimeout,

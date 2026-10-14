@@ -235,12 +235,17 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
   # Set default location to us-central1.
   location = 'us-central1'
 
+  api_version: Annotated[
+      Literal['v1', 'v1beta1'],
+      'The Vertex AI API version.',
+  ] = 'v1'
+
   @property
   def api_endpoint(self) -> str:  # pyrefly: ignore[bad-override]
     assert self._api_initialized
     project = self._project
     return (
-        'https://aiplatform.googleapis.com/v1/projects/'
+        f'https://aiplatform.googleapis.com/{self.api_version}/projects/'
         f'{project}/locations/{self._location}/publishers/google/'
         f'models/{self.model}:generateContent'
     )
@@ -253,6 +258,22 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 #
 # Production models.
 #
+class VertexAIGemini4Argon(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 4 Argon GA model launched on 10/13/2026."""
+
+  model = 'gemini-4-argon'
+  # Pinned: `VertexAIGemini` defaults to `us-central1`, which is not among this
+  # model's available regions (`global`, `us` and `eu`).
+  location = 'global'
+  # A response stops at 32K tokens, and v1 rejects the `continuationToken` that
+  # resumes a longer generation.
+  api_version = 'v1beta1'
+  # The model's documented default output budget, spanning two responses.
+  sampling_options = lf.LMSamplingOptions(max_tokens=65_536)
+  # A 32K-token response takes minutes; the model docs advise 15+ minutes.
+  timeout = 900.0
+
+
 class VertexAIGemini31ProPreview(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 3.1 Pro Preview model launched on 02/19/2026."""
 
@@ -864,6 +885,10 @@ def _register_vertexai_models():
         and 'VertexAI' in m.provider.candidates
     ):
       lf.LanguageModel.register(m.model_id, VertexAIGemini)
+
+  # Registered after the generic loop so that the bare string id resolves to the
+  # location-pinned subclass rather than the generic VertexAIGemini base class.
+  lf.LanguageModel.register('gemini-4-argon', VertexAIGemini4Argon)
 
   for m in anthropic.SUPPORTED_MODELS:
     if m.provider == 'VertexAI':
