@@ -83,7 +83,7 @@ class LfQuery(mapping.Mapping):
 
   # This the flag to update default protocol version.
   _DEFAULT_PROTOCOL_VERSIONS: ClassVar[dict[str, str]] = {
-      'python': '2.0',
+      'python': '3.0',
       'json': '1.0',
   }
 
@@ -275,6 +275,77 @@ class _LfQueryPythonV2(LfQuery):
       {% endif -%}
       """
   )
+
+
+class _LfQueryPythonV3(LfQuery):
+  """Query a structured value using Python as the protocol.
+
+  Compared to `_LfQueryPythonV2`, this layout:
+
+  * renders the schema *before* the request, so everything ahead of the
+    caller's own text is byte-identical across requests and can be served
+    from an LLM prefix (KV) cache;
+  * passes both the schema and the request through verbatim, instead of
+    re-indenting them by two spaces;
+  * replaces the worked `Answer(final_answer=2)` example with a rubric that
+    covers both output idioms (a quoted literal and a multi-line constructor
+    call) using types no user schema can collide with.
+
+  `template_str` is bound explicitly below rather than derived from this
+  docstring: `Mapping` already binds `template_str` to a `str`, so
+  `lf.Template.__init_subclass__` will not re-derive it from a subclass
+  docstring.
+  """
+
+  # pyrefly: ignore[bad-assignment]
+  preamble = """
+      Respond with a single Python expression matching {{ schema_title }} in a ```python``` block only.
+      For primitive or container types (int, float, bool, str, list, dict), return the Python literal directly, with strings quoted:
+        2
+        'yes'
+        [1, 2]
+      For class types, instantiate via keyword arguments (never attribute assignment), writing one argument per line and indenting each nesting level:
+        Point(
+          x=1,
+          y=2
+        )
+      """
+  version = '3.0'
+  protocol = 'python'
+  input_title = 'REQUEST'
+  schema_title = 'OUTPUT_TYPE'
+  output_title = 'OUTPUT_OBJECT'
+  template_str = """
+      {{ preamble }}
+
+      {{ schema_title }}:
+      {{ mapping_request.schema_repr(protocol) }}
+      {%- if examples %}
+
+      EXAMPLES:
+      {%- for example in examples %}
+      {%- if example.context %}
+
+      {{ context_title }}:
+      {{ example.context }}
+      {%- endif %}
+
+      {{ input_title }}:
+      {{ example.input_repr(protocol, compact=False) }}
+
+      {{ output_title }}:
+      {{ example.output_repr(protocol, compact=False) }}
+      {%- endfor %}
+      {%- endif %}
+      {%- if mapping_request.context %}
+
+      {{ context_title }}:
+      {{ mapping_request.context }}
+      {%- endif %}
+
+      {{ input_title }}:
+      {{ mapping_request.input_repr(protocol, compact=False) }}
+      """
 
 
 def query(

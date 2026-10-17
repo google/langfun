@@ -221,7 +221,7 @@ class EvaluationTest(unittest.TestCase):
             score=1.0,
             logprobs=None,
             is_cached=False,
-            usage=lf.LMSamplingUsage(428, 24, 452),
+            usage=lf.LMSamplingUsage(511, 24, 535),
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )
@@ -258,12 +258,12 @@ class EvaluationTest(unittest.TestCase):
                 failure_breakdown={'MappingError.SchemaError.TypeError': 1},
             ),
             usage=dict(
-                total_prompt_tokens=856,
+                total_prompt_tokens=1022,
                 total_completion_tokens=25,
                 num_usages=2,
-                average_prompt_tokens=428,
+                average_prompt_tokens=511,
                 average_completion_tokens=12,
-                average_total_tokens=440,
+                average_total_tokens=523,
             ),
         ),
     )
