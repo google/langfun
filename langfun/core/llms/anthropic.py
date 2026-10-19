@@ -1325,6 +1325,15 @@ class Anthropic(rest.REST):
     return args
 
   def result(self, response_json: dict[str, Any]) -> lf.LMSamplingResult:
+    if response_json.get('stop_reason') == 'refusal':
+      # A policy refusal (HTTP 200) is deterministic for a given request, so it
+      # must not surface as a retryable empty generation.
+      details = response_json.get('stop_details') or {}
+      raise lf.ContentFilteredError(
+          f'{self.model_id} refused the request (stop_reason=refusal,'
+          f' category={details.get("category")!r}):'
+          f' {details.get("explanation") or "no explanation given"}'
+      )
     message = lf.Message.from_value(response_json, format='anthropic')
     input_tokens = response_json['usage']['input_tokens']
     output_tokens = response_json['usage']['output_tokens']
@@ -1379,7 +1388,8 @@ class Anthropic(rest.REST):
     - content_block_delta: appends text_delta / thinking_delta /
       signature_delta / input_json_delta fragments to that block.
     - content_block_stop: finalizes any accumulated tool-use JSON.
-    - message_delta: carries the final stop_reason and usage.output_tokens.
+    - message_delta: carries the final stop_reason (plus stop_details for a
+      refusal) and usage.output_tokens.
     - message_stop: terminator.
 
     Args:
@@ -1467,7 +1477,7 @@ class Anthropic(rest.REST):
       elif etype == 'message_delta':
         delta = event.get('delta', {})
         if message is not None:
-          for key in ('stop_reason', 'stop_sequence'):
+          for key in ('stop_reason', 'stop_sequence', 'stop_details'):
             if key in delta:
               message[key] = delta[key]
         usage = event.get('usage')

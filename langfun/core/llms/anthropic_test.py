@@ -1548,6 +1548,44 @@ class AnthropicStreamingSSETest(unittest.TestCase):
       self.assertEqual(response.usage.completion_tokens, 42)
       self.assertEqual(response.usage.total_tokens, 67)
 
+  def test_refusal_is_a_non_retryable_content_filtered_error(self):
+    """A pre-generation refusal raises ContentFilteredError after ONE call."""
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-5","content":[],'
+        '"stop_reason":null,"stop_sequence":null,"stop_details":null,'
+        '"usage":{"input_tokens":5,"output_tokens":1}}}\n\n'
+        'event: message_delta\n'
+        'data: {"type":"message_delta","delta":{"stop_reason":"refusal",'
+        '"stop_sequence":null,"stop_details":{"type":"refusal",'
+        '"category":"reasoning_extraction","explanation":"Blocked."}},'
+        '"usage":{"output_tokens":0}}\n\n'
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key', max_attempts=3)
+    self.assertEqual(
+        lm._reassemble_sse(sse)['stop_details']['category'],
+        'reasoning_extraction',
+    )
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_sse_post(sse)
+      with self.assertRaisesRegex(
+          lf.ContentFilteredError,
+          r"stop_reason=refusal, category='reasoning_extraction'\): Blocked\.",
+      ):
+        lm('hello')
+      self.assertEqual(mock_request.call_count, 1)
+
+  def test_buffered_refusal_raises_content_filtered_error(self):
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    with self.assertRaisesRegex(lf.ContentFilteredError, 'category=None'):
+      lm.result({
+          'content': [],
+          'stop_reason': 'refusal',
+          'usage': {'input_tokens': 5, 'output_tokens': 0},
+      })
+
   def test_buffered_json_body_still_parses(self):
     """A single buffered JSON body (non-SSE) must still parse (auto-detect)."""
     with mock.patch('requests.Session.post') as mock_request:
