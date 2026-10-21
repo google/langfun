@@ -837,6 +837,143 @@ class GeminiContinuationTest(unittest.TestCase):
       with self.assertRaises(lf.TemporaryLMError):
         self._lm()._sample_single(lf.UserMessage('hi'))
 
+  def _lm_with_budget(self, max_tokens: int) -> gemini.Gemini:
+    return gemini.Gemini(
+        'gemini-4-argon',
+        api_endpoint='',
+        max_attempts=3,
+        retry_interval=0,
+        sampling_options=lf.LMSamplingOptions(max_tokens=max_tokens),
+    )
+
+  def test_budget_starved_hop_is_resumed_with_a_raised_ceiling(self):
+    """Thinking ate the whole budget, so the offered token is followed."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=1021,
+        ),
+        _hop([{'text': 'The answer is 42.'}], 'STOP',
+             candidates_token_count=6),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm_with_budget(1024)('hi')
+    self.assertEqual(response.text, 'The answer is 42.')
+    self.assertEqual(len(sent), 2)
+    self.assertEqual(sent[1]['continuationToken'], 'token-1')
+    # The service accumulates the budget across continuations and rejects a
+    # resume that reuses an exhausted one, so the ceiling has to rise.
+    self.assertEqual(sent[0]['generationConfig']['maxOutputTokens'], 1024)
+    self.assertEqual(sent[1]['generationConfig']['maxOutputTokens'], 2048)
+
+  def test_budget_starved_hop_without_ceiling_uses_the_model_maximum(self):
+    sent, post = self._serve(
+        _hop([{'text': ''}], 'MAX_TOKENS', token='token-1'),
+        _hop([{'text': 'Done.'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Done.')
+    self.assertEqual(
+        sent[1]['generationConfig']['maxOutputTokens'],
+        gemini._SUPPORTED_MODELS_BY_ID[
+            'gemini-4-argon'
+        ].context_length.max_output_tokens,
+    )
+
+  def test_max_tokens_with_an_answer_is_not_resumed(self):
+    """A truncated answer is the caller's budget doing what it was told."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'A partial ans'}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=1024,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm_with_budget(1024)('hi')
+    self.assertEqual(response.text, 'A partial ans')
+    self.assertEqual(len(sent), 1)
+
+  def test_max_tokens_with_only_a_function_call_is_not_resumed(self):
+    """A function call is answer content even though it carries no text.
+
+    The generation is therefore not resumed. It is still rejected, because
+    `_check_answer_present` decides emptiness from `message.text`, which a
+    function-call-only candidate leaves empty -- so a candidate that did
+    produce output is reported as having produced none. That is a separate
+    pre-existing defect, unchanged here and pinned so it stays visible.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'functionCall': {'name': 'f', 'args': {}}}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=20,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
+        self._lm_with_budget(1024)._sample_single(lf.UserMessage('hi'))
+    self.assertEqual(len(sent), 1)
+
+  def test_max_tokens_with_only_thoughts_is_resumed(self):
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'Still reasoning', 'thought': True}],
+            'MAX_TOKENS',
+            token='token-1',
+            thoughts_token_count=1024,
+        ),
+        _hop([{'text': '42'}], 'STOP', candidates_token_count=1),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm_with_budget(1024)('hi')
+    self.assertEqual(response.text, '42')
+    self.assertEqual(len(sent), 2)
+
+  def test_budget_extensions_are_bounded(self):
+    """A prompt that never stops thinking cannot spend without limit."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=1021,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
+        self._lm_with_budget(1024)._sample_single(lf.UserMessage('hi'))
+    # The original request plus one resume per permitted extension.
+    self.assertEqual(len(sent), gemini._MAX_OUTPUT_BUDGET_EXTENSIONS + 1)
+    self.assertEqual(sent[1]['generationConfig']['maxOutputTokens'], 2048)
+    self.assertEqual(sent[2]['generationConfig']['maxOutputTokens'], 4096)
+
+  def test_failed_budget_extension_reports_the_original_diagnosis(self):
+    """The rescue's error must not replace the error it tried to prevent."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=1021,
+        ),
+        400,
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaisesRegex(
+          gemini.GeminiEmptyGenerationError, 'thoughtsTokenCount=1021'
+      ):
+        self._lm_with_budget(1024)._sample_single(lf.UserMessage('hi'))
+    self.assertEqual(len(sent), 2)
+
   def test_stops_after_max_continuation_hops(self):
     sent, post = self._serve(
         _hop([{'text': 'x'}], 'CONTINUATION', token='token-1')

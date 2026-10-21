@@ -1017,11 +1017,57 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 # server that keeps returning CONTINUATION without ever finishing.
 _MAX_CONTINUATION_HOPS = 64
 
+# How many times one generation may be granted a fresh output budget after
+# spending an entire one without emitting a single answer token.
+#
+# This is deliberately NOT folded into `_MAX_CONTINUATION_HOPS`, because the
+# two bound different things. A `CONTINUATION` hop stays inside the budget the
+# caller already authorized -- it is the same generation arriving in 32K-token
+# instalments. A budget extension authorizes spending the caller never asked
+# for, because `maxOutputTokens` accumulates across continuation requests and
+# the service refuses a resume that does not raise it. Two extensions bound a
+# starved request at 4x its nominal cost in the worst case, which covers the
+# observed failure -- thinking overran the budget once -- without letting a
+# pathological prompt spend without limit.
+_MAX_OUTPUT_BUDGET_EXTENSIONS = 2
+
+# Part keys that carry content the caller would see. `text` is handled
+# separately because a starved candidate comes back as `{'text': ''}`: a text
+# part that holds no answer.
+_ANSWER_PART_KEYS = (
+    'functionCall',
+    'inlineData',
+    'fileData',
+    'executableCode',
+    'codeExecutionResult',
+)
+
 
 def _gemini_major_version(model_id: str) -> int:
   """Returns N for a `gemini-N...` model ID, or 0 for unversioned IDs."""
   match = re.match(r'gemini-(\d+)', model_id)
   return int(match.group(1)) if match else 0
+
+
+def _has_answer_part(candidate: dict[str, Any]) -> bool:
+  """Returns True if `candidate` carries content the caller would receive.
+
+  Thought parts are excluded: they are the model's internal reasoning, which
+  `Message.from_value` routes to `message.thought` rather than to the answer,
+  so a candidate holding nothing else has produced nothing for the caller.
+
+  Args:
+    candidate: A `candidates[i]` entry from a `generateContent` response.
+
+  Returns:
+    Whether any non-thought part holds text or a non-text payload.
+  """
+  for part in (candidate.get('content') or {}).get('parts') or []:
+    if part.get('thought'):
+      continue
+    if part.get('text') or any(key in part for key in _ANSWER_PART_KEYS):
+      return True
+  return False
 
 
 def _continues_text(part: dict[str, Any], next_part: dict[str, Any]) -> bool:
@@ -1127,7 +1173,31 @@ class Gemini(rest.REST):
           exponential_backoff=self.exponential_backoff,
           max_retry_interval=self.max_retry_interval,
       )
+      budget_extensions = 0
+      # Carries a raised output ceiling forward. Rebuilding every resume from
+      # `request` would re-send the ceiling the service just rejected, so a
+      # second extension would never actually extend anything.
+      base = request
       while (hop := self._continuation_hop(response)) is not None:
+        candidate = hop['candidates'][0]
+        resumed = dict(
+            base, continuationToken=candidate['continuationToken']
+        )
+        # A `MAX_TOKENS` hop reaches here only when it produced no answer at
+        # all. Its budget is gone, and the service accumulates that budget
+        # across continuations, so resuming under the same ceiling is
+        # refused. Raising it authorizes spending the caller did not ask for,
+        # which is why extensions are bounded separately and tightly.
+        starved = candidate.get('finishReason') == 'MAX_TOKENS'
+        if starved:
+          if budget_extensions == _MAX_OUTPUT_BUDGET_EXTENSIONS:
+            break
+          extended = self._extend_output_budget(resumed)
+          if extended is None:
+            break
+          budget_extensions += 1
+          resumed = extended
+          base = extended
         hops.append(hop)
         if len(hops) == _MAX_CONTINUATION_HOPS:
           raise lf.LMError(
@@ -1135,13 +1205,22 @@ class Gemini(rest.REST):
               f'{_MAX_CONTINUATION_HOPS} requests.'
           )
         # Long decode: each hop resends the original request plus the token.
-        response = post_continuation(
-            dict(
-                request,
-                continuationToken=hop['candidates'][0]['continuationToken'],
-            ),
-            endpoint,
-        )
+        try:
+          response = post_continuation(resumed, endpoint)
+        except lf.LMError:
+          # Resuming a starved hop is a rescue attempt for a generation that
+          # would otherwise be reported as empty, so its failure must not
+          # replace that diagnosis -- which names the budget and the knobs
+          # that control it -- with an error about the rescue. Drop the hop
+          # and let the normal path report on what was really generated.
+          #
+          # A failure resuming an ordinary CONTINUATION hop is not
+          # speculative: that generation was proceeding normally, and hiding
+          # the error would turn a real failure into a silent truncation.
+          if not starved:
+            raise
+          hops.pop()
+          break
       if not hops:
         return self._parse_response(response)
       try:
@@ -1161,10 +1240,69 @@ class Gemini(rest.REST):
       raise self._error(response.status_code, response.content)  # pyrefly: ignore[bad-argument-type]
     return response
 
+  def _extend_output_budget(
+      self, request: dict[str, Any]
+  ) -> dict[str, Any] | None:
+    """Returns `request` with room for the answer its budget never reached.
+
+    `maxOutputTokens` is a running total over a continued generation, not a
+    per-response limit, so a generation that spent all of it has to be
+    resumed under a higher ceiling or the service refuses with
+    ``max_output_tokens (N) has already been exhausted``. Doubling gives the
+    answer a budget the size of the one thinking just consumed, which is the
+    smallest increase with a principled justification: the observed failure
+    is thinking overrunning the budget, and the answer still has to fit.
+
+    Args:
+      request: The resume request, carrying the exhausted ceiling.
+
+    Returns:
+      The request with a raised `generationConfig.maxOutputTokens`, or None
+      when no higher ceiling can be named -- in which case the caller should
+      stop rather than send a request the service will reject.
+    """
+    config = dict(request.get('generationConfig') or {})
+    current = config.get('maxOutputTokens')
+    if current is None:
+      # No ceiling was requested, so the service applied its own default and
+      # the only higher value this library can state is the model's maximum.
+      context_length = self.model_info.context_length
+      raised = context_length.max_output_tokens if context_length else None
+      if raised is None:
+        return None
+    else:
+      raised = current * 2
+    config['maxOutputTokens'] = raised
+    return dict(request, generationConfig=config)
+
   def _continuation_hop(
       self, response: requests.Response
   ) -> dict[str, Any] | None:
-    """Returns the payload of `response` if it stopped to be continued."""
+    """Returns the payload of `response` if it stopped to be continued.
+
+    Two different stops are resumable, and the service signals both by
+    attaching a `continuationToken`:
+
+    * ``CONTINUATION`` -- the generation hit the per-response wire limit with
+      budget left. Resuming costs nothing extra.
+    * ``MAX_TOKENS`` with no answer part -- the output budget was spent
+      entirely on thinking, so there is nothing to return. Resuming is the
+      only way to get an answer out of the tokens already paid for; the
+      alternative is `GeminiEmptyGenerationError`, i.e. billing the caller
+      for the thinking and delivering nothing. The caller of this method is
+      responsible for raising `maxOutputTokens` on the resumed request, since
+      the service accumulates that budget across continuations.
+
+    A ``MAX_TOKENS`` candidate that DID produce answer content is not
+    resumed. There the budget did exactly what the caller asked of it, and
+    silently spending more would override an explicit instruction.
+
+    Args:
+      response: The HTTP response of the hop just completed.
+
+    Returns:
+      The parsed payload when the generation can be continued, else None.
+    """
     if response.status_code != 200:
       return None
     try:
@@ -1172,11 +1310,12 @@ class Gemini(rest.REST):
     except ValueError:
       return None
     candidates = payload.get('candidates') or []
-    if (
-        len(candidates) == 1
-        and candidates[0].get('finishReason') == 'CONTINUATION'
-        and candidates[0].get('continuationToken')
-    ):
+    if len(candidates) != 1 or not candidates[0].get('continuationToken'):
+      return None
+    finish_reason = candidates[0].get('finishReason')
+    if finish_reason == 'CONTINUATION':
+      return payload
+    if finish_reason == 'MAX_TOKENS' and not _has_answer_part(candidates[0]):
       return payload
     return None
 
