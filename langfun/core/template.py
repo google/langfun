@@ -21,6 +21,7 @@ from typing import Annotated, Any, Callable, Iterator, Set, Tuple, Type, Union
 
 import jinja2
 from jinja2 import meta as jinja2_meta
+from jinja2 import sandbox as jinja2_sandbox
 from langfun.core import component
 from langfun.core import message as message_lib
 from langfun.core import modality
@@ -41,6 +42,14 @@ _TLS_RENDER_RESULT_CACHE = '_template_render_result_cache'
 # The prefix for fields or contextual attributes to be treated as additional
 # metadata for rendered message.
 _ADDITIONAL_METADATA_PREFIX = 'metadata_'
+
+# Shared sandboxed Jinja2 environment used to compile template strings.
+# Template strings can originate from untrusted sources (e.g. an
+# LLM-controlled value interpolated into a template, or user-supplied text),
+# so a plain jinja2.Environment/Template (which allows arbitrary attribute
+# access, and therefore arbitrary code execution via Python internals) is
+# not safe to use here.
+_SANDBOXED_JINJA_ENV = jinja2_sandbox.SandboxedEnvironment()
 
 
 class Template(
@@ -265,7 +274,7 @@ class Template(
 
   @functools.cached_property
   def _template(self) -> jinja2.Template:
-    return jinja2.Template(self.preprocessed_template_str)
+    return _SANDBOXED_JINJA_ENV.from_string(self.preprocessed_template_str)
 
   @functools.cached_property
   def preprocessed_template_str(self) -> str:
@@ -788,6 +797,18 @@ class _UnresolvedExpression(pg.Object):
   """Unresolved expression in a Jinja2 template for partial rendering."""
 
   expression: str
+
+  # `SandboxedEnvironment.is_safe_callable` probes these two attribute names
+  # via `getattr(obj, name, False)` to let a callable declare itself safe
+  # (see jinja2.sandbox's own docs/`unsafe` decorator). Declaring them as
+  # plain class attributes here means normal attribute lookup finds them
+  # directly and returns `False` as intended -- without this, the probe
+  # falls through to `__getattr__` below (which unconditionally builds a new
+  # `_UnresolvedExpression` for ANY attribute name, including these two),
+  # and the sandbox's own `bool(...)` check on that result blows up because
+  # `_UnresolvedExpression.__len__` deliberately doesn't return an int.
+  unsafe_callable = False
+  alters_data = False
 
   def __repr__(self) -> str:
     return self.expression
