@@ -140,21 +140,34 @@ class BaseSandboxService(interface.SandboxService):
   def _check_image_ids(self) -> None:
     """Checks image ids. Subclass could override this method."""
 
+  def _feature_image_ids(self) -> list[str]:
+    """Returns the image ids a feature may declare applicability against.
+
+    For most services that is just the images the service serves. A service
+    that layers additional images into each container has more, because a
+    feature can be supplied by a layer rather than by the base image.
+
+    Returns:
+      Image ids to test features against.
+    """
+    return list(self.image_ids)
+
   def _check_feature_requirements(self) -> None:
     """Checks if the image ID is supported by the feature."""
     if self.supports_dynamic_image_loading:
       return
+    image_ids = self._feature_image_ids()
     for name, feature in self.features.items():
       if not feature.is_sandbox_based:
         raise ValueError(
             f'Feature {name!r} is not sandbox-based. '
             'Sandbox service only supports sandbox-based features.'
         )
-      if any(feature.is_applicable(image_id) for image_id in self.image_ids):
+      if any(feature.is_applicable(image_id) for image_id in image_ids):
         continue
       raise ValueError(
           f'Feature {name!r} is not applicable to all available images: '
-          f'{self.image_ids!r}. '
+          f'{image_ids!r}. '
           f'Applicable images: {feature.applicable_images}.'
       )
 
