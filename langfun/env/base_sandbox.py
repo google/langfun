@@ -194,7 +194,7 @@ class BaseSandbox(interface.Sandbox):
     super()._on_bound()
     self._event_handler = self.sandbox_service.event_handler
     for feature in self.features.values():
-      if not feature.is_applicable(self.image_id):
+      if not self._is_feature_applicable(feature):
         raise ValueError(
             f'Feature {feature.name!r} is not applicable to image '
             f'{self.image_id!r}.'
@@ -231,6 +231,23 @@ class BaseSandbox(interface.Sandbox):
 
       # Thread local state for this sandbox.
       self._tls_state = threading.local()
+
+  def _is_feature_applicable(self, feature: interface.Feature) -> bool:
+    """Returns whether `feature` can run on this sandbox.
+
+    A sandbox normally runs exactly one image, so applicability is decided
+    by that image alone. Subclasses that compose several images into one
+    container -- an overlay stack, for instance -- widen this, because a
+    feature shipped by a non-base layer is still present at runtime even
+    though the base image id says nothing about it.
+
+    Args:
+      feature: The feature to test.
+
+    Returns:
+      Whether the feature is applicable to this sandbox.
+    """
+    return feature.is_applicable(self.image_id)
 
   @functools.cached_property
   def working_dir(self) -> str | None:
