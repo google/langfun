@@ -29,6 +29,23 @@ from langfun.core.structured import querying
 import pyglove as pg
 
 
+# The static instruction block that `python:3.0` (the default Python protocol)
+# emits ahead of every prompt. Defined once here so the golden prompts below
+# assert on the *layout* under test instead of restating the preamble.
+_PYTHON_V3_PREAMBLE = inspect.cleandoc("""
+    Respond with a single Python expression matching OUTPUT_TYPE in a ```python``` block only.
+    For primitive or container types (int, float, bool, str, list, dict), return the Python literal directly, with strings quoted:
+      2
+      'yes'
+      [1, 2]
+    For class types, instantiate via keyword arguments (never attribute assignment), writing one argument per line and indenting each nesting level:
+      Point(
+        x=1,
+        y=2
+      )
+    """)
+
+
 class Activity(pg.Object):
   description: str
 
@@ -92,7 +109,7 @@ class QueryTest(unittest.TestCase):
             score=1.0,
             logprobs=None,
             is_cached=False,
-            usage=lf.LMSamplingUsage(364, 1, 365),
+            usage=lf.LMSamplingUsage(455, 1, 456),
             tags=['lm-response', 'lm-output', 'transformed'],
         ),
     )
@@ -159,27 +176,12 @@ class QueryTest(unittest.TestCase):
         x=1,
         y=2,
         lm=lm.clone(),
-        expected_snippet=(
-            'Please respond to the last REQUEST with OUTPUT PYTHON OBJECT '
-            'only according to OUTPUT PYTHON TYPE.\n\n'
-            'REQUEST:\n  1 + 1 =\n\n'
-            'OUTPUT PYTHON TYPE:\n'
-            '  Answer\n\n'
-            '  ```python\n'
-            '  class Answer:\n'
-            '    final_answer: int\n'
-            '  ```\n\n'
-            'OUTPUT PYTHON OBJECT:\n'
-            '  ```python\n'
-            '  output = Answer(\n'
-            '    final_answer=2\n'
-            '  )\n'
-            '  ```\n\n'
+        expected_snippet=_PYTHON_V3_PREAMBLE + (
+            '\n\n'
+            'OUTPUT_TYPE:\n'
+            'int\n\n'
             'REQUEST:\n'
-            '  What is 1 + 2?\n\n'
-            'OUTPUT PYTHON TYPE:\n'
-            '  int\n\n'
-            'OUTPUT PYTHON OBJECT:'
+            'What is 1 + 2?'
         ),
     )
 
@@ -192,27 +194,12 @@ class QueryTest(unittest.TestCase):
         y=2,
         lm=lm.clone(),
         template_str='!!{{ DEFAULT }}!!',
-        expected_snippet=(
-            '!!Please respond to the last REQUEST with OUTPUT PYTHON OBJECT '
-            'only according to OUTPUT PYTHON TYPE.\n\n'
-            'REQUEST:\n  1 + 1 =\n\n'
-            'OUTPUT PYTHON TYPE:\n'
-            '  Answer\n\n'
-            '  ```python\n'
-            '  class Answer:\n'
-            '    final_answer: int\n'
-            '  ```\n\n'
-            'OUTPUT PYTHON OBJECT:\n'
-            '  ```python\n'
-            '  output = Answer(\n'
-            '    final_answer=2\n'
-            '  )\n'
-            '  ```\n\n'
+        expected_snippet='!!' + _PYTHON_V3_PREAMBLE + (
+            '\n\n'
+            'OUTPUT_TYPE:\n'
+            'int\n\n'
             'REQUEST:\n'
-            '  What is 1 + 2?\n\n'
-            'OUTPUT PYTHON TYPE:\n'
-            '  int\n\n'
-            'OUTPUT PYTHON OBJECT:!!'
+            'What is 1 + 2?!!'
         ),
     )
 
@@ -236,9 +223,7 @@ class QueryTest(unittest.TestCase):
         x=1,
         y=2,
         lm=lm.clone(),
-        expected_snippet=(
-            '\n\nREQUEST:\n  ```python\n  [\n    1\n  ]\n  ```\n\n'
-        ),
+        expected_snippet='\n\nREQUEST:\n```python\n[\n  1\n]\n```',
     )
 
   def test_structure_to_str_render(self):
@@ -254,7 +239,7 @@ class QueryTest(unittest.TestCase):
         image,
         int,
         lm=lm,
-        expected_snippet=f'\n\nREQUEST:\n  <<[[{image.id}]]>>\n\n',
+        expected_snippet=f'\n\nREQUEST:\n<<[[{image.id}]]>>',
         expected_modalities=1,
     )
 
@@ -333,12 +318,12 @@ class QueryTest(unittest.TestCase):
         lm=lm,
         expected_snippet=inspect.cleandoc(f"""
             REQUEST:
-              ```python
-              [
-                <<[[{cat_image.id}]]>>,
-                <<[[{mouse_image.id}]]>>
-              ]
-              ```
+            ```python
+            [
+              <<[[{cat_image.id}]]>>,
+              <<[[{mouse_image.id}]]>>
+            ]
+            ```
             """),
         expected_modalities=2,
     )
@@ -360,36 +345,32 @@ class QueryTest(unittest.TestCase):
         ],
         lm=lm,
         expected_snippet=inspect.cleandoc(f"""
-            REQUEST:
-              ```python
-              [
-                <<[[{dog_image.id}]]>>
-              ]
-              ```
+            OUTPUT_TYPE:
+            list[str]
 
-            OUTPUT PYTHON TYPE:
-              list[str]
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = [
-                'dog'
-              ]
-              ```
-
+            EXAMPLES:
 
             REQUEST:
-              ```python
-              [
-                <<[[{cat_image.id}]]>>,
-                <<[[{mouse_image.id}]]>>
-              ]
-              ```
+            ```python
+            [
+              <<[[{dog_image.id}]]>>
+            ]
+            ```
 
-            OUTPUT PYTHON TYPE:
-              list[str]
+            OUTPUT_OBJECT:
+            ```python
+            [
+              'dog'
+            ]
+            ```
 
-            OUTPUT PYTHON OBJECT:
+            REQUEST:
+            ```python
+            [
+              <<[[{cat_image.id}]]>>,
+              <<[[{mouse_image.id}]]>>
+            ]
+            ```
             """),
         expected_modalities=3,
     )
@@ -470,11 +451,22 @@ class QueryTest(unittest.TestCase):
 
   def test_from_protocol(self):
     self.assertIs(
-        querying.LfQuery.from_protocol('python'), querying._LfQueryPythonV2
+        querying.LfQuery.from_protocol('python'), querying._LfQueryPythonV3
     )
     self.assertIs(
         querying.LfQuery.from_protocol('python:1.0'),
         querying._LfQueryPythonV1
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('python:2.0'),
+        querying._LfQueryPythonV2
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('python:3.0'),
+        querying._LfQueryPythonV3
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('json'), querying._LfQueryJsonV1
     )
 
     class MyLfQuery(querying.LfQuery):
@@ -524,36 +516,20 @@ class QueryTest(unittest.TestCase):
   def test_query_prompt(self):
     self.assertEqual(
         querying.query_prompt('what is this?', int),
-        inspect.cleandoc("""
-            Please respond to the last REQUEST with OUTPUT PYTHON OBJECT only according to OUTPUT PYTHON TYPE.
+        _PYTHON_V3_PREAMBLE + '\n\n' + inspect.cleandoc("""
+            OUTPUT_TYPE:
+            int
 
             REQUEST:
-              1 + 1 =
-
-            OUTPUT PYTHON TYPE:
-              Answer
-
-              ```python
-              class Answer:
-                final_answer: int
-              ```
-
-            OUTPUT PYTHON OBJECT:
-              ```python
-              output = Answer(
-                final_answer=2
-              )
-              ```
-
-            REQUEST:
-              what is this?
-
-            OUTPUT PYTHON TYPE:
-              int
-
-            OUTPUT PYTHON OBJECT:
-            """),
+            what is this?"""),
     )
+    # 439 (constant framing, pinned by
+    # `LfQueryPythonV3Test.test_framing_is_constant_in_schema_size`)
+    # + 3 ('int') + 13 ('what is this?'). Pinned because the total is quoted
+    # in prose; the fake LM in these tests reports `len(prompt.text)` as the
+    # prompt token count, which is why the `LMSamplingUsage` goldens below
+    # move in lockstep with it.
+    self.assertEqual(len(querying.query_prompt('what is this?', int).text), 455)
 
   def test_query_prompt_with_metadata(self):
     self.assertIn(
@@ -1142,6 +1118,250 @@ class LfQueryPythonV2Test(unittest.TestCase):
             """),
     )
 
+  def test_explicit_version_survives_default_switch(self):
+    # `_DEFAULT_PROTOCOL_VERSIONS['python']` is now '3.0', so the unversioned
+    # `protocol='python'` renders a different layout. A caller that pinned a
+    # version must be unaffected: same bytes, and still the `output = ...`
+    # idiom V2's preamble asks for.
+    prompt, schema = 'Compute 12 / 6 + 2.', int
+    v2_text = querying.query_prompt(
+        prompt, schema, protocol='python:2.0'
+    ).text
+    self.assertEqual(
+        v2_text,
+        querying.LfQuery.from_protocol('python:2.0')(
+            input=lf.AIMessage(prompt), schema=schema
+        ).render().text,
+    )
+    self.assertEqual(
+        querying.query_prompt(prompt, schema, protocol='python:1.0').text,
+        querying.LfQuery.from_protocol('python:1.0')(
+            input=lf.AIMessage(prompt), schema=schema
+        ).render().text,
+    )
+    self.assertNotEqual(querying.query_prompt(prompt, schema).text, v2_text)
+    self.assertEqual(
+        querying.query(
+            prompt,
+            schema,
+            lm=fake.StaticResponse('```python\noutput = 4\n```'),
+            protocol='python:2.0',
+        ),
+        4,
+    )
+
+
+class LfQueryPythonV3Test(unittest.TestCase):
+
+  def test_render_no_examples(self):
+    l = querying.LfQuery.from_protocol('python:3.0')(
+        input=lf.AIMessage('Compute 12 / 6 + 2.'), schema=int
+    )
+    self.assertEqual(
+        l.render().text,
+        _PYTHON_V3_PREAMBLE + '\n\n' + inspect.cleandoc("""
+            OUTPUT_TYPE:
+            int
+
+            REQUEST:
+            Compute 12 / 6 + 2."""),
+    )
+
+  def test_render_with_examples(self):
+    l = querying.LfQuery.from_protocol('python:3.0')(
+        input=lf.AIMessage('Compute 12 / 6 + 2.'),
+        schema=int,
+        examples=[
+            mapping.MappingExample(
+                input='What is the answer of 1 plus 1?', output=2
+            ),
+            mapping.MappingExample(
+                input='Compute the value of 3 + (2 * 6).', output=15
+            ),
+        ],
+    )
+    self.assertEqual(
+        l.render().text,
+        _PYTHON_V3_PREAMBLE + '\n\n' + inspect.cleandoc("""
+            OUTPUT_TYPE:
+            int
+
+            EXAMPLES:
+
+            REQUEST:
+            What is the answer of 1 plus 1?
+
+            OUTPUT_OBJECT:
+            ```python
+            2
+            ```
+
+            REQUEST:
+            Compute the value of 3 + (2 * 6).
+
+            OUTPUT_OBJECT:
+            ```python
+            15
+            ```
+
+            REQUEST:
+            Compute 12 / 6 + 2."""),
+    )
+
+  def test_render_with_context(self):
+    l = querying.LfQuery.from_protocol('python:3.0')(
+        input=lf.AIMessage('Compute 12 / 6 + 2.'),
+        schema=int,
+        context='Use integer arithmetic.',
+    )
+    self.assertEqual(
+        l.render().text,
+        _PYTHON_V3_PREAMBLE + '\n\n' + inspect.cleandoc("""
+            OUTPUT_TYPE:
+            int
+
+            CONTEXT:
+            Use integer arithmetic.
+
+            REQUEST:
+            Compute 12 / 6 + 2."""),
+    )
+
+  def test_render_with_example_context(self):
+    # The only template branch the cases above leave untaken: a few-shot
+    # example that carries its own `context`. It renders inside `EXAMPLES:`,
+    # ahead of that example's own `REQUEST:`, and is independent of the
+    # request-level `CONTEXT:` block -- both are emitted here to pin that.
+    l = querying.LfQuery.from_protocol('python:3.0')(
+        input=lf.AIMessage('Compute 12 / 6 + 2.'),
+        schema=int,
+        context='Use integer arithmetic.',
+        examples=[
+            mapping.MappingExample(
+                input='What is the answer of 1 plus 1?',
+                output=2,
+                context='Addition is commutative.',
+            ),
+            mapping.MappingExample(
+                input='Compute the value of 3 + (2 * 6).', output=15
+            ),
+        ],
+    )
+    self.assertEqual(
+        l.render().text,
+        _PYTHON_V3_PREAMBLE + '\n\n' + inspect.cleandoc("""
+            OUTPUT_TYPE:
+            int
+
+            EXAMPLES:
+
+            CONTEXT:
+            Addition is commutative.
+
+            REQUEST:
+            What is the answer of 1 plus 1?
+
+            OUTPUT_OBJECT:
+            ```python
+            2
+            ```
+
+            REQUEST:
+            Compute the value of 3 + (2 * 6).
+
+            OUTPUT_OBJECT:
+            ```python
+            15
+            ```
+
+            CONTEXT:
+            Use integer arithmetic.
+
+            REQUEST:
+            Compute 12 / 6 + 2."""),
+    )
+
+  def test_render_class_schema(self):
+    # The case the preamble's constructor rubric is written for. The schema is
+    # embedded verbatim -- `python:2.0` would have shifted every line of it by
+    # two spaces.
+    l = querying.LfQuery.from_protocol('python:3.0')(
+        input=lf.AIMessage('Suggest an activity.'), schema=Activity
+    )
+    self.assertEqual(
+        l.render().text,
+        _PYTHON_V3_PREAMBLE + '\n\n' + inspect.cleandoc("""
+            OUTPUT_TYPE:
+            Activity
+
+            ```python
+            class Activity:
+              description: str
+            ```
+
+            REQUEST:
+            Suggest an activity."""),
+    )
+
+  def test_request_is_rendered_without_added_indent(self):
+    # `python:2.0` pipes the request through `| indent(2, True)`, which shifts
+    # every line of the caller's text; `python:3.0` must not. Note `lf.Template`
+    # already `cleandoc`s a str prompt before either protocol sees it, so this
+    # prompt deliberately has no common leading whitespace to strip.
+    prompt = 'Fix this:\nif x:\n    return 1'
+    # Compared as an equality on the tail rather than `assertTrue(endswith())`
+    # so that a failure prints the rendered prompt instead of `False is not
+    # true`.
+    v3_tail = 'REQUEST:\n' + prompt
+    v3_text = querying.query_prompt(prompt, int, protocol='python:3.0').text
+    self.assertEqual(v3_text[-len(v3_tail):], v3_tail)
+    v2_tail = (
+        'REQUEST:\n  Fix this:\n  if x:\n      return 1\n\n'
+        'OUTPUT PYTHON TYPE:\n  int\n\nOUTPUT PYTHON OBJECT:'
+    )
+    v2_text = querying.query_prompt(prompt, int, protocol='python:2.0').text
+    self.assertEqual(v2_text[-len(v2_tail):], v2_tail)
+
+  def test_prefix_is_identical_across_requests(self):
+    # The whole point of the head-first layout: everything ahead of the user's
+    # own text is byte-identical, so an LLM prefix cache can serve it.
+    prefix = _PYTHON_V3_PREAMBLE + '\n\nOUTPUT_TYPE:\nint\n\nREQUEST:\n'
+    for prompt in ('what is 1 + 1?', 'a much longer and quite different ask'):
+      rendered = querying.query_prompt(prompt, int, protocol='python:3.0').text
+      self.assertEqual(rendered, prefix + prompt)
+
+  def test_framing_is_constant_in_schema_size(self):
+    # `python:2.0` spends 2 extra characters per schema line on `| indent`;
+    # `python:3.0` embeds the schema verbatim, so framing does not grow.
+    def framing(schema) -> int:
+      rendered = querying.query_prompt(
+          'hi', schema, protocol='python:3.0'
+      ).text
+      schema_repr = mapping.MappingExample(
+          input='hi', schema=schema
+      ).schema_repr('python')
+      return len(rendered) - len('hi') - len(schema_repr)
+
+    self.assertEqual(framing(int), framing(list[str]))
+    self.assertEqual(framing(int), framing(Itinerary))
+    # Pinned to the literal value, not just to its being constant: the number
+    # is quoted in prose (CL description, release notes), so a template edit
+    # has to fail here rather than silently make that prose wrong.
+    # 439 = 413 (preamble) + 2 ('\n\n') + 12 ('OUTPUT_TYPE:') + 1 ('\n')
+    #       + 2 ('\n\n') + 8 ('REQUEST:') + 1 ('\n').
+    self.assertEqual(framing(int), 439)
+
+  def test_invocation(self):
+    self.assertEqual(
+        querying.query(
+            'Compute 12 / 6 + 2.',
+            int,
+            lm=fake.StaticResponse('4'),
+            protocol='python:3.0',
+        ),
+        4,
+    )
+
 
 class LfQueryJsonV1Test(unittest.TestCase):
 
@@ -1480,7 +1700,7 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(len(queries), 1)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
     self.assertIn('foo', queries[0].lm_request.text)
-    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertIn('OUTPUT_TYPE:', queries[0].lm_request.text)
     self.assertEqual(queries[0].schema.spec.cls, Activity)
     self.assertEqual(queries[0].default, lf.RAISE_IF_HAS_ERROR)
     self.assertTrue(queries[0].protocol.startswith('python:'))
@@ -1500,7 +1720,7 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(len(queries), 1)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
     self.assertIn('foo', queries[0].lm_request.text)
-    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertIn('OUTPUT_TYPE:', queries[0].lm_request.text)
     self.assertEqual(queries[0].schema.spec.cls, Activity)
     self.assertIsNone(queries[0].default)
     self.assertTrue(queries[0].protocol.startswith('python:'))
@@ -1523,7 +1743,7 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(len(queries), 1)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
     self.assertIn('foo', queries[0].lm_request.text)
-    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertIn('OUTPUT_TYPE:', queries[0].lm_request.text)
     self.assertEqual(queries[0].schema.spec.cls, Activity)
     self.assertEqual(queries[0].default, lf.RAISE_IF_HAS_ERROR)
     self.assertTrue(queries[0].protocol.startswith('python:'))
@@ -1546,7 +1766,7 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(len(queries), 1)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
     self.assertIn('foo', queries[0].lm_request.text)
-    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertIn('OUTPUT_TYPE:', queries[0].lm_request.text)
     self.assertEqual(queries[0].schema.spec.cls, Activity)
     self.assertEqual(queries[0].default, 1)
     self.assertTrue(queries[0].protocol.startswith('python:'))
@@ -1575,7 +1795,7 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertEqual(len(queries), 1)
     self.assertTrue(pg.eq(queries[0].input, lf.Template('foo')))
     self.assertIn('foo', queries[0].lm_request.text)
-    self.assertIn('Please respond to ', queries[0].lm_request.text)
+    self.assertIn('OUTPUT_TYPE:', queries[0].lm_request.text)
     self.assertEqual(queries[0].schema.spec.cls, Activity)
     self.assertEqual(queries[0].default, 1)
     self.assertTrue(queries[0].protocol.startswith('python:'))
