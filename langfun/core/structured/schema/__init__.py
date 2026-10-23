@@ -47,3 +47,10 @@ from langfun.core.structured.schema.python import structure_from_python
 from langfun.core.structured.schema.python import class_definition
 from langfun.core.structured.schema.python import class_definitions
 from langfun.core.structured.schema.python import include_method_in_prompt
+
+# Python protocol with an out-of-band verbatim channel for text fields.
+from langfun.core.structured.schema.python_verbatim import PythonVerbatimPromptingProtocol
+from langfun.core.structured.schema.python_verbatim import VerbatimBlockError
+from langfun.core.structured.schema.python_verbatim import VERBATIM_METADATA_KEY
+from langfun.core.structured.schema.python_verbatim import diagnose_escape_damage
+from langfun.core.structured.schema.python_verbatim import extract_blocks

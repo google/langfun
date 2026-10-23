@@ -512,6 +512,10 @@ class PromptingProtocol(metaclass=abc.ABCMeta):
 
   NAME: ClassVar[str]
 
+  # Whether `parse_value` repairs a malformed response with an LM when given
+  # `autofix`; `lf.query` passes `autofix=0` to protocols without support.
+  SUPPORTS_AUTOFIX: ClassVar[bool] = False
+
   _PROTOCOLS: ClassVar[dict[str, Type['PromptingProtocol']]] = {}
 
   def __init_subclass__(cls):
@@ -524,6 +528,12 @@ class PromptingProtocol(metaclass=abc.ABCMeta):
     if protocol_cls is None:
       raise ValueError(f'Unsupported protocol: {name}.')
     return protocol_cls()
+
+  @classmethod
+  def supports_autofix(cls, name: str) -> bool:
+    """Returns True if the protocol registered as `name` supports autofix."""
+    protocol_cls = cls._PROTOCOLS.get(name)
+    return protocol_cls is not None and protocol_cls.SUPPORTS_AUTOFIX
 
   @abc.abstractmethod
   def schema_repr(self, schema: Schema) -> str:

@@ -84,6 +84,7 @@ class LfQuery(mapping.Mapping):
   # This the flag to update default protocol version.
   _DEFAULT_PROTOCOL_VERSIONS: ClassVar[dict[str, str]] = {
       'python': '2.0',
+      'python-verbatim': '1.0',
       'json': '1.0',
   }
 
@@ -275,6 +276,80 @@ class _LfQueryPythonV2(LfQuery):
       {% endif -%}
       """
   )
+
+
+class _LfQueryPythonVerbatimV1(LfQuery):
+  """Query a structured value with an out-of-band channel for text fields."""
+
+  preamble = lf.Template(r"""
+      Please respond to the last {{ input_title }} with {{ output_title }} only according to {{ schema_title }}.
+
+      Emit exactly ONE ```python fence, containing only the `output = ...` assignment. Never repeat the class definitions: they are given to you above.
+
+      A field marked `(verbatim field)` MUST NOT be given a Python string literal. Assign it a block name and put its text in a block placed AFTER the ```python fence. A block is copied byte for byte: escape nothing, indent nothing, and do not wrap it in a fence. Name the block after its field, in upper case. Every block in a response carries the same short random token that you pick, in both of its fences:
+
+        <<<LF:BLOCK THE_BLOCK_NAME token>>>
+        the exact text
+        <<<LF:END THE_BLOCK_NAME token>>>
+
+      {{ input_title }}:
+        Write a script that generates a report.
+
+      {{ schema_title }}:
+        Answer
+
+        ```python
+        class Script:
+          # (verbatim field: do not write a string literal; assign a block name, e.g. `code=CODE`, and define that block below)
+          code: str
+
+        class Answer:
+          note: str
+          script: Script
+        ```
+
+      {{ output_title }}:
+        ```python
+        output = Answer(
+          note='A heredoc keeps the Python source unescaped.',
+          script=Script(code=CODE)
+        )
+        ```
+
+        <<<LF:BLOCK CODE 7f3a>>>
+        cat > /tmp/report.py <<'EOF'
+        with open('/tmp/report.md', 'w') as f:
+            f.write("# Title\n\nDone.\n")
+        EOF
+        python3 /tmp/report.py
+        <<<LF:END CODE 7f3a>>>
+      """)
+  version = '1.0'
+  protocol = 'python-verbatim'
+  input_title = 'REQUEST'
+  schema_title = 'OUTPUT PYTHON TYPE'
+  output_title = 'OUTPUT PYTHON OBJECT'
+  mapping_template = lf.Template("""
+      {%- if example.context -%}
+      {{ context_title}}:
+      {{ example.context | indent(2, True)}}
+
+      {% endif -%}
+
+      {{ input_title }}:
+      {{ example.input_repr(protocol, compact=False) | indent(2, True) }}
+
+      {% if example.schema -%}
+      {{ schema_title }}:
+      {{ example.schema_repr(protocol) | indent(2, True) }}
+
+      {% endif -%}
+
+      {{ output_title }}:
+      {%- if example.has_output %}
+      {{ example.output_repr(protocol, compact=False, assign_to_var='output') | indent(2, True) }}
+      {% endif -%}
+      """)
 
 
 def query(
@@ -638,6 +713,9 @@ def query(
             output_message = lf.AIMessage(processed_text, source=output_message)
       else:
         # Query with structured output.
+        supports_autofix = schema_lib.PromptingProtocol.supports_autofix(
+            protocol.split(':', 1)[0]
+        )
         output_message = query_cls(
             input=(
                 query_input.render(lm=lm)
@@ -647,7 +725,7 @@ def query(
             schema=schema,
             examples=examples,
             response_postprocess=response_postprocess,
-            autofix=autofix if protocol.startswith('python:') else 0,
+            autofix=autofix if supports_autofix else 0,
             **kwargs,
         )(
             lm=lm,

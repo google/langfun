@@ -1057,6 +1057,24 @@ class LfQueryPythonV2Test(unittest.TestCase):
     ])
     self.assertEqual(querying.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
 
+  def test_autofix_applies_to_python_protocol_family(self):
+    for protocol in ('python', 'python-verbatim'):
+      with self.subTest(protocol=protocol):
+        lm = fake.StaticSequence([
+            '=1',
+            inspect.cleandoc("""
+                CorrectedCode(
+                    corrected_code='1',
+                )
+                """),
+        ])
+        self.assertEqual(
+            querying.query(
+                'what is 1 + 0', int, lm=lm, autofix=1, protocol=protocol
+            ),
+            1,
+        )
+
   def test_response_postprocess(self):
     self.assertEqual(
         querying.query(
@@ -1354,6 +1372,11 @@ class LfQueryJsonV1Test(unittest.TestCase):
         )
       # Make sure bad mapping does not impact cache.
       self.assertEqual(len(cache), 0)
+
+  def test_autofix_is_not_applied(self):
+    lm = fake.StaticSequence(['=1', "CorrectedCode(corrected_code='1')"])
+    with self.assertRaises(mapping.MappingError):
+      querying.query('what is 1 + 0', int, lm=lm, autofix=1, protocol='json')
 
   def test_query(self):
     lm = fake.StaticResponse('{"result": 1}')
