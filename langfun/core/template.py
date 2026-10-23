@@ -17,6 +17,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import re
 from typing import Annotated, Any, Callable, Iterator, Set, Tuple, Type, Union
 
 import jinja2
@@ -37,6 +38,10 @@ NO_TEMPLATE_DOCSTR_SIGN = 'THIS IS NOT A TEMPLATE'
 # thread-local storage.
 _TLS_RENDER_STACK = '_template_render_stack'
 _TLS_RENDER_RESULT_CACHE = '_template_render_result_cache'
+
+# Matches a Jinja `endraw` tag in every spelling that ends a `{% raw %}` block,
+# mirroring the `TOKEN_RAW_BEGIN` rule of `jinja2.lexer`.
+_ENDRAW_TAG = re.compile(r'\{%[-+]?\s*endraw\s*[-+]?%\}')
 
 # The prefix for fields or contextual attributes to be treated as additional
 # metadata for rendered message.
@@ -339,13 +344,40 @@ class Template(
 
   @classmethod
   def raw_str(cls, text: str) -> str:
-    """Returns a template string that preserves the text as original."""
-    return '{% raw %}' + text + '{% endraw %}'
+    """Returns a template string that renders `text` verbatim.
+
+    A `{% raw %}` block ends at the first `endraw` tag, so a literal one inside
+    `text` would close the block early and leave the remainder of `text` parsed
+    as Jinja. Each literal tag is therefore emitted from outside the block --
+    its `{%` as a Jinja string expression, the rest from a reopened raw block --
+    which makes this total over arbitrary strings. Everything else, including
+    `{% raw %}` itself, is already literal inside a raw block, which does not
+    nest.
+
+    Args:
+      text: An arbitrary string, which may itself contain Jinja syntax.
+
+    Returns:
+      A template string that renders back to exactly `text`.
+    """
+    escaped = _ENDRAW_TAG.sub(
+        lambda tag: "{% endraw %}{{ '{%' }}{% raw %}" + tag.group()[2:], text
+    )
+    return '{% raw %}' + escaped + '{% endraw %}'
 
   @classmethod
-  def from_raw_str(cls, text: str) -> 'Template':
-    """Returns a template that preserves the text as original."""
-    return cls(cls.raw_str(text), clean=False)
+  def from_raw_str(cls, text: str, **kwargs) -> 'Template':
+    """Returns a template that renders `text` verbatim.
+
+    Args:
+      text: An arbitrary string, which may itself contain Jinja syntax.
+      **kwargs: Template attributes and variables. `clean` is forced off, as
+        reindenting `text` would contradict preserving it as original.
+
+    Returns:
+      A template that renders back to exactly `text`.
+    """
+    return cls(cls.raw_str(text), **dict(kwargs, clean=False))
 
   def render(
       self,

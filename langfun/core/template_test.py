@@ -121,6 +121,39 @@ class BasicTest(unittest.TestCase):
         '\n{{d}}, {%x%}\n'
     )
 
+  def test_raw_str_is_total_over_arbitrary_text(self):
+    """An embedded `endraw` must not close the raw block it is quoted in.
+
+    Every spelling `jinja2.lexer` accepts as the end of a `{% raw %}` block
+    has to round-trip, otherwise the remainder of the text escapes back into
+    Jinja -- which is how model output mentioning Jinja syntax used to raise
+    a template error instead of being quoted.
+    """
+    for text in [
+        '',
+        'no jinja here',
+        '{{d}}, {%x%}',
+        '{% endraw %}',
+        'before {% endraw %} after',
+        '{%endraw%}',
+        '{%- endraw -%}',
+        '{%+endraw+%}',
+        '{%\tendraw\n%}',
+        '{% endraw %}{% endraw %}',
+        '{% raw %}{{x}}{% endraw %}',
+        '{%{% endraw %}',
+        'unterminated {% raw %}',
+    ]:
+      with self.subTest(text=text):
+        t = Template.from_raw_str(text)
+        self.assertEqual(t.render().text, text)
+        self.assertEqual(t.missing_vars, set())
+
+  def test_from_raw_str_forwards_kwargs(self):
+    t = Template.from_raw_str('{{x}}', metadata_y=2)
+    self.assertFalse(t.clean)
+    self.assertEqual(t.render().metadata.y, 2)
+
 
 class DefinitionTest(unittest.TestCase):
 
