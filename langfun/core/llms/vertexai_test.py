@@ -96,7 +96,7 @@ class VertexAITest(unittest.TestCase):
     self.assertEqual(model.timeout, 300)
     self.assertFalse(model.exponential_backoff)
     self.assertEqual(model.sampling_options.thinking_level, 'high')
-    self.assertEqual(model.sampling_options.max_tokens, 65_536)
+    self.assertIsNone(model.sampling_options.max_tokens)
     self.assertEqual(
         model.api_endpoint,
         'https://aiplatform.googleapis.com/v1beta1/projects/lf-agent/'
@@ -107,7 +107,7 @@ class VertexAITest(unittest.TestCase):
         'generationConfig'
     ]
     self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'high'})
-    self.assertEqual(config['maxOutputTokens'], 65_536)
+    self.assertIsNone(config['maxOutputTokens'])
     self.assertEqual(config['mediaResolution'], 'MEDIA_RESOLUTION_HIGH')
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
@@ -120,6 +120,94 @@ class VertexAITest(unittest.TestCase):
     self.assertEqual(model.sampling_options.max_tokens, 131_072)
     self.assertEqual(model.timeout, 900)
     self.assertIn('aiplatform.googleapis.com/v1/projects/', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_does_not_cap_the_output_budget(self):
+    """A pinned ceiling makes a starved generation impossible to resume.
+
+    `maxOutputTokens` accumulates across continuation requests, so a resume
+    that re-sends an already exhausted ceiling is rejected outright. Left
+    unset, the service applies its own default and the resume is accepted.
+    """
+    model = vertexai.VertexAIGemini4Argon(project='test-project')
+    self.assertIsNone(model.sampling_options.max_tokens)
+    config = model.request(lf.UserMessage('hi'), model.sampling_options)[
+        'generationConfig'
+    ]
+    self.assertIsNone(config['maxOutputTokens'])
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_resumes_a_budget_pinned_by_the_model_uri(self):
+    """Unsetting the class default cannot help a caller who sets it anyway.
+
+    `max_tokens` arrives through the model URI, so the resume has to survive
+    a pinned ceiling rather than merely the absence of one.
+    Here the caller pinned the model's own 65,536-token output maximum and
+    thinking spent all of it, so the resume has to ask for more than the model
+    can itself produce. It asserts that number anyway rather than dropping the
+    ceiling: measured against the service, `maxOutputTokens` above the model
+    maximum is accepted, and dropping the key would hand the rest of the
+    generation to the service default. The fake refuses only what the service
+    refuses -- the ceiling already reported spent.
+    """
+    starved = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': ''}]},
+            'finishReason': 'MAX_TOKENS',
+            'continuationToken': 'token-1',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 12,
+            'candidatesTokenCount': 3,
+            'thoughtsTokenCount': 65_533,
+            'totalTokenCount': 65_548,
+        },
+    }
+    answered = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': '42'}]},
+            'finishReason': 'STOP',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 12,
+            'candidatesTokenCount': 1,
+            'totalTokenCount': 13,
+        },
+    }
+    sent = []
+
+    def post(url, json, **kwargs):
+      del url, kwargs
+      sent.append(json)
+      response = requests.Response()
+      ceiling = json['generationConfig'].get('maxOutputTokens')
+      if 'continuationToken' not in json:
+        served = starved
+      elif ceiling == 65_536:
+        response.status_code = 400
+        response._content = (  # pylint: disable=protected-access
+            b'max_output_tokens (65536) has already been exhausted.'
+        )
+        return response
+      else:
+        served = answered
+      response.status_code = 200
+      response._content = pg.to_json_str(served).encode()  # pylint: disable=protected-access
+      return response
+
+    model = lf.LanguageModel.get(
+        'gemini-4-argon?project=test-project&max_tokens=65536&max_attempts=2'
+        '&retry_interval=0'
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = model('hi')
+    self.assertEqual(response.text, '42')
+    self.assertEqual(len(sent), 2)
+    self.assertEqual(sent[0]['generationConfig']['maxOutputTokens'], 65_536)
+    # 65,536 already burned, plus the 65,533 answer tokens still owed.
+    self.assertEqual(
+        sent[1]['generationConfig']['maxOutputTokens'], 131_069
+    )
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_4_argon_resumes_continuation_on_one_project(self):
@@ -744,10 +832,11 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_thought_only_max_tokens_is_not_resent(self):
-    """Thinking ate the decode budget: fail after exactly ONE request.
+    """Thinking ate the decode budget: reported once, not re-bought.
 
-    This is the retry-storm regression guard: the generation is deterministic
-    for a given prompt, so re-sending it can only reproduce it.
+    No `continuationToken` is offered here, so there is no in-request rescue
+    left to try and a re-send would only reproduce the same spend.
+    `max_attempts=5` must buy exactly one request.
     """
     calls, post = self._fake_post(
         _vertex_response(
@@ -759,9 +848,9 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
     )
     with mock.patch('requests.Session.post') as mock_post:
       mock_post.side_effect = post
-      with self.assertRaises(RuntimeError):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
         self._lm()('hello')
-    self.assertEqual(len(calls), 1)
+    self.assertEqual(len(calls), 1)  # `max_attempts=5`, and still one call.
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_thought_only_max_tokens_raises_non_retryable_error(self):
@@ -777,6 +866,7 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
       mock_post.side_effect = post
       with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
         self._lm()('hello')
+    self.assertNotIsInstance(ctx.exception, lf.RetryableLMError)
     message = str(ctx.exception)
     self.assertIn('MAX_TOKENS', message)
     self.assertIn('gemini-3.1-pro-preview', message)
@@ -784,7 +874,7 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_stop_with_zero_output_tokens_is_not_resent(self):
-    """finish_reason=STOP with 0 candidate tokens is also deterministic."""
+    """finish_reason=STOP with 0 candidate tokens is deterministic too."""
     calls, post = self._fake_post(
         _vertex_response([], 'STOP', candidates_token_count=0)
     )
@@ -792,7 +882,7 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
       mock_post.side_effect = post
       with self.assertRaises(gemini.GeminiEmptyGenerationError):
         self._lm()('hello')
-    self.assertEqual(len(calls), 1)
+    self.assertEqual(len(calls), 1)  # `max_attempts=5`, and still one call.
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_normal_generation_unaffected(self):

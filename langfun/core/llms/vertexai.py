@@ -268,8 +268,12 @@ class VertexAIGemini4Argon(VertexAIGemini):  # pylint: disable=invalid-name
   # A response stops at 32K tokens, and v1 rejects the `continuationToken` that
   # resumes a longer generation.
   api_version = 'v1beta1'
-  # The model's documented default output budget, spanning two responses.
-  sampling_options = lf.LMSamplingOptions(max_tokens=65_536)
+  # `max_tokens` is deliberately left unset. The service accumulates
+  # `maxOutputTokens` across continuation requests, so pinning it to the
+  # model's 65,536-token maximum made a generation that spent that budget
+  # thinking impossible to resume: the continuation is rejected with
+  # `max_output_tokens (65536) has already been exhausted`. Unset, the
+  # service applies the same default and the resume is accepted.
   # A 32K-token response takes minutes; the model docs advise 15+ minutes.
   timeout = 900.0
 
