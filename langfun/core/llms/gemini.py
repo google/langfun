@@ -29,24 +29,81 @@ import requests
 class GeminiEmptyGenerationError(lf.LMError):
   """Gemini returned a candidate with no answer content, deterministically.
 
-  Three response signatures produce an answer-less candidate as an EXPECTED
-  function of the request rather than as a transient server fault:
+  The rule is NARROW by construction, because raising is itself expensive:
+  the error is non-retryable, so every signature admitted here ends a live
+  episode. Only a signature a re-send provably cannot change earns that, and
+  each one names the mechanism that makes the re-send futile:
 
-  * ``finishReason == 'MAX_TOKENS'`` with no non-thought part -- thinking
-    consumed the shared decode budget before a single answer token was
-    emitted.
-  * ``finishReason == 'STOP'`` with ``candidatesTokenCount == 0`` -- the model
-    terminated normally after emitting nothing at all.
+  * ``promptFeedback.blockReason`` set -- the prompt was blocked before
+    decoding started, so no candidate was ever generated.
+  * ``finishReason == 'MAX_TOKENS'`` with ``candidatesTokenCount == 0`` --
+    thinking consumed the shared decode budget before a single answer token
+    was emitted.
+  * ``finishReason == 'MAX_TOKENS'`` with ``candidatesTokenCount > 0`` -- the
+    truncated hop was billed for answer tokens it did not return, and no
+    continuation recovered them. The budget did reach the answer, so this one
+    is not starvation and the error says so.
+  * ``finishReason == 'STOP'`` with ``candidatesTokenCount == 0`` AND
+    ``thoughtsTokenCount == 0`` -- the model terminated normally having been
+    billed for no work at all, so there is no lost work to re-request.
   * no ``content`` on the candidate at all (absent or null) -- nothing was
     generated, so there is not even an empty message to parse.
+  * ``candidates`` present but EMPTY *and* a block reason given -- a response
+    with no candidate at all, which otherwise reaches ``LanguageModel`` as a
+    bare ``IndexError``.
 
-  All three are reproduced by re-sending the same request, so this subclasses
-  the NON-retryable ``lf.LMError`` -- deliberately NOT
-  ``lf.EmptyGenerationError`` / ``lf.RetryableLMError``. Without this, the
-  first two reach ``LanguageModel.sample()`` as empty text, which raises the
-  retryable ``lf.EmptyGenerationError`` and re-sends the full prompt up to
-  ``max_attempts`` times -- burning quota and latency only to fail with an
-  opaque error -- while the third escapes as a bare ``KeyError('content')``.
+  Everything else that renders no answer -- a tool-protocol finish reason
+  (``MALFORMED_FUNCTION_CALL``, ...), a candidate-level content-policy flag
+  (``SAFETY``, ``RECITATION``, ``BLOCKLIST``, ...), a ``STOP`` over non-zero
+  token counts, an absent or unrecognised ``finishReason``, an empty
+  ``candidates`` list with nothing to explain it -- is left on the RETRYABLE
+  path (``lf.EmptyGenerationError`` / ``lf.TemporaryLMError``), because it is
+  the path that recovers them. A closed rule was tried here and measured
+  against 30 live ``gemini-4-argon`` trajectories: 28 of 28 aborts it caused
+  were ``MALFORMED_FUNCTION_CALL`` on a mid-episode turn that declared no
+  tools, each billed 521-4,336 answer and 983-6,020 thinking tokens --
+  transient faults the next sample recovers from, converted into fatal ones.
+
+  A candidate-level policy flag is kept on that path for the same reason, and
+  the API contract is what settles it: ``SAFETY``, ``RECITATION``,
+  ``BLOCKLIST``, ``PROHIBITED_CONTENT``, ``SPII``, ``LANGUAGE`` and
+  ``IMAGE_SAFETY`` are defined as flags raised on *the response candidate
+  content* -- the tokens that happened to be sampled -- which is precisely
+  what the next sample changes. Only ``promptFeedback.blockReason`` is
+  defined on the prompt ("the prompt was blocked and no candidates are
+  returned. Rephrase the prompt."), and only it is admitted above. Reporting
+  a sampled-content flag as deterministic would end an episode over an
+  outcome a re-sample can clear, which is the expensive direction of this
+  trade.
+
+  ``candidatesTokenCount > 0`` is NOT evidence that an answer was returned.
+  Measured across 11 answer-less ``gemini-4-argon`` generations,
+  ``candidatesTokenCount`` ran from 51,936 to 64,417 while the parsed text was
+  empty. The only sound evidence of an unrendered answer is the parts
+  themselves, which is what ``_carries_unrendered_content`` inspects: a
+  ``functionCall`` / ``functionResponse`` part is a real answer that
+  ``GeminiMessageConverter.from_value`` drops, and it is the one exemption.
+  Nor is a non-zero count evidence of a truncation hiding under a ``STOP``:
+  that laundering is closed where it happens, in
+  ``_merge_continuation_hops``, which keeps a chain that rendered nothing
+  labelled ``MAX_TOKENS`` instead of taking the last hop's ``STOP``.
+
+  The signatures admitted are reproduced by re-sending the same request, so
+  this subclasses the NON-retryable ``lf.LMError`` -- deliberately NOT
+  ``lf.EmptyGenerationError`` / ``lf.RetryableLMError``. Every recovery that
+  does work is already spent by the time it is raised: a candidate carrying a
+  ``continuationToken`` is resumed in-request by ``_continuation_hop``, and an
+  explicit output ceiling is re-asserted across up to
+  ``_MAX_PINNED_BUDGET_HOPS`` requests for exactly the answer tokens still
+  owed. Re-sending the prompt instead buys nothing and costs ``max_attempts``
+  full generations -- 80 of them under common configurations, each billed for
+  the whole decode budget.
+
+  It stays a distinct class rather than ``lf.EmptyGenerationError`` so the
+  diagnosis -- finish reason, block reason, decode budget, token counts, and
+  the remedy that fits the signature matched -- survives into the message, and
+  so no signature escapes as a bare ``KeyError('content')`` or
+  ``IndexError``.
   Mirrors ``beyond_api.BeyondThinkingBudgetExhaustedError``.
   """
 
@@ -1014,8 +1071,20 @@ SUPPORTED_MODELS = [
 _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 # A 1M-token budget needs about 32 hops of 32K tokens; the cap only stops a
-# server that keeps returning CONTINUATION without ever finishing.
+# server that keeps returning CONTINUATION without ever finishing. It is the
+# bound for a generation that pins no ceiling -- the default, since
+# `max_tokens` is unset unless the caller sets it. A pinned generation is cut
+# off by `_MAX_PINNED_BUDGET_HOPS` long before this.
 _MAX_CONTINUATION_HOPS = 64
+
+# How many requests a generation that pinned `max_tokens` may span. A resume
+# asks for the tokens already spent plus the answer tokens still owed, so it
+# raises the ceiling by at most the pinned cap and four requests hold the whole
+# generation to 4x what the caller asked for: 1x -> 2x -> 3x -> 4x. Cutting it
+# off there is what keeps the cap meaningful; handing the rest of the
+# generation to the service default instead was measured answering a 512-token
+# request with ~75 KB of text.
+_MAX_PINNED_BUDGET_HOPS = 4
 
 
 def _gemini_major_version(model_id: str) -> int:
@@ -1033,13 +1102,88 @@ def _continues_text(part: dict[str, Any], next_part: dict[str, Any]) -> bool:
   )
 
 
+def _with_output_budget(
+    request: dict[str, Any], max_output_tokens: int
+) -> dict[str, Any]:
+  """Returns a copy of `request` resuming under a `max_output_tokens` ceiling.
+
+  `maxOutputTokens` is a running total over a whole generation, not a
+  per-response limit, so a hop that reports `MAX_TOKENS` reports that ceiling
+  spent. A resume that asserts the spent ceiling again is rejected before it
+  starts:
+
+      max_output_tokens (1024) has already been exhausted. Because
+      max_output_tokens is accumulated across continuation requests, pass a
+      higher max_output_tokens value to continue generation.
+
+  Raising the ceiling is the resume the service accepts, and it is the one
+  that keeps the caller's `max_tokens` meaningful: it authorizes exactly the
+  tokens already spent plus the answer tokens still owed, so the generation
+  cannot return more answer than was asked for.
+
+  The raised value needs no upper clamp. Measured against the service,
+  `maxOutputTokens` of 65,537, 131,072 and 1,000,000 -- all above the model's
+  own 65,536-token output maximum -- are each accepted with HTTP 200, so there
+  is no threshold above which the ceiling has to be dropped. Dropping it would
+  be the worst option available anyway: it hands the rest of the generation to
+  the service default, which is the unbounded behaviour the ceiling exists to
+  prevent.
+
+  Args:
+    request: A `generateContent` request body.
+    max_output_tokens: The ceiling the resume should assert.
+
+  Returns:
+    A copy of `request` with `generationConfig.maxOutputTokens` set to
+    `max_output_tokens`.
+  """
+  return dict(
+      request,
+      generationConfig=dict(
+          request.get('generationConfig') or {},
+          maxOutputTokens=max_output_tokens,
+      ),
+  )
+
+
+def _answer_text(candidate: dict[str, Any]) -> str:
+  """Returns the non-thought answer text a response candidate carries.
+
+  Read through the same parser `result()` uses, so that `''` here means
+  exactly what an empty `Message.text` means there: thought parts routed
+  away, empty text parts fused out, modalities counted as answer content.
+
+  Args:
+    candidate: A single `generateContent` response candidate.
+
+  Returns:
+    The candidate's answer text, empty when it carries no answer.
+  """
+  return lf.Message.from_value(
+      candidate.get('content') or {'parts': []}, format='gemini'
+  ).text
+
+
 def _merge_continuation_hops(payloads: list[dict[str, Any]]) -> dict[str, Any]:
   """Merges the responses of a continued generation into a single response.
 
   Parts are concatenated in order, re-joining a text part that a hop boundary
   split, since `Message.from_chunks` would otherwise insert a separator there.
-  Token counts are summed, as every hop is billed. All other fields, e.g.
-  `finishReason`, come from the last hop.
+  Bare `{'text': ''}` parts -- what a hop whose whole budget went to thinking
+  returns -- are kept verbatim: `Message.from_chunks` writes no separator after
+  an empty chunk and strips the fused text, so they contribute nothing to the
+  parsed message wherever they land. Token counts are summed, as every hop is
+  billed. All other fields, e.g. `finishReason`, come from the last hop.
+
+  `finishReason` is the one exception, and only when the chain rendered no
+  answer: a `MAX_TOKENS` hop followed by a hop that adds nothing and reports
+  `STOP` (0 tokens, empty text) is a budget exhaustion the last hop would
+  otherwise launder into a clean stop. Measured on `ex 118`, that laundering
+  cost 80 full 65K-token regenerations, because `_check_answer_present` saw
+  `('STOP', summed count)` -- a signature that looks recoverable -- instead of
+  the `MAX_TOKENS` it was. Taking the truncation over the stop is sound only
+  while the merged candidate renders nothing: once any hop returned answer
+  text, the chain did finish and the last hop's reason is the true one.
 
   Args:
     payloads: Single-candidate `generateContent` responses, in hop order.
@@ -1067,7 +1211,37 @@ def _merge_continuation_hops(payloads: list[dict[str, Any]]) -> dict[str, Any]:
   last = payloads[-1]
   candidate = dict(last['candidates'][0])
   candidate['content'] = dict(candidate.get('content') or {}, parts=parts)
+  if not _answer_text(candidate) and any(
+      payload['candidates'][0].get('finishReason') == 'MAX_TOKENS'
+      for payload in payloads
+  ):
+    candidate['finishReason'] = 'MAX_TOKENS'
   return dict(last, candidates=[candidate], usageMetadata=usage)
+
+
+def _carries_unrendered_content(candidate: dict[str, Any]) -> bool:
+  """Returns True if a candidate holds an answer the converter does not render.
+
+  `GeminiMessageConverter.from_value` drops `functionCall` and
+  `functionResponse` parts, so a tool-calling candidate parses to empty text
+  while carrying a real answer. Those parts remain reachable even though
+  `request()` hard-sets `toolConfig.functionCallingConfig.mode` to `'NONE'`,
+  because `sampling_options.extras` can override the request it built.
+
+  Asking the parts directly is the evidence that replaces the unsound
+  `candidatesTokenCount > 0` proxy: a token count says the service was billed,
+  not that anything was returned.
+
+  Args:
+    candidate: A single `generateContent` candidate.
+
+  Returns:
+    True if any part is a function call or a function response.
+  """
+  parts = (candidate.get('content') or {}).get('parts') or ()
+  return any(
+      'functionCall' in part or 'functionResponse' in part for part in parts
+  )
 
 
 @pg.use_init_args(['model'])
@@ -1118,6 +1292,23 @@ class Gemini(rest.REST):
       endpoint = self.api_endpoint
       response = self._post(request, endpoint)
       hops: list[dict[str, Any]] = []
+      # The output ceiling the caller pinned, if any. `maxOutputTokens` is a
+      # running total over the whole generation covering thinking AND answer,
+      # so a `MAX_TOKENS` hop reports it spent and the only resume the service
+      # accepts is one that raises it. What the caller is owed is answer
+      # tokens, so the two are tracked apart: `maxOutputTokens` bounds the
+      # total, `requested_max_tokens` bounds the answer.
+      requested_max_tokens = (request.get('generationConfig') or {}).get(
+          'maxOutputTokens'
+      )
+      cumulative_candidates_tokens = 0
+      cumulative_total_tokens = 0
+      budget_hops = 1
+      # Set only when a hop reports no `candidatesTokenCount` at all, which
+      # the service does occasionally. There is no arithmetic to do without a
+      # count, so the weaker signal it stands in for is used instead.
+      answered_without_count = False
+      continuation_request = request
       # Retried here rather than by `_sample()`, which would restart from hop 0.
       post_continuation = lf.with_retry(
           self._post_continuation,
@@ -1134,14 +1325,65 @@ class Gemini(rest.REST):
               f'Model {self.model_id} did not finish within '
               f'{_MAX_CONTINUATION_HOPS} requests.'
           )
-        # Long decode: each hop resends the original request plus the token.
-        response = post_continuation(
-            dict(
-                request,
-                continuationToken=hop['candidates'][0]['continuationToken'],
-            ),
-            endpoint,
+        candidate = hop['candidates'][0]
+        usage = hop.get('usageMetadata') or {}
+        hop_answer_tokens = usage.get('candidatesTokenCount')
+        if hop_answer_tokens is None:
+          answered_without_count = answered_without_count or bool(
+              _answer_text(candidate)
+          )
+          hop_answer_tokens = 0
+        cumulative_candidates_tokens += hop_answer_tokens
+        cumulative_total_tokens += hop_answer_tokens + (
+            usage.get('thoughtsTokenCount') or 0
         )
+        if (
+            candidate.get('finishReason') == 'MAX_TOKENS'
+            and requested_max_tokens is not None
+        ):
+          remaining_answer_tokens = (
+              requested_max_tokens - cumulative_candidates_tokens
+          )
+          if (
+              remaining_answer_tokens <= 0
+              or answered_without_count
+              or budget_hops == _MAX_PINNED_BUDGET_HOPS
+          ):
+            # The caller already has every answer token they asked for, or
+            # has answer content that cannot be counted, or the generation
+            # has spent its bound. Stop resuming and report what the
+            # generation itself did -- a truncated answer, or the answer-less
+            # diagnosis.
+            hops.pop()
+            break
+          budget_hops += 1
+          # Thinking spent part of the cap, so the answer tokens still owed
+          # only fit above what the whole generation has burned so far. Asking
+          # for exactly that keeps the resume accepted -- it raises the
+          # running total -- without authorizing an answer longer than the one
+          # the caller asked for.
+          continuation_request = _with_output_budget(
+              request, cumulative_total_tokens + remaining_answer_tokens
+          )
+        try:
+          response = post_continuation(
+              dict(
+                  continuation_request,
+                  continuationToken=candidate['continuationToken'],
+              ),
+              endpoint,
+          )
+        except (lf.LMError, lf.concurrent.RetryError):
+          if candidate.get('finishReason') == 'CONTINUATION':
+            # A mid-flight generation really did fail; hiding that would turn
+            # a failure into a silently truncated answer.
+            raise
+          # Resuming an exhausted budget is best effort -- the token can have
+          # expired, or the service can refuse the resume for a reason the
+          # ceiling does not explain. Fall back to reporting what the
+          # generation itself did rather than the resume's own error.
+          hops.pop()
+          break
       if not hops:
         return self._parse_response(response)
       try:
@@ -1172,9 +1414,15 @@ class Gemini(rest.REST):
     except ValueError:
       return None
     candidates = payload.get('candidates') or []
+    # `CONTINUATION` is the per-response cap: the generation is mid-flight.
+    # `MAX_TOKENS` is budget exhaustion -- when thinking spends the shared
+    # decode budget the service still offers a `continuationToken`, and
+    # following it is what turns an answer-less generation into an answer.
+    # Either way the token is only honoured when the service actually sent
+    # one, which it omits once the generation is genuinely over.
     if (
         len(candidates) == 1
-        and candidates[0].get('finishReason') == 'CONTINUATION'
+        and candidates[0].get('finishReason') in ('CONTINUATION', 'MAX_TOKENS')
         and candidates[0].get('continuationToken')
     ):
       return payload
@@ -1279,7 +1527,7 @@ class Gemini(rest.REST):
           'happens occasionally, and retrying should fix it. '
       )
 
-    usage = json['usageMetadata']
+    usage = json.get('usageMetadata') or {}
     # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.
     # Therefore, we use 0 as the default value.
     input_tokens = usage.get('promptTokenCount', 0)
@@ -1287,6 +1535,32 @@ class Gemini(rest.REST):
     thinking_tokens = usage.get('thoughtsTokenCount', 0)
     total_tokens = usage.get('totalTokenCount', 0)
     cached_tokens = usage.get('cachedContentTokenCount', 0)
+    # A blocked prompt is reported here, not on a candidate -- there is no
+    # candidate to report it on.
+    block_reason = (json.get('promptFeedback') or {}).get('blockReason')
+
+    if not candidates:
+      # `candidates` present but EMPTY is a response that answered nothing.
+      # Left alone, it returns `LMSamplingResult([])` and `LanguageModel`
+      # fails on `result.samples[0]` with a bare `IndexError` that names
+      # neither the block reason nor the model, so it never reaches that
+      # point: a blocked prompt is reported as the deterministic failure it
+      # is, and anything else as the transient one it is.
+      self._check_answer_present(
+          lf.AIMessage(''),
+          {},
+          None,
+          output_tokens,
+          thinking_tokens,
+          block_reason,
+      )
+      raise lf.TemporaryLMError(
+          f'Model {self.model_id} returned an empty candidate list with no '
+          f'block reason (candidatesTokenCount={output_tokens}, '
+          f'thoughtsTokenCount={thinking_tokens}). Nothing was generated and '
+          'nothing explains why, which is the transient shape of this API; '
+          'retrying should fix it.'
+      )
 
     messages = []
     for candidate in candidates:
@@ -1295,15 +1569,26 @@ class Gemini(rest.REST):
       if content is None:
         raise self._no_answer_error(
             'the candidate carries no content at all',
+            (
+                'Nothing was generated, so no budget knob applies: this is '
+                'either a transient service fault or a response the service '
+                'withheld.'
+            ),
             finish_reason,
             output_tokens,
             thinking_tokens,
+            block_reason,
         )
       message = lf.Message.from_value(content, format='gemini')
       if finish_reason:
         message.metadata['finish_reason'] = finish_reason
       self._check_answer_present(
-          message, finish_reason, output_tokens, thinking_tokens
+          message,
+          candidate,
+          finish_reason,
+          output_tokens,
+          thinking_tokens,
+          block_reason,
       )
       messages.append(message)
 
@@ -1323,77 +1608,200 @@ class Gemini(rest.REST):
   def _check_answer_present(
       self,
       message: lf.Message,
+      candidate: dict[str, Any],
       finish_reason: str | None,
       output_tokens: int,
       thinking_tokens: int,
+      block_reason: str | None,
   ) -> None:
-    """Fails fast when a parsed candidate carries no answer, deterministically.
+    """Fails fast when a parsed candidate carries no RECOVERABLE answer.
 
-    Only the two token-budget signatures documented on
-    `GeminiEmptyGenerationError` are reclassified here; its third signature
-    (no `content` at all) is caught by `result()` before parsing. Every other
-    answer-less case (an unrelated `finishReason`, a function-call-only
-    candidate that did emit tokens, a missing `finishReason`) is left alone so
-    the pre-existing retryable `lf.EmptyGenerationError` path keeps handling it
-    -- those may genuinely be transient.
+    Raising here spends the caller's whole generation: the error is
+    non-retryable, so the episode that was mid-flight ends. That is the right
+    trade only for a signature a re-send cannot change. The rule is therefore
+    NARROW, and every arm of it names the mechanism that makes a re-send
+    futile:
+
+    * the prompt never reached decoding (`promptFeedback.blockReason`) -- the
+      API defines that field on the prompt, returns no candidate with it, and
+      names rephrasing the prompt as the remedy;
+    * the decode budget was exhausted (`MAX_TOKENS`, including a continuation
+      chain that `_merge_continuation_hops` keeps marked as one) -- the
+      in-request rescues are already spent by the time this is reached;
+    * the model stopped having generated literally nothing (`STOP` with no
+      answer AND no thinking tokens) -- it was billed for no work, so there is
+      no work in flight to recover.
+
+    Everything else returns, and `LanguageModel.sample()` raises the RETRYABLE
+    `lf.EmptyGenerationError` for it. A closed rule was tried here and
+    measured: across 30 live `gemini-4-argon` trajectories, 28 of 28
+    `GeminiEmptyGenerationError` aborts were `MALFORMED_FUNCTION_CALL` on a
+    mid-episode turn that declared no tools, each billed 521-4,336 answer and
+    983-6,020 thinking tokens -- a transient fault the very next sample
+    recovers from, turned into a fatal abort. Non-zero `candidatesTokenCount`
+    or `thoughtsTokenCount` is exactly that signature: the service did work
+    and lost it, which is what a retry is for. The futile-retry case the
+    closed rule was built for is not reached by widening the rule, but by
+    `_merge_continuation_hops` refusing to relabel an exhausted budget `STOP`.
+
+    A candidate-level content-policy flag (`SAFETY`, `RECITATION`,
+    `BLOCKLIST`, ...) returns for the same reason. The API raises those on the
+    response candidate content, i.e. on the tokens that were sampled, so the
+    next sample is exactly what can clear them -- unlike
+    `promptFeedback.blockReason`, which the API raises on the prompt and
+    returns with no candidate at all.
+
+    There are two ways out before any of this. Rendered text is an answer. A
+    `functionCall` / `functionResponse` part is an answer the converter drops,
+    which `_carries_unrendered_content` checks directly rather than inferring
+    from `candidatesTokenCount > 0` -- a count that is billed for thinking and
+    for tokens a truncated hop never returned.
+
+    Each signature carries its own remedy, because they do not share one: a
+    starved budget wants less thinking or more room, a budget that reached the
+    answer wants only more room, and a blocked prompt or a model that stopped
+    on its own wants neither.
 
     Args:
       message: The parsed candidate. Its text holds the non-thought answer
         content (thought parts are routed to `message.thought`), so empty text
-        means no answer was returned.
+        means nothing was rendered.
+      candidate: The raw candidate, for parts the converter does not render.
       finish_reason: The candidate's `finishReason`, if any.
-      output_tokens: Response-level `candidatesTokenCount`. With `n > 1` this
-        aggregates all candidates, which only makes the `STOP` check stricter
-        (never falsely positive).
+      output_tokens: Response-level `candidatesTokenCount`. It only ever
+        chooses between two diagnoses of the same failure here; it is never
+        read as evidence that an answer exists.
       thinking_tokens: Response-level `thoughtsTokenCount`, for diagnostics.
+      block_reason: Response-level `promptFeedback.blockReason`, if any.
 
     Raises:
-      GeminiEmptyGenerationError: If the candidate is deterministically
-        answer-less.
+      GeminiEmptyGenerationError: If the candidate carries no answer.
     """
     if message.text:
       return
 
-    if finish_reason == 'MAX_TOKENS':
+    if _carries_unrendered_content(candidate):
+      # A tool call is a real answer; the converter just does not render it.
+      return
+
+    if block_reason:
+      cause = (
+          'the prompt was blocked before generation started '
+          f'({block_reason}), so no answer was ever produced'
+      )
+      remedy = (
+          'No budget knob applies: the request never reached decoding. '
+          'Change the prompt or the safety configuration.'
+      )
+    elif finish_reason == 'MAX_TOKENS' and output_tokens > 0:
+      # The decode budget did reach the answer, so this is not starvation: the
+      # truncated hop was billed for answer tokens it did not return, and no
+      # `continuationToken` -- or no hop following one -- recovered them.
+      cause = (
+          f'{output_tokens} answer tokens were billed on a MAX_TOKENS-'
+          'truncated hop that returned no non-empty text part, and no '
+          f'continuation recovered them ({thinking_tokens} thinking tokens '
+          'were produced)'
+      )
+      remedy = (
+          'The budget did reach the answer, so spending less of it on '
+          'thinking is not the fix: raise `max_tokens` so the answer fits, '
+          'or check whether the candidate returned a non-text part that is '
+          'reported here as no answer.'
+      )
+    elif finish_reason == 'MAX_TOKENS':
       cause = (
           'the decode budget was exhausted before any answer token was '
           f'emitted ({thinking_tokens} thinking tokens were produced)'
       )
-    elif finish_reason == 'STOP' and output_tokens == 0:
+      remedy = (
+          'Consider raising `max_tokens`, lowering the thinking budget '
+          '(`max_thinking_tokens` / `thinking_level`), or shortening the '
+          'prompt; a request that starves its decode budget tends to starve '
+          'it again.'
+      )
+    elif finish_reason == 'STOP' and output_tokens == 0 and (
+        thinking_tokens == 0
+    ):
       cause = 'the model stopped without emitting any output token'
+      remedy = (
+          'The decode budget was not the constraint, so `max_tokens` is not '
+          'the knob: look at the prompt and the safety configuration.'
+      )
     else:
+      # Everything left is transient, and the retry path is the one that
+      # recovers it:
+      #
+      # * a tool-protocol fault (`MALFORMED_FUNCTION_CALL`,
+      #   `UNEXPECTED_TOOL_CALL`) -- it fires mid-episode on turns that
+      #   declared no tools at all, so there is no tool declaration to
+      #   correct and the next sample simply succeeds;
+      # * a candidate-level content-policy flag (`SAFETY`, `RECITATION`,
+      #   `BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, `LANGUAGE`,
+      #   `IMAGE_SAFETY`) -- the API raises these on the response candidate
+      #   content, so they describe the tokens that were sampled and the next
+      #   sample is what clears them. The prompt-level counterpart, which a
+      #   re-send genuinely cannot change, is `promptFeedback.blockReason`
+      #   and it is claimed by the first arm above;
+      # * `STOP` over non-zero `candidatesTokenCount` / `thoughtsTokenCount`
+      #   -- the service generated and then lost the work. A truncation is no
+      #   longer hiding in here: `_merge_continuation_hops` keeps an exhausted
+      #   budget labelled `MAX_TOKENS`, which the arm above claims;
+      # * an absent or unrecognised `finishReason` -- an unclassified
+      #   signature is not evidence of determinism, and guessing that it is
+      #   costs a live episode on every false positive.
+      #
+      # `LanguageModel.sample()` sees the empty text and raises the retryable
+      # `lf.EmptyGenerationError`, bounded by the caller's `max_attempts`.
       return
 
     raise self._no_answer_error(
-        cause, finish_reason, output_tokens, thinking_tokens
+        cause,
+        remedy,
+        finish_reason,
+        output_tokens,
+        thinking_tokens,
+        block_reason,
     )
 
   def _no_answer_error(
       self,
       cause: str,
+      remedy: str,
       finish_reason: str | None,
       output_tokens: int,
       thinking_tokens: int,
+      block_reason: str | None,
   ) -> GeminiEmptyGenerationError:
     """Builds the error reported for a deterministically answer-less candidate.
 
     Args:
       cause: A phrase completing 'returned no answer content: ...', naming
         which signature was matched.
+      remedy: A sentence naming what to change for that signature. The
+        signatures do not share a remedy, so it is passed in rather than
+        written once here.
       finish_reason: The candidate's `finishReason`, if any.
       output_tokens: Response-level `candidatesTokenCount`.
       thinking_tokens: Response-level `thoughtsTokenCount`.
+      block_reason: Response-level `promptFeedback.blockReason`, if any.
 
     Returns:
-      The error to raise, carrying the diagnosis and the knobs to change.
+      The error to raise, carrying the diagnosis, the knob to change, and the
+      cost of the retry it declines to make.
     """
     return GeminiEmptyGenerationError(
         f'Model {self.model_id} returned no answer content: {cause} '
-        f'(finishReason={finish_reason}, candidatesTokenCount={output_tokens}, '
-        f'thoughtsTokenCount={thinking_tokens}). This is determined by the '
-        'request, so retrying it as-is would reproduce the same result. '
-        'Consider raising `max_tokens`, lowering the thinking budget '
-        '(`max_thinking_tokens` / `thinking_level`), or shortening the prompt.'
+        f'(finishReason={finish_reason}, blockReason={block_reason}, '
+        f'candidatesTokenCount={output_tokens}, '
+        f'thoughtsTokenCount={thinking_tokens}). Any `continuationToken` the '
+        'service offered was already followed, re-asserting an explicit '
+        '`max_tokens` for the answer tokens still owed across up to '
+        f'{_MAX_PINNED_BUDGET_HOPS} requests. {remedy} '
+        'This error is not retryable: the signature is a function of the '
+        'request, so re-sending the prompt would reproduce it at a cost of '
+        f'up to max_attempts={self.max_attempts} generations, every one of '
+        'them billed in full.'
     )
 
   def _error(self, status_code: int, content: str) -> lf.LMError:

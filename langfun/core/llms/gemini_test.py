@@ -456,6 +456,8 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
       *,
       candidates_token_count: int,
       thoughts_token_count: int = 0,
+      block_reason: str | None = None,
+      drop_candidates: bool = False,
   ) -> dict[str, Any]:
     """Builds a single-candidate response payload.
 
@@ -466,6 +468,11 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
       finish_reason: The candidate's `finishReason`, omitted when None.
       candidates_token_count: Response-level `candidatesTokenCount`.
       thoughts_token_count: Response-level `thoughtsTokenCount`.
+      block_reason: Response-level `promptFeedback.blockReason`, omitted when
+        None.
+      drop_candidates: Sends an EMPTY `candidates` list instead of the
+        candidate built above -- a response that answered nothing, as opposed
+        to one missing the key.
 
     Returns:
       A response payload accepted by `Gemini.result()`.
@@ -475,8 +482,8 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
       candidate['content'] = {'role': 'model', 'parts': parts}
     if finish_reason is not None:
       candidate['finishReason'] = finish_reason
-    return {
-        'candidates': [candidate],
+    payload: dict[str, Any] = {
+        'candidates': [] if drop_candidates else [candidate],
         'usageMetadata': {
             'promptTokenCount': 12,
             'candidatesTokenCount': candidates_token_count,
@@ -486,18 +493,55 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
             ),
         },
     }
+    if block_reason is not None:
+      payload['promptFeedback'] = {'blockReason': block_reason}
+    return payload
 
   def test_error_is_not_retryable(self):
-    """The new error must stay OUT of the retryable error hierarchy."""
+    """Deterministic per prompt, so a re-send can only re-bill it."""
     self.assertTrue(
         issubclass(gemini.GeminiEmptyGenerationError, lf.LMError)
     )
     self.assertFalse(
         issubclass(gemini.GeminiEmptyGenerationError, lf.RetryableLMError)
     )
+    # Staying off `lf.EmptyGenerationError` keeps the diagnosis -- finish
+    # reason, budget, token counts -- instead of a generic empty-text message,
+    # and keeps it off the retry path that class puts it on.
     self.assertFalse(
         issubclass(gemini.GeminiEmptyGenerationError, lf.EmptyGenerationError)
     )
+
+  def test_error_is_not_retried_by_with_retry(self):
+    """A caller's `lf.RetryableLMError` policy must not re-send the prompt.
+
+    Everything that can rescue a starved generation -- following the
+    `continuationToken`, extending an explicit ceiling -- happens inside the
+    one request. Past that there is nothing a second full generation can do
+    that the first did not, so it must not be paid for.
+    """
+    attempts = []
+
+    def starve():
+      attempts.append(None)
+      self._model().result(
+          self._response(
+              [{'text': ''}],
+              'MAX_TOKENS',
+              candidates_token_count=3,
+              thoughts_token_count=2045,
+          )
+      )
+
+    retried = lf.with_retry(
+        starve,
+        retry_on_errors=lf.RetryableLMError,
+        max_attempts=5,
+        retry_interval=0,
+    )
+    with self.assertRaises(gemini.GeminiEmptyGenerationError):
+      retried()
+    self.assertEqual(len(attempts), 1)
 
   def test_thought_only_max_tokens_raises(self):
     with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
@@ -512,6 +556,63 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
     message = str(ctx.exception)
     self.assertIn('MAX_TOKENS', message)
     self.assertIn('8192', message)
+    self.assertIn('before any answer token was emitted', message)
+    # Thinking is what spent the budget, so spending less of it is a remedy.
+    self.assertIn('lowering the thinking budget', message)
+
+  def test_max_tokens_with_billed_output_is_not_called_starvation(self):
+    """61,314 billed answer tokens is the opposite of a starved budget.
+
+    The truncated hop returned none of them and no continuation recovered
+    them, so they are lost rather than never produced -- and the diagnosis
+    has to say which, because the two have different remedies.
+    """
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response(
+              [{'text': ''}],
+              'MAX_TOKENS',
+              candidates_token_count=61314,
+              thoughts_token_count=4222,
+          )
+      )
+    message = str(ctx.exception)
+    self.assertIn('MAX_TOKENS', message)
+    self.assertIn('61314 answer tokens were billed', message)
+    self.assertIn('no continuation recovered them', message)
+    self.assertNotIn('before any answer token was emitted', message)
+    # The budget reached the answer, so the starvation remedy is withheld.
+    self.assertIn('spending less of it on thinking is not the fix', message)
+    self.assertNotIn('lowering the thinking budget', message)
+
+  def test_the_diagnosis_names_the_retry_it_declines(self):
+    """`max_attempts` times a full budget is the bill NOT being run up.
+
+    Callers routinely set `max_attempts=80`; an operator reading one of these
+    in a log needs to see that 80 full regenerations were declined and why,
+    not infer it from the class hierarchy. The in-request rescue that was
+    spent instead belongs in the same sentence.
+    """
+    model = gemini.Gemini(
+        'gemini-3.1-pro-preview', api_endpoint='', max_attempts=80
+    )
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      model.result(
+          self._response(
+              [{'text': ''}],
+              'MAX_TOKENS',
+              candidates_token_count=3,
+              thoughts_token_count=65533,
+          )
+      )
+    message = str(ctx.exception)
+    self.assertIn('not retryable', message)
+    self.assertIn('max_attempts=80', message)
+    self.assertIn('billed in full', message)
+    # The rescue that was already paid for, so nobody looks for it twice.
+    self.assertIn('`continuationToken`', message)
+    self.assertIn('answer tokens still owed', message)
+    self.assertIn(f'{gemini._MAX_PINNED_BUDGET_HOPS} requests', message)  # pylint: disable=protected-access
 
   def test_no_content_max_tokens_raises(self):
     """MAX_TOKENS with no parts at all is equally deterministic."""
@@ -525,7 +626,11 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
       self._model().result(
           self._response([], 'STOP', candidates_token_count=0)
       )
-    self.assertIn('STOP', str(ctx.exception))
+    message = str(ctx.exception)
+    self.assertIn('STOP', message)
+    # The model stopped on its own, so no budget knob is the remedy.
+    self.assertIn('decode budget was not the constraint', message)
+    self.assertNotIn('lowering the thinking budget', message)
 
   def test_missing_content_raises(self):
     """A candidate with no `content` key must not surface as a raw KeyError."""
@@ -545,6 +650,9 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
     self.assertIn('MAX_TOKENS', message)
     self.assertIn('61', message)
     self.assertIn(self._model().model_id, message)
+    # Nothing was generated, so the budget remedies do not apply either.
+    self.assertIn('no budget knob applies', message)
+    self.assertNotIn('lowering the thinking budget', message)
 
   def test_null_content_raises(self):
     """A present-but-null `content` is just as unparseable as a missing one."""
@@ -595,11 +703,13 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
     )
     self.assertNotEqual(result.samples[0].response.text, '')
 
-  def test_stop_with_output_tokens_stays_on_legacy_path(self):
-    """Empty text but tokens were emitted: not our deterministic signature.
+  def test_function_call_candidate_is_exempt(self):
+    """The one carve-out: a tool call is an answer the converter drops.
 
-    E.g. a function-call-only candidate. Left untouched so the pre-existing
-    retryable `EmptyGenerationError` path keeps handling it.
+    `GeminiMessageConverter.from_value` renders no text for a `functionCall`
+    part, so the candidate looks empty while carrying a real answer. The
+    exemption reads the parts, which is evidence; it does not read
+    `candidatesTokenCount > 0`, which is not.
     """
     result = self._model().result(
         self._response(
@@ -610,18 +720,233 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
     )
     self.assertEqual(result.samples[0].response.text, '')
 
-  def test_other_finish_reason_stays_on_legacy_path(self):
-    """Empty text under an unrelated finish reason is not reclassified."""
+  def test_function_response_candidate_is_exempt(self):
+    """A `functionResponse` part is dropped by the converter just the same."""
     result = self._model().result(
-        self._response([], 'SAFETY', candidates_token_count=0)
+        self._response(
+            [{'functionResponse': {'name': 'f', 'response': {}}}],
+            'STOP',
+            candidates_token_count=0,
+        )
     )
     self.assertEqual(result.samples[0].response.text, '')
 
-  def test_missing_finish_reason_stays_on_legacy_path(self):
+  def test_function_call_is_exempt_even_without_billed_tokens(self):
+    """The exemption is the parts, not the count: zero tokens still exempt.
+
+    This is what separates the evidence from the proxy it replaced. Under the
+    old `output_tokens > 0` rule this candidate would have been reported as
+    empty despite carrying a tool call.
+    """
+    result = self._model().result(
+        self._response(
+            [{'functionCall': {'name': 'f', 'args': {}}}],
+            'MAX_TOKENS',
+            candidates_token_count=0,
+        )
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_content_policy_finish_reason_stays_retryable(self):
+    """A policy flag on the sampled content is not a property of the request.
+
+    The API raises every one of these on the *response candidate content*, so
+    each describes the tokens that happened to be sampled -- which is exactly
+    what the next sample changes. Admitting them would end a live episode
+    over an outcome a re-send can clear, the same trade the closed rule lost
+    28 times out of 28 on `MALFORMED_FUNCTION_CALL`. The prompt-level
+    counterpart a re-send genuinely cannot change is
+    `promptFeedback.blockReason`, which the API defines on the prompt and
+    returns with no candidate at all; it is admitted, and tested, separately.
+    """
+    for finish_reason in (
+        'SAFETY',
+        'RECITATION',
+        'BLOCKLIST',
+        'PROHIBITED_CONTENT',
+        'SPII',
+        'LANGUAGE',
+        'IMAGE_SAFETY',
+    ):
+      with self.subTest(finish_reason=finish_reason):
+        result = self._model().result(
+            self._response([], finish_reason, candidates_token_count=0)
+        )
+        self.assertEqual(result.samples[0].response.text, '')
+
+  def test_tool_protocol_finish_reason_stays_retryable(self):
+    """The live failure mode: MALFORMED_FUNCTION_CALL must NOT end the episode.
+
+    Measured across 30 `gemini-4-argon` trajectories, 28 of 28 aborts raised
+    by the closed rule carried this finish reason on a mid-episode turn whose
+    request declared no tools at all -- so there was no tool declaration to
+    correct, and the next sample succeeded. Returning hands it to
+    `LanguageModel.sample()`, which raises the RETRYABLE
+    `lf.EmptyGenerationError` and lets the episode recover.
+    """
+    result = self._model().result(
+        self._response(
+            [{'text': 'thinking...', 'thought': True}],
+            'MALFORMED_FUNCTION_CALL',
+            candidates_token_count=1304,
+            thoughts_token_count=4821,
+        )
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_missing_finish_reason_stays_retryable(self):
+    """No reason reported is not evidence that a re-send cannot work.
+
+    An unclassified signature is unclassified in both directions. Calling it
+    deterministic costs a live episode on every false positive, while calling
+    it transient costs at most `max_attempts` samples that already had to be
+    budgeted for.
+    """
     result = self._model().result(
         self._response([], None, candidates_token_count=0)
     )
     self.assertEqual(result.samples[0].response.text, '')
+
+  def test_unrecognised_finish_reason_stays_retryable(self):
+    """A reason this client has never seen is likewise not proven fatal."""
+    result = self._model().result(
+        self._response([], 'SOME_NEW_REASON', candidates_token_count=0)
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_stop_with_billed_tokens_stays_retryable(self):
+    """A STOP over billed tokens is lost work, which is what a retry is for.
+
+    The truncation this signature used to hide -- a `MAX_TOKENS` hop merged
+    into a chain that takes the LAST hop's `STOP` over a SUMMED count -- is
+    closed at its source now: `_merge_continuation_hops` keeps the chain
+    labelled `MAX_TOKENS` (see
+    `GeminiStarvedBudgetTest.test_an_exhausted_budget_is_not_laundered_into_stop`).
+    What reaches here is a generation the service was billed for and lost, so
+    re-sampling it is the recovery, not a wasted bill.
+    """
+    result = self._model().result(
+        self._response(
+            [{'text': ''}],
+            'STOP',
+            candidates_token_count=62848,
+            thoughts_token_count=2688,
+        )
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_stop_with_thinking_tokens_only_stays_retryable(self):
+    """The boundary of the fatal STOP arm: thinking happened, so work exists.
+
+    `STOP` is fatal only when the model was billed for NOTHING -- no answer
+    and no thinking. One thought token is enough to make it a generation that
+    ran and was lost.
+    """
+    result = self._model().result(
+        self._response(
+            [{'text': 'thinking...', 'thought': True}],
+            'STOP',
+            candidates_token_count=0,
+            thoughts_token_count=1,
+        )
+    )
+    self.assertEqual(result.samples[0].response.text, '')
+
+  def test_blocked_prompt_raises(self):
+    """`promptFeedback.blockReason` outranks every candidate-level reason.
+
+    The prompt never reached decoding, so no budget knob is the remedy and the
+    block reason is what an operator needs to read.
+    """
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response(
+              [],
+              'STOP',
+              candidates_token_count=0,
+              block_reason='PROHIBITED_CONTENT',
+          )
+      )
+    message = str(ctx.exception)
+    self.assertIn('blockReason=PROHIBITED_CONTENT', message)
+    self.assertIn('blocked before generation started', message)
+    self.assertIn('never reached decoding', message)
+    # The candidate-level STOP diagnosis must not be the one reported.
+    self.assertNotIn('without emitting any output token', message)
+
+  def test_empty_candidates_list_raises_instead_of_indexerror(self):
+    """`candidates: []` must not reach `LanguageModel` as a bare IndexError.
+
+    Left alone it yields `LMSamplingResult([])`, and the caller fails on
+    `result.samples[0]` with an error naming neither the model nor the
+    reason. With nothing explaining the empty list it is reported as the
+    transient fault it looks like -- retryable, like the absent key -- but
+    reported, and naming the model.
+    """
+    with self.assertRaises(lf.TemporaryLMError) as ctx:
+      self._model().result(
+          self._response(
+              None, None, candidates_token_count=0, drop_candidates=True
+          )
+      )
+    message = str(ctx.exception)
+    self.assertIn(self._model().model_id, message)
+    self.assertIn('empty candidate list', message)
+
+  def test_empty_candidates_list_reports_the_block_reason(self):
+    """The shape a blocked prompt actually returns: no candidate, a reason."""
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result(
+          self._response(
+              None,
+              None,
+              candidates_token_count=0,
+              drop_candidates=True,
+              block_reason='SAFETY',
+          )
+      )
+    self.assertIn('blockReason=SAFETY', str(ctx.exception))
+
+  def test_absent_candidates_key_stays_retryable(self):
+    """The boundary of the change: a MISSING key is still the retryable path.
+
+    An empty list and an absent key are different responses. Only the former
+    is reclassified; the latter remains the transient Gemini API fault the
+    pre-existing handling documents.
+    """
+    with self.assertRaises(lf.TemporaryLMError):
+      self._model().result({'usageMetadata': {'promptTokenCount': 12}})
+
+  def test_missing_usage_metadata_does_not_crash(self):
+    """`usageMetadata` is read defensively: a response may omit it entirely.
+
+    Before, `json['usageMetadata']` raised a bare `KeyError` that hid whatever
+    the real failure was.
+    """
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._model().result({
+          'candidates': [{
+              'content': {'role': 'model', 'parts': []},
+              'finishReason': 'MAX_TOKENS',
+          }]
+      })
+    self.assertIn('candidatesTokenCount=0', str(ctx.exception))
+
+  def test_carries_unrendered_content_reads_the_parts(self):
+    """Unit-level: the exemption is a pure function of the candidate's parts."""
+    carries = gemini._carries_unrendered_content  # pylint: disable=protected-access
+    self.assertTrue(
+        carries({'content': {'parts': [{'functionCall': {'name': 'f'}}]}})
+    )
+    self.assertTrue(
+        carries({'content': {'parts': [{'functionResponse': {'name': 'f'}}]}})
+    )
+    self.assertFalse(carries({'content': {'parts': [{'text': ''}]}}))
+    self.assertFalse(carries({'content': {'parts': []}}))
+    # The shapes `result()` can hand it: no parts, null content, no candidate.
+    self.assertFalse(carries({'content': {}}))
+    self.assertFalse(carries({'content': None}))
+    self.assertFalse(carries({}))
 
 
 def _hop(
@@ -731,6 +1056,12 @@ class GeminiContinuationTest(unittest.TestCase):
     self.assertEqual(len(sent), 2)
 
   def test_budget_exhausted_after_continuation_is_not_resent(self):
+    """A MAX_TOKENS hop with no token ends the generation, within one sample.
+
+    Sampled through `_sample_single` so the assertion is about the hop loop;
+    `GeminiEmptyGenerationError` is retryable, so the public entry point would
+    re-send the whole prompt `max_attempts` times on top of this.
+    """
     sent, post = self._serve(
         _hop(
             [{'text': 'Thinking...', 'thought': True}],
@@ -748,7 +1079,7 @@ class GeminiContinuationTest(unittest.TestCase):
       with self.assertRaisesRegex(
           gemini.GeminiEmptyGenerationError, 'thoughtsTokenCount=65536'
       ):
-        self._lm()('hi')
+        self._lm()._sample_single(lf.UserMessage('hi'))
     self.assertEqual(len(sent), 2)
 
   def test_failed_continuation_hop_is_retried_in_place(self):
@@ -848,6 +1179,576 @@ class GeminiContinuationTest(unittest.TestCase):
         ):
           self._lm()._sample_single(lf.UserMessage('hi'))
     self.assertEqual(len(sent), 3)
+
+
+class GeminiStarvedBudgetTest(unittest.TestCase):
+  """Tests resuming a generation whose thinking spent the decode budget.
+
+  The hop shapes replay what `gemini-4-argon` returns on Vertex AI when
+  thinking consumes `maxOutputTokens` before an answer token is emitted:
+  `finishReason=MAX_TOKENS`, `parts=[{'text': ''}]`, the budget accounted for
+  exactly by `candidatesTokenCount + thoughtsTokenCount`, and a valid
+  `continuationToken`.
+  """
+
+  def _serve(self, *responses: dict[str, Any] | int) -> tuple[list[Any], Any]:
+    """Returns (sent requests, POST side effect) serving `responses` in order.
+
+    Args:
+      *responses: Payloads to return with HTTP 200, or HTTP error codes. The
+        last one is served again for any extra request.
+    """
+    sent = []
+
+    def post(url, json, **kwargs):
+      del url, kwargs
+      sent.append(json)
+      served = responses[min(len(sent), len(responses)) - 1]
+      response = requests.Response()
+      if isinstance(served, int):
+        response.status_code = served
+        response._content = b'Error.'  # pylint: disable=protected-access
+      else:
+        response.status_code = 200
+        response._content = pg.to_json_str(served).encode()  # pylint: disable=protected-access
+      return response
+
+    return sent, post
+
+  def _resuming_service(self, answers_at: int) -> tuple[list[Any], Any]:
+    """Returns (sent requests, POST side effect) replaying the real service.
+
+    A fake rather than a canned script, because the behaviour under test is a
+    rule the service applies hop by hop to the request we send it. It
+    reproduces what was measured against `gemini-4-argon` on Vertex AI:
+
+    * `maxOutputTokens` is a running total over the whole generation, so a
+      resume that re-asserts a ceiling already reported spent is rejected
+      with HTTP 400 and the generation cannot continue.
+    * A resume that raises the ceiling is accepted and buys exactly the
+      headroom it added -- which thinking spends too, until the ceiling
+      finally leaves room for the answer.
+
+    Args:
+      answers_at: The ceiling at which the generation has room to answer.
+        Every hop below it starves at `MAX_TOKENS`, offering a token.
+
+    Returns:
+      The list that records each request body, and the `requests.Session.post`
+      side effect.
+    """
+    sent = []
+    spent = [0]  # The running total the service has accumulated so far.
+
+    def post(url, json, **kwargs):
+      del url, kwargs
+      sent.append(json)
+      response = requests.Response()
+      ceiling = (json.get('generationConfig') or {}).get('maxOutputTokens')
+      if ceiling is not None and ceiling <= spent[0]:
+        response.status_code = 400
+        response._content = (  # pylint: disable=protected-access
+            f'max_output_tokens ({ceiling}) has already been exhausted. '
+            'Because max_output_tokens is accumulated across continuation '
+            'requests, pass a higher max_output_tokens value to continue '
+            'generation.'
+        ).encode()
+        return response
+      if ceiling is not None and ceiling < answers_at:
+        served = _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token=f'token-{len(sent)}',
+            thoughts_token_count=ceiling - spent[0],
+        )
+        spent[0] = ceiling
+      else:
+        served = _hop([{'text': '5'}], 'STOP', candidates_token_count=1)
+      response.status_code = 200
+      response._content = pg.to_json_str(served).encode()  # pylint: disable=protected-access
+      return response
+
+    return sent, post
+
+  def _lm(self, max_tokens: int | None = None) -> gemini.Gemini:
+    return gemini.Gemini(
+        'gemini-4-argon',
+        api_endpoint='',
+        max_attempts=3,
+        retry_interval=0,
+        sampling_options=lf.LMSamplingOptions(max_tokens=max_tokens),
+    )
+
+  def test_starved_hop_is_continued_until_the_answer_arrives(self):
+    """Mode B: MAX_TOKENS carrying a token is resumed, not reported empty."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=2045,
+        ),
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-2',
+            thoughts_token_count=2048,
+        ),
+        _hop(
+            [{'text': '5'}],
+            'STOP',
+            candidates_token_count=1,
+            thoughts_token_count=2500,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, '5')
+    self.assertEqual(response.metadata.finish_reason, 'STOP')
+    self.assertEqual(len(sent), 3)
+    self.assertNotIn('continuationToken', sent[0])
+    self.assertEqual(sent[1], dict(sent[0], continuationToken='token-1'))
+    self.assertEqual(sent[2], dict(sent[0], continuationToken='token-2'))
+    # Every hop is billed, so the usage of all three is summed.
+    self.assertEqual(response.metadata.usage.completion_tokens, 4)
+    self.assertEqual(
+        response.metadata.usage.completion_tokens_details['thinking_tokens'],
+        6593,
+    )
+
+  def test_empty_final_hop_keeps_text_from_earlier_hops(self):
+    """A trailing `{'text': ''}` must not discard what earlier hops wrote."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'Hello, wor'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=3,
+        ),
+        _hop(
+            [{'text': 'ld!'}],
+            'MAX_TOKENS',
+            token='token-2',
+            candidates_token_count=2,
+        ),
+        _hop([{'text': ''}], 'STOP', thoughts_token_count=16),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello, world!')
+    self.assertEqual(len(sent), 3)
+
+  def test_empty_part_is_kept_when_it_cannot_be_joined(self):
+    """The merge keeps the placeholder; it is `from_chunks` that ignores it.
+
+    A bare `{'text': ''}` is only joined into the preceding part when that
+    part is text of the same thought-ness. Following a thought part it has
+    nothing to join to, so it reaches the parser -- harmlessly, per
+    `test_empty_text_chunks_do_not_change_the_parsed_text`.
+    """
+    merged = gemini._merge_continuation_hops([  # pylint: disable=protected-access
+        _hop(
+            [{'text': 'the answer'}, {'text': 'and more thinking',
+                                      'thought': True}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=2,
+        ),
+        _hop([{'text': ''}], 'STOP'),
+    ])
+    self.assertEqual(
+        merged['candidates'][0]['content']['parts'],
+        [{'text': 'the answer'}, {'text': 'and more thinking',
+                                  'thought': True}, {'text': ''}],
+    )
+    self.assertEqual(merged['candidates'][0]['finishReason'], 'STOP')
+    self.assertEqual(
+        lf.Message.from_value(
+            merged['candidates'][0]['content'], format='gemini'
+        ).text,
+        'the answer',
+    )
+
+  def test_empty_text_chunks_do_not_change_the_parsed_text(self):
+    """Why the merge needs no empty-part filter of its own.
+
+    `Message.from_chunks` writes the separator before a chunk only when the
+    previous one ended in a non-whitespace character, and an empty chunk
+    resets that to `None`, so a run of empty chunks costs at most the single
+    separator that a direct neighbour would have cost anyway -- and a trailing
+    one is stripped. Dropping empty text parts is therefore unobservable in
+    the parsed text, in every position.
+    """
+    for parts, expected in [
+        ([{'text': ''}], ''),
+        ([{'text': ''}, {'text': 'B'}], 'B'),
+        ([{'text': 'A'}, {'text': ''}], 'A'),
+        ([{'text': 'A'}, {'text': ''}, {'text': 'B'}], 'A B'),
+        ([{'text': 'A'}, {'text': ''}, {'text': ''}, {'text': 'B'}], 'A B'),
+        ([{'text': 'A'}, {'text': 'thinking', 'thought': True},
+          {'text': ''}, {'text': 'B'}], 'A B'),
+    ]:
+      with self.subTest(parts=parts):
+        self.assertEqual(
+            lf.Message.from_value({'parts': parts}, format='gemini').text,
+            expected,
+        )
+        self.assertEqual(
+            lf.Message.from_value(
+                {'parts': [p for p in parts if p != {'text': ''}]},
+                format='gemini',
+            ).text,
+            expected,
+        )
+
+  def test_every_hop_empty_still_reports_the_empty_generation(self):
+    """With nothing to preserve, the last hop's shape is reported as-is."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=2045,
+        ),
+        _hop([{'text': ''}], 'MAX_TOKENS', thoughts_token_count=2048),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+        self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertIn('MAX_TOKENS', str(ctx.exception))
+    self.assertEqual(len(sent), 2)
+
+  def test_failed_starvation_resume_falls_back_to_the_diagnosis(self):
+    """A rejected resume must not replace what the generation itself did.
+
+    A pinned `max_tokens` is rejected on continuation, because the service
+    accumulates it across continuation requests. The caller is told about the
+    exhausted budget rather than about the resume's HTTP error.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=2045,
+        ),
+        400,
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+        self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertIn('MAX_TOKENS', str(ctx.exception))
+    self.assertEqual(len(sent), 2)
+
+  def test_starved_hop_without_a_token_cannot_be_resumed(self):
+    """Mode A: no token, so the error is raised after exactly one request."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            candidates_token_count=3,
+            thoughts_token_count=2045,
+        )
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
+        self._lm()._sample_single(lf.UserMessage('hi'))
+    self.assertEqual(len(sent), 1)
+
+  def test_a_starved_generation_that_cannot_resume_is_not_resent(self):
+    """Mode A: non-retryable, so the prompt is paid for exactly once.
+
+    `max_attempts=3` would otherwise buy three full regenerations of a budget
+    that is spent the same way every time, and production launches set 80.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            candidates_token_count=3,
+            thoughts_token_count=2045,
+        )
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+        self._lm()('hi')
+    self.assertEqual(len(sent), 1)  # `max_attempts=3`, and still one request.
+    self.assertNotIsInstance(ctx.exception, lf.RetryableLMError)
+
+  def test_explicitly_pinned_max_tokens_does_not_defeat_the_resume(self):
+    """The caller's ceiling is honoured on hop 0 and doubled to resume.
+
+    Against the real service rule -- a resume that re-sends a spent ceiling is
+    rejected -- the only way to reach the answer is to raise it. This is the
+    case an unset class default cannot cover, because the caller sets
+    `max_tokens` itself, e.g. via a `?max_tokens=` model URI.
+    """
+    sent, post = self._resuming_service(answers_at=2048)
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=1024)('hi')
+    self.assertEqual(response.text, '5')
+    self.assertEqual(len(sent), 2)
+    # Hop 0 spends exactly the budget the caller authorized.
+    self.assertEqual(sent[0]['generationConfig']['maxOutputTokens'], 1024)
+    # Hop 1 raises it, which is the only resume the service accepts.
+    self.assertEqual(sent[1]['generationConfig']['maxOutputTokens'], 2048)
+    self.assertEqual(sent[1]['continuationToken'], 'token-1')
+
+  def test_the_budget_extension_climbs_to_four_times_the_cap(self):
+    """One resume is not always enough, so the ladder runs 1x -> 2x -> 3x -> 4x.
+
+    Each resume asks for the tokens already spent plus the answer tokens
+    still owed, so the ceiling climbs by the pinned cap and no faster.
+    Replays the measured wire behaviour for a caller pinning 2048: thinking
+    spends every ceiling it is handed until 8192 finally leaves room for the
+    answer.
+    """
+    sent, post = self._resuming_service(answers_at=8192)
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=2048)('hi')
+    self.assertEqual(response.text, '5')
+    self.assertEqual(
+        [r['generationConfig']['maxOutputTokens'] for r in sent],
+        [2048, 4096, 6144, 8192],
+    )
+
+  def test_the_budget_extension_stops_at_four_times_the_cap(self):
+    """The ceiling the caller pinned still bounds the call.
+
+    A generation that keeps starving is cut off rather than handed the
+    service default: 512 authorized buys at most 2048, where dropping the
+    ceiling instead was measured generating tens of thousands of tokens.
+    """
+    sent, post = self._resuming_service(answers_at=10**9)
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+        self._lm(max_tokens=512)('hi')
+    self.assertIn('MAX_TOKENS', str(ctx.exception))
+    self.assertEqual(
+        [r['generationConfig']['maxOutputTokens'] for r in sent],
+        [512, 1024, 1536, 2048],
+    )
+    # The bound and the guarantee it buys, pinned together: N requests for a
+    # ceiling that climbs by the cap each time is exactly Nx the cap.
+    self.assertEqual(len(sent), gemini._MAX_PINNED_BUDGET_HOPS)  # pylint: disable=protected-access
+    self.assertEqual(
+        sent[-1]['generationConfig']['maxOutputTokens'],
+        512 * gemini._MAX_PINNED_BUDGET_HOPS,  # pylint: disable=protected-access
+    )
+
+  def test_a_cap_already_spent_on_answer_tokens_is_not_resumed(self):
+    """`max_tokens` answer tokens were asked for and `max_tokens` arrived.
+
+    The ceiling did exactly its job, so truncating here is the caller's own
+    instruction rather than a failure to recover, and the `continuationToken`
+    the service offered is declined.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'the answer, trunca'}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=512,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=512)('hi')
+    self.assertEqual(response.text, 'the answer, trunca')
+    self.assertEqual(response.metadata.finish_reason, 'MAX_TOKENS')
+    self.assertEqual(len(sent), 1)
+
+  def test_a_cap_spent_on_thinking_is_resumed_for_the_whole_answer(self):
+    """Thinking is not what the caller bought, so none of the cap is lost.
+
+    Hop 0 spends all 512 on thinking and emits no answer token. The resume
+    asks for those 512 back plus the 512 answer tokens still owed, so the
+    caller gets the full answer they paid for rather than nothing.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=0,
+            thoughts_token_count=512,
+        ),
+        _hop([{'text': 'the answer'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=512)('hi')
+    self.assertEqual(response.text, 'the answer')
+    self.assertEqual(len(sent), 2)
+    self.assertEqual(sent[0]['generationConfig']['maxOutputTokens'], 512)
+    self.assertEqual(sent[1]['generationConfig']['maxOutputTokens'], 1024)
+
+  def test_a_partly_spent_cap_is_resumed_for_only_the_rest_of_the_answer(self):
+    """The resume buys the remainder of the cap, never a fresh one.
+
+    509 of the 512 answer tokens arrived, so the resume authorizes the 512
+    already burned plus the 3 still owed -- not another 512. Stopping here
+    instead would hand back an answer cut off three tokens short because
+    thinking took the difference.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'the answer, trunca'}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=509,
+            thoughts_token_count=3,
+        ),
+        _hop([{'text': 'ted'}], 'STOP', candidates_token_count=3),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=512)('hi')
+    self.assertEqual(response.text, 'the answer, truncated')
+    self.assertEqual(len(sent), 2)
+    self.assertEqual(sent[1]['generationConfig']['maxOutputTokens'], 515)
+
+  def test_a_ceiling_above_the_model_maximum_is_still_asserted(self):
+    """A ceiling the model cannot fill is sent anyway, not dropped.
+
+    A caller pinning the model's own maximum makes every resume ask for more
+    than the model can produce. Measured against the service, such values are
+    accepted -- 65,537, 131,072 and 1,000,000 all return HTTP 200 -- so there
+    is nothing to omit, and asserting them is what keeps the bound: dropping
+    the key would hand the rest of the generation to the service default.
+    The hop bound is what stops the generation.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=0,
+            thoughts_token_count=65_536,
+        ),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
+        self._lm(max_tokens=65_536)('hi')
+    # Each resume asks for everything burned so far plus the full 65,536
+    # answer tokens still owed, since no hop ever emits one.
+    self.assertEqual(
+        [r['generationConfig']['maxOutputTokens'] for r in sent],
+        [65_536, 131_072, 196_608, 262_144],
+    )
+    self.assertEqual(len(sent), gemini._MAX_PINNED_BUDGET_HOPS)  # pylint: disable=protected-access
+
+  def test_an_extended_ceiling_is_carried_by_every_later_hop(self):
+    """The extension belongs to the generation, not to the one hop.
+
+    A `CONTINUATION` hop following a `MAX_TOKENS` one is still part of a
+    generation whose accumulated budget now stands at the extended ceiling.
+    Reverting to the caller's original would be rejected exactly as
+    re-asserting a spent ceiling was.
+    """
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=1021,
+        ),
+        _hop([{'text': 'the '}], 'CONTINUATION', token='token-2'),
+        _hop([{'text': 'answer'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=1024)('hi')
+    self.assertEqual(response.text, 'the answer')
+    self.assertEqual(len(sent), 3)
+    # 1024 spent (3 answer + 1021 thinking) plus the 1021 answer tokens still
+    # owed, carried unchanged by the `CONTINUATION` hop that follows.
+    self.assertEqual(
+        [r['generationConfig']['maxOutputTokens'] for r in sent],
+        [1024, 2045, 2045],
+    )
+
+  def test_an_unspent_ceiling_is_kept_while_the_generation_is_mid_flight(self):
+    """`CONTINUATION` is the per-response cap, not budget exhaustion.
+
+    Nothing is spent yet, so the caller's ceiling is still both legal and
+    binding: dropping it here would hand the generation a budget nobody asked
+    for.
+    """
+    sent, post = self._serve(
+        _hop([{'text': 'the '}], 'CONTINUATION', token='token-1'),
+        _hop([{'text': 'answer'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=1024)('hi')
+    self.assertEqual(response.text, 'the answer')
+    self.assertEqual(len(sent), 2)
+    self.assertEqual(sent[1], dict(sent[0], continuationToken='token-1'))
+
+  def test_a_request_without_a_ceiling_is_resumed_unchanged(self):
+    """With nothing pinned there is nothing to extend, so nothing changes."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            candidates_token_count=3,
+            thoughts_token_count=2045,
+        ),
+        _hop([{'text': '5'}], 'STOP', candidates_token_count=1),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, '5')
+    self.assertEqual(sent[1], dict(sent[0], continuationToken='token-1'))
+
+  def test_an_exhausted_budget_is_not_laundered_into_stop(self):
+    """`ex 118`: 80 futile retries bought by the last hop's reason winning.
+
+    Hop 0 spent the whole 65,536-token budget on thinking and returned no
+    text; hop 1 added nothing and reported `STOP`. Taking `STOP` from the
+    last hop while SUMMING the token counts produced `('STOP', >0)` -- a
+    signature indistinguishable from a generation that ran and was lost, so
+    it was re-sent `max_attempts` times, each re-send exhausting the same
+    budget the same way.
+    """
+    merged = gemini._merge_continuation_hops([  # pylint: disable=protected-access
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            thoughts_token_count=65536,
+        ),
+        _hop([], 'STOP'),
+    ])
+    candidate = merged['candidates'][0]
+    self.assertEqual(candidate['finishReason'], 'MAX_TOKENS')
+    self.assertEqual(merged['usageMetadata']['thoughtsTokenCount'], 65536)
+    # The resumption state of the last hop is still the chain's own.
+    self.assertNotIn('continuationToken', candidate)
+
+  def test_a_chain_that_answered_keeps_the_last_hops_reason(self):
+    """The boundary: a truncation the continuation RECOVERED is not one.
+
+    Only a chain that rendered nothing is relabelled. Once any hop returned
+    answer text the generation did finish, and reporting `MAX_TOKENS` over it
+    would turn a complete answer into a fatal budget exhaustion.
+    """
+    merged = gemini._merge_continuation_hops([  # pylint: disable=protected-access
+        _hop(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            token='token-1',
+            thoughts_token_count=65536,
+        ),
+        _hop([{'text': 'the answer'}], 'STOP', candidates_token_count=2),
+    ])
+    candidate = merged['candidates'][0]
+    self.assertEqual(candidate['finishReason'], 'STOP')
+    self.assertEqual(
+        lf.Message.from_value(candidate['content'], format='gemini').text,
+        'the answer',
+    )
 
 
 if __name__ == '__main__':
