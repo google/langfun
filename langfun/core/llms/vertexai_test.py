@@ -96,7 +96,7 @@ class VertexAITest(unittest.TestCase):
     self.assertEqual(model.timeout, 300)
     self.assertFalse(model.exponential_backoff)
     self.assertEqual(model.sampling_options.thinking_level, 'high')
-    self.assertIsNone(model.sampling_options.max_tokens)
+    self.assertEqual(model.sampling_options.max_tokens, 65_536)
     self.assertEqual(
         model.api_endpoint,
         'https://aiplatform.googleapis.com/v1beta1/projects/lf-agent/'
@@ -107,7 +107,7 @@ class VertexAITest(unittest.TestCase):
         'generationConfig'
     ]
     self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'high'})
-    self.assertIsNone(config['maxOutputTokens'])
+    self.assertEqual(config['maxOutputTokens'], 65_536)
     self.assertEqual(config['mediaResolution'], 'MEDIA_RESOLUTION_HIGH')
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
@@ -122,26 +122,19 @@ class VertexAITest(unittest.TestCase):
     self.assertIn('aiplatform.googleapis.com/v1/projects/', model.api_endpoint)
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
-  def test_gemini_4_argon_does_not_cap_the_output_budget(self):
-    """A pinned ceiling makes a starved generation impossible to resume.
-
-    `maxOutputTokens` accumulates across continuation requests, so a resume
-    that re-sends an already exhausted ceiling is rejected outright. Left
-    unset, the service applies its own default and the resume is accepted.
-    """
+  def test_gemini_4_argon_caps_the_output_budget(self):
+    """Unset, one generation can run to ~2^20 tokens across continuations."""
     model = vertexai.VertexAIGemini4Argon(project='test-project')
-    self.assertIsNone(model.sampling_options.max_tokens)
+    self.assertEqual(model.sampling_options.max_tokens, 65_536)
     config = model.request(lf.UserMessage('hi'), model.sampling_options)[
         'generationConfig'
     ]
-    self.assertIsNone(config['maxOutputTokens'])
+    self.assertEqual(config['maxOutputTokens'], 65_536)
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_4_argon_resumes_a_budget_pinned_by_the_model_uri(self):
-    """Unsetting the class default cannot help a caller who sets it anyway.
+    """A generation that spends a pinned 65,536-token budget still resumes.
 
-    `max_tokens` arrives through the model URI, so the resume has to survive
-    a pinned ceiling rather than merely the absence of one.
     Here the caller pinned the model's own 65,536-token output maximum and
     thinking spent all of it, so the resume has to ask for more than the model
     can itself produce. It asserts that number anyway rather than dropping the

@@ -93,7 +93,7 @@ class GeminiEmptyGenerationError(lf.LMError):
   ``lf.EmptyGenerationError`` / ``lf.RetryableLMError``. Every recovery that
   does work is already spent by the time it is raised: a candidate carrying a
   ``continuationToken`` is resumed in-request by ``_continuation_hop``, and an
-  explicit output ceiling is re-asserted across up to
+  explicit output ceiling is extended across up to
   ``_MAX_PINNED_BUDGET_HOPS`` requests for exactly the answer tokens still
   owed. Re-sending the prompt instead buys nothing and costs ``max_attempts``
   full generations -- 80 of them under common configurations, each billed for
@@ -1072,9 +1072,8 @@ _SUPPORTED_MODELS_BY_ID = {m.model_id: m for m in SUPPORTED_MODELS}
 
 # A 1M-token budget needs about 32 hops of 32K tokens; the cap only stops a
 # server that keeps returning CONTINUATION without ever finishing. It is the
-# bound for a generation that pins no ceiling -- the default, since
-# `max_tokens` is unset unless the caller sets it. A pinned generation is cut
-# off by `_MAX_PINNED_BUDGET_HOPS` long before this.
+# bound for a generation that pins no ceiling; a pinned generation is cut off
+# by `_MAX_PINNED_BUDGET_HOPS` long before this.
 _MAX_CONTINUATION_HOPS = 64
 
 # How many requests a generation that pinned `max_tokens` may span. A resume
@@ -1795,8 +1794,8 @@ class Gemini(rest.REST):
         f'(finishReason={finish_reason}, blockReason={block_reason}, '
         f'candidatesTokenCount={output_tokens}, '
         f'thoughtsTokenCount={thinking_tokens}). Any `continuationToken` the '
-        'service offered was already followed, re-asserting an explicit '
-        '`max_tokens` for the answer tokens still owed across up to '
+        'service offered was already followed, raising `max_tokens`, if '
+        'pinned, for the answer tokens still owed across up to '
         f'{_MAX_PINNED_BUDGET_HOPS} requests. {remedy} '
         'This error is not retryable: the signature is a function of the '
         'request, so re-sending the prompt would reproduce it at a cost of '
