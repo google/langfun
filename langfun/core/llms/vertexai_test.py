@@ -897,6 +897,27 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
     self.assertEqual(response.text, 'the answer')
     self.assertEqual(len(calls), 1)
 
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  @mock.patch.object(gemini, '_CAP_MISFIRE_RETRY_INTERVAL', 0)
+  def test_cap_misfire_budget_does_not_grow_with_max_attempts(self):
+    """A model that keeps misfiring into the cap stops after 3 samples."""
+    calls, post = self._fake_post(
+        _vertex_response(
+            [{'text': ''}],
+            'MAX_TOKENS',
+            candidates_token_count=65_536,
+            thoughts_token_count=2_000,
+        )
+    )
+    lm = vertexai.VertexAIGemini4Argon(
+        project='abc', max_attempts=100, retry_interval=0
+    )
+    with mock.patch('requests.Session.post') as mock_post:
+      mock_post.side_effect = post
+      with self.assertRaises(lf.concurrent.RetryError):
+        lm('hello')
+    self.assertEqual(len(calls), 3)
+
 
 if __name__ == '__main__':
   unittest.main()

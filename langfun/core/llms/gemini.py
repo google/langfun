@@ -13,6 +13,8 @@
 # limitations under the License.
 """Gemini REST API (Shared by Google GenAI and Vertex AI)."""
 
+import collections
+import contextvars
 import datetime
 import functools
 import re
@@ -42,7 +44,9 @@ class GeminiEmptyGenerationError(lf.LMError):
   * ``finishReason == 'MAX_TOKENS'`` with ``candidatesTokenCount > 0`` -- the
     truncated hop was billed for answer tokens it did not return, and no
     continuation recovered them. The budget did reach the answer, so this one
-    is not starvation and the error says so.
+    is not starvation and the error says so. More answer than thought tokens
+    is a misfire that ran into the cap instead, raised as
+    ``MalformedFunctionCallError``.
   * ``finishReason == 'STOP'`` with ``candidatesTokenCount == 0`` AND
     ``thoughtsTokenCount == 0`` -- the model terminated normally having been
     billed for no work at all, so there is no lost work to re-request.
@@ -105,6 +109,21 @@ class GeminiEmptyGenerationError(lf.LMError):
   so no signature escapes as a bare ``KeyError('content')`` or
   ``IndexError``.
   Mirrors ``beyond_api.BeyondThinkingBudgetExhaustedError``.
+  """
+
+
+class MalformedFunctionCallError(lf.EmptyGenerationError):
+  """Gemini misfired into the output cap: a function call that never closed.
+
+  The request declares no tools, yet the model emits a function call. A short
+  one comes back as ``finishReason == 'MALFORMED_FUNCTION_CALL'`` with empty
+  content; `result()` logs it and leaves it to the retryable empty-generation
+  path under ``max_attempts``. This error is for the call that never
+  terminates: an answer-less ``MAX_TOKENS`` or ``CONTINUATION`` candidate that
+  billed more answer tokens than thoughts. Each such attempt can cost the whole
+  output budget, so it is never continuation-resumed, and a query draws at most
+  ``_CAP_MISFIRE_MAX_ATTEMPTS`` of them (fewer if ``max_attempts`` is lower),
+  counted across all of its retries.
   """
 
 
@@ -1085,6 +1104,20 @@ _MAX_CONTINUATION_HOPS = 64
 # request with ~75 KB of text.
 _MAX_PINNED_BUDGET_HOPS = 4
 
+# Samples misfired into the output cap that one query may draw, across all of
+# its retries, in place of `max_attempts` when that is larger (up to 100 in
+# agent configs): each one can cost the whole pinned budget. Short misfires are
+# cheap and stay under `max_attempts`.
+_CAP_MISFIRE_MAX_ATTEMPTS = 3
+# Seconds before the first re-sample, drawn at random and doubled per attempt.
+_CAP_MISFIRE_RETRY_INTERVAL = (1, 5)
+_CAP_MISFIRE_MAX_RETRY_INTERVAL = 30
+# Cap misfires drawn so far in the current `Gemini.sample()` call, by `id` of
+# the prompt; see there.
+_cap_misfires_drawn: contextvars.ContextVar[collections.Counter[int]] = (
+    contextvars.ContextVar('_cap_misfires_drawn')
+)
+
 
 def _gemini_major_version(model_id: str) -> int:
   """Returns N for a `gemini-N...` model ID, or 0 for unversioned IDs."""
@@ -1243,6 +1276,49 @@ def _carries_unrendered_content(candidate: dict[str, Any]) -> bool:
   )
 
 
+def _is_cap_misfire(
+    finish_reason: str | None, output_tokens: int, thinking_tokens: int
+) -> bool:
+  """Returns True if an answer-less candidate misfired into the output cap.
+
+  Thinking starvation also returns no answer under `MAX_TOKENS`, but it spends
+  the budget on thoughts. A misfire spends it on answer tokens that come back
+  as no text: an unterminated function call.
+
+  Args:
+    finish_reason: The candidate's `finishReason`.
+    output_tokens: `candidatesTokenCount` of the response.
+    thinking_tokens: `thoughtsTokenCount` of the response.
+
+  Returns:
+    Whether the candidate misfired into the cap.
+  """
+  return (
+      finish_reason in ('MAX_TOKENS', 'CONTINUATION')
+      and output_tokens > thinking_tokens
+  )
+
+
+def _hop_signature(payload: dict[str, Any]) -> tuple[str | None, int, int]:
+  """Returns a hop's `finishReason` and its own answer and thinking tokens."""
+  usage = payload.get('usageMetadata') or {}
+  return (
+      payload['candidates'][0].get('finishReason'),
+      usage.get('candidatesTokenCount') or 0,
+      usage.get('thoughtsTokenCount') or 0,
+  )
+
+
+def _is_misfire_hop(payload: dict[str, Any]) -> bool:
+  """Returns True if a hop misfired, so resuming it would return nothing."""
+  candidate = payload['candidates'][0]
+  return (
+      not _answer_text(candidate)
+      and not _carries_unrendered_content(candidate)
+      and _is_cap_misfire(*_hop_signature(payload))
+  )
+
+
 @pg.use_init_args(['model'])
 class Gemini(rest.REST):
   """Base class for Gemini models served on Google GenAI and Vertex AI.
@@ -1282,6 +1358,76 @@ class Gemini(rest.REST):
         'Content-Type': 'application/json; charset=utf-8',
     }
 
+  def sample(
+      self,
+      prompts: list[str | lf.Message],
+      *,
+      cache_seed: int = 0,
+      **kwargs,
+  ) -> list[lf.LMSamplingResult]:
+    """Samples `prompts`, with one cap-misfire budget per prompt."""
+    # A short misfire is retried by `LanguageModel.sample()`, and a transient
+    # error such as a 429 by `_parallel_execute_with_currency_control`, both by
+    # sampling the prompt anew. Counting cap misfires here, above both, bounds
+    # them per query rather than per retry.
+    token = _cap_misfires_drawn.set(collections.Counter())
+    try:
+      return super().sample(prompts, cache_seed=cache_seed, **kwargs)
+    finally:
+      _cap_misfires_drawn.reset(token)
+
+  def _sample(self, prompts: list[lf.Message]) -> list[lf.LMSamplingResult]:
+    assert self._api_initialized
+    # Read on this thread, as the prompts may be sampled on others. Called
+    # outside `sample()`, the budget is per call.
+    misfires = _cap_misfires_drawn.get(collections.Counter())
+    return self._parallel_execute_with_currency_control(
+        functools.partial(self._sample_with_misfire_budget, misfires=misfires),
+        prompts,
+    )
+
+  def _sample_with_misfire_budget(
+      self, prompt: lf.Message, misfires: collections.Counter[int]
+  ) -> lf.LMSamplingResult:
+    """Samples a prompt, drawing a fresh sample when it misfires into the cap.
+
+    Raises `lf.concurrent.RetryError` once the query has drawn
+    `_cap_misfire_max_attempts()` such misfires, which is not retried further:
+    each one can cost the whole output budget. Short misfires and transport
+    errors escape this loop and are retried under `max_attempts` as before,
+    and the misfires drawn before them still count.
+
+    Args:
+      prompt: The prompt to sample.
+      misfires: Cap misfires drawn so far in this query, by `id` of the prompt.
+
+    Returns:
+      The sampling result.
+    """
+
+    def sample_once(prompt: lf.Message) -> lf.LMSamplingResult:
+      try:
+        return self._sample_single(prompt)
+      except MalformedFunctionCallError:
+        misfires[id(prompt)] += 1
+        raise
+
+    return lf.with_retry(
+        sample_once,
+        retry_on_errors=MalformedFunctionCallError,
+        max_attempts=self._cap_misfire_max_attempts() - misfires[id(prompt)],
+        retry_interval=_CAP_MISFIRE_RETRY_INTERVAL,
+        max_retry_interval=_CAP_MISFIRE_MAX_RETRY_INTERVAL,
+    )(prompt)
+
+  def _cap_misfire_max_attempts(self) -> int:
+    """Returns how many cap misfires a query may draw.
+
+    Never more than `max_attempts`: a caller that sets it lower, e.g. to 1 to
+    run its own retries, has asked for no more than that.
+    """
+    return min(_CAP_MISFIRE_MAX_ATTEMPTS, self.max_attempts)
+
   def _sample_single(self, prompt: lf.Message) -> lf.LMSamplingResult:
     """Samples a prompt, resuming a generation cut at the per-request cap."""
     with self._as_lm_errors():
@@ -1318,6 +1464,11 @@ class Gemini(rest.REST):
           max_retry_interval=self.max_retry_interval,
       )
       while (hop := self._continuation_hop(response)) is not None:
+        if _is_misfire_hop(hop):
+          # Re-sampled, never resumed, which would only extend the runaway
+          # call. Judged here on this hop's own counts: `result()` sees them
+          # summed over the hops, where earlier thinking can mask the misfire.
+          raise self._misfire_error(*_hop_signature(hop))
         hops.append(hop)
         if len(hops) == _MAX_CONTINUATION_HOPS:
           raise lf.LMError(
@@ -1565,6 +1716,18 @@ class Gemini(rest.REST):
     for candidate in candidates:
       finish_reason = candidate.get('finishReason')
       content = candidate.get('content')
+      if finish_reason == 'MALFORMED_FUNCTION_CALL':
+        # A short misfire. It is cheap and a fresh sample usually clears it, so
+        # it stays on the retryable empty-generation path under `max_attempts`.
+        pg.logging.warning(
+            self._misfire_message(
+                finish_reason,
+                output_tokens,
+                thinking_tokens,
+                candidate.get('finishMessage'),
+            )
+            + ' Retrying it as an empty generation.'
+        )
       if content is None:
         raise self._no_answer_error(
             'the candidate carries no content at all',
@@ -1614,6 +1777,10 @@ class Gemini(rest.REST):
       block_reason: str | None,
   ) -> None:
     """Fails fast when a parsed candidate carries no RECOVERABLE answer.
+
+    A misfire into the output cap (see `_is_cap_misfire`) is raised first, as
+    the retryable `MalformedFunctionCallError`. A short misfire
+    (`MALFORMED_FUNCTION_CALL`) is logged by `result()` and returns below.
 
     Raising here spends the caller's whole generation: the error is
     non-retryable, so the episode that was mid-flight ends. That is the right
@@ -1674,6 +1841,7 @@ class Gemini(rest.REST):
       block_reason: Response-level `promptFeedback.blockReason`, if any.
 
     Raises:
+      MalformedFunctionCallError: If the candidate misfired into the cap.
       GeminiEmptyGenerationError: If the candidate carries no answer.
     """
     if message.text:
@@ -1682,6 +1850,11 @@ class Gemini(rest.REST):
     if _carries_unrendered_content(candidate):
       # A tool call is a real answer; the converter just does not render it.
       return
+
+    if _is_cap_misfire(finish_reason, output_tokens, thinking_tokens):
+      # More answer than thinking tokens and no text: a stray function call,
+      # not starvation. A fresh sample often succeeds, so it is retryable.
+      raise self._misfire_error(finish_reason, output_tokens, thinking_tokens)
 
     if block_reason:
       cause = (
@@ -1802,6 +1975,41 @@ class Gemini(rest.REST):
         f'up to max_attempts={self.max_attempts} generations, every one of '
         'them billed in full.'
     )
+
+  def _misfire_message(
+      self,
+      finish_reason: str | None,
+      output_tokens: int,
+      thinking_tokens: int,
+      finish_message: str | None = None,
+  ) -> str:
+    """Returns the diagnosis of a misfired candidate, for logs and errors."""
+    details = (
+        f'finishReason={finish_reason}, candidatesTokenCount={output_tokens}, '
+        f'thoughtsTokenCount={thinking_tokens}'
+    )
+    if finish_message:
+      # User content, up to several KB, so only its length, as in `beyond_api`.
+      details += f', finishMessageChars={len(finish_message)}'
+    return (
+        f'Model {self.model_id} misfired: it emitted a function call, which '
+        f'the request does not declare, instead of text ({details}).'
+    )
+
+  def _misfire_error(
+      self, finish_reason: str | None, output_tokens: int, thinking_tokens: int
+  ) -> MalformedFunctionCallError:
+    """Logs and returns the error for a misfire that ran into the cap."""
+    error = MalformedFunctionCallError(
+        'Empty generation. '
+        + self._misfire_message(finish_reason, output_tokens, thinking_tokens)
+        + ' The call ran into the output cap, which is not thinking starvation.'
+        ' A fresh sample often succeeds, so samples are drawn up to'
+        f' {self._cap_misfire_max_attempts()} per query, each costing up to the'
+        ' cap.'
+    )
+    pg.logging.warning(str(error))
+    return error
 
   def _error(self, status_code: int, content: str) -> lf.LMError:
     if status_code == 400 and (

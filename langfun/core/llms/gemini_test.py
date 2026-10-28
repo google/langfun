@@ -561,24 +561,25 @@ class GeminiEmptyGenerationTest(unittest.TestCase):
     self.assertIn('lowering the thinking budget', message)
 
   def test_max_tokens_with_billed_output_is_not_called_starvation(self):
-    """61,314 billed answer tokens is the opposite of a starved budget.
+    """4,222 billed answer tokens is the opposite of a starved budget.
 
     The truncated hop returned none of them and no continuation recovered
     them, so they are lost rather than never produced -- and the diagnosis
-    has to say which, because the two have different remedies.
+    has to say which, because the two have different remedies. (More answer
+    than thought tokens would be a misfire; see `GeminiMisfireTest`.)
     """
     with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
       self._model().result(
           self._response(
               [{'text': ''}],
               'MAX_TOKENS',
-              candidates_token_count=61314,
-              thoughts_token_count=4222,
+              candidates_token_count=4222,
+              thoughts_token_count=61314,
           )
       )
     message = str(ctx.exception)
     self.assertIn('MAX_TOKENS', message)
-    self.assertIn('61314 answer tokens were billed', message)
+    self.assertIn('4222 answer tokens were billed', message)
     self.assertIn('no continuation recovered them', message)
     self.assertNotIn('before any answer token was emitted', message)
     # The budget reached the answer, so the starvation remedy is withheld.
@@ -1749,6 +1750,329 @@ class GeminiStarvedBudgetTest(unittest.TestCase):
         lf.Message.from_value(candidate['content'], format='gemini').text,
         'the answer',
     )
+
+
+def _misfire(
+    *,
+    candidates_token_count: int = 2_836,
+    thoughts_token_count: int = 717,
+    finish_message: str | None = None,
+) -> dict[str, Any]:
+  """Returns a MALFORMED_FUNCTION_CALL response, shaped as Vertex sends it."""
+  candidate = {
+      'content': {'role': 'model'},
+      'finishReason': 'MALFORMED_FUNCTION_CALL',
+  }
+  if finish_message is not None:
+    candidate['finishMessage'] = finish_message
+  return {
+      'candidates': [candidate],
+      'usageMetadata': {
+          'promptTokenCount': 8_992,
+          'candidatesTokenCount': candidates_token_count,
+          'thoughtsTokenCount': thoughts_token_count,
+          'totalTokenCount': (
+              8_992 + candidates_token_count + thoughts_token_count
+          ),
+      },
+  }
+
+
+def _cap_misfire(
+    answer_tokens: int = 65_536, thoughts: int = 2_000
+) -> dict[str, Any]:
+  """Returns an answer-less MAX_TOKENS hop that billed the cap as answer."""
+  return _hop(
+      [{'text': ''}],
+      'MAX_TOKENS',
+      token='token-1',
+      candidates_token_count=answer_tokens,
+      thoughts_token_count=thoughts,
+  )
+
+
+class GeminiMisfireTest(unittest.TestCase):
+  """Tests the two misfire paths: short ones and ones that hit the cap."""
+
+  def setUp(self):
+    super().setUp()
+    self.enterContext(
+        mock.patch.object(gemini, '_CAP_MISFIRE_RETRY_INTERVAL', 0)
+    )
+
+  def _lm(
+      self, max_tokens: int | None = None, max_attempts: int = 80
+  ) -> gemini.Gemini:
+    return gemini.Gemini(
+        'gemini-4-argon',
+        api_endpoint='',
+        max_attempts=max_attempts,
+        retry_interval=0,
+        sampling_options=lf.LMSamplingOptions(max_tokens=max_tokens),
+    )
+
+  def _serve(self, *responses: dict[str, Any] | int) -> tuple[list[Any], Any]:
+    """Returns (sent requests, POST side effect) serving `responses` in order.
+
+    Args:
+      *responses: Payloads to return with HTTP 200, or HTTP error codes. The
+        last one is served again for any extra request.
+    """
+    sent = []
+
+    def post(url, json, **kwargs):
+      del url, kwargs
+      sent.append(json)
+      served = responses[min(len(sent), len(responses)) - 1]
+      response = requests.Response()
+      if isinstance(served, int):
+        response.status_code = served
+        response._content = b'Error.'  # pylint: disable=protected-access
+      else:
+        response.status_code = 200
+        response._content = pg.to_json_str(served).encode()  # pylint: disable=protected-access
+      return response
+
+    return sent, post
+
+  def test_short_misfire_is_logged_and_left_retryable(self):
+    # The finish message can carry the model's whole answer: user content.
+    finish_message = 'Malformed function call: ' + 'x' * 5_000
+    with mock.patch.object(pg.logging, 'warning') as warning:
+      result = self._lm().result(_misfire(finish_message=finish_message))
+    self.assertEqual(result.samples[0].response.text, '')
+    logged = warning.call_args.args[0]
+    self.assertIn('finishReason=MALFORMED_FUNCTION_CALL', logged)
+    self.assertIn('candidatesTokenCount=2836', logged)
+    self.assertIn('thoughtsTokenCount=717', logged)
+    self.assertIn(f'finishMessageChars={len(finish_message)}', logged)
+    self.assertNotIn('Malformed function call:', logged)
+    self.assertNotIn('xxxxxxxxxx', logged)
+
+  def test_sticky_short_misfire_recovers_under_max_attempts(self):
+    sent, post = self._serve(
+        *[_misfire()] * 10,
+        _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello!')
+    self.assertEqual(len(sent), 11)
+
+  def test_short_misfires_are_bounded_by_max_attempts(self):
+    sent, post = self._serve(_misfire())
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(lf.concurrent.RetryError) as ctx:
+        self._lm(max_attempts=12)('hi')
+    self.assertEqual(len(sent), 12)
+    self.assertTrue(
+        all(
+            isinstance(e, lf.EmptyGenerationError) for e in ctx.exception.errors
+        )
+    )
+
+  def test_cap_misfire_is_a_retryable_misfire_error(self):
+    with self.assertRaises(gemini.MalformedFunctionCallError) as ctx:
+      self._lm().result(_cap_misfire(63_000, 2_536))
+    self.assertIsInstance(ctx.exception, lf.EmptyGenerationError)
+    message = str(ctx.exception)
+    self.assertIn('finishReason=MAX_TOKENS', message)
+    self.assertIn('candidatesTokenCount=63000', message)
+    self.assertIn('thoughtsTokenCount=2536', message)
+    self.assertIn('not thinking starvation', message)
+
+  def test_starvation_keeps_its_diagnosis(self):
+    with self.assertRaises(gemini.GeminiEmptyGenerationError) as ctx:
+      self._lm().result(_cap_misfire(0, 65_536))
+    message = str(ctx.exception)
+    self.assertIn('before any answer token was emitted', message)
+    self.assertNotIn('misfire', message)
+
+  def test_sticky_cap_misfire_fails_after_three_samples(self):
+    """The TBS signature: the whole pinned 65,536 cap billed, no text.
+
+    It is re-sampled from scratch under the caller's ceiling and never
+    continuation-resumed, also when the cap is not yet spent on answer tokens
+    and a resume under a raised ceiling would otherwise be attempted. After
+    three samples it fails, however large `max_attempts` is.
+    """
+    for answer_tokens, thoughts in (
+        (65_536, 2_000),
+        (65_536, 15_000),
+        (60_000, 5_536),
+    ):
+      with self.subTest(answer_tokens=answer_tokens, thoughts=thoughts):
+        sent, post = self._serve(_cap_misfire(answer_tokens, thoughts))
+        with mock.patch('requests.Session.post', side_effect=post):
+          with self.assertRaises(lf.concurrent.RetryError) as ctx:
+            self._lm(max_tokens=65_536, max_attempts=100)('hi')
+        self.assertEqual(len(sent), 3)
+        for request in sent:
+          self.assertNotIn('continuationToken', request)
+          self.assertEqual(
+              request['generationConfig']['maxOutputTokens'], 65_536
+          )
+        self.assertTrue(
+            all(
+                isinstance(e, gemini.MalformedFunctionCallError)
+                for e in ctx.exception.errors
+            )
+        )
+
+  def test_cap_misfire_budget_never_exceeds_max_attempts(self):
+    """A caller running its own retries with `max_attempts=1` gets 1 sample."""
+    sent, post = self._serve(_cap_misfire())
+    with mock.patch('requests.Session.post', side_effect=post):
+      with self.assertRaises(lf.concurrent.RetryError) as ctx:
+        self._lm(max_tokens=65_536, max_attempts=1)('hi')
+    self.assertEqual(len(sent), 1)
+    (error,) = ctx.exception.errors
+    self.assertIsInstance(error, gemini.MalformedFunctionCallError)
+    self.assertIn('up to 1 per query', str(error))
+
+  def test_cap_misfire_budget_is_per_query_not_per_retry(self):
+    """Retrying a short misfire or a 429 does not reset the budget.
+
+    Both are retried outside the cap-misfire loop, by sampling the prompt anew.
+    A sticky prompt alternating them with cap misfires would otherwise draw
+    about two cap misfires per attempt of `max_attempts`.
+    """
+    for name, between in (('short misfire', _misfire()), ('HTTP 429', 429)):
+      with self.subTest(between=name):
+        sent, post = self._serve(
+            _cap_misfire(),
+            between,
+            _cap_misfire(),
+            between,
+            _cap_misfire(),
+            _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2),
+        )
+        with mock.patch('requests.Session.post', side_effect=post):
+          with self.assertRaises(lf.concurrent.RetryError) as ctx:
+            self._lm(max_tokens=65_536)('hi')
+        self.assertEqual(len(sent), 5)
+        self.assertTrue(
+            all(
+                isinstance(e, gemini.MalformedFunctionCallError)
+                for e in ctx.exception.errors
+            )
+        )
+
+  def test_each_query_draws_on_its_own_budget(self):
+    """Sending the same prompt object again starts a fresh budget."""
+    prompt = lf.UserMessage('hi')
+    answer = _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2)
+    sent, post = self._serve(*[_cap_misfire(), _cap_misfire(), answer] * 2)
+    lm = self._lm(max_tokens=65_536)
+    with mock.patch('requests.Session.post', side_effect=post):
+      self.assertEqual(lm(prompt).text, 'Hello!')
+      self.assertEqual(lm(prompt).text, 'Hello!')
+    self.assertEqual(len(sent), 6)
+
+  def test_cap_misfire_then_answer_recovers(self):
+    sent, post = self._serve(
+        _cap_misfire(),
+        _cap_misfire(),
+        _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm(max_tokens=65_536)('hi')
+    self.assertEqual(response.text, 'Hello!')
+    self.assertEqual(len(sent), 3)
+    self.assertFalse(any('continuationToken' in r for r in sent))
+
+  def test_misfired_continuation_hop_is_resampled_not_resumed(self):
+    sent, post = self._serve(
+        _hop(
+            [],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=32_000,
+            thoughts_token_count=1_500,
+        ),
+        _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello!')
+    self.assertEqual(len(sent), 2)
+    self.assertNotIn('continuationToken', sent[1])
+
+  def test_misfire_after_a_thinking_hop_is_judged_on_its_own_counts(self):
+    """A misfired later hop is raised where it is refused, within the budget.
+
+    Summed with the 32,768 thought tokens of the hop before it, its 30,768
+    answer tokens no longer outnumber the thoughts. Judged on the sums, a
+    `MAX_TOKENS` hop would end in the non-retryable `GeminiEmptyGenerationError`
+    and a `CONTINUATION` one would fall back to the plain empty-generation
+    retry, outside the cap-misfire budget.
+    """
+    thinking = _hop(
+        [{'text': ''}],
+        'CONTINUATION',
+        token='token-1',
+        thoughts_token_count=32_768,
+    )
+    answer = _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2)
+    for finish_reason in ('MAX_TOKENS', 'CONTINUATION'):
+      with self.subTest(finish_reason=finish_reason):
+        misfire = _hop(
+            [{'text': ''}],
+            finish_reason,
+            token='token-2',
+            candidates_token_count=30_768,
+            thoughts_token_count=2_000,
+        )
+        sent, post = self._serve(*[thinking, misfire] * 3, answer)
+        with mock.patch('requests.Session.post', side_effect=post):
+          with self.assertRaises(lf.concurrent.RetryError) as ctx:
+            self._lm(max_tokens=65_536)('hi')
+        # Each thinking hop is resumed, and each misfire is sampled anew.
+        self.assertEqual(
+            ['continuationToken' in r for r in sent], [False, True] * 3
+        )
+        self.assertEqual(len(ctx.exception.errors), 3)
+        for error in ctx.exception.errors:
+          self.assertIsInstance(error, gemini.MalformedFunctionCallError)
+          self.assertIn(f'finishReason={finish_reason}', str(error))
+          self.assertIn('candidatesTokenCount=30768', str(error))
+          self.assertIn('thoughtsTokenCount=2000', str(error))
+
+  def test_misfire_after_partial_text_is_resampled_not_returned(self):
+    """An answer cut off by a runaway call is not returned as the answer."""
+    sent, post = self._serve(
+        _hop(
+            [{'text': 'The answer starts'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=20_000,
+        ),
+        _hop(
+            [{'text': ''}],
+            'CONTINUATION',
+            token='token-2',
+            candidates_token_count=30_768,
+            thoughts_token_count=2_000,
+        ),
+        _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello!')
+    self.assertEqual(
+        ['continuationToken' in r for r in sent], [False, True, False]
+    )
+
+  def test_answers_are_unaffected(self):
+    sent, post = self._serve(
+        _hop([{'text': 'Hello!'}], 'STOP', candidates_token_count=2)
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with mock.patch.object(pg.logging, 'warning') as warning:
+        response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello!')
+    self.assertEqual(len(sent), 1)
+    warning.assert_not_called()
 
 
 if __name__ == '__main__':
