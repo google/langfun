@@ -91,6 +91,122 @@ class Foo(action_lib.Action):
     lf_structured.query('additional query', lm=lm)
 
 
+def _end_budget(invocation):
+  """Ends the time budget of `invocation` now, as if its deadline had passed."""
+  invocation.rebind(
+      max_execution_time=invocation.elapse, skip_notification=True
+  )
+
+
+class _ReturnsLate(action_lib.Action):
+  """Returns its answer only after its time budget ran out."""
+
+  def call(self, session, **kwargs):
+    del session, kwargs
+    _end_budget(self.invocation)
+    return 'late answer'
+
+
+class _GetsLateModelReply(action_lib.Action):
+  """Starts a model call within its budget whose reply lands after it."""
+
+  def call(self, session, **kwargs):
+    del kwargs
+
+    def reply_lands_late(text):
+      _end_budget(self.invocation)
+      return text
+
+    return session.query(
+        'late reply', lm=fake.Echo(), response_postprocess=reply_lands_late
+    )
+
+
+class _WorksPastDeadline(action_lib.Action):
+  """Takes another step after its time budget ran out."""
+
+  def call(self, session, **kwargs):
+    del kwargs
+    _end_budget(self.invocation)
+    session.info('next step')
+    return 'never returned'
+
+
+class _ParallelStepTimesOut(action_lib.Action):
+  """Runs a parallel step that raises TimeoutError."""
+
+  after_deadline: bool
+
+  def call(self, session, **kwargs):
+    del kwargs
+
+    def step(unused_input):
+      if self.after_deadline:
+        _end_budget(self.invocation)
+      raise TimeoutError('step timed out')
+
+    # Ordered, because of a bug in the unordered loop of `lf.concurrent_map`:
+    # it takes a step's TimeoutError for a timeout of its own poll.
+    return list(
+        session.concurrent_map(step, [0], ordered=True, silence_on_errors=None)
+    )
+
+
+class _ReturnsAtOnce(action_lib.Action):
+  """Returns without calling the session."""
+
+  def call(self, session, **kwargs):
+    del session, kwargs
+    return 'returned'
+
+
+class _StartsAnActionAfterItsDeadline(action_lib.Action):
+  """Starts a sub-action after its own time budget ran out."""
+
+  def call(self, session, **kwargs):
+    del kwargs
+    _end_budget(self.invocation)
+    return _ReturnsAtOnce()(session)
+
+
+class _ReportsProgress(action_lib.Action):
+  """Reports its progress once, then returns."""
+
+  def call(self, session, **kwargs):
+    del kwargs
+    session.update_progress('step')
+    return 'done'
+
+
+class _Recorder(action_lib.SessionEventHandler):
+  """Records the starts and ends of actions, query ends and the session end."""
+
+  def __init__(self):
+    super().__init__()
+    self.started_actions = []
+    self.ended_actions = []
+    self.action_results = []
+    self.queries = []
+    self.session_ended = False
+    self.final_result = None
+    self.final_error = None
+
+  def on_action_start(self, session, action):
+    self.started_actions.append(action.action.__class__.__name__)
+
+  def on_action_end(self, session, action):
+    self.ended_actions.append(action.action.__class__.__name__)
+    self.action_results.append(action.result)
+
+  def on_query_end(self, session, action, query):
+    self.queries.append(query)
+
+  def on_session_end(self, session):
+    self.session_ended = True
+    self.final_result = session.final_result
+    self.final_error = session.final_error
+
+
 class ExecutionUnitPositionTest(unittest.TestCase):
 
   def test_basics(self):
@@ -690,6 +806,164 @@ class SessionTest(unittest.TestCase):
         self.fail(f'Context lost on rebinding: {e}')
 
     session.end(None)
+
+
+class SessionDeadlineTest(unittest.TestCase):
+  """A spent time budget stops the action, not the reports of finished work.
+
+  The session logs and then records each event, as the web_browsing benchmarks
+  do. Each action ends its own budget instead of waiting for it to run out.
+  """
+
+  def _run(self, action):
+    self.recorder = _Recorder()
+    self.session = action_lib.Session(
+        event_handler=action_lib.SessionEventHandlerChain(
+            handlers=[action_lib.SessionLogging(verbose=True), self.recorder]
+        )
+    )
+    with self.session:
+      return action(self.session, max_execution_time=600.0)
+
+  def test_a_result_returned_after_the_deadline_is_kept(self):
+    result = self._run(_ReturnsLate())
+
+    self.assertEqual(result, 'late answer')
+    self.assertEqual(self.recorder.started_actions, ['_ReturnsLate'])
+    self.assertEqual(self.recorder.action_results, ['late answer'])
+    self.assertTrue(self.recorder.session_ended)
+    self.assertEqual(self.recorder.final_result, 'late answer')
+    self.assertIsNone(self.recorder.final_error)
+
+  def test_a_model_reply_after_the_deadline_is_kept(self):
+    result = self._run(_GetsLateModelReply())
+
+    self.assertEqual(result, 'late reply')
+    self.assertEqual(len(self.recorder.queries), 1)
+    self.assertIsNone(self.recorder.queries[0].error)
+    self.assertEqual(self.recorder.final_result, 'late reply')
+    self.assertIsNone(self.recorder.final_error)
+
+  def test_a_session_call_after_the_deadline_still_raises(self):
+    with self.assertRaises(action_lib.ActionTimeoutError):
+      self._run(_WorksPastDeadline())
+
+    self.assertTrue(self.recorder.session_ended)
+    self.assertIsInstance(self.recorder.final_error, pg.ErrorInfo)
+    failures = [
+        log.message
+        for log in self.session.all_logs
+        if 'Action execution failed' in log.message
+    ]
+    self.assertEqual(len(failures), 1)
+    self.assertIn('(_WorksPastDeadline)', failures[0])
+
+  def test_a_parallel_step_timing_out_after_the_deadline_is_a_timeout(self):
+    with self.assertRaises(action_lib.ActionTimeoutError):
+      self._run(_ParallelStepTimesOut(after_deadline=True))
+
+  def test_a_parallel_step_timing_out_within_the_budget_keeps_its_error(self):
+    with self.assertRaisesRegex(TimeoutError, 'step timed out'):
+      self._run(_ParallelStepTimesOut(after_deadline=False))
+
+  def test_an_action_started_by_a_handler_still_stops_at_its_deadline(self):
+
+    class RunsAnActionOnProgress(action_lib.SessionEventHandler):
+
+      def on_action_progress(self, session, action, title, **kwargs):
+        _WorksPastDeadline()(session)
+
+    session = action_lib.Session(event_handler=RunsAnActionOnProgress())
+    with session:
+      with self.assertRaises(action_lib.ActionTimeoutError):
+        session.update_progress('step')
+
+  def test_a_parallel_step_log_after_the_deadline_raises_during_a_handler(self):
+    # The flag is per thread: a handler running on this thread does not exempt
+    # the log that a parallel step writes on its worker thread.
+
+    class MapsOnProgress(action_lib.SessionEventHandler):
+
+      def on_action_progress(self, session, action, title, **kwargs):
+
+        def step(unused_input):
+          _end_budget(action)
+          session.info('parallel step after the deadline')
+
+        list(session.concurrent_map(step, [0], silence_on_errors=None))
+
+    session = action_lib.Session(event_handler=MapsOnProgress())
+    with session:
+      with self.assertRaises(action_lib.ActionTimeoutError):
+        _ReportsProgress()(session, max_execution_time=600.0)
+
+  def test_an_action_started_after_the_deadline_ends_with_a_timeout(self):
+    with self.assertRaises(action_lib.ActionTimeoutError):
+      self._run(_StartsAnActionAfterItsDeadline())
+
+    self.assertEqual(
+        self.recorder.started_actions,
+        ['_StartsAnActionAfterItsDeadline', '_ReturnsAtOnce'],
+    )
+    self.assertEqual(
+        self.recorder.ended_actions,
+        ['_ReturnsAtOnce', '_StartsAnActionAfterItsDeadline'],
+    )
+    error = self.session.root.actions[0].actions[0].error
+    self.assertIsNotNone(error)
+    self.assertIn('ActionTimeoutError', error.tag)
+
+  def test_an_implicit_session_logs_a_failure_after_the_deadline(self):
+    # Called without a session, the action ends the session it created while
+    # it is still the current action, i.e. after its own deadline.
+    action = _WorksPastDeadline()
+    with self.assertRaises(action_lib.ActionTimeoutError):
+      action(max_execution_time=600.0, show_progress=False, verbose=True)
+
+    session = action.session
+    self.assertIsNotNone(session)
+    failures = [
+        log.message
+        for log in session.all_logs
+        if 'Trajectory failed' in log.message
+    ]
+    self.assertEqual(len(failures), 1)
+
+  def test_a_handler_log_after_a_nested_action_is_kept(self):
+
+    class RunsAnActionThenLogs(action_lib.SessionEventHandler):
+
+      def on_action_progress(self, session, action, title, **kwargs):
+        _ReturnsAtOnce()(session)
+        _end_budget(action)
+        session.info('handler log after the deadline')
+
+    session = action_lib.Session(event_handler=RunsAnActionThenLogs())
+    with session:
+      result = _ReportsProgress()(session, max_execution_time=600.0)
+
+    self.assertEqual(result, 'done')
+    self.assertTrue(
+        any(
+            'handler log after the deadline' in log.message
+            for log in session.all_logs
+        )
+    )
+
+  def test_current_action_is_restored_when_a_handler_raises(self):
+
+    class FailsOnActionEnd(action_lib.SessionEventHandler):
+
+      def on_action_end(self, session, action):
+        raise ValueError('handler failed')
+
+    session = action_lib.Session(event_handler=FailsOnActionEnd())
+    with session:
+      with self.assertRaisesRegex(ValueError, 'handler failed'):
+        _ReturnsLate()(session)
+      self.assertIs(session.current_action, session.root)
+      session.info('back at the root')
+    self.assertIn('back at the root', session.root.logs[-1].message)
 
 
 if __name__ == '__main__':

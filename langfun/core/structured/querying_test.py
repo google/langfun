@@ -1690,6 +1690,17 @@ class TrackQueriesTest(unittest.TestCase):
     self.assertIs(state['start'], queries[0])
     self.assertIs(state['end'], queries[0])
 
+  def test_end_callback_error_is_raised_as_is(self):
+    def end_callback(query):
+      del query
+      raise ValueError('end callback failed')
+
+    with self.assertRaisesRegex(ValueError, 'end callback failed'):
+      with querying.track_queries(end_callback=end_callback) as queries:
+        querying.query('foo', lm=fake.StaticResponse('bar'))
+    self.assertEqual(queries[0].output, 'bar')
+    self.assertIsNone(queries[0].error)
+
   def test_track_with_autofix(self):
     lm = fake.StaticSequence([
         '=1',

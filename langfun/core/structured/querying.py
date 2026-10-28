@@ -655,7 +655,6 @@ def query(
             cache_seed=cache_seed,
             skip_lm=skip_lm,
         )
-      _mark_query_completed(output_message, None, usage_summary)
     except mapping.MappingError as e:
       _mark_query_completed(
           e.lm_response, pg.ErrorInfo.from_exception(e), usage_summary
@@ -669,6 +668,11 @@ def query(
           None, pg.ErrorInfo.from_exception(e), usage_summary
       )
       raise e
+    else:
+      # Outside the `try`: an error from marking the query completed, such as
+      # one raised by a tracker's end callback, is not a query failure, so it
+      # propagates as is instead of completing the query a second time.
+      _mark_query_completed(output_message, None, usage_summary)
 
   if returns_message:
     return output_message

@@ -1497,7 +1497,14 @@ class RootAction(Action):
 
 
 class SessionEventHandler:
-  """Interface for handling session events."""
+  """Interface for handling session events.
+
+  Logs that a handler writes through the session never raise
+  `ActionTimeoutError`: they report events that already happened, such as a
+  model reply that came in after the action's deadline. Queries, actions and
+  `concurrent_map` calls that a handler starts still raise `ActionTimeoutError`
+  after the deadline.
+  """
 
   def get(
       self,
@@ -1926,7 +1933,8 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   def start(self) -> None:
     """Starts the session."""
     self.root.execution.start()
-    self.event_handler.on_session_start(self)
+    with self._running_event_handler():
+      self.event_handler.on_session_start(self)
 
   def end(
       self,
@@ -1936,7 +1944,8 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
   ) -> None:
     """Ends the session."""
     self.root.end(result, error, metadata)
-    self.event_handler.on_session_end(self)
+    with self._running_event_handler():
+      self.event_handler.on_session_end(self)
 
   def check_execution_time(self) -> None:
     """Checks the execution time of the current action."""
@@ -1962,12 +1971,28 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       title: The title of the progress update.
       **kwargs: Additional keyword arguments to pass to the event handler.
     """
-    self.event_handler.on_action_progress(
-        self,
-        self._current_action,
-        title,
-        **kwargs
-    )
+    with self._running_event_handler():
+      self.event_handler.on_action_progress(
+          self, self._current_action, title, **kwargs
+      )
+
+  @property
+  def _in_event_handler(self) -> bool:
+    """Returns True while the current thread runs the event handler's own code.
+
+    It is False in the body of an action, even one that the handler starts.
+    """
+    return getattr(self._tls, '__in_event_handler__', False)
+
+  @contextlib.contextmanager
+  def _running_event_handler(self, running: bool = True) -> Iterator[None]:
+    """Sets whether the current thread runs the event handler (see `_log`)."""
+    in_event_handler = self._in_event_handler
+    setattr(self._tls, '__in_event_handler__', running)
+    try:
+      yield
+    finally:
+      setattr(self._tls, '__in_event_handler__', in_event_handler)
 
   def __enter__(self):
     """Enters the session."""
@@ -2025,12 +2050,20 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       self._current_execution = invocation.execution
       # Start the execution of the current action.
       self._current_action.start()
-      self.event_handler.on_action_start(self, self._current_action)
-      yield invocation
+      with self._running_event_handler():
+        self.event_handler.on_action_start(self, self._current_action)
+      # The action's own logs check the deadline, even if a handler started it.
+      with self._running_event_handler(running=False):
+        yield invocation
     finally:
-      self.event_handler.on_action_end(self, self._current_action)
-      self._current_execution = parent_execution
-      self._current_action = parent_action
+      try:
+        with self._running_event_handler():
+          self.event_handler.on_action_end(self, self._current_action)
+      finally:
+        # Even if a handler raised: later calls on this thread must not run
+        # under the invocation that has ended.
+        self._current_execution = parent_execution
+        self._current_action = parent_action
 
   @contextlib.contextmanager
   def track_phase(self, name: str | None) -> Iterator[ExecutionTrace]:
@@ -2083,7 +2116,10 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
           skip_notification=False, raise_on_no_change=False
       )
       execution.append(invocation)
-      self.event_handler.on_query_start(self, self._current_action, invocation)
+      with self._running_event_handler():
+        self.event_handler.on_query_start(
+            self, self._current_action, invocation
+        )
 
     def _query_end(invocation: lf_structured.QueryInvocation):
       if track_if is not None and not track_if(invocation):
@@ -2092,7 +2128,8 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       # count the usage summary to the current execution and trigger the
       # event handler to log the query.
       self._current_execution.merge_usage_summary(invocation.usage_summary)
-      self.event_handler.on_query_end(self, self._current_action, invocation)
+      with self._running_event_handler():
+        self.event_handler.on_query_end(self, self._current_action, invocation)
 
     with self.track_phase(phase), lf_structured.track_queries(
         include_child_scopes=False,
@@ -2199,6 +2236,12 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
 
     Yields:
       Tuples of (input, result, error) for each input.
+
+    Raises:
+      ActionTimeoutError: If the action's deadline has passed when the map
+        starts or when it raises `TimeoutError`. Other errors, and a
+        `TimeoutError` before the deadline, are raised as `lf.concurrent_map`
+        raises them.
     """
     self.check_execution_time()
     parallel_inputs = list(parallel_inputs)
@@ -2220,17 +2263,23 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       finally:
         execution.stop()
 
-    for input_value, result, error in lf.concurrent_map(
-        _map_single,
-        parallel_inputs,
-        max_workers=max_workers,
-        timeout=self._child_max_execution_time(timeout),  # pyrefly: ignore[bad-argument-type]
-        max_duration=max_duration,
-        silence_on_errors=silence_on_errors,
-        ordered=ordered,
-        show_progress=show_progress,
-    ):
-      yield input_value, result, error
+    try:
+      for input_value, result, error in lf.concurrent_map(
+          _map_single,
+          parallel_inputs,
+          max_workers=max_workers,
+          timeout=self._child_max_execution_time(timeout),  # pyrefly: ignore[bad-argument-type]
+          max_duration=max_duration,
+          silence_on_errors=silence_on_errors,
+          ordered=ordered,
+          show_progress=show_progress,
+      ):
+        yield input_value, result, error
+    except TimeoutError:
+      # After the action's deadline, a TimeoutError means the action ran out
+      # of time.
+      self.check_execution_time()
+      raise
 
   def _child_max_execution_time(
       self, max_execution_time: float | None
@@ -2265,8 +2314,11 @@ class Session(pg.Object, pg.views.html.HtmlTreeView.Extension):
       **kwargs: Additional keyword arguments to pass to `lf.logging.log` as
         metadata to show.
     """
-    # Early terminate the action if the execution time is exceeded.
-    self.check_execution_time()
+    # Early terminate the action if the execution time is exceeded. Logs from
+    # the event handler are exempt: they report what already happened, and
+    # raising there would discard a late result and skip the other handlers.
+    if not self._in_event_handler:
+      self.check_execution_time()
 
     execution = self._current_execution
     if for_action is None:
