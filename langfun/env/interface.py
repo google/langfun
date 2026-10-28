@@ -137,6 +137,32 @@ class SandboxStateError(SandboxError):
     super().__init__(message or default_message, *args, **kwargs)
 
 
+class SandboxRestartedError(SandboxError):
+  """Error that indicates the sandbox was restarted on a new machine.
+
+  Unlike `SandboxStateError`, this error does NOT end the user session: the
+  sandbox has already been brought back on a replacement machine and the
+  session continues on it. It is raised for the operation that was in flight
+  when the original machine was lost, because that operation may or may not
+  have taken effect. State that the sandbox persists (e.g. files under
+  persistent directories) is restored; ephemeral state (e.g. running
+  processes) is lost. `details` describes what was restored and what was lost,
+  so callers (e.g. agents) can re-check their state before continuing.
+  """
+
+  def __init__(
+      self,
+      message: str | None = None,
+      *args,
+      details: str | None = None,
+      **kwargs
+  ):
+    self.details = details
+    super().__init__(
+        message or 'Sandbox was restarted on a new machine', *args, **kwargs
+    )
+
+
 class SandboxFeaturesTeardownError(SandboxError):
   """Base class for feature errors."""
 

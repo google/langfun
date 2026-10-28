@@ -199,6 +199,15 @@ class Environment(AbstractEnvironment):
       sb.shell('echo hi')
   ```
 
+  ### Restarted Sandboxes
+  Some sandboxes (e.g. capsule sandboxes) recover from the loss of their
+  machine by moving the session to a new machine. The operation that was in
+  flight then raises `lf.env.SandboxRestartedError`, which does not end the
+  session: the operation may or may not have taken effect, and state that the
+  sandbox does not persist (e.g. running processes) is lost.
+  `SandboxRestartedError.details` describes what was restored, so that callers
+  can check their state and continue.
+
   ### Robust User Code
   A simple strategy for robust user code is to wrap critical operations in a
   retry loop:
