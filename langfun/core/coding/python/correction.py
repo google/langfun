@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Python code error correction."""
-from typing import Any
+from typing import Annotated, Any
 import langfun.core as lf
 from langfun.core.coding.python import execution
 import pyglove as pg
@@ -36,7 +36,9 @@ class CorrectedCode(pg.Object):
   code, expecting the model to return the fixed code in the `corrected_code`
   field.
   """
-  corrected_code: str
+  # Travels in a block under the `verbatim` protocol feature, so the corrected
+  # code is not escape-decoded.
+  corrected_code: Annotated[str, None, dict(verbatim=True)]
 
 
 def run_with_correction(
@@ -52,6 +54,7 @@ def run_with_correction(
     returns_code: bool = False,
     returns_stdout: bool = False,
     outputs_intermediate: bool = False,
+    protocol: str | None = None,
 ) -> Any | tuple[Any, str]:
   """Correct code with a language model via self-play.
 
@@ -78,6 +81,9 @@ def run_with_correction(
     outputs_intermediate: If True, intermediate output will be output as a
       dict, with the last line's value accessible by key '__result__'. Otherwise
       the value of the last line will be returned.
+    protocol: The prompting protocol of the correction query, e.g. the one of
+      the query whose output `code` builds. If None, the protocol from
+      `lf.query_protocol` is used.
 
   Returns:
     Run result if `returns_code` is set to False (default), otherwise a tuple
@@ -88,7 +94,9 @@ def run_with_correction(
   """
   # Delay import at runtime to avoid circular depenency.
   # pylint: disable=g-import-not-at-top
+  from langfun.core.structured import mapping  # pyrefly: ignore[missing-import]
   from langfun.core.structured import querying  # pyrefly: ignore[missing-import]
+  from langfun.core.structured.schema import python_verbatim  # pyrefly: ignore[missing-import]
   # pylint: enable=g-import-not-at-top
 
   if max_attempts == 0:
@@ -134,10 +142,19 @@ def run_with_correction(
     try:
       # Disable autofix for code correction to avoid recursion.
       correction = querying.query(
-          CodeWithError(code=code, error=error), CorrectedCode, lm=lm, autofix=0
+          CodeWithError(code=code, error=error),
+          CorrectedCode,
+          lm=lm,
+          autofix=0,
+          protocol=protocol,
       )
     except pg.coding.CodeError:
       break
+    except mapping.MappingError as e:
+      # The reply broke the block format, not the code: ask again.
+      if isinstance(e.cause, python_verbatim.VerbatimBlockError):
+        continue
+      raise
 
     code = correction.corrected_code
     result, error = result_and_error(code)

@@ -38,6 +38,22 @@ class _PinnedFeature(schema_base._ProtocolFeature):  # pylint: disable=protected
   BASES = {'python': ('2.0',)}
 
 
+class _PreambleFeature(schema_base._ProtocolFeature):  # pylint: disable=protected-access
+  """Replaces the example of the `lf.query` preamble, and adds instructions."""
+
+  # Not `preamble`: schema/base_test.py registers it, and feature names are
+  # process-wide (pytest imports all test modules into one process).
+  NAME = 'no-example'
+  VERSION = '1.0'
+  BASES = {'python': ('2.0',)}
+
+  def query_preamble(self, base_preamble):
+    return base_preamble.partition('\n\n')[0] + '\n\nNo example.'
+
+  def parse_instructions(self):
+    return 'Mind the {{ output_title }}.'
+
+
 class Activity(pg.Object):
   description: str
 
@@ -1159,6 +1175,49 @@ class LfQueryPythonV2Test(unittest.TestCase):
             ),
             1,
         )
+
+  def test_autofix_query_protocol(self):
+    for protocol, recorded in [
+        # The correction query inherits a protocol with features...
+        ('python+pinned', ['python:2.0+pinned:1.0', 'python:2.0+pinned:1.0']),
+        # ...and otherwise uses `lf.query_protocol`, as before.
+        ('python:1.0', ['python:1.0', 'python:2.0']),
+    ]:
+      with self.subTest(protocol=protocol):
+        lm = fake.StaticSequence(['=1', "CorrectedCode(corrected_code='1')"])
+        with querying.track_queries() as queries:
+          self.assertEqual(
+              querying.query(
+                  'what is 1 + 0', int, lm=lm, autofix=1, protocol=protocol
+              ),
+              1,
+          )
+        self.assertEqual([q.protocol for q in queries], recorded)
+
+  def test_feature_preamble(self):
+    def prompt(**kwargs):
+      return querying.query_prompt(
+          '1 + 1 =', int, protocol='python+no-example', **kwargs
+      ).text
+
+    self.assertTrue(
+        prompt().startswith(
+            'Please respond to the last REQUEST with OUTPUT PYTHON OBJECT only'
+            ' according to OUTPUT PYTHON TYPE.\n\nNo example.\n\nREQUEST:'
+        ),
+        prompt(),
+    )
+    # A preamble argument wins, followed by the instructions of the features.
+    template = lf.Template('Be {{ how }}.', how='brief')
+    for preamble in ('\n  Be brief.\n  ', template):
+      with self.subTest(preamble=preamble):
+        self.assertTrue(
+            prompt(preamble=preamble).startswith(
+                'Be brief.\n\nMind the OUTPUT PYTHON OBJECT.\n\nREQUEST:'
+            ),
+            prompt(preamble=preamble),
+        )
+    self.assertEqual(template.template_str, 'Be {{ how }}.')
 
   def test_response_postprocess(self):
     self.assertEqual(

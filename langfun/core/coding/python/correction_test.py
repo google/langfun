@@ -18,6 +18,8 @@ import unittest
 
 from langfun.core.coding.python import correction
 from langfun.core.llms import fake
+from langfun.core.structured import mapping
+from langfun.core.structured import querying
 import pyglove as pg
 
 
@@ -70,6 +72,55 @@ class RunWithCorrectionTest(unittest.TestCase):
         ]),
     )
     self.assertEqual(result, Foo(0))
+
+  def test_correction_query_protocol(self):
+    for protocol, recorded in [
+        (None, 'python:2.0'),
+        ('python:1.0', 'python:1.0'),
+    ]:
+      with self.subTest(protocol=protocol):
+        with querying.track_queries() as queries:
+          result = correction.run_with_correction(
+              'x = 1 +',
+              lm=fake.StaticResponse("CorrectedCode(corrected_code='x = 2')"),
+              max_attempts=1,
+              protocol=protocol,
+          )
+        self.assertEqual(result, 2)
+        self.assertEqual([q.protocol for q in queries], [recorded])
+
+  def test_a_correction_that_misuses_the_blocks_is_retried(self):
+    missing_block = 'output = CorrectedCode(corrected_code=CORRECTED_CODE)'
+    good = (
+        f'{missing_block}\n<<<LF:BLOCK CORRECTED_CODE t1>>>\n'
+        'x = 2\n<<<LF:END CORRECTED_CODE t1>>>'
+    )
+    result = correction.run_with_correction(
+        'x = 1 +',
+        lm=fake.StaticSequence([missing_block, good]),
+        max_attempts=2,
+        protocol='python+verbatim',
+    )
+    self.assertEqual(result, 2)
+    with self.assertRaisesRegex(
+        pg.coding.CodeError, 'Cannot correct code after 2 attempts'
+    ):
+      correction.run_with_correction(
+          'x = 1 +',
+          lm=fake.StaticResponse(missing_block),
+          max_attempts=2,
+          protocol='python+verbatim',
+      )
+    # Other failures of the correction query still end the loop.
+    with self.assertRaises(mapping.MappingError):
+      correction.run_with_correction(
+          'x = 1 +',
+          lm=fake.StaticSequence([
+              'CorrectedCode(corrected_code=CODE)',
+              "CorrectedCode(corrected_code='x = 2')",
+          ]),
+          max_attempts=2,
+      )
 
   def test_run_without_correction(self):
     result = correction.run_with_correction(

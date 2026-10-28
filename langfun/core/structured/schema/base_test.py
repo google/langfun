@@ -577,6 +577,30 @@ class _TwiceV2(base._ProtocolFeature):  # pylint: disable=protected-access
   BASES = {'json': None}
 
 
+class _Preamble(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'preamble'
+  VERSION = '1.0'
+  BASES = {'json': None}
+
+  def applies_to(self, schema):
+    return schema is None or not isinstance(schema.spec, pg.typing.Int)
+
+  def query_preamble(self, base_preamble):
+    return f'{base_preamble} Preamble.'
+
+  def parse_instructions(self):
+    return 'Instructions.'
+
+
+class _More(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'more'
+  VERSION = '1.0'
+  BASES = {'json': None}
+
+  def parse_instructions(self):
+    return 'More.'
+
+
 class ProtocolNameTest(unittest.TestCase):
 
   def setUp(self):
@@ -831,6 +855,79 @@ class PromptingProtocolTest(unittest.TestCase):
     self.assertFalse(
         base.PromptingProtocol.supports_autofix('no-such-protocol')
     )
+
+
+class FeatureHooksTest(unittest.TestCase):
+
+  def test_for_schema(self):
+    protocol = base.PromptingProtocol.from_name('json:1.0+upper+preamble')
+    self.assertEqual(
+        protocol.for_schema(base.Schema(str)).name,
+        'json:1.0+upper:1.0+preamble:1.0',
+    )
+    self.assertEqual(
+        protocol.for_schema(base.Schema(int)).name, 'json:1.0+upper:1.0'
+    )
+
+  def test_query_preamble(self):
+    self.assertIsNone(
+        base.PromptingProtocol.from_name('json').query_preamble('Base.')
+    )
+    self.assertIsNone(
+        base.PromptingProtocol.from_name('json+upper').query_preamble('Base.')
+    )
+    self.assertEqual(
+        base.PromptingProtocol.from_name('json+upper+preamble').query_preamble(
+            'Base.'
+        ),
+        'Base. Preamble.',
+    )
+
+  def test_parse_instructions(self):
+    self.assertIsNone(
+        base.PromptingProtocol.from_name('json+upper').parse_instructions()
+    )
+    # In feature order: `more` and `preamble` have the same rank.
+    self.assertEqual(
+        base.PromptingProtocol.from_name(
+            'json+preamble+more'
+        ).parse_instructions(),
+        'More.\n\nInstructions.',
+    )
+
+  def test_add_instructions(self):
+    self.assertEqual(
+        base.PromptingProtocol.from_name('json+preamble+more').add_instructions(
+            '\n  Be brief.\n  Really.\n'
+        ),
+        'Be brief.\nReally.\n\nMore.\n\nInstructions.',
+    )
+    preamble = 'Be brief.'
+    self.assertIs(
+        base.PromptingProtocol.from_name('json+upper').add_instructions(
+            preamble
+        ),
+        preamble,
+    )
+
+  def test_default_hooks(self):
+    feature = _Upper()
+    self.assertTrue(feature.applies_to(None))
+    self.assertIsNone(feature.query_preamble('Base.'))
+    self.assertIsNone(feature.parse_instructions())
+    self.assertIsNone(
+        feature.field_hint(
+            pg.schema(Activity).get_field('description'),
+            base.Schema.from_value(Activity),
+        )
+    )
+    self.assertEqual(feature.render_value(1, None, str), '1')
+    hooks = feature.parse_hooks(None)
+    self.assertEqual(hooks.before_exec('x = 1'), 'x = 1')
+    global_vars = {}
+    hooks.check_code('x = 1', global_vars)
+    self.assertEqual(global_vars, {})
+    self.assertEqual(hooks.after_exec(1, 'x = 1'), 1)
 
 
 if __name__ == '__main__':

@@ -641,6 +641,9 @@ def query(
             output_message = lf.AIMessage(processed_text, source=output_message)
       else:
         # Query with structured output.
+        structure_protocol, structure_kwargs = _query_protocol(
+            protocol, schema, kwargs  # pyrefly: ignore[bad-argument-type]
+        )
         output_message = query_cls(
             input=(
                 query_input.render(lm=lm)
@@ -655,8 +658,8 @@ def query(
                 if schema_lib.PromptingProtocol.supports_autofix(protocol)
                 else 0
             ),
-            protocol=protocol,
-            **kwargs,
+            protocol=structure_protocol,
+            **structure_kwargs,
         )(
             lm=lm,
             autofix_lm=autofix_lm or lm,
@@ -689,6 +692,40 @@ def query(
   if returns_message or output_message.referred_modalities:
     return output_message
   return output_message.text
+
+
+def _query_protocol(
+    protocol: str, schema: schema_lib.SchemaType, kwargs: dict[str, Any]
+) -> tuple[str, dict[str, Any]]:
+  """Returns the protocol and keyword arguments of the query structure.
+
+  Features that do not apply to `schema` are left out, so the query is the same
+  as without them. A feature may replace the preamble of the base protocol; a
+  preamble in `kwargs` wins, followed by the instructions of the features.
+
+  Args:
+    protocol: The normalized protocol name.
+    schema: The output schema.
+    kwargs: Keyword arguments of `lf.query`.
+
+  Returns:
+    A tuple of (protocol, keyword arguments) for the query structure.
+  """
+  if not schema_lib.ProtocolName.parse(protocol).features:
+    return protocol, kwargs
+  prompting_protocol = schema_lib.PromptingProtocol.from_name(
+      protocol
+  ).for_schema(schema_lib.Schema.from_value(schema))
+  if 'preamble' in kwargs:
+    # E.g. the field hints of `verbatim` ask for blocks that its instructions
+    # describe.
+    preamble = prompting_protocol.add_instructions(kwargs['preamble'])
+  else:
+    base = LfQuery.from_protocol(protocol).__schema__['preamble'].default_value
+    preamble = prompting_protocol.query_preamble(base.template_str)
+  if preamble is not None:
+    kwargs = dict(kwargs, preamble=preamble)
+  return prompting_protocol.name, kwargs
 
 
 async def aquery(
