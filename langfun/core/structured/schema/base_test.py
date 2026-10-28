@@ -548,5 +548,14 @@ class UnknownTest(unittest.TestCase):
     self.assertEqual(base.UNKNOWN, base.Unknown())
 
 
+class PromptingProtocolTest(unittest.TestCase):
+
+  def test_supports_autofix(self):
+    self.assertFalse(base.PromptingProtocol.supports_autofix('json'))
+    self.assertFalse(
+        base.PromptingProtocol.supports_autofix('no-such-protocol')
+    )
+
+
 if __name__ == '__main__':
   unittest.main()

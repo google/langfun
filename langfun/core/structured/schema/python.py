@@ -13,13 +13,14 @@
 # limitations under the License.
 """Python-based prompting protocol."""
 
+import ast
 import inspect
 import io
 import re
 import sys
 import textwrap
 import typing
-from typing import Any, Sequence, Type
+from typing import Any, Callable, Sequence, Type
 import langfun.core as lf
 from langfun.core.coding.python import correction
 from langfun.core.structured.schema import base
@@ -30,6 +31,7 @@ class PythonPromptingProtocol(base.PromptingProtocol):
   """Python-based prompting protocol."""
 
   NAME = 'python'
+  SUPPORTS_AUTOFIX = True
 
   def schema_repr(
       self,
@@ -118,6 +120,7 @@ class PythonPromptingProtocol(base.PromptingProtocol):
       ),
       autofix=0,
       autofix_lm: lf.LanguageModel = lf.contextual(),
+      returns_code: bool = False,
       **kwargs,
   ) -> Any:
     """Parses a Python string into a structured object."""
@@ -132,7 +135,24 @@ class PythonPromptingProtocol(base.PromptingProtocol):
         autofix=autofix,
         autofix_lm=autofix_lm,
         permission=permission,
+        returns_code=returns_code,
     )
+
+
+# Names that every `structure_from_python()` call binds, besides `global_vars`.
+STRUCTURE_GLOBALS: dict[str, Any] = {
+    'pg': pg,
+    'Object': pg.Object,
+    'Any': typing.Any,
+    'List': typing.List,
+    'Tuple': typing.Tuple,
+    'Dict': typing.Dict,
+    'Sequence': typing.Sequence,
+    'Optional': typing.Optional,
+    'Union': typing.Union,
+    # Special value markers.
+    'UNKNOWN': base.UNKNOWN,
+}
 
 
 def structure_from_python(
@@ -144,22 +164,24 @@ def structure_from_python(
     ),
     autofix=0,
     autofix_lm: lf.LanguageModel = lf.contextual(),
+    returns_code: bool = False,
 ) -> Any:
-  """Evaluates structure from Python code with access to symbols."""
+  """Evaluates structure from Python code with access to symbols.
+
+  Args:
+    code: The Python code to evaluate.
+    global_vars: Names the code may reference, besides `STRUCTURE_GLOBALS`.
+    permission: What the code is allowed to do.
+    autofix: Max number of attempts to repair failing code with `autofix_lm`.
+    autofix_lm: The LM that repairs failing code.
+    returns_code: If True, returns a tuple of (value, the code that produced
+      it), which differs from `code` if autofix rewrote it.
+
+  Returns:
+    The value of the code, or a tuple of (value, code) if `returns_code`.
+  """
   global_vars = global_vars or {}
-  global_vars.update({
-      'pg': pg,
-      'Object': pg.Object,
-      'Any': typing.Any,
-      'List': typing.List,
-      'Tuple': typing.Tuple,
-      'Dict': typing.Dict,
-      'Sequence': typing.Sequence,
-      'Optional': typing.Optional,
-      'Union': typing.Union,
-      # Special value markers.
-      'UNKNOWN': base.UNKNOWN,
-  })
+  global_vars.update(STRUCTURE_GLOBALS)
   # We are creating objects here, so we execute the code without a sandbox.
   return correction.run_with_correction(
       code,
@@ -168,6 +190,119 @@ def structure_from_python(
       max_attempts=autofix,
       lm=autofix_lm,
       permission=permission,
+      returns_code=returns_code,
+  )
+
+
+_CODE_FENCE_RE = re.compile(
+    r'^[ \t]*```(?:python|py)?[ \t]*\n(.*?)^[ \t]*```', re.DOTALL | re.MULTILINE
+)
+_DEFINITION_RE = re.compile(r'^\s*(class|import|from|def)\b')
+
+
+def select_object_code(
+    text: str,
+    assign_to_var: str = 'output',
+    class_names: Sequence[str] = (),
+) -> str:
+  """Returns the part of an LM response that holds the output object.
+
+  LMs sometimes echo the schema's class definitions before emitting the object,
+  either in a separate ```python fence (markdown extraction then takes the
+  first one) or above the object inside the same fence. Both fail with
+  `Class definition is not allowed`, losing a response whose object is present
+  and correct.
+
+  Args:
+    text: An LM response, possibly containing several fenced code blocks.
+    assign_to_var: The variable the output object is expected to be assigned to.
+    class_names: Classes of the output object. A block that assigns an instance
+      of one of them to `assign_to_var` wins over any other code block, e.g. a
+      script the LM fenced as Python that assigns its own `output`.
+
+  Returns:
+    Code containing just the output object, or `text` unchanged if there is
+    nothing to repair.
+  """
+  blocks = _CODE_FENCE_RE.findall(text)
+  if not blocks:
+    return text
+  if len(blocks) > 1:
+    assignment = re.compile(
+        rf'^\s*{re.escape(assign_to_var)}\s*=', re.MULTILINE
+    )
+    construction = re.compile(
+        rf'^\s*{re.escape(assign_to_var)}\s*=\s*'
+        rf'(?:{"|".join(map(re.escape, class_names))})\s*\(',
+        re.MULTILINE,
+    )
+
+    def _score(block: str) -> int:
+      return (
+          8 * bool(class_names and construction.search(block))
+          + 4 * bool(assignment.search(block))
+          + 2 * (not _DEFINITION_RE.match(block))
+          + bool('(' in block)
+      )
+
+    # `max` keeps the first maximum; reverse so ties go to the last block,
+    # which is where the object goes when the LM prefixes it with something.
+    chosen = max(reversed(blocks), key=_score)
+    return _trim_to_object(chosen) or chosen
+  return _trim_to_object(blocks[0]) or text
+
+
+def _trim_to_object(code: str) -> str | None:
+  """Returns `code` reduced to the output object, or None if unchanged."""
+  try:
+    tree = ast.parse(code)
+  except SyntaxError:
+    return None
+  call = _as_constructor_call(tree)
+  if call is not None:
+    return ast.unparse(call)
+  definitions = (ast.ClassDef, ast.FunctionDef, ast.Import, ast.ImportFrom)
+  kept = [n for n in tree.body if not isinstance(n, definitions)]
+  if not kept or len(kept) == len(tree.body):
+    return None
+  return '\n'.join(ast.unparse(n) for n in kept)
+
+
+def _as_constructor_call(tree: ast.Module) -> ast.Expr | None:
+  r"""Rewrites `class X:\n  a = 1` into `X(a=1)`, which is what the LM meant.
+
+  A schema class definition (`class X:\n  a: int`) has no assigned values and
+  is left alone, so class-generating queries are unaffected.
+
+  Args:
+    tree: The parsed response.
+
+  Returns:
+    The equivalent constructor call, or None if the response is not a class
+    body of assignments.
+  """
+  if len(tree.body) != 1 or not isinstance(tree.body[0], ast.ClassDef):
+    return None
+  cls = tree.body[0]
+  keywords = []
+  for stmt in cls.body:
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+      target, value = stmt.targets[0], stmt.value
+    elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+      target, value = stmt.target, stmt.value
+    else:
+      return None
+    if not isinstance(target, ast.Name):
+      return None
+    keywords.append(ast.keyword(arg=target.id, value=value))
+  return ast.fix_missing_locations(
+      ast.Expr(
+          value=ast.Call(
+              func=ast.Name(id=cls.name, ctx=ast.Load()),
+              args=[],
+              keywords=keywords,
+          )
+      )
   )
 
 
@@ -193,8 +328,20 @@ def class_definition(
     cls,
     strict: bool = False,
     allowed_dependencies: set[Type[Any]] | None = None,
+    field_hint: Callable[[pg.typing.Field], str | None] | None = None,
 ) -> str:
-  """Returns the Python class definition."""
+  """Returns the Python class definition.
+
+  Args:
+    cls: The class to render.
+    strict: If True, render value specs in `pg.typing` form.
+    allowed_dependencies: Classes that may be referenced by name.
+    field_hint: An optional callable that returns an extra comment line to emit
+      right above a field, e.g. to tell the LM how to provide its value.
+
+  Returns:
+    The Python source of the class definition.
+  """
   out = io.StringIO()
   schema = pg.schema(cls)
   eligible_bases = []
@@ -252,6 +399,10 @@ def class_definition(
             out.write(line)
             out.write('\n')
 
+      hint = field_hint(field) if field_hint is not None else None
+      if hint:
+        out.write(f'  # {hint}\n')
+
       annotation_str = base.annotation(
           field.value, strict=strict, allowed_dependencies=allowed_dependencies
       )
@@ -295,6 +446,7 @@ def class_definitions(
     allowed_dependencies: set[Type[Any]] | None = None,
     strict: bool = False,
     markdown: bool = False,
+    field_hint: Callable[[pg.typing.Field], str | None] | None = None,
 ) -> str | None:
   """Returns a string for class definitions."""
   if not classes:
@@ -308,6 +460,7 @@ def class_definitions(
             cls,
             strict=strict,
             allowed_dependencies=allowed_dependencies,
+            field_hint=field_hint,
         )
     )
   ret = def_str.getvalue()
