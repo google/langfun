@@ -14,13 +14,14 @@
 """Schema and Prompting Protocol for Structured Data."""
 
 import abc
+import copy
 import dataclasses
 import inspect
 import io
 import re
 import textwrap
 import typing
-from typing import Any, ClassVar, Sequence, Type, Union
+from typing import Any, Callable, ClassVar, Sequence, Type, Union
 import langfun.core as lf
 import pyglove as pg
 
@@ -520,7 +521,8 @@ class _ProtocolFeature:
 
   A protocol name lists the features it uses after its base, e.g.
   `python:2.0+feature:1.0` (see `ProtocolName`). Subclasses register on
-  definition.
+  definition, and override the hooks they need; a base protocol decides which
+  hooks it calls.
   """
 
   NAME: ClassVar[str]
@@ -637,6 +639,84 @@ class _ProtocolFeature:
         (f.NAME, f.VERSION)
         for f in sorted(resolved, key=lambda c: (c.RANK, c.NAME))
     )
+
+  def applies_to(self, schema: 'Schema | None') -> bool:
+    """Returns False if queries of `schema` should run without this feature."""
+    del schema
+    return True
+
+  def query_preamble(self, base_preamble: str) -> str | None:
+    """Returns the `lf.query` preamble to use instead of `base_preamble`."""
+    del base_preamble
+    return None
+
+  def parse_instructions(self) -> str | None:
+    """Returns instructions to append to `lf.parse`'s or a caller's preamble."""
+    return None
+
+  def field_hint(self, field: pg.typing.Field, schema: 'Schema') -> str | None:
+    """Returns a comment to render above `field` in class definitions.
+
+    Args:
+      field: A field of a class of `schema`.
+      schema: The schema whose classes are rendered.
+    """
+    del field, schema
+    return None
+
+  def render_value(
+      self,
+      value: Any,
+      schema: 'Schema | None',
+      render: Callable[[Any], str],
+  ) -> str:
+    """Renders a value (not a class) for the prompt.
+
+    Args:
+      value: The value.
+      schema: The schema of `value`, if known.
+      render: Renders a value as the protocol without this feature does.
+
+    Returns:
+      The representation of `value`.
+    """
+    del schema
+    return render(value)
+
+  def parse_hooks(self, schema: 'Schema | None') -> '_ParseHooks':
+    """Returns the parse hooks for one response of `schema`."""
+    del schema
+    return _ParseHooks()
+
+
+class _ParseHooks:
+  """Parse hooks of a feature for one response.
+
+  The base protocol runs each phase for every feature, in feature order (see
+  `_ProtocolFeature.RANK`), before the next phase.
+  """
+
+  def before_exec(self, text: str) -> str:
+    """Phase 1: returns the response with this feature's syntax handled."""
+    return text
+
+  def check_code(self, code: str, global_vars: dict[str, Any]) -> None:
+    """Phase 2: checks the code to run, and may add names to `global_vars`."""
+    del code, global_vars
+
+  def after_exec(self, value: Any, final_code: str) -> Any:
+    """Phase 3: checks the parsed value.
+
+    Args:
+      value: The parsed value.
+      final_code: The code that produced `value`; autofix may have rewritten
+        the code passed to `check_code`.
+
+    Returns:
+      The value, possibly rewritten.
+    """
+    del final_code
+    return value
 
 
 _PROTOCOL_NAME_RE = re.compile(
@@ -755,6 +835,48 @@ class PromptingProtocol(metaclass=abc.ABCMeta):
     """Returns True if the base protocol of `name` supports autofix."""
     protocol_cls = cls._PROTOCOLS.get(ProtocolName.parse(name).base)
     return protocol_cls is not None and protocol_cls.SUPPORTS_AUTOFIX
+
+  def for_schema(self, schema: Schema | None) -> 'PromptingProtocol':
+    """Returns this protocol without the features that skip `schema`."""
+    return self._with_features(
+        [f for f in self.features if f.applies_to(schema)]
+    )
+
+  def _with_features(
+      self, features: Sequence[_ProtocolFeature]
+  ) -> 'PromptingProtocol':
+    """Returns a copy of this protocol with `features` instead of its own."""
+    # A copy, not a new instance, keeps a subclass's constructor arguments.
+    protocol = copy.copy(self)
+    protocol.features = tuple(features)
+    return protocol
+
+  def query_preamble(self, base_preamble: str) -> str | None:
+    """Returns a feature's `lf.query` preamble to use instead of the base one."""
+    for feature in self.features:
+      preamble = feature.query_preamble(base_preamble)
+      if preamble is not None:
+        return preamble
+    return None
+
+  def parse_instructions(self) -> str | None:
+    """Returns the instructions features add to a preamble."""
+    instructions = [
+        text for f in self.features if (text := f.parse_instructions())
+    ]
+    return '\n\n'.join(instructions) or None
+
+  def add_instructions(self, preamble: str | lf.Template) -> str | lf.Template:
+    """Returns `preamble` followed by the `parse_instructions`, if any."""
+    instructions = self.parse_instructions()
+    if instructions is None:
+      return preamble
+    if isinstance(preamble, lf.Template):
+      return lf.Template.from_value(
+          preamble, template_str=f'{preamble.template_str}\n\n{instructions}'
+      )
+    # Dedented as `lf.Template` would, which the instructions would prevent.
+    return f'{inspect.cleandoc(preamble)}\n\n{instructions}'
 
   @abc.abstractmethod
   def schema_repr(self, schema: Schema) -> str:

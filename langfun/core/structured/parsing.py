@@ -169,12 +169,27 @@ def parse(
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
   context = getattr(message.lm_input, 'text', None) if include_context else None
 
+  # Features that do not apply to the schema are left out, and the others may
+  # add instructions to the preamble: the caller's, or else the default one.
+  prompting_protocol = schema_base.PromptingProtocol.from_name(
+      protocol
+  ).for_schema(schema_lib.Schema.from_value(schema))
+  preamble = {}
+  if 'preamble' in kwargs:
+    kwargs['preamble'] = prompting_protocol.add_instructions(kwargs['preamble'])
+  elif prompting_protocol.parse_instructions() is not None:
+    base_preamble = parse_structure_cls.__schema__['preamble'].default_value
+    preamble['preamble'] = prompting_protocol.add_instructions(
+        base_preamble.template_str
+    )
+
   t = parse_structure_cls(
       schema=schema,
       context=context,
       default=default,
       examples=examples or default_parse_examples(),
-      protocol=protocol,
+      protocol=prompting_protocol.name,
+      **preamble,
   )
 
   # Setting up context.

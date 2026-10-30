@@ -18,6 +18,7 @@ import unittest
 
 import langfun.core as lf
 from langfun.core.llms import fake
+from langfun.core.structured import querying
 from langfun.core.structured.schema import base
 from langfun.core.structured.schema import python
 import pyglove as pg
@@ -139,6 +140,141 @@ class SchemaReprTest(unittest.TestCase):
             class E(Object):
               x: str
             """) + '\n'
+    )
+
+  def test_select_object_code(self):
+    text = (
+        '```python\nclass A:\n  x: int\n```\n\n'
+        '```python\noutput = A(x=1)\n```\n'
+    )
+    self.assertEqual(python.select_object_code(text), 'output = A(x=1)\n')
+
+  def test_select_object_code_passes_through_a_single_block(self):
+    text = '```python\noutput = A(x=1)\n```\n'
+    self.assertIs(python.select_object_code(text), text)
+
+  def test_select_object_code_prefers_the_last_plausible_block(self):
+    text = '```python\nimport os\n```\n\n```python\nA(x=1)\n```\n'
+    self.assertEqual(python.select_object_code(text), 'A(x=1)\n')
+
+  def test_select_object_code_scores_blocks(self):
+    def select(*blocks):
+      return python.select_object_code(
+          ''.join(f'```python\n{b}\n```\n' for b in blocks)
+      )
+
+    # An `output` assignment wins, then a non-definition, then a call.
+    self.assertEqual(select('output = A(x=1)', 'A(x=2)'), 'output = A(x=1)\n')
+    self.assertEqual(select('y = 1', 'class B:\n  y: int'), 'y = 1\n')
+    self.assertEqual(select('A(x=1)', 'y = 2'), 'A(x=1)\n')
+    # Ties go to the last block.
+    self.assertEqual(select('A(x=1)', 'A(x=2)'), 'A(x=2)\n')
+
+  def test_select_object_code_prefers_the_block_that_builds_the_object(self):
+    text = (
+        '```python\noutput = A(x=1)\n```\n'
+        '```python\noutput = summarize(rows)\n```\n'
+    )
+    self.assertEqual(
+        python.select_object_code(text), 'output = summarize(rows)\n'
+    )
+    self.assertEqual(
+        python.select_object_code(text, class_names=['A']), 'output = A(x=1)\n'
+    )
+
+  def test_select_object_code_rewrites_a_class_body_of_assignments(self):
+    text = '```python\nclass A:\n  x = 1\n  y: int = 2\n```\n'
+    self.assertEqual(python.select_object_code(text), 'A(x=1, y=2)')
+
+  def test_select_object_code_drops_definitions_around_the_object(self):
+    text = '```python\nimport os\noutput = A(x=1)\n```\n'
+    self.assertEqual(python.select_object_code(text), 'output = A(x=1)')
+
+  def test_select_object_code_leaves_other_code_alone(self):
+    for code in (
+        'output = A(x=1',  # Not valid Python.
+        'import os',  # Nothing but definitions.
+        'class A:\n  x: int',  # A schema: no values.
+        'class A:\n  x = 1\n  def f(self):\n    pass',
+        'class A:\n  x = y = 1',
+        'class A:\n  x.y = 1',
+    ):
+      with self.subTest(code=code):
+        text = f'```python\n{code}\n```\n'
+        self.assertIs(python.select_object_code(text), text)
+
+  def test_select_object_code_falls_back_to_the_response(self):
+    # The block that builds the object does not parse.
+    text = (
+        '```python\nclass A:\n  x: int\n```\n\n```python\noutput = A(x=1\n```\n'
+    )
+    self.assertIs(python.select_object_code(text, class_names=['A']), text)
+
+  def test_select_object_code_ignores_fences_in_string_literals(self):
+    for literal in (
+        '"""Run:\n```bash\nls\n```\ndone"""',
+        "'''Steps:\n   ```go\n   for {}\n   ```\n'''",
+        'f"""Run:\n```bash\n{cmd}\n```\n"""',
+        'f"""Run:\n```\n{f\'{x}\' + \'y\'}\n```\n"""',
+        '"""Run:\n```"""',
+        "'Run: \\\n```'",
+    ):
+      with self.subTest(literal=literal):
+        code = f'output = A(x={literal})\n'
+        text = f'```python\n{code}```\n'
+        self.assertIs(python.select_object_code(text), text)
+        text = f'```python\nclass A:\n  x: str\n```\n\n{text}'
+        # Fenced, or else `parsing.clean` would read the string's fences.
+        self.assertEqual(
+            python.select_object_code(text, class_names=['A']),
+            f'```python\n{code}```',
+        )
+    text = '```python\nimport os\noutput = A(x="""Run:\n```\n""")\n```\n'
+    self.assertEqual(
+        python.select_object_code(text),
+        "```python\noutput = A(x='Run:\\n```\\n')\n```",
+    )
+
+  def test_select_object_code_needs_a_closing_fence_outside_strings(self):
+    text = '```python\noutput = A(x="""\n```\n""")\n'
+    self.assertIs(python.select_object_code(text), text)
+
+  def test_select_object_code_ignores_fences_in_a_correction(self):
+    # A recorded correction reply: its code holds a markdown answer.
+    text = (
+        '```python\noutput = CorrectedCode(\n'
+        '    corrected_code="""_ANS = \'\'\'Sweep:\n'
+        '     ```go\n     for _, mod := range mods {}\n     ```\n'
+        '\'\'\'\noutput = _ANS\n"""\n)\n```\n'
+    )
+    self.assertIs(
+        python.select_object_code(text, class_names=['CorrectedCode']), text
+    )
+
+  def test_select_object_code_reads_fences_after_an_unclosed_string(self):
+    text = (
+        '```python\noutput = A(x="""draft\n```\n\n'
+        '```python\noutput = A(x=1)\n```\n'
+    )
+    self.assertEqual(
+        python.select_object_code(text, class_names=['A']), 'output = A(x=1)\n'
+    )
+
+  def test_class_definition_with_field_hint(self):
+    class F(pg.Object):
+      x: int
+      y: str
+
+    self.assertEqual(
+        python.class_definition(
+            F, field_hint=lambda f: 'Hint.' if str(f.key) == 'y' else None
+        ),
+        'class F(Object):\n  x: int\n  # Hint.\n  y: str\n',
+    )
+
+  def test_structure_from_python_returns_code(self):
+    self.assertEqual(
+        python.structure_from_python('1', returns_code=True), (1, '1')
     )
 
   def test_repr(self):
@@ -404,6 +540,195 @@ class PromptingProtocolTest(unittest.TestCase):
     )
 
 
+class _Shout(base._ProtocolFeature):  # pylint: disable=protected-access
+  """A test feature that uses every hook."""
+
+  NAME = 'shout'
+  VERSION = '1.0'
+  BASES = {'python': None}
+
+  def applies_to(self, schema):
+    return schema is None or Itinerary not in schema.class_dependencies()
+
+  def field_hint(self, field, schema):
+    if str(field.key) != 'description':
+      return None
+    return f'Loud in {base.annotation(schema.spec)}.'
+
+  def render_value(self, value, schema, render):
+    loud = render(value).upper()
+    if schema is None:
+      return loud
+    return f'{loud}  # {base.annotation(schema.spec)}'
+
+  def parse_hooks(self, schema):
+    del schema
+    return _ShoutParse()
+
+
+class _ShoutParse(base._ParseHooks):  # pylint: disable=protected-access
+
+  def before_exec(self, text):
+    return text.removeprefix('SHOUT\n')
+
+  def check_code(self, code, global_vars):
+    self.code = code
+    global_vars['LOUD'] = 'loud'
+
+  def after_exec(self, value, final_code):
+    assert final_code == self.code, (final_code, self.code)
+    return value.clone(override=dict(description=value.description + '!'))
+
+
+class _Quiet(base._ProtocolFeature):  # pylint: disable=protected-access
+  """A test feature with no hooks."""
+
+  NAME = 'quiet'
+  VERSION = '1.0'
+  BASES = {'python': None}
+
+
+class _Rewrite(base._ParseHooks):  # pylint: disable=protected-access
+
+  def __init__(self, rewrite):
+    self._rewrite = rewrite
+
+  def before_exec(self, text):
+    return self._rewrite(text)
+
+
+class _Double(base._ProtocolFeature):  # pylint: disable=protected-access
+  """Registered before `_Increment` and sorts before it by name."""
+
+  NAME = 'double'
+  VERSION = '1.0'
+  BASES = {'python': None}
+  RANK = 1
+
+  def parse_hooks(self, schema):
+    del schema
+    return _Rewrite(lambda code: f'({code}) * 2')
+
+
+class _Increment(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'increment'
+  VERSION = '1.0'
+  BASES = {'python': None}
+
+  def parse_hooks(self, schema):
+    del schema
+    return _Rewrite(lambda code: f'{code} + 1')
+
+
+class ProtocolFeatureTest(unittest.TestCase):
+
+  def test_field_hints(self):
+    schema = base.Schema.from_value(Activity)
+    self.assertEqual(
+        base.PromptingProtocol.from_name('python+shout').schema_repr(schema),
+        'Activity\n\n```python\nclass Activity:\n'
+        '  # Loud in Activity.\n  description: str\n```',
+    )
+    self.assertNotIn(
+        'Loud',
+        base.PromptingProtocol.from_name('python+quiet').schema_repr(schema),
+    )
+
+  def test_value_repr(self):
+    protocol = base.PromptingProtocol.from_name('python+shout+quiet')
+    self.assertEqual(
+        protocol.value_repr(Activity(description='a'), assign_to_var='output'),
+        "```PYTHON\nOUTPUT = ACTIVITY(DESCRIPTION='A')\n```",
+    )
+    self.assertEqual(
+        protocol.value_repr(
+            Activity(description='a'),
+            base.Schema.from_value(Activity),
+            markdown=False,
+        ),
+        "ACTIVITY(DESCRIPTION='A')  # Activity",
+    )
+    # Classes and templates are not values for features.
+    self.assertIn('# Loud in Activity.', protocol.value_repr(Activity))
+    self.assertEqual(protocol.value_repr(lf.Template('{{x}}', x=1)), '1')
+
+  def test_parse_value_runs_hooks_by_phase(self):
+    protocol = base.PromptingProtocol.from_name('python+shout+quiet')
+    self.assertEqual(
+        protocol.parse_value(
+            'SHOUT\nActivity(description=LOUD)',
+            base.Schema.from_value(Activity),
+        ),
+        Activity(description='loud!'),
+    )
+
+  def test_features_that_skip_the_schema_do_not_parse(self):
+    protocol = base.PromptingProtocol.from_name('python+shout+quiet')
+    schema = base.Schema.from_value(Itinerary)
+    self.assertEqual(
+        [f.NAME for f in protocol.for_schema(schema).features], ['quiet']
+    )
+    with self.assertRaisesRegex(pg.coding.CodeError, 'SHOUT'):
+      protocol.parse_value('SHOUT\nItinerary(day=1)', schema)
+
+  def test_hooks_run_by_rank(self):
+    protocol = base.PromptingProtocol.from_name('python+double+increment')
+    self.assertEqual(protocol.name, 'python+increment:1.0+double:1.0')
+    self.assertEqual(protocol.parse_value('1', base.Schema(int)), 4)
+
+  def test_features_keep_a_subclass_and_its_state(self):
+
+    class _Custom(python.PythonPromptingProtocol):
+      NAME = 'python-custom'
+
+      def __init__(self, strict: bool = False):
+        super().__init__()
+        self.strict = strict
+
+    class _Wrap(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+      NAME = 'wrap'
+      VERSION = '1.0'
+      BASES = {'python-custom': None}
+
+      def applies_to(self, schema):
+        return schema is None or Itinerary not in schema.class_dependencies()
+
+      def render_value(self, value, schema, render):
+        del schema
+        return f'<{render(value)}>'
+
+    protocol = base.PromptingProtocol.from_name('python-custom+wrap')
+    protocol.strict = True
+    self.assertEqual(protocol.value_repr(1, markdown=False), '<1>')
+    narrowed = protocol.for_schema(base.Schema.from_value(Itinerary))
+    self.assertIsInstance(narrowed, _Custom)
+    self.assertTrue(narrowed.strict)
+    self.assertEqual(narrowed.name, 'python-custom')
+    self.assertEqual(protocol.name, 'python-custom+wrap:1.0')
+
+  def test_autofix_query_protocol(self):
+    for protocol, recorded in [
+        # A protocol with features carries over to the autofix query.
+        ('python:1.0+quiet', 'python:1.0+quiet:1.0'),
+        # A plain protocol leaves it to `lf.query_protocol`, as before.
+        ('python:1.0', 'python:2.0'),
+    ]:
+      with self.subTest(protocol=protocol):
+        with querying.track_queries() as queries:
+          self.assertEqual(
+              base.PromptingProtocol.from_name(protocol).parse_value(
+                  'Activity(description=1',
+                  base.Schema.from_value(Activity),
+                  autofix=1,
+                  autofix_lm=fake.StaticResponse(
+                      "CorrectedCode(corrected_code='Activity(description=\"x\")')"
+                  ),
+              ),
+              Activity(description='x'),
+          )
+        self.assertEqual([q.protocol for q in queries], [recorded])
+
+
 class StructureFromPythonTest(unittest.TestCase):
 
   def test_parse_class_def(self):
@@ -422,6 +747,11 @@ class StructureFromPythonTest(unittest.TestCase):
     )
     self.assertEqual(v.__module__, 'builtins')
     self.assertEqual(schema.class_dependencies(), [B])
+
+  def test_structure_globals_are_bound(self):
+    for name, value in python.STRUCTURE_GLOBALS.items():
+      with self.subTest(name=name):
+        self.assertIs(python.structure_from_python(name), value)
 
 
 if __name__ == '__main__':
