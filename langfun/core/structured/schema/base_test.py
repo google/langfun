@@ -14,9 +14,10 @@
 import dataclasses
 import typing
 import unittest
+from unittest import mock
 
 from langfun.core.structured.schema import base
-from langfun.core.structured.schema import json  # pylint: disable=unused-import
+from langfun.core.structured.schema import json
 import pyglove as pg
 
 
@@ -546,6 +547,290 @@ class UnknownTest(unittest.TestCase):
     self.assertFalse(a.is_partial)
     self.assertEqual(a.x, base.UNKNOWN)
     self.assertEqual(base.UNKNOWN, base.Unknown())
+
+
+# Test features. `upper` comes first by rank, although it is registered after
+# `strict` and sorts after it by name.
+class _Strict(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'strict'
+  VERSION = '1.0'
+  BASES = {'json': ('1.0',)}
+
+
+class _Upper(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'upper'
+  VERSION = '1.0'
+  BASES = {'json': None}
+  RANK = -1
+
+
+class _TwiceV1(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'twice'
+  VERSION = '1.0'
+  BASES = {'json': None}
+  DEFAULT = True
+
+
+class _TwiceV2(base._ProtocolFeature):  # pylint: disable=protected-access
+  NAME = 'twice'
+  VERSION = '2.0'
+  BASES = {'json': None}
+
+
+class ProtocolNameTest(unittest.TestCase):
+
+  def setUp(self):
+    super().setUp()
+    # A feature that a test defines is registered for that test only.
+    self.enterContext(
+        mock.patch.dict(base._ProtocolFeature._REGISTRY)  # pylint: disable=protected-access
+    )
+
+  def assert_name(self, name, normalized, **kwargs):
+    self.assertEqual(str(base.ProtocolName.parse(name, **kwargs)), normalized)
+
+  def test_names_without_features(self):
+    self.assertEqual(
+        base.ProtocolName.parse('json'), base.ProtocolName('json')
+    )
+    self.assertEqual(
+        base.ProtocolName.parse('python:2.0'),
+        base.ProtocolName('python', '2.0'),
+    )
+    self.assert_name('python', 'python')
+    self.assert_name('python', 'python:2.0', default_version='2.0')
+    self.assert_name('python:1.0', 'python:1.0', default_version='2.0')
+    self.assert_name('python-verbatim:1.0', 'python-verbatim:1.0')
+
+  def test_features_are_versioned_completed_and_ordered(self):
+    self.assertEqual(
+        base.ProtocolName.parse('json:1.0+strict+upper'),
+        base.ProtocolName('json', '1.0', (('upper', '1.0'), ('strict', '1.0'))),
+    )
+    self.assert_name('json+strict+upper', 'json+upper:1.0+strict:1.0')
+    # Features of equal rank sort by name.
+    self.assert_name('json+twice+strict', 'json+strict:1.0+twice:1.0')
+    self.assert_name(
+        'json+strict:1.0+upper',
+        'json:1.0+upper:1.0+strict:1.0',
+        default_version='1.0',
+    )
+    self.assert_name('json+twice:2.0+upper:1.0', 'json+upper:1.0+twice:2.0')
+
+  def test_malformed_names(self):
+    for name in (
+        '',
+        'json:',
+        ':1.0',
+        'json+',
+        'json++upper',
+        'json+upper:',
+        'json:1.0:2.0',
+        'json+upper:1.0:2.0',
+        None,
+    ):
+      with self.subTest(name=name):
+        with self.assertRaisesRegex(ValueError, 'Invalid protocol'):
+          base.ProtocolName.parse(name)
+
+  def test_bad_features(self):
+    for name, error in [
+        ('json+nope', "Unknown feature 'nope' in protocol 'json\\+nope'"),
+        ('json+upper+upper:1.0', "Feature 'upper' appears twice"),
+        ('json+upper:2.0', "Version '2.0' is not supported for feature"),
+        ('python+upper', 'upper:1.0 .* does not support python:\\*'),
+        ('json:2.0+strict', 'strict:1.0 .* does not support json:2.0'),
+    ]:
+      with self.subTest(name=name):
+        with self.assertRaisesRegex(ValueError, error):
+          base.ProtocolName.parse(name)
+    # A feature that requires a base version also checks the default one.
+    self.assert_name('json+strict', 'json+strict:1.0')
+    with self.assertRaisesRegex(ValueError, 'does not support json:3.0'):
+      base.ProtocolName.parse('json+strict', default_version='3.0')
+
+  def test_feature_versions(self):
+    # A feature that the name gives without a version takes its default one.
+    self.assert_name('json+twice', 'json+twice:1.0')
+    self.assert_name('json+twice:2.0', 'json+twice:2.0')
+
+  def test_a_feature_version_registers_once(self):
+    with self.assertRaisesRegex(ValueError, 'upper:1.0 is already registered'):
+
+      class _Another(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+        NAME = 'upper'
+        VERSION = '1.0'
+        BASES = {}
+
+  def test_adding_a_version_keeps_unpinned_names(self):
+
+    class _GrowV1(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+      NAME = 'grow'
+      VERSION = '1.0'
+      BASES = {'json': None}
+      DEFAULT = True
+
+    names = ['json+grow', 'json:1.0+grow']
+    normalized = ['json+grow:1.0', 'json:1.0+grow:1.0']
+    self.assertEqual(
+        [str(base.ProtocolName.parse(n)) for n in names], normalized
+    )
+
+    class _GrowV2(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+      NAME = 'grow'
+      VERSION = '2.0'
+      BASES = {'json': None}
+
+    self.assertEqual(
+        [str(base.ProtocolName.parse(n)) for n in names], normalized
+    )
+    self.assert_name('json+grow:2.0', 'json+grow:2.0')
+
+  def test_a_feature_with_several_versions_has_one_default(self):
+
+    class _OnceV1(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+      NAME = 'once'
+      VERSION = '1.0'
+      BASES = {'json': None}
+
+    with self.assertRaisesRegex(
+        ValueError,
+        "Feature 'once' has versions \\['1.0', '2.0'\\], so exactly one of "
+        'them must set `DEFAULT = True`; found \\[\\]',
+    ):
+
+      class _OnceV2(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+        NAME = 'once'
+        VERSION = '2.0'
+        BASES = {'json': None}
+
+    with self.assertRaisesRegex(ValueError, "found \\['1.0', '3.0'\\]"):
+
+      class _TwiceV3(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+        NAME = 'twice'
+        VERSION = '3.0'
+        BASES = {'json': None}
+        DEFAULT = True
+
+    # A rejected version is not registered.
+    self.assert_name('json+once', 'json+once:1.0')
+    self.assert_name('json+twice', 'json+twice:1.0')
+    with self.assertRaisesRegex(ValueError, "Version '3.0' is not supported"):
+      base.ProtocolName.parse('json+twice:3.0')
+
+    # A new version becomes the default only by saying so.
+    class _OnceV3(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+      NAME = 'once'
+      VERSION = '3.0'
+      BASES = {'json': None}
+      DEFAULT = True
+
+    self.assert_name('json+once', 'json+once:3.0')
+    self.assert_name('json+once:1.0', 'json+once:1.0')
+
+  def test_versions_of_a_feature_share_its_rank(self):
+    with self.assertRaisesRegex(
+        ValueError, "Versions of feature 'twice' have ranks \\[0, 1\\]"
+    ):
+
+      class _TwiceV4(base._ProtocolFeature):  # pylint: disable=protected-access,unused-variable
+        NAME = 'twice'
+        VERSION = '4.0'
+        BASES = {'json': None}
+        RANK = 1
+
+    with self.assertRaisesRegex(ValueError, "Version '4.0' is not supported"):
+      base.ProtocolName.parse('json+twice:4.0')
+
+  def test_names_and_versions_exclude_separators(self):
+    for name, version, error in [
+        ('a:b', '1.0', "Feature name 'a:b' must be non-empty"),
+        ('', '1.0', "Feature name '' must be non-empty"),
+        ('ab', '1+0', "Feature version '1\\+0' must be non-empty"),
+    ]:
+      with self.subTest(name=name, version=version):
+        with self.assertRaisesRegex(ValueError, error):
+          type(
+              '_Bad',
+              (base._ProtocolFeature,),  # pylint: disable=protected-access
+              dict(NAME=name, VERSION=version, BASES={}),
+          )
+
+  def test_registration_keeps_the_init_subclass_chain(self):
+
+    class _Recorder:
+      subclasses = []
+
+      def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _Recorder.subclasses.append(cls)
+
+    class _Recorded(base._ProtocolFeature, _Recorder):  # pylint: disable=protected-access
+      NAME = 'recorded'
+      VERSION = '1.0'
+      BASES = {}
+
+    self.assertEqual(_Recorder.subclasses, [_Recorded])
+
+
+class PromptingProtocolTest(unittest.TestCase):
+
+  def test_from_name(self):
+    protocol = base.PromptingProtocol.from_name('json')
+    self.assertIsInstance(protocol, json.JsonPromptingProtocol)
+    self.assertEqual(protocol.name, 'json')
+    self.assertEqual(protocol.features, ())
+
+  def test_from_name_with_version_and_features(self):
+    protocol = base.PromptingProtocol.from_name('json:1.0+strict+upper')
+    self.assertIsInstance(protocol, json.JsonPromptingProtocol)
+    self.assertEqual(protocol.version, '1.0')
+    self.assertEqual(
+        [type(f) for f in protocol.features], [_Upper, _Strict]
+    )
+    self.assertEqual(protocol.name, 'json:1.0+upper:1.0+strict:1.0')
+    # The version and features leave the representation as is.
+    self.assertEqual(
+        base.Schema(int).value_repr(1, protocol='json:1.0+strict'),
+        '{"result": 1}',
+    )
+
+  def test_from_name_builds_a_subclass_without_arguments(self):
+
+    class _Indented(json.JsonPromptingProtocol):
+      NAME = 'json-indented'
+
+      def __init__(self, indent: int = 2):
+        super().__init__()
+        self.indent = indent
+
+    for name, version in [
+        ('json-indented', None),
+        ('json-indented:1.0', '1.0'),
+    ]:
+      with self.subTest(name=name):
+        protocol = base.PromptingProtocol.from_name(name)
+        self.assertIsInstance(protocol, _Indented)
+        self.assertEqual(protocol.indent, 2)
+        self.assertEqual(protocol.version, version)
+        self.assertEqual(protocol.name, name)
+
+  def test_protocol_names_exclude_separators(self):
+    with self.assertRaisesRegex(ValueError, "Protocol name 'json\\+x'"):
+      type('_Bad', (json.JsonPromptingProtocol,), dict(NAME='json+x'))
+
+  def test_from_name_rejects_unknown_protocols_and_features(self):
+    with self.assertRaisesRegex(ValueError, 'Unsupported protocol: text:1.0'):
+      base.PromptingProtocol.from_name('text:1.0')
+    with self.assertRaisesRegex(ValueError, 'Unknown feature'):
+      base.PromptingProtocol.from_name('json+nope')
+
+  def test_supports_autofix(self):
+    self.assertFalse(base.PromptingProtocol.supports_autofix('json'))
+    self.assertFalse(base.PromptingProtocol.supports_autofix('json:1.0+upper'))
+    self.assertFalse(
+        base.PromptingProtocol.supports_autofix('no-such-protocol')
+    )
 
 
 if __name__ == '__main__':

@@ -67,6 +67,21 @@ class ScoringTest(unittest.TestCase):
         [0.0, -1.0, -2.0]
     )
 
+  def test_score_with_protocol_name(self):
+    self.assertEqual(
+        scoring.score('hi', [1, 2], lm=fake.Echo(), protocol='python:2.0'),
+        [0.0, -1.0],
+    )
+    self.assertEqual(
+        scoring.score(
+            '1 + 1=',
+            [Answer(pg.oneof([1, 2, 3]))],
+            lm=fake.Echo(),
+            protocol='python:2.0',
+        ),
+        [0.0, -1.0, -2.0],
+    )
+
   def test_score_returning_scoring_results(self):
     self.assertEqual(scoring.score(
         'hi', [1, 2], lm=fake.Echo(), return_scoring_results=True),

@@ -386,6 +386,24 @@ class ValuePythonReprTest(unittest.TestCase):
     )
 
 
+class PromptingProtocolTest(unittest.TestCase):
+
+  def test_supports_autofix(self):
+    self.assertTrue(base.PromptingProtocol.supports_autofix('python'))
+    self.assertTrue(base.PromptingProtocol.supports_autofix('python:1.0'))
+
+  def test_from_name_with_version(self):
+    protocol = base.PromptingProtocol.from_name('python:2.0')
+    self.assertIsInstance(protocol, python.PythonPromptingProtocol)
+    self.assertEqual(protocol.name, 'python:2.0')
+    self.assertEqual(
+        base.Schema.from_value(Activity).parse_value(
+            "Activity(description='x')", protocol='python:2.0'
+        ),
+        Activity(description='x'),
+    )
+
+
 class StructureFromPythonTest(unittest.TestCase):
 
   def test_parse_class_def(self):

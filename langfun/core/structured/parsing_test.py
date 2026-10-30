@@ -296,6 +296,16 @@ class ParseStructurePythonTest(unittest.TestCase):
     with lf.context(lm=fake.StaticResponse('1')):
       self.assertEqual(asyncio.run(parsing.aparse('the answer is 1', int)), 1)
 
+  def test_parse_with_protocol_name(self):
+    lm = fake.StaticResponse('1')
+    self.assertEqual(
+        parsing.parse('the answer is 1', int, lm=lm, protocol='python:2.0'), 1
+    )
+    with self.assertRaisesRegex(ValueError, "Unknown protocol: 'text'"):
+      parsing.parse('the answer is 1', int, lm=lm, protocol='text')
+    with self.assertRaisesRegex(ValueError, "Unknown feature 'nope'"):
+      parsing.parse('the answer is 1', int, lm=lm, protocol='python+nope')
+
 
 class ParseStructureJsonTest(unittest.TestCase):
 
@@ -565,6 +575,9 @@ class ParseStructureJsonTest(unittest.TestCase):
     lm = fake.StaticResponse('{"result": 1}')
     self.assertEqual(
         parsing.parse('the answer is 1', int, lm=lm, protocol='json'), 1
+    )
+    self.assertEqual(
+        parsing.parse('the answer is 1', int, lm=lm, protocol='json:1.0'), 1
     )
     self.assertEqual(
         parsing.parse(

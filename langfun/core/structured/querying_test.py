@@ -26,7 +26,16 @@ from langfun.core.llms import fake
 from langfun.core.llms.cache import in_memory
 from langfun.core.structured import mapping
 from langfun.core.structured import querying
+from langfun.core.structured.schema import base as schema_base
 import pyglove as pg
+
+
+class _PinnedFeature(schema_base._ProtocolFeature):  # pylint: disable=protected-access
+  """A feature without behavior, for testing protocol names."""
+
+  NAME = 'pinned'
+  VERSION = '1.0'
+  BASES = {'python': ('2.0',)}
 
 
 class Activity(pg.Object):
@@ -521,6 +530,67 @@ class QueryTest(unittest.TestCase):
     ):
       querying.LfQuery.from_protocol('text:1.0')
 
+    # Features do not change the query structure.
+    self.assertIs(
+        querying.LfQuery.from_protocol('python:2.0+pinned'),
+        querying._LfQueryPythonV2,
+    )
+    self.assertIs(
+        querying.LfQuery.from_protocol('python+pinned:1.0'),
+        querying._LfQueryPythonV2,
+    )
+    with self.assertRaisesRegex(ValueError, 'Unknown feature \'nope\''):
+      querying.LfQuery.from_protocol('python+nope')
+    with self.assertRaisesRegex(ValueError, 'Invalid protocol'):
+      querying.LfQuery.from_protocol('python:2.0:1.0')
+
+  def test_recorded_protocol(self):
+    for protocol, recorded in [
+        ('python', 'python:2.0'),
+        ('python:1.0', 'python:1.0'),
+        ('json', 'json:1.0'),
+        ('python+pinned', 'python:2.0+pinned:1.0'),
+        ('python:2.0+pinned:1.0', 'python:2.0+pinned:1.0'),
+    ]:
+      with self.subTest(protocol=protocol):
+        response = '{"result": 1}' if protocol == 'json' else '1'
+        with querying.track_queries() as queries:
+          self.assertEqual(
+              querying.query(
+                  'what is 1 + 0',
+                  int,
+                  lm=fake.StaticResponse(response),
+                  protocol=protocol,
+              ),
+              1,
+          )
+        self.assertEqual(queries[0].protocol, recorded)
+        # The recorded name rebuilds the prompt and the output.
+        self.assertEqual(
+            queries[0].lm_request.text,
+            querying.query_prompt('what is 1 + 0', int, protocol=protocol).text,
+        )
+        self.assertEqual(queries[0].output, 1)
+
+  def test_protocol_features(self):
+    self.assertEqual(
+        querying.query_prompt(
+            'what is 1 + 0', int, protocol='python+pinned'
+        ).text,
+        querying.query_prompt('what is 1 + 0', int, protocol='python').text,
+    )
+    with self.assertRaisesRegex(
+        ValueError, 'pinned:1.0 .* does not support python:1.0'
+    ):
+      querying.query(
+          'what is 1 + 0',
+          int,
+          lm=fake.StaticResponse('1'),
+          protocol='python:1.0+pinned',
+      )
+    with self.assertRaisesRegex(ValueError, 'Unknown feature \'nope\''):
+      querying.query_output('1', int, protocol='python+nope')
+
   def test_query_prompt(self):
     self.assertEqual(
         querying.query_prompt('what is this?', int),
@@ -647,6 +717,21 @@ class QueryTest(unittest.TestCase):
             'Answer(5)'
         ),
         1.0
+    )
+
+    # The response is parsed with the given protocol.
+    self.assertEqual(
+        querying.query_reward(
+            mapping.MappingExample(
+                input=lf.Template('{{x}} + {{y}}', x=1, y=1),
+                schema=Answer,
+                output=Answer(final_answer=2),
+            ),
+            '{"result": {"_type": "%s", "final_answer": 2}}'
+            % Answer.__type_name__,
+            protocol='json',
+        ),
+        1.0,
     )
 
     # Case 2: Reward function based on input, result and expected output.
@@ -1057,6 +1142,24 @@ class LfQueryPythonV2Test(unittest.TestCase):
     ])
     self.assertEqual(querying.query('what is 1 + 0', int, lm=lm, autofix=3), 1)
 
+  def test_autofix_applies_to_python_protocols(self):
+    for protocol in ('python', 'python:1.0', 'python+pinned'):
+      with self.subTest(protocol=protocol):
+        lm = fake.StaticSequence([
+            '=1',
+            inspect.cleandoc("""
+                CorrectedCode(
+                    corrected_code='1',
+                )
+                """),
+        ])
+        self.assertEqual(
+            querying.query(
+                'what is 1 + 0', int, lm=lm, autofix=1, protocol=protocol
+            ),
+            1,
+        )
+
   def test_response_postprocess(self):
     self.assertEqual(
         querying.query(
@@ -1354,6 +1457,11 @@ class LfQueryJsonV1Test(unittest.TestCase):
         )
       # Make sure bad mapping does not impact cache.
       self.assertEqual(len(cache), 0)
+
+  def test_autofix_is_not_applied(self):
+    lm = fake.StaticSequence(['=1', "CorrectedCode(corrected_code='1')"])
+    with self.assertRaises(mapping.MappingError):
+      querying.query('what is 1 + 0', int, lm=lm, autofix=1, protocol='json')
 
   def test_query(self):
     lm = fake.StaticResponse('{"result": 1}')

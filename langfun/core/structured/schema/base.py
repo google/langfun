@@ -14,11 +14,13 @@
 """Schema and Prompting Protocol for Structured Data."""
 
 import abc
+import dataclasses
 import inspect
 import io
+import re
 import textwrap
 import typing
-from typing import Any, ClassVar, Type, Union
+from typing import Any, ClassVar, Sequence, Type, Union
 import langfun.core as lf
 import pyglove as pg
 
@@ -507,23 +509,252 @@ def annotation(
 #
 
 
+def _check_name_part(kind: str, value: str) -> None:
+  """Raises ValueError if `value` cannot be a part of a protocol name."""
+  if not re.fullmatch(r'[^:+]+', value):
+    raise ValueError(f'{kind} {value!r} must be non-empty, without ":" or "+".')
+
+
+class _ProtocolFeature:
+  """A named, versioned addition to base prompting protocols.
+
+  A protocol name lists the features it uses after its base, e.g.
+  `python:2.0+feature:1.0` (see `ProtocolName`). Subclasses register on
+  definition.
+  """
+
+  NAME: ClassVar[str]
+  VERSION: ClassVar[str]
+
+  # Base protocol name -> the base versions this feature supports, or None for
+  # all of them.
+  BASES: ClassVar[dict[str, tuple[str, ...] | None]]
+
+  # Whether a protocol name that gives no version of this feature means this
+  # version. A feature with several versions marks exactly one, so a new
+  # version changes what such names mean only if it takes the mark.
+  DEFAULT: ClassVar[bool] = False
+
+  # Features are ordered by rank, then by name, in normalized protocol names and
+  # in `PromptingProtocol.features`, so the order does not depend on imports.
+  # All versions of a feature share its rank.
+  RANK: ClassVar[int] = 0
+
+  # Name -> version -> class.
+  _REGISTRY: ClassVar[dict[str, dict[str, Type['_ProtocolFeature']]]] = {}
+
+  def __init_subclass__(cls):
+    super().__init_subclass__()
+    _check_name_part('Feature name', cls.NAME)
+    _check_name_part('Feature version', cls.VERSION)
+    versions = dict(_ProtocolFeature._REGISTRY.get(cls.NAME, {}))
+    registered = versions.get(cls.VERSION)
+    if registered is not None and (
+        registered.__module__, registered.__qualname__
+    ) != (cls.__module__, cls.__qualname__):
+      raise ValueError(
+          f'Feature {cls.NAME}:{cls.VERSION} is already registered by '
+          f'{registered!r}.'
+      )
+    versions[cls.VERSION] = cls
+    defaults = sorted(v for v, c in versions.items() if c.DEFAULT)
+    if len(versions) > 1 and len(defaults) != 1:
+      raise ValueError(
+          f'Feature {cls.NAME!r} has versions {sorted(versions)}, so exactly '
+          f'one of them must set `DEFAULT = True`; found {defaults}.'
+      )
+    ranks = sorted({c.RANK for c in versions.values()})
+    if len(ranks) > 1:
+      raise ValueError(
+          f'Versions of feature {cls.NAME!r} have ranks {ranks}, but all '
+          'versions of a feature must share its rank.'
+      )
+    _ProtocolFeature._REGISTRY[cls.NAME] = versions
+
+  @classmethod
+  def get(cls, name: str, version: str) -> Type['_ProtocolFeature']:
+    """Returns the registered class of feature `name:version`."""
+    return cls._REGISTRY[name][version]
+
+  @classmethod
+  def supports(cls, base: str, version: str | None) -> bool:
+    """Returns whether this feature supports `base:version` (None: any)."""
+    if base not in cls.BASES:
+      return False
+    versions = cls.BASES[base]
+    return version is None or versions is None or version in versions
+
+  @classmethod
+  def resolve(
+      cls,
+      requested: dict[str, str | None],
+      base: str,
+      base_version: str | None,
+      protocol: str,
+  ) -> tuple[tuple[str, str], ...]:
+    """Returns (name, version) of the requested features.
+
+    Args:
+      requested: Feature name -> version, or None for its default version.
+      base: The base protocol name.
+      base_version: The base protocol version, or None if not known yet.
+      protocol: The protocol name, for error messages.
+
+    Returns:
+      The features, by rank and then by name.
+
+    Raises:
+      ValueError: If a feature or version is unknown, or does not support the
+        base protocol.
+    """
+    resolved: list[Type[_ProtocolFeature]] = []
+    for name, version in requested.items():
+      versions = cls._REGISTRY.get(name)
+      if versions is None:
+        raise ValueError(
+            f'Unknown feature {name!r} in protocol {protocol!r}. Available '
+            f'features: {list(cls._REGISTRY)}.'
+        )
+      if version is None:
+        # The marked default, or the only version (see `__init_subclass__`).
+        version = next(
+            (v for v, c in versions.items() if c.DEFAULT), next(iter(versions))
+        )
+      feature_cls = versions.get(version)
+      if feature_cls is None:
+        raise ValueError(
+            f'Version {version!r} is not supported for feature {name!r}. '
+            f'Available versions: {sorted(versions)}.'
+        )
+      if not feature_cls.supports(base, base_version):
+        raise ValueError(
+            f'Feature {name}:{version} in protocol {protocol!r} does not '
+            f'support {base}:{base_version or "*"}. Supported: '
+            f'{feature_cls.BASES}.'
+        )
+      resolved.append(feature_cls)
+    return tuple(
+        (f.NAME, f.VERSION)
+        for f in sorted(resolved, key=lambda c: (c.RANK, c.NAME))
+    )
+
+
+_PROTOCOL_NAME_RE = re.compile(
+    r'(?P<base>[^:+]+)(?::(?P<version>[^:+]+))?'
+    r'(?P<features>(?:\+[^:+]+(?::[^:+]+)?)*)'
+)
+_PROTOCOL_FEATURE_RE = re.compile(r'\+([^:+]+)(?::([^:+]+))?')
+
+
+@dataclasses.dataclass(frozen=True)
+class ProtocolName:
+  """A prompting protocol name: `base[:version](+feature[:version])*`.
+
+  E.g. `python`, `python:2.0`, or a base with features such as
+  `python:2.0+feature:1.0`. `parse` fills in feature versions and orders
+  features by rank, so a protocol has a single name once its base version is
+  known.
+  """
+
+  base: str
+  version: str | None = None
+  features: tuple[tuple[str, str], ...] = ()
+
+  @classmethod
+  def parse(
+      cls, name: str, default_version: str | None = None
+  ) -> 'ProtocolName':
+    """Parses and normalizes a protocol name.
+
+    Args:
+      name: The protocol name.
+      default_version: The base version to use if `name` has none.
+
+    Returns:
+      The normalized name.
+
+    Raises:
+      ValueError: If `name` is malformed, or has an unknown, repeated or
+        unsupported feature.
+    """
+    match = _PROTOCOL_NAME_RE.fullmatch(name) if isinstance(name, str) else None
+    if match is None:
+      raise ValueError(
+          f'Invalid protocol {name!r}: expected '
+          '`base[:version](+feature[:version])*`.'
+      )
+    version = match['version'] or default_version
+    requested = {}
+    for feature, feature_version in _PROTOCOL_FEATURE_RE.findall(
+        match['features']
+    ):
+      if feature in requested:
+        raise ValueError(
+            f'Feature {feature!r} appears twice in protocol {name!r}.'
+        )
+      requested[feature] = feature_version or None
+    features = _ProtocolFeature.resolve(
+        requested, match['base'], version, name
+    )
+    return cls(match['base'], version, features)
+
+  def __str__(self) -> str:
+    name = self.base if self.version is None else f'{self.base}:{self.version}'
+    return name + ''.join(f'+{f}:{v}' for f, v in self.features)
+
+
 class PromptingProtocol(metaclass=abc.ABCMeta):
   """Base class for prompting protocols for structured data."""
 
   NAME: ClassVar[str]
 
+  # Whether `parse_value` repairs a malformed response with an LM when given
+  # `autofix`; `lf.query` passes `autofix=0` to protocols without support.
+  SUPPORTS_AUTOFIX: ClassVar[bool] = False
+
   _PROTOCOLS: ClassVar[dict[str, Type['PromptingProtocol']]] = {}
 
+  # The base version and features of the protocol name. `from_name` sets them
+  # on an instance it builds without arguments, so a subclass may have its own
+  # constructor. The base version selects the `lf.query` prompt; it does not
+  # change the representations here.
+  version: str | None = None
+  features: Sequence[_ProtocolFeature] = ()
+
   def __init_subclass__(cls):
+    _check_name_part('Protocol name', cls.NAME)
     PromptingProtocol._PROTOCOLS[cls.NAME] = cls
+
+  @property
+  def name(self) -> str:
+    """The protocol name, with its version and features if any."""
+    return str(
+        ProtocolName(
+            self.NAME,
+            self.version,
+            tuple((f.NAME, f.VERSION) for f in self.features),
+        )
+    )
 
   @classmethod
   def from_name(cls, name: str) -> 'PromptingProtocol':
-    """Returns the prompting protocol from the name."""
-    protocol_cls = cls._PROTOCOLS.get(name)
+    """Returns the prompting protocol for a name such as `python:2.0`."""
+    parsed = ProtocolName.parse(name)
+    protocol_cls = cls._PROTOCOLS.get(parsed.base)
     if protocol_cls is None:
       raise ValueError(f'Unsupported protocol: {name}.')
-    return protocol_cls()
+    protocol = protocol_cls()
+    protocol.version = parsed.version
+    protocol.features = tuple(
+        _ProtocolFeature.get(f, v)() for f, v in parsed.features
+    )
+    return protocol
+
+  @classmethod
+  def supports_autofix(cls, name: str) -> bool:
+    """Returns True if the base protocol of `name` supports autofix."""
+    protocol_cls = cls._PROTOCOLS.get(ProtocolName.parse(name).base)
+    return protocol_cls is not None and protocol_cls.SUPPORTS_AUTOFIX
 
   @abc.abstractmethod
   def schema_repr(self, schema: Schema) -> str:

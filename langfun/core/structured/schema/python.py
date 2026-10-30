@@ -30,6 +30,7 @@ class PythonPromptingProtocol(base.PromptingProtocol):
   """Python-based prompting protocol."""
 
   NAME = 'python'
+  SUPPORTS_AUTOFIX = True
 
   def schema_repr(
       self,

@@ -106,10 +106,10 @@ class LfQuery(mapping.Mapping):
 
   @classmethod
   def from_protocol(cls, protocol: str) -> Type['LfQuery']:
-    """Returns a query structure from the given protocol and version."""
-    if ':' in protocol:
-      protocol, version = protocol.split(':')
-    else:
+    """Returns the query structure for the base protocol and its version."""
+    name = schema_lib.ProtocolName.parse(protocol)
+    protocol, version = name.base, name.version
+    if version is None:
       version = cls._DEFAULT_PROTOCOL_VERSIONS.get(protocol)
       if version is None:
         version_dict = cls._OOP_PROMPT_MAP.get(protocol)
@@ -442,9 +442,11 @@ def query(
       `lf.structured.LfQuery`. Also protocol could be specified with a version
       in the format of 'protocol:version', e.g., 'python:1.0', so users could
       use a specific version of the prompt based on the protocol. Please see the
-      documentation of `LfQuery` for more details. If None, the protocol from
-      context manager `lf.query_protocol` will be used, or 'python' if not
-      specified.
+      documentation of `LfQuery` for more details. Features of the protocol
+      follow its base, as in 'protocol:version+feature:version' (see
+      `lf.structured.schema.base.ProtocolName`). The query is recorded with
+      every version filled in. If None, the protocol from context manager
+      `lf.query_protocol` will be used, or 'python' if not specified.
     returns_message: If `True`, returns an `lf.Message` object instead of
       the final parsed result.
     skip_lm: If `True`, skips the LLM call and returns the rendered
@@ -566,8 +568,9 @@ def query(
   else:
     # Query with structured output.
     query_cls = LfQuery.from_protocol(protocol)
-    if ':' not in protocol:
-      protocol = f'{protocol}:{query_cls.version}'  # pyrefly: ignore[missing-attribute]
+    protocol = str(
+        schema_lib.ProtocolName.parse(protocol, query_cls.version)  # pyrefly: ignore[missing-attribute]
+    )
 
   # `skip_lm`` is True when `lf.query_prompt` is called.
   # and `prompt` is `pg.MISSING_VALUE` when `lf.query_output` is called.
@@ -647,7 +650,12 @@ def query(
             schema=schema,
             examples=examples,
             response_postprocess=response_postprocess,
-            autofix=autofix if protocol.startswith('python:') else 0,
+            autofix=(
+                autofix
+                if schema_lib.PromptingProtocol.supports_autofix(protocol)
+                else 0
+            ),
+            protocol=protocol,
             **kwargs,
         )(
             lm=lm,
@@ -879,8 +887,19 @@ def query_output(
 def query_reward(
     mapping_example: Union[str, mapping.MappingExample],
     response: Union[str, lf.Message],
+    protocol: str | None = None,
 ) -> float | None:
-  """Returns the reward of an LLM response based on a mapping example."""
+  """Returns the reward of an LLM response based on a mapping example.
+
+  Args:
+    mapping_example: The mapping example, or its JSON string.
+    response: The LLM response to the example's input.
+    protocol: The protocol the response was written in. If None, the protocol
+      from `lf.query_protocol` is used, or 'python' if not specified.
+
+  Returns:
+    The reward, or None if the output class defines no `__reward__`.
+  """
   if isinstance(mapping_example, str):
     mapping_example = pg.from_json_str(mapping_example)
     assert isinstance(mapping_example, mapping.MappingExample), mapping_example
@@ -898,7 +917,7 @@ def query_reward(
     return None
 
   return reward_fn(
-      query_output(response, output_cls),
+      query_output(response, output_cls, protocol=protocol),
       mapping_example.input,
       mapping_example.output,
       mapping_example.metadata,  # pyrefly: ignore[bad-argument-type]

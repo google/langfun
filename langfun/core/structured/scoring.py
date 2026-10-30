@@ -19,6 +19,7 @@ import langfun.core as lf
 from langfun.core.structured import mapping
 from langfun.core.structured import querying
 from langfun.core.structured import schema as schema_lib
+from langfun.core.structured.schema import base as schema_base
 import pyglove as pg
 
 
@@ -150,7 +151,9 @@ def score(
       if oneof_pos == -1:
         completion_reprs.append(rep)
       else:
-        assert protocol == 'python', protocol
+        assert schema_base.ProtocolName.parse(protocol).base == 'python', (
+            protocol
+        )
         if isinstance(input_message, list):
           raise ValueError(
               'Scoring on object fields using `pg.oneof` must share the '

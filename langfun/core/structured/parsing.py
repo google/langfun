@@ -19,6 +19,7 @@ import langfun.core as lf
 from langfun.core.structured import mapping
 from langfun.core.structured import querying
 from langfun.core.structured import schema as schema_lib
+from langfun.core.structured.schema import base as schema_base
 import pyglove as pg
 
 
@@ -148,7 +149,8 @@ def parse(
       `autofix_lm` from `lf.context` context manager will be used. Otherwise it
       will use `lm`.
     protocol: The protocol for schema/value representation. Applicable values
-      are 'json' and 'python'. By default 'python' will be used.
+      are 'json' and 'python', optionally with a version and features, e.g.
+      'python:2.0' (the version is ignored). By default 'python' will be used.
     returns_message: If True, returns `lf.Message` as the output, instead of
       returning the structured `message.result`.
     **kwargs: Keyword arguments passed to the `_ParseStructure`
@@ -157,8 +159,9 @@ def parse(
   Returns:
     The parsed result based on the schema.
   """
+  parse_structure_cls = _parse_structure_cls(protocol)
   # Autofix is not supported for JSON yet.
-  if protocol == 'json':
+  if parse_structure_cls is _ParseStructureJson:
     autofix = 0
 
   message = lf.AIMessage.from_value(message)
@@ -166,11 +169,12 @@ def parse(
     message.source = lf.UserMessage(user_prompt, tags=['lm-input'])
   context = getattr(message.lm_input, 'text', None) if include_context else None
 
-  t = _parse_structure_cls(protocol)(
+  t = parse_structure_cls(
       schema=schema,
       context=context,
       default=default,
       examples=examples or default_parse_examples(),
+      protocol=protocol,
   )
 
   # Setting up context.
@@ -396,9 +400,10 @@ async def acall(
 def _parse_structure_cls(
     protocol: str,
 ) -> Type[_ParseStructure]:
-  if protocol == 'json':
+  base = schema_base.ProtocolName.parse(protocol).base
+  if base == 'json':
     return _ParseStructureJson
-  elif protocol == 'python':
+  elif base == 'python':
     return _ParseStructurePython
   else:
     raise ValueError(f'Unknown protocol: {protocol!r}.')
