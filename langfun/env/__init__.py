@@ -19,6 +19,7 @@ from langfun.env.interface import SandboxServiceOutageError
 from langfun.env.interface import SandboxServiceOverloadError
 from langfun.env.interface import SandboxError
 from langfun.env.interface import SandboxStateError
+from langfun.env.interface import SandboxRestartedError
 from langfun.env.interface import FeatureError
 from langfun.env.interface import FeatureSetupError
 from langfun.env.interface import FeatureTeardownError
