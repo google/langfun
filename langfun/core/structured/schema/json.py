@@ -123,6 +123,22 @@ class JsonPromptingProtocol(base.PromptingProtocol):
     return v['result']
 
 
+def _is_unescaped_quote(json_str: str, i: int) -> bool:
+  """Returns True if the quote at position i is not escaped by a backslash.
+
+  In JSON, a double quote is escaped only when it is preceded by an odd number
+  of consecutive backslashes. This distinguishes an escaped quote from a
+  closing quote that follows a literal backslash (e.g. a string value that ends
+  with a backslash).
+  """
+  num_backslashes = 0
+  j = i - 1
+  while j >= 0 and json_str[j] == '\\':
+    num_backslashes += 1
+    j -= 1
+  return num_backslashes % 2 == 0
+
+
 def cleanup_json(json_str: str) -> str:
   """Cleans up the LM responded JSON string."""
   # Treatments:
@@ -151,7 +167,7 @@ def cleanup_json(json_str: str) -> str:
       curly_brackets -= 1
       if curly_brackets == 0:
         break
-    elif c == '"' and json_str[i - 1] != '\\':
+    elif c == '"' and _is_unescaped_quote(json_str, i):
       under_str = not under_str
       if under_str:
         str_begin = i
