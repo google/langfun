@@ -151,6 +151,85 @@ class GeminiTest(unittest.TestCase):
         0.3225,
     )
 
+  def test_estimate_cost_bills_thinking_tokens_as_output(self):
+    model = gemini.Gemini('gemini-3.5-flash', api_endpoint='')
+    usage = lf.LMSamplingUsage(
+        prompt_tokens=10_000,
+        completion_tokens=100,
+        total_tokens=11_000,
+        cached_prompt_tokens=8_000,
+        completion_tokens_details={'thinking_tokens': 900},
+    )
+    self.assertAlmostEqual(
+        model.estimate_cost(usage),
+        # (2K uncached * 1.5 + 8K cached * 0.15 + (100 + 900) output * 9) / 1M
+        (3_000 + 1_200 + 9_000) / 1e6,
+    )
+    usage.rebind(completion_tokens_details=None, skip_notification=True)
+    self.assertAlmostEqual(
+        model.estimate_cost(usage), (3_000 + 1_200 + 900) / 1e6
+    )
+
+  def test_estimate_cost_long_context_threshold(self):
+
+    def cost(model_id: str, prompt_tokens: int) -> float | None:
+      return gemini.Gemini(model_id, api_endpoint='').estimate_cost(
+          lf.LMSamplingUsage(
+              prompt_tokens=prompt_tokens,
+              completion_tokens=1000,
+              total_tokens=prompt_tokens + 1000,
+          )
+      )
+
+    # Gemini 2.5 and later bill prompts of up to 200K tokens at the standard
+    # rates, and longer ones at the long-context rates.
+    for model_id in ('gemini-3.1-pro-preview', 'gemini-3-pro-preview'):
+      self.assertAlmostEqual(
+          cost(model_id, 150_000), (150_000 * 2.0 + 1000 * 12.0) / 1e6
+      )
+      self.assertAlmostEqual(
+          cost(model_id, 200_000), (200_000 * 2.0 + 1000 * 12.0) / 1e6
+      )
+      self.assertAlmostEqual(
+          cost(model_id, 200_001), (200_001 * 4.0 + 1000 * 18.0) / 1e6
+      )
+    self.assertAlmostEqual(
+        cost('gemini-2.5-pro', 150_000), (150_000 * 1.25 + 1000 * 10.0) / 1e6
+    )
+    self.assertAlmostEqual(
+        cost('gemini-2.5-pro', 200_001), (200_001 * 2.5 + 1000 * 15.0) / 1e6
+    )
+    # Gemini 1.5 keeps its 128K tier.
+    self.assertAlmostEqual(
+        cost('gemini-1.5-pro', 128_000), (128_000 * 1.25 + 1000 * 5.0) / 1e6
+    )
+    self.assertAlmostEqual(
+        cost('gemini-1.5-pro', 128_001), (128_001 * 2.5 + 1000 * 10.0) / 1e6
+    )
+
+  def test_gemini_4_argon_pricing_schedule(self):
+    pricing = gemini.Gemini('gemini-4-argon', api_endpoint='').pricing
+    promotional = pricing.effective_on(datetime.date(2026, 11, 30))
+    self.assertEqual(promotional.cost_per_1m_input_tokens, 2.0)
+    self.assertEqual(promotional.cost_per_1m_cached_input_tokens, 0.1)
+    self.assertEqual(promotional.cost_per_1m_output_tokens, 10.0)
+    standard = pricing.effective_on(datetime.date(2026, 12, 1))
+    self.assertEqual(standard.cost_per_1m_input_tokens, 4.0)
+    self.assertEqual(standard.cost_per_1m_cached_input_tokens, 0.2)
+    self.assertEqual(standard.cost_per_1m_output_tokens, 20.0)
+
+  def test_gemini_flash_introductory_pricing_schedule(self):
+    for model_id in ('gemini-3.8-flash', 'gemini-3.7-flash'):
+      pricing = gemini.Gemini(model_id, api_endpoint='').pricing
+      introductory = pricing.effective_on(datetime.date(2026, 12, 31))
+      self.assertEqual(introductory.cost_per_1m_input_tokens, 0.75)
+      self.assertEqual(introductory.cost_per_1m_cached_input_tokens, 0.075)
+      self.assertEqual(introductory.cost_per_1m_output_tokens, 3.75)
+      standard = pricing.effective_on(datetime.date(2027, 1, 1))
+      self.assertEqual(standard.cost_per_1m_input_tokens, 1.5)
+      self.assertEqual(standard.cost_per_1m_cached_input_tokens, 0.15)
+      self.assertEqual(standard.cost_per_1m_output_tokens, 7.5)
+
   def test_generation_config(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
     json_schema = {
@@ -2073,6 +2152,190 @@ class GeminiMisfireTest(unittest.TestCase):
     self.assertEqual(response.text, 'Hello!')
     self.assertEqual(len(sent), 1)
     warning.assert_not_called()
+
+
+class GeminiBilledDiscardedResponseTest(unittest.TestCase):
+  """Tests that billed responses that yield no result reach usage trackers."""
+
+  def setUp(self):
+    super().setUp()
+    self.enterContext(
+        mock.patch.object(gemini, '_CAP_MISFIRE_RETRY_INTERVAL', 0)
+    )
+
+  def _lm(self) -> gemini.Gemini:
+    # $1.50 input and $9.00 output per 1M tokens, with no scheduled change.
+    return gemini.Gemini(
+        'gemini-3.5-flash', api_endpoint='', max_attempts=3, retry_interval=0
+    )
+
+  def _post(self, *responses: dict[str, Any] | bytes | int) -> Any:
+    """Returns a POST side effect serving `responses`, the last one repeated.
+
+    Args:
+      *responses: Payloads or raw bodies to return with HTTP 200, or HTTP
+        error codes.
+    """
+    served = []
+
+    def post(url, json, **kwargs):
+      del url, json, kwargs
+      served.append(None)
+      body = responses[min(len(served), len(responses)) - 1]
+      response = requests.Response()
+      if isinstance(body, int):
+        response.status_code = body
+        response._content = b'Error.'
+      elif isinstance(body, bytes):
+        response.status_code = 200
+        response._content = body
+      else:
+        response.status_code = 200
+        response._content = pg.to_json_str(body).encode()
+      return response
+
+    return post
+
+  def test_answerless_generation_is_tracked(self):
+    payload = _hop([{'text': ''}], 'MAX_TOKENS', thoughts_token_count=1_000)
+    with lf.track_usages() as usages:
+      with self.assertRaises(gemini.GeminiEmptyGenerationError):
+        self._lm().result(payload)
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.prompt_tokens, 10)
+    self.assertAlmostEqual(
+        usages.total.estimated_cost, (10 * 1.5 + 1_000 * 9.0) / 1e6
+    )
+
+  def test_misfire_into_the_cap_is_tracked(self):
+    post = self._post(
+        _cap_misfire(answer_tokens=3_000, thoughts=100),
+        _hop([{'text': 'Hello'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with lf.track_usages() as usages:
+        response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello')
+    self.assertEqual(response.metadata.usage.num_requests, 1)
+    self.assertEqual(usages.total.num_requests, 2)
+    self.assertEqual(usages.total.completion_tokens, 3_002)
+    self.assertAlmostEqual(
+        usages.total.estimated_cost,
+        (10 * 1.5 + 3_100 * 9.0 + 10 * 1.5 + 2 * 9.0) / 1e6,
+    )
+
+  def test_short_misfire_is_tracked(self):
+    post = self._post(
+        _misfire(),
+        _hop([{'text': 'Hello'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with lf.track_usages() as usages:
+        response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello')
+    self.assertEqual(usages.total.num_requests, 2)
+    self.assertEqual(usages.total.prompt_tokens, 8_992 + 10)
+    self.assertAlmostEqual(
+        usages.total.estimated_cost,
+        (8_992 * 1.5 + (2_836 + 717) * 9.0 + 10 * 1.5 + 2 * 9.0) / 1e6,
+    )
+
+  def test_failed_continuation_is_tracked(self):
+    post = self._post(
+        _hop(
+            [{'text': 'Hel'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=4,
+            thoughts_token_count=100,
+        ),
+        500,
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with lf.track_usages() as usages:
+        with self.assertRaises((lf.LMError, lf.concurrent.RetryError)):
+          self._lm()('hi')
+    # The first response was billed; the failed continuations were not.
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.completion_tokens, 4)
+    self.assertAlmostEqual(
+        usages.total.estimated_cost, (10 * 1.5 + 104 * 9.0) / 1e6
+    )
+
+  def test_continuation_ending_without_candidates_is_tracked(self):
+    post = self._post(
+        _hop(
+            [{'text': 'Hel'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=4,
+            thoughts_token_count=100,
+        ),
+        {'usageMetadata': {'promptTokenCount': 10, 'totalTokenCount': 10}},
+        _hop([{'text': 'Hello'}], 'STOP', candidates_token_count=2),
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with lf.track_usages() as usages:
+        response = self._lm()('hi')
+    self.assertEqual(response.text, 'Hello')
+    # The generation that ended without candidates is sampled again, and both
+    # of its responses are billed.
+    self.assertEqual(usages.total.num_requests, 2)
+    self.assertEqual(usages.total.prompt_tokens, 30)
+    self.assertEqual(usages.total.completion_tokens, 6)
+    # 30 prompt tokens, and 6 answer plus 100 thinking tokens of output.
+    self.assertAlmostEqual(
+        usages.total.estimated_cost, (30 * 1.5 + 106 * 9.0) / 1e6
+    )
+
+  def test_continuation_ending_with_no_candidate_reports_its_own_counts(self):
+    post = self._post(
+        _hop(
+            [{'text': 'Hel'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=4_000,
+            thoughts_token_count=100,
+        ),
+        {
+            'candidates': [],
+            'usageMetadata': {'promptTokenCount': 10, 'totalTokenCount': 10},
+        },
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with lf.track_usages() as usages:
+        with self.assertRaisesRegex(
+            lf.TemporaryLMError,
+            r'candidatesTokenCount=0, thoughtsTokenCount=0\)',
+        ):
+          self._lm()._sample_single(lf.UserMessage('hi'))
+    # The error describes the last response, while the usage of the failed
+    # generation also counts the first.
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.prompt_tokens, 20)
+    self.assertEqual(usages.total.completion_tokens, 4_000)
+
+  def test_continuation_ending_unreadable_is_tracked(self):
+    post = self._post(
+        _hop(
+            [{'text': 'Hel'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=4,
+            thoughts_token_count=100,
+        ),
+        b'not json',
+    )
+    with mock.patch('requests.Session.post', side_effect=post):
+      with lf.track_usages() as usages:
+        with self.assertRaises(lf.LMError):
+          self._lm()('hi')
+    # The unreadable response has no usage to count; the first one does.
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.completion_tokens, 4)
+    self.assertAlmostEqual(
+        usages.total.estimated_cost, (10 * 1.5 + 104 * 9.0) / 1e6
+    )
 
 
 if __name__ == '__main__':

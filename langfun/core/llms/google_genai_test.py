@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for Google GenAI models."""
 
+import datetime
 import os
 import unittest
 import langfun.core as lf
@@ -70,6 +71,36 @@ class GenAITest(unittest.TestCase):
         lf.LanguageModel.get('google_genai://gemini-1.5-pro'),
         google_genai.GenAI,
     )
+
+  def test_gemini_25_pro_billed_as_gemini_38_flash_from_december(self):
+    pricing = google_genai.Gemini25Pro(api_key='abc').pricing
+    gemini_25_pro = pricing.effective_on(datetime.date(2026, 11, 30))
+    self.assertEqual(gemini_25_pro.cost_per_1m_input_tokens, 1.25)
+    self.assertEqual(gemini_25_pro.cost_per_1m_cached_input_tokens, 0.125)
+    self.assertEqual(gemini_25_pro.cost_per_1m_output_tokens, 10.0)
+    self.assertEqual(
+        gemini_25_pro.cost_per_1m_input_tokens_with_prompt_longer_than_128k,
+        2.5,
+    )
+    introductory = pricing.effective_on(datetime.date(2026, 12, 1))
+    self.assertEqual(introductory.cost_per_1m_input_tokens, 0.75)
+    self.assertEqual(introductory.cost_per_1m_cached_input_tokens, 0.075)
+    self.assertEqual(introductory.cost_per_1m_output_tokens, 3.75)
+    self.assertIsNone(
+        introductory.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+    )
+    standard = pricing.effective_on(datetime.date(2027, 1, 1))
+    self.assertEqual(standard.cost_per_1m_input_tokens, 1.5)
+    self.assertEqual(standard.cost_per_1m_output_tokens, 7.5)
+
+  def test_other_models_keep_their_rates(self):
+    pricing = google_genai.Gemini25Flash(api_key='abc').pricing
+    self.assertEqual(
+        pricing.effective_on(datetime.date(2027, 1, 1)),
+        pricing,
+    )
+    self.assertEqual(pricing.cost_per_1m_input_tokens, 0.3)
+
 
 if __name__ == '__main__':
   unittest.main()

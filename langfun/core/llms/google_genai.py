@@ -13,6 +13,7 @@
 # limitations under the License.
 """Language models from Google GenAI."""
 
+import datetime
 import functools
 import os
 from typing import Annotated, Literal
@@ -20,6 +21,47 @@ from typing import Annotated, Literal
 import langfun.core as lf
 from langfun.core.llms import gemini
 import pyglove as pg
+
+
+# Models that the Gemini API serves with a newer model after a given day, and
+# bills at the newer model's rates. Vertex AI keeps serving them as before.
+# https://ai.google.dev/gemini-api/docs/pricing#gemini-2.5-pro
+# (`gemini-2.5-flash` is likewise served by Gemini 3.5 Flash-Lite from
+# 2026-12-01, whose text rates are the same, so its pricing needs no change.)
+_REROUTED_MODELS: dict[str, tuple[datetime.date, str]] = {
+    'gemini-2.5-pro': (datetime.date(2026, 11, 30), 'gemini-3.8-flash'),
+}
+
+
+def _with_reroute_pricing(model_info: lf.ModelInfo) -> lf.ModelInfo:
+  """Returns `model_info`, billed at its replacement's rates once rerouted.
+
+  Args:
+    model_info: The model info of a model served by the Gemini API.
+
+  Returns:
+    `model_info` itself, or a copy whose pricing switches to the rates of the
+    model that serves it after the last day it is served itself.
+  """
+  reroute = _REROUTED_MODELS.get(model_info.model_id)
+  if reroute is None or model_info.pricing is None:
+    return model_info
+  last_day, replacement_id = reroute
+  (replacement,) = [
+      m for m in gemini.SUPPORTED_MODELS if m.model_id == replacement_id
+  ]
+  return pg.clone(
+      model_info,
+      override=dict(
+          pricing=pg.clone(
+              model_info.pricing,
+              override=dict(
+                  valid_through=last_day,
+                  next_pricing=pg.clone(replacement.pricing, deep=True),
+              ),
+          )
+      ),
+  )
 
 
 @lf.use_init_args(['model'])
@@ -85,8 +127,8 @@ class GenAI(gemini.Gemini):
 
   @functools.cached_property
   def model_info(self) -> lf.ModelInfo:  # pyrefly: ignore[bad-override]
-    return super().model_info.clone(  # pyrefly: ignore[bad-return]
-        override=dict(provider='Google GenAI')
+    return _with_reroute_pricing(
+        pg.clone(super().model_info, override=dict(provider='Google GenAI'))
     )
 
   def session(self):

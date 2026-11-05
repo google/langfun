@@ -46,6 +46,78 @@ except ImportError:
 # Placeholder for sidechannel imports.
 
 
+# `SUPPORTED_MODELS` record the rates of the global endpoint. Vertex AI bills
+# these models 10% more on regional and multi-region endpoints: generally
+# available Gemini 3 and later models
+# (https://cloud.google.com/model-garden/pricing), and Claude Sonnet 4.5, Haiku
+# 4.5, Opus 4.5 and later models
+# (https://cloud.google.com/model-garden/partner-models/pricing).
+_NON_GLOBAL_PRICE_MULTIPLIER = 1.1
+_MODELS_WITH_NON_GLOBAL_PRICE_PREMIUM = frozenset([
+    'gemini-4-argon',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite',
+    'claude-opus-5-5',
+    'claude-opus-5',
+    'claude-opus-4-8',
+    'claude-opus-4-7',
+    'claude-opus-4-6',
+    'claude-opus-4-5-20251101',
+    'claude-sonnet-4-5-20250929',
+    'claude-haiku-4-5-20251001',
+])
+
+
+def _scale_pricing(
+    pricing: lf.ModelInfo.Pricing, factor: float
+) -> lf.ModelInfo.Pricing:
+  """Returns a copy of `pricing` with every rate multiplied by `factor`."""
+  override: dict[str, Any] = {}
+  for key, value in pricing.sym_init_args.items():
+    if (
+        isinstance(key, str)
+        and key.startswith('cost_per_1m_')
+        and value is not None
+    ):
+      override[key] = round(value * factor, 10)
+  if pricing.next_pricing is not None:
+    override['next_pricing'] = _scale_pricing(pricing.next_pricing, factor)
+  return pg.clone(pricing, override=override)
+
+
+def _price_for_location(
+    model_info: lf.ModelInfo, location: str | None
+) -> lf.ModelInfo:
+  """Returns `model_info` with the rates of a Vertex AI endpoint location.
+
+  Args:
+    model_info: Model info with the rates of the global endpoint.
+    location: The Vertex AI location of the endpoint. If None (unknown), the
+      global endpoint rates are kept.
+
+  Returns:
+    `model_info` itself, or a copy whose rates carry the non-global premium.
+  """
+  if (
+      location is None
+      or location == 'global'
+      or model_info.pricing is None
+      or (model_info.alias_for or model_info.model_id)
+      not in _MODELS_WITH_NON_GLOBAL_PRICE_PREMIUM
+  ):
+    return model_info
+  return pg.clone(
+      model_info,
+      override=dict(
+          pricing=_scale_pricing(
+              model_info.pricing, _NON_GLOBAL_PRICE_MULTIPLIER
+          )
+      ),
+  )
+
+
 @pg.use_init_args(['api_endpoint'])
 class VertexAI(rest.REST):
   """Base class for models served on Vertex AI.
@@ -252,7 +324,10 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 
   @functools.cached_property
   def model_info(self) -> gemini.GeminiModelInfo:
-    return super().model_info.clone(override=dict(provider='VertexAI'))  # pyrefly: ignore[bad-return]
+    return _price_for_location(  # pyrefly: ignore[bad-return]
+        pg.clone(super().model_info, override=dict(provider='VertexAI')),
+        self.location or os.environ.get('VERTEXAI_LOCATION', None),
+    )
 
 
 #
@@ -512,7 +587,7 @@ class VertexAIAnthropic(VertexAI, anthropic.Anthropic):
           mi = m
           self.rebind(model=mi.model_id, skip_notification=True)
           break
-    return mi
+    return _price_for_location(mi, self.location)
 
   @property
   def headers(self):  # pyrefly: ignore[bad-override]

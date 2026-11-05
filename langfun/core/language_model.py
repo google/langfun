@@ -85,6 +85,11 @@ class TemporaryLMError(RetryableLMError):
 #
 
 
+def _utc_today() -> datetime.date:
+  """Returns today's date in UTC, the date that dated pricing resolves on."""
+  return datetime.datetime.now(datetime.timezone.utc).date()
+
+
 class ModelInfo(pg.Object):
   """Common information for a language model."""
 
@@ -225,8 +230,95 @@ class ModelInfo(pg.Object):
         )
     ] = None
 
+    cost_per_1m_cache_creation_input_tokens: Annotated[
+        float | None,
+        (
+            'The cost per 1M input tokens written to the prompt cache, in US '
+            'dollars. Providers such as Anthropic bill cache writes above the '
+            'regular input rate. If None, `_cache_creation_rate` decides: it '
+            'returns the regular input rate unless a subclass derives another '
+            'rate from it (e.g. 1.25x for Anthropic models).'
+        )
+    ] = None
+
+    valid_through: Annotated[
+        datetime.date | None,
+        (
+            'The last day (in UTC) on which these rates apply, for rates '
+            'with a published end date such as introductory pricing. '
+            '`next_pricing` applies from the following day. Providers do not '
+            'always publish the hour of a price change, so the switch is '
+            'accurate to the day. If None, the rates have no scheduled end.'
+        )
+    ] = None
+
+    next_pricing: Annotated[
+        Optional['ModelInfo.Pricing'],
+        (
+            'The pricing that replaces these rates on the day after '
+            '`valid_through`, of the same type so that provider-specific '
+            'billing rules carry over. Set if and only if `valid_through` is '
+            'set.'
+        )
+    ] = None
+
+    def _on_bound(self):
+      super()._on_bound()
+      if (self.valid_through is None) != (self.next_pricing is None):
+        raise ValueError(
+            '`valid_through` and `next_pricing` must be set together. '
+            f'Encountered: valid_through={self.valid_through!r}, '
+            f'next_pricing={self.next_pricing!r}.'
+        )
+      if self.next_pricing is not None and (
+          type(self.next_pricing) is not type(self)
+      ):
+        raise ValueError(
+            '`next_pricing` must be of the same type as the pricing it '
+            'replaces, so that provider-specific billing rules carry over. '
+            f'Encountered: {type(self).__name__} followed by '
+            f'{type(self.next_pricing).__name__}.'
+        )
+      if (
+          self.next_pricing is not None
+          and self.next_pricing.valid_through is not None
+          and self.valid_through is not None
+          and self.next_pricing.valid_through <= self.valid_through
+      ):
+        raise ValueError(
+            'Scheduled pricing must end in chronological order. '
+            f'Encountered: valid_through={self.valid_through!r}, '
+            f'next_pricing.valid_through={self.next_pricing.valid_through!r}.'
+        )
+
+    def effective_on(
+        self, date: datetime.date | None = None
+    ) -> 'ModelInfo.Pricing':
+      """Returns the pricing in effect on a date.
+
+      Args:
+        date: A date in UTC. If None, today's date in UTC is used.
+
+      Returns:
+        This pricing if `date` is on or before `valid_through` or no change
+        is scheduled, otherwise the `next_pricing` in effect on `date`.
+      """
+      if date is None:
+        date = _utc_today()
+      pricing = self
+      while (
+          pricing.next_pricing is not None
+          and pricing.valid_through is not None
+          and date > pricing.valid_through
+      ):
+        pricing = pricing.next_pricing
+      return pricing
+
     def estimate_cost(self, usage: 'LMSamplingUsage') -> float | None:
-      """Estimates the cost of using the model. Subclass could override.
+      """Estimates the cost of a usage at these rates. Subclass could override.
+
+      `ModelInfo.estimate_cost` calls this method on the pricing in effect
+      today (see `effective_on`), so it never needs to consult the schedule.
 
       Args:
         usage: The usage information of the model.
@@ -235,30 +327,73 @@ class ModelInfo(pg.Object):
         The estimated cost in US dollars. If None, cost estimating is not
         supported on the model.
       """
-
       if (self.cost_per_1m_input_tokens is None
           or self.cost_per_1m_output_tokens is None):
         return None
-
-      # Calculate cost for non-cached prompt tokens
-      non_cached_prompt_tokens = (
-          usage.prompt_tokens - usage.cached_prompt_tokens
+      return self._cost_at_rates(
+          usage,
+          input_rate=self.cost_per_1m_input_tokens,
+          cached_input_rate=self.cost_per_1m_cached_input_tokens,
+          output_rate=self.cost_per_1m_output_tokens,
+          output_tokens=usage.completion_tokens,
       )
-      cost = self.cost_per_1m_input_tokens * non_cached_prompt_tokens
 
-      # Add cost for cached prompt tokens (if pricing is available)
-      if self.cost_per_1m_cached_input_tokens is not None:
-        cost += (
-            self.cost_per_1m_cached_input_tokens * usage.cached_prompt_tokens
-        )
-      else:
-        # Fall back to regular input token pricing for cached tokens
-        cost += self.cost_per_1m_input_tokens * usage.cached_prompt_tokens
+    def _cost_at_rates(
+        self,
+        usage: 'LMSamplingUsage',
+        *,
+        input_rate: float,
+        cached_input_rate: float | None,
+        output_rate: float,
+        output_tokens: int,
+    ) -> float:
+      """Returns the cost of a usage in US dollars at per-1M-token rates.
 
-      # Add cost for output/completion tokens
-      cost += self.cost_per_1m_output_tokens * usage.completion_tokens
+      `usage.prompt_tokens` counts the whole prompt. Cache reads
+      (`usage.cached_prompt_tokens`) are billed at `cached_input_rate`, cache
+      writes (`usage.cache_creation_prompt_tokens`) at
+      `_cache_creation_rate`, and the remaining prompt tokens at `input_rate`.
 
+      Args:
+        usage: The usage information of the model.
+        input_rate: The cost per 1M uncached input tokens.
+        cached_input_rate: The cost per 1M input tokens read from the prompt
+          cache. If None, `input_rate` applies.
+        output_rate: The cost per 1M output tokens.
+        output_tokens: The number of tokens billed as output.
+
+      Returns:
+        The cost in US dollars.
+      """
+      cached_tokens = usage.cached_prompt_tokens
+      cache_creation_tokens = usage.cache_creation_prompt_tokens
+      uncached_tokens = (
+          usage.prompt_tokens - cached_tokens - cache_creation_tokens
+      )
+      if cached_input_rate is None:
+        cached_input_rate = input_rate
+      cost = (
+          input_rate * uncached_tokens
+          + cached_input_rate * cached_tokens
+          + self._cache_creation_rate(input_rate) * cache_creation_tokens
+          + output_rate * output_tokens
+      )
       return cost / 1000_000
+
+    def _cache_creation_rate(self, input_rate: float) -> float:
+      """Returns the cost per 1M input tokens written to the prompt cache.
+
+      Subclass could override, e.g. to derive the rate from `input_rate`.
+
+      Args:
+        input_rate: The cost per 1M uncached input tokens of the request.
+
+      Returns:
+        `cost_per_1m_cache_creation_input_tokens` if set, else `input_rate`.
+      """
+      if self.cost_per_1m_cache_creation_input_tokens is not None:
+        return self.cost_per_1m_cache_creation_input_tokens
+      return input_rate
 
   pricing: Annotated[
       Pricing | None,
@@ -316,10 +451,10 @@ class ModelInfo(pg.Object):
 
   @final
   def estimate_cost(self, usage: 'LMSamplingUsage') -> float | None:
-    """Estimates the cost of using the model."""
+    """Estimates the cost of using the model at the rates in effect today."""
     if self.pricing is None:
       return None
-    return self.pricing.estimate_cost(usage)
+    return self.pricing.effective_on().estimate_cost(usage)
 
   def supports_input(self, mime_type: str) -> bool:
     """Returns True if an input MIME type is supported.
@@ -454,6 +589,22 @@ class LMSamplingUsage(pg.Object):
   ] = None
   retry_stats: RetryStats = RetryStats()
   completion_tokens_details: dict[str, Any] | None = None
+  # Declared last so that positional construction keeps its meaning.
+  cache_creation_prompt_tokens: Annotated[
+      int,
+      (
+          'The number of prompt tokens written to the prompt cache. Like '
+          '`cached_prompt_tokens` (prompt tokens read from the cache), they '
+          'are included in `prompt_tokens`.'
+      ),
+  ] = 0
+  prompt_tokens_details: Annotated[
+      dict[str, Any] | None,
+      (
+          'Provider-specific breakdown of `prompt_tokens`, the counterpart '
+          'of `completion_tokens_details`.'
+      ),
+  ] = None
 
   def __bool__(self) -> bool:
     return self.num_requests > 0
@@ -503,6 +654,8 @@ class LMSamplingUsage(pg.Object):
         num_requests=self.num_requests + other.num_requests,
         estimated_cost=estimated_cost,
         retry_stats=self.retry_stats + other.retry_stats,
+        cache_creation_prompt_tokens=self.cache_creation_prompt_tokens
+        + other.cache_creation_prompt_tokens,
     )
 
   def __radd__(self, other: Optional['LMSamplingUsage']) -> 'LMSamplingUsage':
@@ -1064,6 +1217,39 @@ class LanguageModel(component.Component):
     """Returns the estimated cost of a usage. Subclasses can override."""
     return self.model_info.estimate_cost(usage)
 
+  def _track_billed_usage(self, usage: LMSamplingUsage) -> None:
+    """Reports the usage of a billed response that no result will carry.
+
+    A provider bills a response it returns successfully even if Langfun then
+    discards it: e.g. an empty or misfired generation that is sampled again, a
+    refusal, the earlier requests of a continued generation that fails, or
+    the results for the other prompts of a batch in which one prompt fails.
+    This reports its usage, with its estimated cost, to the usage trackers in
+    scope (see `lf.track_usages`), so that their totals include what was
+    billed. The usage of the results that are returned is unaffected.
+
+    It is called on the way to raising the error that discards the response,
+    so an error while reporting is logged rather than raised: it must neither
+    replace that error nor prevent its retry.
+
+    Args:
+      usage: The usage of the discarded response.
+    """
+    if isinstance(usage, UsageNotAvailable):
+      return
+    try:
+      estimated_cost = self.estimate_cost(usage)
+      if estimated_cost is not None:
+        usage.rebind(estimated_cost=estimated_cost, skip_notification=True)
+      for tracker in component.context_value('__usage_trackers__', []):
+        tracker.track(self.model_id, usage, False)
+    except Exception as e:  # pylint: disable=broad-exception-caught
+      pg.logging.warning(
+          'Failed to report the usage of a discarded response from %s: %r',
+          self.model_id,
+          e,
+      )
+
   #
   # Language model operations.
   #
@@ -1146,6 +1332,11 @@ class LanguageModel(component.Component):
             if not sample.response.text:
               if self.cache is not None:
                 self.cache.delete(self, prompts[i], seed=cache_seed)  # pyrefly: ignore[bad-argument-type]
+              # Every prompt is sampled again, so the results of this attempt
+              # are billed without being returned.
+              for discarded in results:
+                if not discarded.is_cached:
+                  self._track_billed_usage(discarded.usage)
               raise EmptyGenerationError(
                   f'Empty generation encountered from model {self.model_id}.'
               )
@@ -1166,20 +1357,18 @@ class LanguageModel(component.Component):
         # Tag LM input.
         prompt.tag(message_lib.Message.TAG_LM_INPUT)  # pyrefly: ignore[missing-attribute]
 
+        # Update estimated cost.
+        usage = result.usage
+        estimated_cost = self.estimate_cost(usage)
+        if estimated_cost is not None:
+          usage.rebind(estimated_cost=estimated_cost, skip_notification=True)
+
         for sample in result.samples:
           # Update metadata for response message.
           response = sample.response
           response.metadata.score = sample.score
           response.metadata.logprobs = sample.logprobs
           response.metadata.is_cached = result.is_cached
-
-          # Update estimated cost.
-          usage = result.usage
-          estimated_cost = self.estimate_cost(usage)
-          if estimated_cost is not None:
-            usage.rebind(
-                estimated_cost=estimated_cost, skip_notification=True
-            )
 
           # NOTE(daiyip): Current usage is computed at per-result level,
           # which is accurate when n=1. For n > 1, we average the usage across
@@ -1193,6 +1382,9 @@ class LanguageModel(component.Component):
                 completion_tokens=usage.completion_tokens // n,
                 total_tokens=usage.total_tokens // n,
                 cached_prompt_tokens=usage.cached_prompt_tokens // n,
+                cache_creation_prompt_tokens=(
+                    usage.cache_creation_prompt_tokens // n
+                ),
                 estimated_cost=(
                     usage.estimated_cost / n if usage.estimated_cost else None
                 ),
@@ -1209,18 +1401,18 @@ class LanguageModel(component.Component):
                 ),
             )
 
-          # Track usage.
-          trackers = component.context_value('__usage_trackers__', [])
-          if trackers:
-            model_id = self.model_id
-            for tracker in trackers:
-              tracker.track(model_id, usage, result.is_cached)
-
           # Track the prompt for corresponding response.
           response.source = prompt
 
           # Tag LM response.
           response.tag(message_lib.Message.TAG_LM_RESPONSE)
+
+        # Track usage once per result: `usage` covers all of its samples.
+        trackers = component.context_value('__usage_trackers__', [])
+        if trackers:
+          model_id = self.model_id
+          for tracker in trackers:
+            tracker.track(model_id, usage, result.is_cached)
       return results
 
   def _sample_with_cache_lookup(
@@ -1298,18 +1490,33 @@ class LanguageModel(component.Component):
       executor = self.resource_id if len(inputs) > 1 else None
       max_workers = self.max_concurrency
 
-    executed_jobs = concurrent.concurrent_execute(
-        execute,
-        inputs,
-        executor=executor,
-        max_workers=max_workers,
-        retry_on_errors=retry_on_errors,
-        max_attempts=self.max_attempts,
-        retry_interval=self.retry_interval,
-        exponential_backoff=self.exponential_backoff,
-        max_retry_interval=self.max_retry_interval,
-        return_jobs=True,
-    )
+    # An error on one input discards the results of the others, which are
+    # billed all the same.
+    succeeded = []
+
+    def execute_and_keep(x):
+      result = execute(x)
+      succeeded.append(result)
+      return result
+
+    try:
+      executed_jobs = concurrent.concurrent_execute(
+          execute_and_keep,
+          inputs,
+          executor=executor,
+          max_workers=max_workers,
+          retry_on_errors=retry_on_errors,
+          max_attempts=self.max_attempts,
+          retry_interval=self.retry_interval,
+          exponential_backoff=self.exponential_backoff,
+          max_retry_interval=self.max_retry_interval,
+          return_jobs=True,
+      )
+    except Exception:
+      for result in succeeded:
+        if isinstance(result, LMSamplingResult):
+          self._track_billed_usage(result.usage)
+      raise
     for job in executed_jobs:
       if isinstance(job.result, LMSamplingResult):
         job.result.usage.rebind(

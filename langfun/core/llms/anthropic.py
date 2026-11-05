@@ -26,6 +26,13 @@ from langfun.core.llms import rest
 import pyglove as pg
 
 
+# Anthropic bills a write to its default 5-minute prompt cache at 1.25x the
+# base input rate, and a write to its 1-hour cache at 2x, for every model:
+# https://platform.claude.com/docs/en/about-claude/pricing#prompt-caching
+_CACHE_WRITE_INPUT_RATE_MULTIPLIER = 1.25
+_ONE_HOUR_CACHE_WRITE_INPUT_RATE_MULTIPLIER = 2.0
+
+
 class AnthropicModelInfo(lf.ModelInfo):
   """Anthropic model info."""
 
@@ -46,6 +53,37 @@ class AnthropicModelInfo(lf.ModelInfo):
       rate_limits='https://docs.anthropic.com/en/api/rate-limits',
       error_codes='https://docs.anthropic.com/en/api/errors',
   )
+
+  class Pricing(lf.ModelInfo.Pricing):
+    """Pricing for Anthropic models.
+
+    Unless `cost_per_1m_cache_creation_input_tokens` is set, a write to the
+    default 5-minute prompt cache costs 1.25x the input rate. Langfun only
+    asks for that cache (see `_apply_cache_breakpoints`), but writes that a
+    response reports for the 1-hour cache, in
+    `prompt_tokens_details['cache_creation_1h_tokens']`, cost 2x.
+    """
+
+    def estimate_cost(self, usage: lf.LMSamplingUsage) -> float | None:
+      cost = super().estimate_cost(usage)
+      one_hour_tokens = (usage.prompt_tokens_details or {}).get(
+          'cache_creation_1h_tokens'
+      )
+      if cost is None or not one_hour_tokens:
+        return cost
+      assert self.cost_per_1m_input_tokens is not None
+      input_rate = self.cost_per_1m_input_tokens
+      # `super().estimate_cost` billed every cache write at the 5-minute rate.
+      premium = (
+          input_rate * _ONE_HOUR_CACHE_WRITE_INPUT_RATE_MULTIPLIER
+          - self._cache_creation_rate(input_rate)
+      )
+      return cost + premium * one_hour_tokens / 1000_000
+
+    def _cache_creation_rate(self, input_rate: float) -> float:
+      if self.cost_per_1m_cache_creation_input_tokens is not None:
+        return self.cost_per_1m_cache_creation_input_tokens
+      return input_rate * _CACHE_WRITE_INPUT_RATE_MULTIPLIER
 
   class RateLimits(lf.ModelInfo.RateLimits):
     """Rate limits for Anthropic models."""
@@ -75,7 +113,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5,
             cost_per_1m_output_tokens=25,
@@ -101,7 +139,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5.0,
             cost_per_1m_output_tokens=25.0,
@@ -127,7 +165,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5.0,
             cost_per_1m_output_tokens=25.0,
@@ -155,7 +193,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5.0,
             cost_per_1m_output_tokens=25.0,
@@ -183,10 +221,15 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        # Pricing per 1M tokens as of 2026-09-22, from the vendor's published
-        # pricing page. Opus 5.5 is cheaper than every earlier Opus entry, so
-        # these numbers must not be copied from a sibling row.
-        pricing=lf.ModelInfo.Pricing(
+        # Pricing per 1M tokens, checked on 2026-11-04 against
+        # https://platform.claude.com/docs/en/about-claude/pricing and the
+        # Vertex AI global endpoint rates at
+        # https://cloud.google.com/model-garden/partner-models/pricing. Opus
+        # 5.5 is cheaper than every earlier Opus entry and its cache reads cost
+        # 0.05x the input rate (0.1x on earlier Opus models), so these numbers
+        # must not be copied from a sibling row. 5-minute cache writes cost
+        # $5.00, the 1.25x default of `AnthropicModelInfo.Pricing`.
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.2,
             cost_per_1m_input_tokens=4.0,
             cost_per_1m_output_tokens=20.0,
@@ -214,7 +257,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=64_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.1,
             cost_per_1m_input_tokens=1,
             cost_per_1m_output_tokens=5,
@@ -240,7 +283,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=64_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -268,7 +311,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=64_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5,
             cost_per_1m_output_tokens=25,
@@ -294,7 +337,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=1.5,
             cost_per_1m_input_tokens=15,
             cost_per_1m_output_tokens=75,
@@ -320,7 +363,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -347,7 +390,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -373,7 +416,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -399,7 +442,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -426,7 +469,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=64_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             # For global endpoint
             cost_per_1m_cached_input_tokens=0.1,
             cost_per_1m_input_tokens=1,
@@ -454,7 +497,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=64_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             # For global endpoint
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
@@ -483,7 +526,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5,
             cost_per_1m_output_tokens=25,
@@ -510,7 +553,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5.0,
             cost_per_1m_output_tokens=25.0,
@@ -537,7 +580,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_000_000,
             max_output_tokens=128_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5.0,
             cost_per_1m_output_tokens=25.0,
@@ -563,7 +606,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=64_000,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.5,
             cost_per_1m_input_tokens=5,
             cost_per_1m_output_tokens=25,
@@ -589,7 +632,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=1.5,
             cost_per_1m_input_tokens=15.0,
             cost_per_1m_output_tokens=75.0,
@@ -615,7 +658,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3.0,
             cost_per_1m_output_tokens=15.0,
@@ -641,7 +684,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -667,7 +710,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.3,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -690,7 +733,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.08,
             cost_per_1m_input_tokens=0.8,
             cost_per_1m_output_tokens=4,
@@ -713,7 +756,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.08,
             cost_per_1m_input_tokens=0.8,
             cost_per_1m_output_tokens=4,
@@ -737,7 +780,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=8_192,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.08,
             cost_per_1m_input_tokens=0.8,
             cost_per_1m_output_tokens=4,
@@ -761,7 +804,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=1.5,
             cost_per_1m_input_tokens=15,
             cost_per_1m_output_tokens=75,
@@ -784,7 +827,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=1.5,
             cost_per_1m_input_tokens=15,
             cost_per_1m_output_tokens=75,
@@ -808,7 +851,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=1.5,
             cost_per_1m_input_tokens=15,
             cost_per_1m_output_tokens=75,
@@ -832,7 +875,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=None,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -856,7 +899,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=None,
             cost_per_1m_input_tokens=3,
             cost_per_1m_output_tokens=15,
@@ -880,7 +923,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=None,
             cost_per_1m_input_tokens=0.25,
             cost_per_1m_output_tokens=1.25,
@@ -904,7 +947,7 @@ SUPPORTED_MODELS = [
             max_input_tokens=200_000,
             max_output_tokens=4_096,
         ),
-        pricing=lf.ModelInfo.Pricing(
+        pricing=AnthropicModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=None,
             cost_per_1m_input_tokens=0.25,
             cost_per_1m_output_tokens=1.25,
@@ -1326,6 +1369,14 @@ class Anthropic(rest.REST):
 
   def result(self, response_json: dict[str, Any]) -> lf.LMSamplingResult:
     if response_json.get('stop_reason') == 'refusal':
+      # The refusal is billed although it yields no result. Its usage is
+      # counted when it is complete, so that it never masks the refusal.
+      usage = response_json.get('usage') or {}
+      if all(
+          usage.get(key) is not None
+          for key in ('input_tokens', 'output_tokens')
+      ):
+        self._track_billed_usage(_usage(usage))
       # A policy refusal (HTTP 200) is deterministic for a given request, so it
       # must not surface as a retryable empty generation.
       details = response_json.get('stop_details') or {}
@@ -1335,15 +1386,8 @@ class Anthropic(rest.REST):
           f' {details.get("explanation") or "no explanation given"}'
       )
     message = lf.Message.from_value(response_json, format='anthropic')
-    input_tokens = response_json['usage']['input_tokens']
-    output_tokens = response_json['usage']['output_tokens']
     return lf.LMSamplingResult(
-        [lf.LMSample(message)],
-        usage=lf.LMSamplingUsage(
-            prompt_tokens=input_tokens,
-            completion_tokens=output_tokens,
-            total_tokens=input_tokens + output_tokens,
-        ),
+        [lf.LMSample(message)], usage=_usage(response_json['usage'])
     )
 
   def _response_to_message_dict(self, response: Any) -> dict[str, Any]:
@@ -1546,6 +1590,50 @@ class Anthropic(rest.REST):
     if status_code == 400 and b'prompt is too long' in content:  # pyrefly: ignore[unsupported-operation]
       return lf.ContextLimitError(f'{status_code}: {content}')
     return super()._error(status_code, content)
+
+
+def _usage(usage: dict[str, Any]) -> lf.LMSamplingUsage:
+  """Returns the Langfun usage of an Anthropic `usage` object.
+
+  Anthropic splits the prompt into disjoint counts: tokens read from the
+  prompt cache, tokens written to it, and the uncached rest after the last
+  cache breakpoint (`input_tokens`). `prompt_tokens` is the whole prompt.
+  `output_tokens` already includes thinking tokens.
+
+  Args:
+    usage: The `usage` object of a Messages API response.
+
+  Returns:
+    The usage.
+  """
+  cached_prompt_tokens = usage.get('cache_read_input_tokens') or 0
+  cache_creation_prompt_tokens = usage.get('cache_creation_input_tokens') or 0
+  prompt_tokens = (
+      usage['input_tokens']
+      + cached_prompt_tokens
+      + cache_creation_prompt_tokens
+  )
+  output_tokens = usage['output_tokens']
+  # Cache writes broken down by cache lifetime, which sets their price.
+  cache_creation = usage.get('cache_creation') or {}
+  prompt_tokens_details = None
+  if cache_creation:
+    prompt_tokens_details = {
+        'cache_creation_5m_tokens': (
+            cache_creation.get('ephemeral_5m_input_tokens') or 0
+        ),
+        'cache_creation_1h_tokens': (
+            cache_creation.get('ephemeral_1h_input_tokens') or 0
+        ),
+    }
+  return lf.LMSamplingUsage(
+      prompt_tokens=prompt_tokens,
+      completion_tokens=output_tokens,
+      total_tokens=prompt_tokens + output_tokens,
+      cached_prompt_tokens=cached_prompt_tokens,
+      cache_creation_prompt_tokens=cache_creation_prompt_tokens,
+      prompt_tokens_details=prompt_tokens_details,
+  )
 
 
 class Claude46(Anthropic):

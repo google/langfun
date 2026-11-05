@@ -196,29 +196,48 @@ class GeminiModelInfo(lf.ModelInfo):
     cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k: Annotated[
         float | None,
         (
-            'The cost per 1M cached input tokens for prompts longer than 128K. '
-            'If None, the 128k constraint is not applicable.'
+            'The cost per 1M cached input tokens for prompts longer than '
+            '`long_context_threshold` tokens. If None, the long-context input '
+            'rate applies.'
         )
     ] = None
 
     cost_per_1m_input_tokens_with_prompt_longer_than_128k: Annotated[
         float | None,
         (
-            'The cost per 1M input tokens for prompts longer than 128K. '
-            'If None, the 128k constraint is not applicable.'
+            'The cost per 1M input tokens for prompts longer than '
+            '`long_context_threshold` tokens. If None, the model has no '
+            'long-context rates.'
         )
     ] = None
 
     cost_per_1m_output_tokens_with_prompt_longer_than_128k: Annotated[
         float | None,
         (
-            'The cost per 1M output tokens for prompts longer than 128K.'
-            'If None, the 128k constraint is not applicable.'
+            'The cost per 1M output tokens for prompts longer than '
+            '`long_context_threshold` tokens. If None, the regular output '
+            'rate applies.'
         )
     ] = None
 
+    long_context_threshold: Annotated[
+        int,
+        (
+            'The prompt length, in tokens, above which the '
+            '`*_with_prompt_longer_than_128k` rates apply. The field names '
+            'come from Gemini 1.5, whose long-context tier starts above 128K '
+            'tokens; Gemini 2.5 and later start it above 200K tokens.'
+        )
+    ] = 128_000
+
     def estimate_cost(self, usage: lf.LMSamplingUsage) -> float | None:
-      """Estimates the cost of using the model. Subclass could override.
+      """Estimates the cost of a usage at these rates.
+
+      Gemini reports thinking tokens (`thoughtsTokenCount`) apart from
+      `usage.completion_tokens` (`candidatesTokenCount`) yet bills them as
+      output, so they are priced at the output rate. A prompt longer than
+      `long_context_threshold` tokens bills all its tokens at the long-context
+      rates.
 
       Args:
         usage: The usage information of the model.
@@ -227,48 +246,44 @@ class GeminiModelInfo(lf.ModelInfo):
         The estimated cost in US dollars. If None, cost estimating is not
         supported on the model.
       """
-      # Use 128K+ pricing if applicable
+      if (self.cost_per_1m_input_tokens is None
+          or self.cost_per_1m_output_tokens is None):
+        return None
+      thinking_tokens = (usage.completion_tokens_details or {}).get(
+          'thinking_tokens'
+      )
+      output_tokens = usage.completion_tokens + (thinking_tokens or 0)
+      long_context_input_rate = (
+          self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+      )
       if (
-          usage.prompt_tokens is not None
-          and usage.prompt_tokens >= 128_000
-          and self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
+          long_context_input_rate is not None
+          and usage.prompt_tokens > self.long_context_threshold
       ):
-        # Calculate non-cached prompt tokens
-        non_cached_prompt_tokens = (
-            usage.prompt_tokens - usage.cached_prompt_tokens
-        )
-        cost = (
-            self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
-            * non_cached_prompt_tokens
-        )
-
-        # Add cost for cached prompt tokens (if pricing is available)
-        if (
+        long_context_cached_input_rate = (
             self.cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k
-            is not None
-        ):
-          cost += (
-              self.cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k
-              * usage.cached_prompt_tokens
-          )
-        else:
-          # Fall back to regular 128K+ input pricing for cached tokens
-          cost += (
-              self.cost_per_1m_input_tokens_with_prompt_longer_than_128k
-              * usage.cached_prompt_tokens
-          )
-
-        # Add cost for output tokens
-        cost += (
-            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k  # pyrefly: ignore[unsupported-operation]
-            * usage.completion_tokens
         )
-
-        return cost / 1000_000
-
-      # Use regular pricing (delegates to parent class which handles cached
-      # tokens)
-      return super().estimate_cost(usage)
+        long_context_output_rate = (
+            self.cost_per_1m_output_tokens_with_prompt_longer_than_128k
+        )
+        return self._cost_at_rates(
+            usage,
+            input_rate=long_context_input_rate,
+            cached_input_rate=long_context_cached_input_rate,
+            output_rate=(
+                self.cost_per_1m_output_tokens
+                if long_context_output_rate is None
+                else long_context_output_rate
+            ),
+            output_tokens=output_tokens,
+        )
+      return self._cost_at_rates(
+          usage,
+          input_rate=self.cost_per_1m_input_tokens,
+          cached_input_rate=self.cost_per_1m_cached_input_tokens,
+          output_rate=self.cost_per_1m_output_tokens,
+          output_tokens=output_tokens,
+      )
 
   experimental: Annotated[
       bool,
@@ -301,10 +316,24 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_048_576,
             max_output_tokens=65_536,
         ),
-        # pricing, rate_limits and knowledge_cutoff are left unset, so they
-        # default to None, which callers already read as "unknown". Launch
-        # pricing is introductory and scheduled to rise, so pinning a rate here
-        # would go stale with no signal to the reader.
+        # Rates for the global endpoint per
+        # https://cloud.google.com/model-garden/pricing, which match
+        # https://ai.google.dev/gemini-api/docs/pricing. The launch rates are
+        # promotional (Vertex AI grants them as 50% credits back on the
+        # standard rates) and end on 2026-11-30. There is no long-context tier.
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.1,
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=10.0,
+            valid_through=datetime.date(2026, 11, 30),
+            next_pricing=GeminiModelInfo.Pricing(
+                cost_per_1m_cached_input_tokens=0.2,
+                cost_per_1m_input_tokens=4.0,
+                cost_per_1m_output_tokens=20.0,
+            ),
+        ),
+        # rate_limits and knowledge_cutoff are left unset, so they default to
+        # None, which callers already read as "unknown".
     ),
     # Gemini 3.1 Pro Preview
     GeminiModelInfo(
@@ -327,6 +356,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.4,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=4.0,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=18.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -400,6 +430,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.4,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=4.0,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=18.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -497,10 +528,18 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_048_576,
             max_output_tokens=65_536,
         ),
+        # Introductory rates through 2026-12-31 per
+        # https://cloud.google.com/model-garden/pricing (global endpoint).
         pricing=GeminiModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.075,
             cost_per_1m_input_tokens=0.75,
             cost_per_1m_output_tokens=3.75,
+            valid_through=datetime.date(2026, 12, 31),
+            next_pricing=GeminiModelInfo.Pricing(
+                cost_per_1m_cached_input_tokens=0.15,
+                cost_per_1m_input_tokens=1.5,
+                cost_per_1m_output_tokens=7.5,
+            ),
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2_000,
@@ -523,10 +562,19 @@ SUPPORTED_MODELS = [
             max_input_tokens=1_048_576,
             max_output_tokens=65_536,
         ),
+        # Introductory rates through 2026-12-31 per
+        # https://cloud.google.com/model-garden/pricing (global endpoint) and
+        # https://ai.google.dev/gemini-api/docs/pricing.
         pricing=GeminiModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.075,
             cost_per_1m_input_tokens=0.75,
             cost_per_1m_output_tokens=3.75,
+            valid_through=datetime.date(2026, 12, 31),
+            next_pricing=GeminiModelInfo.Pricing(
+                cost_per_1m_cached_input_tokens=0.15,
+                cost_per_1m_input_tokens=1.5,
+                cost_per_1m_output_tokens=7.5,
+            ),
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2_000,
@@ -576,6 +624,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -602,6 +651,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -651,6 +701,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -700,6 +751,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=2000,
@@ -725,6 +777,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_cached_input_tokens_with_prompt_longer_than_128k=0.250,
             cost_per_1m_input_tokens_with_prompt_longer_than_128k=2.50,
             cost_per_1m_output_tokens_with_prompt_longer_than_128k=15.0,
+            long_context_threshold=200_000,
         ),
         rate_limits=lf.ModelInfo.RateLimits(
             max_requests_per_minute=20,
@@ -1224,7 +1277,6 @@ def _merge_continuation_hops(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     A `generateContent` response combining all hops.
   """
   parts = []
-  usage = {}
   for payload in payloads:
     content = payload['candidates'][0].get('content') or {}
     hop_parts = list(content.get('parts') or [])
@@ -1236,10 +1288,6 @@ def _merge_continuation_hops(payloads: list[dict[str, Any]]) -> dict[str, Any]:
           'text': parts[-1]['text'] + first['text'],
       }
     parts.extend(hop_parts)
-    for key, value in (payload.get('usageMetadata') or {}).items():
-      if isinstance(value, int):
-        value += usage.get(key, 0)
-      usage[key] = value
   last = payloads[-1]
   candidate = dict(last['candidates'][0])
   candidate['content'] = dict(candidate.get('content') or {}, parts=parts)
@@ -1248,7 +1296,45 @@ def _merge_continuation_hops(payloads: list[dict[str, Any]]) -> dict[str, Any]:
       for payload in payloads
   ):
     candidate['finishReason'] = 'MAX_TOKENS'
-  return dict(last, candidates=[candidate], usageMetadata=usage)
+  return dict(
+      last,
+      candidates=[candidate],
+      usageMetadata=_sum_usage_metadata(payloads),
+  )
+
+
+def _sum_usage_metadata(payloads: list[dict[str, Any]]) -> dict[str, Any]:
+  """Returns the `usageMetadata` of responses, with their token counts summed.
+
+  Args:
+    payloads: `generateContent` responses. Fields that are not counts come
+      from the last response that has them.
+
+  Returns:
+    The combined `usageMetadata`.
+  """
+  usage = {}
+  for payload in payloads:
+    for key, value in (payload.get('usageMetadata') or {}).items():
+      if isinstance(value, int):
+        value += usage.get(key, 0)
+      usage[key] = value
+  return usage
+
+
+def _usage_from_metadata(usage: dict[str, Any]) -> lf.LMSamplingUsage:
+  """Returns the Langfun usage of a `usageMetadata`."""
+  # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.
+  # Therefore, we use 0 as the default value.
+  return lf.LMSamplingUsage(
+      prompt_tokens=usage.get('promptTokenCount') or 0,
+      completion_tokens=usage.get('candidatesTokenCount') or 0,
+      total_tokens=usage.get('totalTokenCount') or 0,
+      cached_prompt_tokens=usage.get('cachedContentTokenCount') or 0,
+      completion_tokens_details={
+          'thinking_tokens': usage.get('thoughtsTokenCount') or 0,
+      },
+  )
 
 
 def _carries_unrendered_content(candidate: dict[str, Any]) -> bool:
@@ -1468,9 +1554,11 @@ class Gemini(rest.REST):
           # Re-sampled, never resumed, which would only extend the runaway
           # call. Judged here on this hop's own counts: `result()` sees them
           # summed over the hops, where earlier thinking can mask the misfire.
+          self._track_billed_hops(hops + [hop])
           raise self._misfire_error(*_hop_signature(hop))
         hops.append(hop)
         if len(hops) == _MAX_CONTINUATION_HOPS:
+          self._track_billed_hops(hops)
           raise lf.LMError(
               f'Model {self.model_id} did not finish within '
               f'{_MAX_CONTINUATION_HOPS} requests.'
@@ -1527,6 +1615,7 @@ class Gemini(rest.REST):
           if candidate.get('finishReason') == 'CONTINUATION':
             # A mid-flight generation really did fail; hiding that would turn
             # a failure into a silently truncated answer.
+            self._track_billed_hops(hops)
             raise
           # Resuming an exhausted budget is best effort -- the token can have
           # expired, or the service can refuse the resume for a reason the
@@ -1538,11 +1627,26 @@ class Gemini(rest.REST):
         return self._parse_response(response)
       try:
         final = self._response_to_message_dict(response)
+      except (ValueError, KeyError) as e:
+        # Unreadable, but the earlier requests of the generation were billed.
+        self._track_billed_hops(hops)
+        raise lf.LMError(str(e)) from e
+      try:
         if final.get('candidates'):
-          final = _merge_continuation_hops(hops + [final])
-        return self.result(final)
+          return self.result(_merge_continuation_hops(hops + [final]))
+        # Nothing to merge into: the last response is judged on its own, but
+        # the usage of the failed generation includes the earlier requests.
+        try:
+          return self._result(final)
+        except (lf.LMError, ValueError, KeyError):
+          self._track_billed_hops(hops + [final])
+          raise
       except (ValueError, KeyError) as e:
         raise lf.LMError(str(e)) from e
+
+  def _track_billed_hops(self, hops: list[dict[str, Any]]) -> None:
+    """Reports the usage of the responses of a generation that has failed."""
+    self._track_billed_usage(_usage_from_metadata(_sum_usage_metadata(hops)))
 
   def _post_continuation(
       self, request: dict[str, Any], endpoint: str
@@ -1670,6 +1774,16 @@ class Gemini(rest.REST):
     return config
 
   def result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    try:
+      return self._result(json)
+    except (lf.LMError, ValueError, KeyError):
+      # The response is billed although it yields no result.
+      if usage := json.get('usageMetadata'):
+        self._track_billed_usage(_usage_from_metadata(usage))
+      raise
+
+  def _result(self, json: dict[str, Any]) -> lf.LMSamplingResult:
+    """Returns the result of a response, raising if it renders no answer."""
     candidates = json.get('candidates')
     if candidates is None:
       raise lf.TemporaryLMError(
@@ -1678,13 +1792,8 @@ class Gemini(rest.REST):
       )
 
     usage = json.get('usageMetadata') or {}
-    # NOTE(daiyip): We saw cases that `candidatesTokenCount` is not present.
-    # Therefore, we use 0 as the default value.
-    input_tokens = usage.get('promptTokenCount', 0)
     output_tokens = usage.get('candidatesTokenCount', 0)
     thinking_tokens = usage.get('thoughtsTokenCount', 0)
-    total_tokens = usage.get('totalTokenCount', 0)
-    cached_tokens = usage.get('cachedContentTokenCount', 0)
     # A blocked prompt is reported here, not on a candidate -- there is no
     # candidate to report it on.
     block_reason = (json.get('promptFeedback') or {}).get('blockReason')
@@ -1756,15 +1865,7 @@ class Gemini(rest.REST):
 
     return lf.LMSamplingResult(
         [lf.LMSample(message) for message in messages],
-        usage=lf.LMSamplingUsage(
-            prompt_tokens=input_tokens,
-            completion_tokens=output_tokens,
-            total_tokens=total_tokens,
-            cached_prompt_tokens=cached_tokens,
-            completion_tokens_details={
-                'thinking_tokens': thinking_tokens,
-            },
-        ),
+        usage=_usage_from_metadata(usage),
     )
 
   def _check_answer_present(

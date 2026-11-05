@@ -15,8 +15,10 @@
 
 import asyncio
 import contextlib
+import datetime
 import io
 import unittest
+from unittest import mock
 from langfun.core import concurrent
 from langfun.core import language_model as lm_lib
 from langfun.core import message as message_lib
@@ -76,6 +78,68 @@ class MockModel(lm_lib.LanguageModel):
   @property
   def model_id(self) -> str:
     return self.name
+
+
+class MockTwoSampleModel(MockModel):
+  """A mock model that returns two samples, and their joint usage, per call."""
+
+  def _sample(
+      self, prompts: list[message_lib.Message]
+  ) -> list[lm_lib.LMSamplingResult]:
+    return [
+        lm_lib.LMSamplingResult(
+            [lm_lib.LMSample(response='a'), lm_lib.LMSample(response='b')],
+            usage=lm_lib.LMSamplingUsage(
+                prompt_tokens=1000,
+                completion_tokens=200,
+                total_tokens=1200,
+                cached_prompt_tokens=400,
+                cache_creation_prompt_tokens=300,
+            ),
+        )
+        for _ in prompts
+    ]
+
+
+class MockEmptyOnceModel(MockModel):
+  """A mock model whose first generation is empty."""
+
+  def _on_bound(self):
+    super()._on_bound()
+    self._calls = 0
+
+  def _sample(
+      self, prompts: list[message_lib.Message]
+  ) -> list[lm_lib.LMSamplingResult]:
+    self._calls += 1
+    return [
+        lm_lib.LMSamplingResult(
+            [lm_lib.LMSample(response='' if self._calls == 1 else 'hi')],
+            usage=lm_lib.LMSamplingUsage(
+                prompt_tokens=100, completion_tokens=10, total_tokens=110
+            ),
+        )
+        for _ in prompts
+    ]
+
+
+class MockOneFailingPromptModel(MockModel):
+  """A mock model that rejects the prompt 'fail' and answers the others."""
+
+  def _sample(
+      self, prompts: list[message_lib.Message]
+  ) -> list[lm_lib.LMSamplingResult]:
+    def sample_one(prompt):
+      if prompt.text == 'fail':
+        raise lm_lib.LMError('Rejected.')
+      return lm_lib.LMSamplingResult(
+          [lm_lib.LMSample(response=prompt.text)],
+          usage=lm_lib.LMSamplingUsage(
+              prompt_tokens=100, completion_tokens=10, total_tokens=110
+          ),
+      )
+
+    return self._parallel_execute_with_currency_control(sample_one, prompts)
 
 
 class MockScoringModel(MockModel):
@@ -204,6 +268,144 @@ class ModelInfoTest(unittest.TestCase):
         # (100 prompt * 1.0 + 100 output * 2.0) / 1M = 0.0003
         0.0003,
     )
+
+  def test_estimate_cost_with_cache_creation_tokens(self):
+    usage = lm_lib.LMSamplingUsage(
+        prompt_tokens=1000,
+        completion_tokens=100,
+        total_tokens=1100,
+        cached_prompt_tokens=600,
+        cache_creation_prompt_tokens=300,
+    )
+    self.assertAlmostEqual(
+        lm_lib.ModelInfo(
+            'unknown',
+            pricing=lm_lib.ModelInfo.Pricing(
+                cost_per_1m_input_tokens=4.0,
+                cost_per_1m_output_tokens=20.0,
+                cost_per_1m_cached_input_tokens=0.2,
+                cost_per_1m_cache_creation_input_tokens=5.0,
+            ),
+        ).estimate_cost(usage),
+        # (100 uncached * 4.0 + 600 cached * 0.2 + 300 written * 5.0
+        #  + 100 output * 20.0) / 1M
+        (400 + 120 + 1500 + 2000) / 1e6,
+    )
+    # Cache writes fall back to the input rate when they are not priced.
+    self.assertAlmostEqual(
+        lm_lib.ModelInfo(
+            'unknown',
+            pricing=lm_lib.ModelInfo.Pricing(
+                cost_per_1m_input_tokens=4.0,
+                cost_per_1m_output_tokens=20.0,
+                cost_per_1m_cached_input_tokens=0.2,
+            ),
+        ).estimate_cost(usage),
+        (400 + 120 + 300 * 4.0 + 2000) / 1e6,
+    )
+
+  def test_pricing_effective_on(self):
+    standard = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=4.0,
+        cost_per_1m_output_tokens=20.0,
+    )
+    introductory = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=2.0,
+        cost_per_1m_output_tokens=10.0,
+        valid_through=datetime.date(2026, 11, 30),
+        next_pricing=standard,
+    )
+    self.assertIs(
+        introductory.effective_on(datetime.date(2026, 11, 30)), introductory
+    )
+    self.assertIs(
+        introductory.effective_on(datetime.date(2026, 12, 1)), standard
+    )
+    self.assertIs(standard.effective_on(datetime.date(2030, 1, 1)), standard)
+
+    # A schedule with two changes.
+    launch = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=1.0,
+        cost_per_1m_output_tokens=5.0,
+        valid_through=datetime.date(2026, 10, 31),
+        next_pricing=introductory,
+    )
+    self.assertIs(launch.effective_on(datetime.date(2026, 10, 31)), launch)
+    self.assertEqual(
+        launch.effective_on(datetime.date(2026, 11, 1)), introductory
+    )
+    self.assertEqual(launch.effective_on(datetime.date(2026, 12, 1)), standard)
+
+  def test_pricing_effective_on_defaults_to_utc_today(self):
+    pricing = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=2.0,
+        cost_per_1m_output_tokens=10.0,
+        valid_through=datetime.date(2026, 11, 30),
+        next_pricing=lm_lib.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=4.0,
+            cost_per_1m_output_tokens=20.0,
+        ),
+    )
+    with mock.patch.object(
+        lm_lib, '_utc_today', return_value=datetime.date(2026, 12, 1)
+    ):
+      self.assertEqual(pricing.effective_on().cost_per_1m_input_tokens, 4.0)
+
+  def test_estimate_cost_uses_pricing_in_effect(self):
+    info = lm_lib.ModelInfo(
+        'unknown',
+        pricing=lm_lib.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=10.0,
+            valid_through=datetime.date(2026, 11, 30),
+            next_pricing=lm_lib.ModelInfo.Pricing(
+                cost_per_1m_input_tokens=4.0,
+                cost_per_1m_output_tokens=20.0,
+            ),
+        ),
+    )
+    usage = lm_lib.LMSamplingUsage(
+        prompt_tokens=1000, completion_tokens=100, total_tokens=1100
+    )
+    with mock.patch.object(
+        lm_lib, '_utc_today', return_value=datetime.date(2026, 11, 30)
+    ):
+      self.assertAlmostEqual(info.estimate_cost(usage), 0.003)
+    with mock.patch.object(
+        lm_lib, '_utc_today', return_value=datetime.date(2026, 12, 1)
+    ):
+      self.assertAlmostEqual(info.estimate_cost(usage), 0.006)
+
+  def test_pricing_schedule_validation(self):
+    with self.assertRaisesRegex(ValueError, 'must be set together'):
+      lm_lib.ModelInfo.Pricing(
+          cost_per_1m_input_tokens=2.0,
+          cost_per_1m_output_tokens=10.0,
+          valid_through=datetime.date(2026, 11, 30),
+      )
+    with self.assertRaisesRegex(ValueError, 'must be set together'):
+      lm_lib.ModelInfo.Pricing(
+          cost_per_1m_input_tokens=2.0,
+          cost_per_1m_output_tokens=10.0,
+          next_pricing=lm_lib.ModelInfo.Pricing(),
+      )
+    with self.assertRaisesRegex(ValueError, 'chronological order'):
+      lm_lib.ModelInfo.Pricing(
+          valid_through=datetime.date(2026, 11, 30),
+          next_pricing=lm_lib.ModelInfo.Pricing(
+              valid_through=datetime.date(2026, 11, 30),
+              next_pricing=lm_lib.ModelInfo.Pricing(),
+          ),
+      )
+
+    class CustomPricing(lm_lib.ModelInfo.Pricing):
+      pass
+
+    with self.assertRaisesRegex(ValueError, 'same type'):
+      CustomPricing(
+          valid_through=datetime.date(2026, 11, 30),
+          next_pricing=lm_lib.ModelInfo.Pricing(),
+      )
 
 
 class LMSamplingOptionsTest(unittest.TestCase):
@@ -1128,6 +1330,106 @@ class LMSamplingUsageTest(unittest.TestCase):
     self.assertEqual(result.total_tokens, 700)
     self.assertEqual(result.num_requests, 5)
     self.assertEqual(result.estimated_cost, 7.0)
+
+  def test_cache_creation_prompt_tokens(self):
+    # Positional construction is unaffected by the field, which defaults to 0.
+    usage = lm_lib.LMSamplingUsage(100, 200, 300, 0, 4, 5.0)
+    self.assertEqual(usage.num_requests, 4)
+    self.assertEqual(usage.cache_creation_prompt_tokens, 0)
+
+    usage1 = lm_lib.LMSamplingUsage(
+        prompt_tokens=100,
+        completion_tokens=200,
+        total_tokens=300,
+        cached_prompt_tokens=50,
+        cache_creation_prompt_tokens=40,
+    )
+    usage2 = lm_lib.LMSamplingUsage(
+        prompt_tokens=150,
+        completion_tokens=250,
+        total_tokens=400,
+        cache_creation_prompt_tokens=20,
+    )
+    result = usage1 + usage2
+    self.assertEqual(result.cache_creation_prompt_tokens, 60)
+    self.assertEqual(result.cached_prompt_tokens, 50)
+    self.assertEqual(result.prompt_tokens, 250)
+
+  def test_track_billed_usage_of_discarded_generations(self):
+    lm = MockEmptyOnceModel(retry_interval=0)
+    with lm_lib.track_usages() as usages:
+      response = lm('hello')
+    self.assertEqual(response.text, 'hi')
+    # The response carries the usage of its own call ...
+    self.assertEqual(response.metadata.usage.num_requests, 1)
+    self.assertEqual(response.metadata.usage.estimated_cost, 1.0)
+    # ... while the trackers also count the empty generation sampled again.
+    self.assertEqual(usages.total.num_requests, 2)
+    self.assertEqual(usages.total.prompt_tokens, 200)
+    self.assertEqual(usages.total.estimated_cost, 2.0)
+
+  def test_track_billed_usage_of_a_batch_with_a_failed_prompt(self):
+    lm = MockOneFailingPromptModel()
+    with lm_lib.track_usages() as usages:
+      with self.assertRaisesRegex(lm_lib.LMError, 'Rejected'):
+        lm.sample(['hi', 'fail', 'hello'])
+    # The two answered prompts were billed, although the error discards them.
+    self.assertEqual(usages.total.num_requests, 2)
+    self.assertEqual(usages.total.prompt_tokens, 200)
+    self.assertEqual(usages.total.estimated_cost, 2.0)
+
+  def test_track_billed_usage_never_stops_a_retry(self):
+    lm = MockEmptyOnceModel(retry_interval=0)
+    with mock.patch.object(
+        MockModel.ModelInfo,
+        'estimate_cost',
+        side_effect=[ZeroDivisionError('pricing bug'), 1.0],
+    ):
+      with mock.patch.object(pg.logging, 'warning') as warning:
+        response = lm('hello')
+    # Pricing the discarded generation failed, which is logged, and the
+    # generation was sampled again all the same.
+    self.assertEqual(response.text, 'hi')
+    self.assertEqual(lm._calls, 2)
+    self.assertIn('pricing bug', repr(warning.call_args_list))
+
+  def test_track_billed_usage_never_raises_tracker_errors(self):
+    lm = MockModel()
+    with lm_lib.track_usages():
+      with mock.patch.object(
+          lm_lib._UsageTracker, 'track', side_effect=ValueError('tracker bug')
+      ):
+        with mock.patch.object(pg.logging, 'warning') as warning:
+          lm._track_billed_usage(
+              lm_lib.LMSamplingUsage(
+                  prompt_tokens=100, completion_tokens=10, total_tokens=110
+              )
+          )
+    warning.assert_called_once()
+    self.assertIn('tracker bug', repr(warning.call_args))
+
+  def test_track_billed_usage_skips_unavailable_usage(self):
+    lm = MockModel()
+    with lm_lib.track_usages() as usages:
+      lm._track_billed_usage(lm_lib.UsageNotAvailable())
+    self.assertEqual(usages.total.num_requests, 0)
+
+  def test_cache_creation_prompt_tokens_split_across_samples(self):
+    results = MockTwoSampleModel().sample(['hi'])
+    for sample in results[0].samples:
+      usage = sample.response.metadata.usage
+      self.assertEqual(usage.prompt_tokens, 500)
+      self.assertEqual(usage.cached_prompt_tokens, 200)
+      self.assertEqual(usage.cache_creation_prompt_tokens, 150)
+
+  def test_track_usages_counts_a_multi_sample_call_once(self):
+    with lm_lib.track_usages() as usages:
+      MockTwoSampleModel().sample(['hi'])
+    # One call that returned two samples, billed once.
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.prompt_tokens, 1000)
+    self.assertEqual(usages.total.cache_creation_prompt_tokens, 300)
+    self.assertEqual(usages.total.estimated_cost, 1.0)
 
   def test_add(self):
     usage1 = lm_lib.LMSamplingUsage(100, 200, 300, 0, 4, 5.0)

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Tests for VertexAI models."""
 
+import datetime
 import os
 from typing import Any
 import unittest
@@ -21,6 +22,7 @@ from unittest import mock
 from google import auth
 from google.auth import exceptions
 import langfun.core as lf
+from langfun.core.llms import anthropic
 from langfun.core.llms import gemini
 from langfun.core.llms import rest
 from langfun.core.llms import vertexai
@@ -472,8 +474,6 @@ class VertexAIAnthropicTest(unittest.TestCase):
 
   def test_lm_get_at_latest_resolves_anthropic(self):
     """@latest suffix for Opus 4.6/4.7 resolves as Anthropic direct API."""
-    from langfun.core.llms import anthropic  # pylint: disable=g-import-not-at-top
-
     self.assertIsInstance(
         lf.LanguageModel.get('claude-opus-4-6@latest'),
         anthropic.Anthropic,
@@ -917,6 +917,300 @@ class VertexAIEmptyGenerationTest(unittest.TestCase):
       with self.assertRaises(lf.concurrent.RetryError):
         lm('hello')
     self.assertEqual(len(calls), 3)
+
+
+def _serve_json(*bodies: dict[str, Any]) -> Any:
+  """Returns a POST side effect serving `bodies` with HTTP 200, in order."""
+  served = []
+
+  def post(url, json, **kwargs):
+    del url, json, kwargs
+    body = bodies[len(served)]
+    served.append(body)
+    response = requests.Response()
+    response.status_code = 200
+    response._content = (  # pylint: disable=protected-access
+        pg.to_json_str(body).encode()
+    )
+    return response
+
+  return post
+
+
+def _today(year: int, month: int, day: int) -> Any:
+  """Pins the date that dated pricing resolves on."""
+  return mock.patch(
+      'langfun.core.language_model._utc_today',
+      return_value=datetime.date(year, month, day),
+  )
+
+
+class VertexAIBillingTest(unittest.TestCase):
+  """Tests the usage and cost reported for the latest models on Vertex AI.
+
+  The token counts in the fake responses are those Vertex AI reported for live
+  calls on 2026-11-04. Each prompt had been cached by an earlier call, except in
+  the first Claude response, which wrote the prompt to the cache.
+  """
+
+  _ARGON_RESPONSE = {
+      'candidates': [{
+          'content': {'role': 'model', 'parts': [{'text': '25'}]},
+          'finishReason': 'STOP',
+      }],
+      'usageMetadata': {
+          'promptTokenCount': 17_387,
+          'candidatesTokenCount': 6,
+          'totalTokenCount': 18_099,
+          'cachedContentTokenCount': 15_333,
+          'thoughtsTokenCount': 706,
+      },
+  }
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_argon_bills_cache_hits_and_thinking(self):
+    lm = vertexai.VertexAIGemini4Argon(project='test-project')
+    with mock.patch(
+        'requests.Session.post',
+        side_effect=_serve_json(self._ARGON_RESPONSE, self._ARGON_RESPONSE),
+    ):
+      with _today(2026, 11, 30):
+        promotional = lm('promotional').usage
+      with _today(2026, 12, 1):
+        standard = lm('standard').usage
+
+    self.assertEqual(promotional.prompt_tokens, 17_387)
+    self.assertEqual(promotional.cached_prompt_tokens, 15_333)
+    self.assertEqual(promotional.completion_tokens, 6)
+    self.assertEqual(
+        promotional.completion_tokens_details, {'thinking_tokens': 706}
+    )
+    # (2,054 uncached * $2 + 15,333 cached * $0.10
+    #  + (6 answer + 706 thinking) output * $10) / 1M
+    self.assertAlmostEqual(promotional.estimated_cost, 0.0127613)
+    # The standard rates from 2026-12-01 are twice the promotional ones.
+    self.assertAlmostEqual(standard.estimated_cost, 0.0255226)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_38_flash_bills_cache_hits_and_thinking(self):
+    response = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': '1369'}]},
+            'finishReason': 'STOP',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 17_340,
+            'candidatesTokenCount': 4,
+            'totalTokenCount': 17_396,
+            'cachedContentTokenCount': 12_264,
+            'thoughtsTokenCount': 52,
+        },
+    }
+    lm = vertexai.VertexAIGemini38Flash(project='test-project')
+    with mock.patch(
+        'requests.Session.post', side_effect=_serve_json(response, response)
+    ):
+      with _today(2026, 12, 31):
+        introductory = lm('introductory').usage
+      with _today(2027, 1, 1):
+        standard = lm('standard').usage
+
+    self.assertEqual(introductory.prompt_tokens, 17_340)
+    self.assertEqual(introductory.cached_prompt_tokens, 12_264)
+    # (5,076 uncached * $0.75 + 12,264 cached * $0.075
+    #  + (4 answer + 52 thinking) output * $3.75) / 1M
+    self.assertAlmostEqual(introductory.estimated_cost, 0.0049368)
+    # The standard rates from 2027-01-01 are twice the introductory ones.
+    self.assertAlmostEqual(standard.estimated_cost, 0.0098736)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_claude_opus_55_bills_cache_writes_and_reads(self):
+
+    def response(cache_creation_tokens, cache_read_tokens, output_tokens):
+      return {
+          'id': 'msg_1',
+          'type': 'message',
+          'role': 'assistant',
+          'model': 'claude-opus-5-5',
+          'content': [{'type': 'text', 'text': '25'}],
+          'stop_reason': 'end_turn',
+          'usage': {
+              'input_tokens': 4,
+              'cache_creation_input_tokens': cache_creation_tokens,
+              'cache_read_input_tokens': cache_read_tokens,
+              'cache_creation': {
+                  'ephemeral_5m_input_tokens': cache_creation_tokens,
+                  'ephemeral_1h_input_tokens': 0,
+              },
+              'output_tokens': output_tokens,
+          },
+      }
+
+    lm = vertexai.VertexAIClaude55Opus(project='test-project')
+    with mock.patch(
+        'requests.Session.post',
+        side_effect=_serve_json(
+            response(14_422, 0, 168), response(0, 14_422, 183)
+        ),
+    ):
+      write = lm('first').usage
+      read = lm('second').usage
+
+    self.assertEqual(write.prompt_tokens, 14_426)
+    self.assertEqual(write.cache_creation_prompt_tokens, 14_422)
+    self.assertEqual(write.cached_prompt_tokens, 0)
+    # (4 uncached * $4 + 14,422 written * $5 + 168 output * $20) / 1M
+    self.assertAlmostEqual(write.estimated_cost, 0.075486)
+    self.assertEqual(read.prompt_tokens, 14_426)
+    self.assertEqual(read.cache_creation_prompt_tokens, 0)
+    self.assertEqual(read.cached_prompt_tokens, 14_422)
+    # (4 uncached * $4 + 14,422 read * $0.20 + 183 output * $20) / 1M
+    self.assertAlmostEqual(read.estimated_cost, 0.0065604)
+
+  def test_non_global_endpoints_bill_a_premium(self):
+    # Gemini 4 Argon on the US multi-region endpoint.
+    pricing = vertexai.VertexAIGemini4Argon(
+        project='test-project', location='us'
+    ).pricing
+    promotional = pricing.effective_on(datetime.date(2026, 11, 30))
+    self.assertEqual(promotional.cost_per_1m_input_tokens, 2.2)
+    self.assertEqual(promotional.cost_per_1m_cached_input_tokens, 0.11)
+    self.assertEqual(promotional.cost_per_1m_output_tokens, 11.0)
+    standard = pricing.effective_on(datetime.date(2026, 12, 1))
+    self.assertEqual(standard.cost_per_1m_input_tokens, 4.4)
+    self.assertEqual(standard.cost_per_1m_cached_input_tokens, 0.22)
+    self.assertEqual(standard.cost_per_1m_output_tokens, 22.0)
+
+    # Claude Opus 4.6 on its default endpoint, the us-east5 region.
+    lm = vertexai.VertexAIClaude46Opus(project='test-project')
+    self.assertEqual(lm.location, 'us-east5')
+    self.assertEqual(lm.pricing.cost_per_1m_input_tokens, 5.5)
+    self.assertEqual(lm.pricing.cost_per_1m_cached_input_tokens, 0.55)
+    self.assertEqual(lm.pricing.cost_per_1m_output_tokens, 27.5)
+    # A 5-minute cache write costs 1.25x the regional input rate.
+    self.assertAlmostEqual(
+        lm.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=1_000_000,
+                completion_tokens=0,
+                total_tokens=1_000_000,
+                cache_creation_prompt_tokens=1_000_000,
+            )
+        ),
+        6.875,
+    )
+
+  def test_global_endpoints_and_older_models_bill_list_rates(self):
+    self.assertEqual(
+        vertexai.VertexAIClaude55Opus(
+            project='test-project'
+        ).pricing.cost_per_1m_input_tokens,
+        4.0,
+    )
+    self.assertEqual(
+        vertexai.VertexAIGemini38Flash(project='test-project')
+        .pricing.effective_on(datetime.date(2026, 12, 31))
+        .cost_per_1m_input_tokens,
+        0.75,
+    )
+    # Vertex AI bills Gemini 2.5 and Claude Opus 4 alike on every endpoint.
+    self.assertEqual(
+        vertexai.VertexAIGemini25Flash(
+            project='test-project', location='us-central1'
+        ).pricing.cost_per_1m_input_tokens,
+        0.3,
+    )
+    self.assertEqual(
+        vertexai.VertexAIClaude4Opus_20250514(
+            project='test-project'
+        ).pricing.cost_per_1m_input_tokens,
+        15.0,
+    )
+
+  def test_gemini_25_pro_keeps_its_rates_on_vertex_ai(self):
+    # Unlike the Gemini API, Vertex AI keeps serving Gemini 2.5 Pro.
+    pricing = vertexai.VertexAIGemini25Pro(project='test-project').pricing
+    in_2027 = pricing.effective_on(datetime.date(2027, 1, 1))
+    self.assertEqual(in_2027.cost_per_1m_input_tokens, 1.25)
+
+  def test_non_global_premium_follows_the_resolved_location(self):
+    pricing = vertexai.VertexAIGemini38Flash(
+        project='test-project', location='us-central1'
+    ).pricing.effective_on(datetime.date(2026, 12, 31))
+    self.assertEqual(pricing.cost_per_1m_input_tokens, 0.825)
+    self.assertEqual(pricing.cost_per_1m_cached_input_tokens, 0.0825)
+    self.assertEqual(pricing.cost_per_1m_output_tokens, 4.125)
+
+    # Without a location, the endpoint location comes from the environment.
+    with mock.patch.dict(os.environ, {'VERTEXAI_LOCATION': 'eu'}):
+      pricing = vertexai.VertexAIGemini4Argon(
+          project='test-project', location=None
+      ).pricing.effective_on(datetime.date(2026, 12, 1))
+    self.assertEqual(pricing.cost_per_1m_input_tokens, 4.4)
+
+  def test_every_priced_model_is_classified_for_the_non_global_premium(self):
+    """Fails when a model is added without deciding its non-global rates.
+
+    Vertex AI bills generally available Gemini 3 and later models, and Claude
+    Sonnet 4.5, Haiku 4.5, Opus 4.5 and later models, 10% more off the global
+    endpoint. A new model belongs either in
+    `vertexai._MODELS_WITH_NON_GLOBAL_PRICE_PREMIUM` or in `same_everywhere`.
+    """
+    same_everywhere = {
+        # Gemini previews and models before Gemini 3.
+        'gemini-3.1-pro-preview',
+        'gemini-3.1-flash-lite-preview',
+        'gemini-3-pro-preview',
+        'gemini-3-flash-preview',
+        'gemini-2.5-pro',
+        'gemini-2.5-flash',
+        'gemini-2.5-pro-preview-06-05',
+        'gemini-2.5-flash-preview-05-20',
+        'gemini-2.5-pro-preview-05-06',
+        'gemini-2.5-flash-preview-04-17',
+        'gemini-2.5-pro-preview-03-25',
+        'gemini-2.5-pro-exp-03-25',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-001',
+        'gemini-2.0-flash-lite-preview-02-05',
+        'gemini-1.5-pro',
+        'gemini-1.5-pro-001',
+        'gemini-1.5-pro-002',
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-001',
+        'gemini-1.5-flash-002',
+        # Claude models before Sonnet 4.5.
+        'claude-4-opus-20250514',
+        'claude-opus-4-20250514',
+        'claude-4-sonnet-20250514',
+        'claude-sonnet-4@20250514',
+        'claude-3-7-sonnet-20250219',
+        'claude-3-5-sonnet-20241022',
+        'claude-3-5-haiku-20241022',
+        'claude-3-opus-20240229',
+        'claude-3-sonnet-20240229',
+        'claude-3-haiku-20240307',
+    }
+    priced = {
+        m.alias_for or m.model_id
+        for m in gemini.SUPPORTED_MODELS
+        if m.pricing is not None
+        and (
+            m.provider == 'VertexAI'
+            or (
+                isinstance(m.provider, pg.hyper.OneOf)
+                and 'VertexAI' in m.provider.candidates
+            )
+        )
+    } | {
+        m.alias_for or m.model_id
+        for m in anthropic.SUPPORTED_MODELS
+        if m.pricing is not None
+    }
+    premium = vertexai._MODELS_WITH_NON_GLOBAL_PRICE_PREMIUM
+    self.assertEqual(priced - premium - same_everywhere, set())
+    self.assertEqual(premium - priced, set())
+    self.assertEqual(premium & same_everywhere, set())
 
 
 if __name__ == '__main__':

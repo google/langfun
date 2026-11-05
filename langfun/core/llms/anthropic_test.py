@@ -1145,6 +1145,32 @@ class Claude55OpusTest(unittest.TestCase):
     self.assertEqual(entry.pricing.cost_per_1m_input_tokens, 4.0)
     self.assertEqual(entry.pricing.cost_per_1m_output_tokens, 20.0)
 
+  def test_opus55_prompt_cache_rates(self):
+    """Opus 5.5 cache writes cost $5.00 and cache reads $0.20 per 1M tokens."""
+    lm = anthropic.Claude55Opus(api_key='fake')
+    self.assertAlmostEqual(
+        lm.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=1_000_000,
+                completion_tokens=0,
+                total_tokens=1_000_000,
+                cache_creation_prompt_tokens=1_000_000,
+            )
+        ),
+        5.0,
+    )
+    self.assertAlmostEqual(
+        lm.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=1_000_000,
+                completion_tokens=0,
+                total_tokens=1_000_000,
+                cached_prompt_tokens=1_000_000,
+            )
+        ),
+        0.2,
+    )
+
   def test_opus55_has_no_vertexai_alias_row(self):
     """Opus 5.5 is registered bare-only, mirroring its predecessor Opus 5.
 
@@ -1307,7 +1333,178 @@ class Claude55OpusTest(unittest.TestCase):
       self.assertIn('top_p=None', response.text)
 
 
+def _cached_sse_stream(
+    cache_creation_tokens: int,
+    cache_read_tokens: int,
+    output_tokens: int,
+    *,
+    cumulative_delta_usage: bool = False,
+) -> str:
+  """Returns an Opus 5.5 SSE stream whose usage reports prompt caching.
+
+  Args:
+    cache_creation_tokens: Prompt tokens written to the cache.
+    cache_read_tokens: Prompt tokens read from the cache.
+    output_tokens: The final output token count.
+    cumulative_delta_usage: Whether `message_delta` repeats the input counts
+      next to `output_tokens`, as some streams do.
+  """
+  input_usage = {
+      'input_tokens': 4,
+      'cache_creation_input_tokens': cache_creation_tokens,
+      'cache_read_input_tokens': cache_read_tokens,
+  }
+  delta_usage = {'output_tokens': output_tokens}
+  if cumulative_delta_usage:
+    delta_usage.update(input_usage)
+  events = [
+      ('message_start', {
+          'type': 'message_start',
+          'message': {
+              'id': 'msg_1',
+              'type': 'message',
+              'role': 'assistant',
+              'model': 'claude-opus-5-5',
+              'content': [],
+              'stop_reason': None,
+              'stop_sequence': None,
+              'usage': dict(
+                  input_usage,
+                  cache_creation={
+                      'ephemeral_5m_input_tokens': cache_creation_tokens,
+                      'ephemeral_1h_input_tokens': 0,
+                  },
+                  output_tokens=1,
+              ),
+          },
+      }),
+      ('content_block_start', {
+          'type': 'content_block_start',
+          'index': 0,
+          'content_block': {'type': 'text', 'text': ''},
+      }),
+      ('content_block_delta', {
+          'type': 'content_block_delta',
+          'index': 0,
+          'delta': {'type': 'text_delta', 'text': '25'},
+      }),
+      ('content_block_stop', {'type': 'content_block_stop', 'index': 0}),
+      ('message_delta', {
+          'type': 'message_delta',
+          'delta': {'stop_reason': 'end_turn', 'stop_sequence': None},
+          'usage': delta_usage,
+      }),
+      ('message_stop', {'type': 'message_stop'}),
+  ]
+  return ''.join(
+      f'event: {name}\ndata: {pg.to_json_str(data)}\n\n'
+      for name, data in events
+  )
+
+
 class AnthropicCachingTest(unittest.TestCase):
+
+  def test_result_counts_cache_reads_and_writes_as_prompt_tokens(self):
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    result = lm.result({
+        'content': [{'type': 'text', 'text': '1369'}],
+        'stop_reason': 'end_turn',
+        'usage': {
+            'input_tokens': 4,
+            'cache_creation_input_tokens': 300,
+            'cache_read_input_tokens': 14_100,
+            'cache_creation': {
+                'ephemeral_5m_input_tokens': 300,
+                'ephemeral_1h_input_tokens': 0,
+            },
+            'output_tokens': 7,
+        },
+    })
+    self.assertEqual(result.usage.prompt_tokens, 14_404)
+    self.assertEqual(result.usage.cached_prompt_tokens, 14_100)
+    self.assertEqual(result.usage.cache_creation_prompt_tokens, 300)
+    self.assertEqual(result.usage.completion_tokens, 7)
+    self.assertEqual(result.usage.total_tokens, 14_411)
+
+  def test_one_hour_cache_writes_cost_twice_the_input_rate(self):
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    usage = lm.result({
+        'content': [{'type': 'text', 'text': 'hi'}],
+        'usage': {
+            'input_tokens': 4,
+            'cache_creation_input_tokens': 3_000,
+            'cache_creation': {
+                'ephemeral_5m_input_tokens': 1_000,
+                'ephemeral_1h_input_tokens': 2_000,
+            },
+            'output_tokens': 10,
+        },
+    }).usage
+    self.assertEqual(usage.cache_creation_prompt_tokens, 3_000)
+    self.assertEqual(
+        usage.prompt_tokens_details,
+        {'cache_creation_5m_tokens': 1_000, 'cache_creation_1h_tokens': 2_000},
+    )
+    self.assertAlmostEqual(
+        lm.estimate_cost(usage),
+        # (4 uncached * $4 + 1,000 5-minute writes * $5
+        #  + 2,000 1-hour writes * $8 + 10 output * $20) / 1M
+        (16 + 5_000 + 16_000 + 200) / 1e6,
+    )
+
+  def test_result_without_cache_fields(self):
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    result = lm.result({
+        'content': [{'type': 'text', 'text': 'hi'}],
+        'usage': {'input_tokens': 2, 'output_tokens': 1},
+    })
+    self.assertEqual(result.usage.prompt_tokens, 2)
+    self.assertEqual(result.usage.cached_prompt_tokens, 0)
+    self.assertEqual(result.usage.cache_creation_prompt_tokens, 0)
+    self.assertEqual(result.usage.total_tokens, 3)
+
+  def test_streamed_calls_bill_cache_writes_then_reads(self):
+    """Replays two identical Opus 5.5 calls, the first of which fills the cache.
+
+    The token counts are those Vertex AI reported for such a pair of calls on
+    2026-11-04.
+    """
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    with mock.patch('requests.Session.post') as mock_request:
+      mock_request.side_effect = mock_sse_post(
+          _cached_sse_stream(14_422, 0, 168)
+      )
+      write = lm('first').usage
+      mock_request.side_effect = mock_sse_post(
+          _cached_sse_stream(0, 14_422, 183)
+      )
+      read = lm('second').usage
+
+    self.assertEqual(write.prompt_tokens, 14_426)
+    self.assertEqual(write.cached_prompt_tokens, 0)
+    self.assertEqual(write.cache_creation_prompt_tokens, 14_422)
+    self.assertEqual(write.completion_tokens, 168)
+    self.assertEqual(write.total_tokens, 14_594)
+    # (4 uncached * $4 + 14,422 written * $5 + 168 output * $20) / 1M
+    self.assertAlmostEqual(write.estimated_cost, 0.075486)
+
+    self.assertEqual(read.prompt_tokens, 14_426)
+    self.assertEqual(read.cached_prompt_tokens, 14_422)
+    self.assertEqual(read.cache_creation_prompt_tokens, 0)
+    self.assertEqual(read.completion_tokens, 183)
+    # (4 uncached * $4 + 14,422 read * $0.20 + 183 output * $20) / 1M
+    self.assertAlmostEqual(read.estimated_cost, 0.0065604)
+
+  def test_cache_counts_repeated_in_message_delta(self):
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    message = lm._reassemble_sse(
+        _cached_sse_stream(0, 14_422, 183, cumulative_delta_usage=True)
+    )
+    usage = lm.result(message).usage
+    self.assertEqual(usage.prompt_tokens, 14_426)
+    self.assertEqual(usage.cached_prompt_tokens, 14_422)
+    self.assertEqual(usage.cache_creation_prompt_tokens, 0)
+    self.assertEqual(usage.completion_tokens, 183)
 
   def test_helper_stamps_system_string_to_block_list(self):
     request = {'system': 'sys text', 'messages': []}
@@ -1585,6 +1782,55 @@ class AnthropicStreamingSSETest(unittest.TestCase):
           'stop_reason': 'refusal',
           'usage': {'input_tokens': 5, 'output_tokens': 0},
       })
+
+  def test_refusal_usage_is_tracked(self):
+    """A refusal is billed, so its usage reaches the usage trackers."""
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    with lf.track_usages() as usages:
+      with self.assertRaises(lf.ContentFilteredError):
+        lm.result({
+            'content': [],
+            'stop_reason': 'refusal',
+            'usage': {
+                'input_tokens': 5,
+                'cache_read_input_tokens': 1_000,
+                'output_tokens': 7,
+            },
+        })
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.prompt_tokens, 1_005)
+    self.assertEqual(usages.total.cached_prompt_tokens, 1_000)
+    # (5 uncached * $4 + 1,000 read * $0.20 + 7 output * $20) / 1M
+    self.assertAlmostEqual(
+        usages.total.estimated_cost, (20 + 200 + 140) / 1e6
+    )
+
+  def test_refusal_still_raises_when_pricing_fails(self):
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    with mock.patch.object(
+        anthropic.Claude55Opus,
+        'estimate_cost',
+        side_effect=ZeroDivisionError('pricing bug'),
+    ):
+      with self.assertRaises(lf.ContentFilteredError):
+        lm.result({
+            'content': [],
+            'stop_reason': 'refusal',
+            'usage': {'input_tokens': 5, 'output_tokens': 7},
+        })
+
+  def test_refusal_without_usage_still_raises(self):
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    with lf.track_usages() as usages:
+      with self.assertRaises(lf.ContentFilteredError):
+        lm.result({'content': [], 'stop_reason': 'refusal'})
+      with self.assertRaises(lf.ContentFilteredError):
+        lm.result({
+            'content': [],
+            'stop_reason': 'refusal',
+            'usage': {'input_tokens': 5, 'output_tokens': None},
+        })
+    self.assertEqual(usages.total.num_requests, 0)
 
   def test_buffered_json_body_still_parses(self):
     """A single buffered JSON body (non-SSE) must still parse (auto-detect)."""
