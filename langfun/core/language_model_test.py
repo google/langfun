@@ -1411,8 +1411,11 @@ class LMSamplingUsageTest(unittest.TestCase):
   def test_track_billed_usage_skips_unavailable_usage(self):
     lm = MockModel()
     with lm_lib.track_usages() as usages:
-      lm._track_billed_usage(lm_lib.UsageNotAvailable())
+      with mock.patch.object(pg.logging, 'warning') as warning:
+        lm._track_billed_usage(lm_lib.UsageNotAvailable())
     self.assertEqual(usages.total.num_requests, 0)
+    # Skipped as having nothing to report, not as a failure to report it.
+    warning.assert_not_called()
 
   def test_cache_creation_prompt_tokens_split_across_samples(self):
     results = MockTwoSampleModel().sample(['hi'])

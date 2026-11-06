@@ -93,6 +93,10 @@ class GenAITest(unittest.TestCase):
     self.assertEqual(standard.cost_per_1m_input_tokens, 1.5)
     self.assertEqual(standard.cost_per_1m_output_tokens, 7.5)
 
+  def test_rerouted_model_without_pricing_is_unchanged(self):
+    model_info = lf.ModelInfo(model_id='gemini-2.5-pro')
+    self.assertIs(google_genai._with_reroute_pricing(model_info), model_info)
+
   def test_other_models_keep_their_rates(self):
     pricing = google_genai.Gemini25Flash(api_key='abc').pricing
     self.assertEqual(

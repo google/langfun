@@ -1426,6 +1426,22 @@ class AnthropicCachingTest(unittest.TestCase):
     self.assertEqual(result.usage.completion_tokens, 7)
     self.assertEqual(result.usage.total_tokens, 14_411)
 
+  def test_cache_write_rate_overrides_the_default(self):
+    pricing = anthropic.AnthropicModelInfo.Pricing(
+        cost_per_1m_input_tokens=4.0,
+        cost_per_1m_cached_input_tokens=0.4,
+        cost_per_1m_output_tokens=20.0,
+        cost_per_1m_cache_creation_input_tokens=6.0,
+    )
+    usage = lf.LMSamplingUsage(
+        prompt_tokens=1_000,
+        completion_tokens=0,
+        total_tokens=1_000,
+        cache_creation_prompt_tokens=1_000,
+    )
+    # 1,000 cache writes * $6, not the default 1.25 * $4 = $5, per 1M.
+    self.assertAlmostEqual(pricing.estimate_cost(usage), 6_000 / 1e6)
+
   def test_one_hour_cache_writes_cost_twice_the_input_rate(self):
     lm = anthropic.Claude55Opus(api_key='fake_key')
     usage = lm.result({

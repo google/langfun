@@ -170,6 +170,16 @@ class GeminiTest(unittest.TestCase):
         model.estimate_cost(usage), (3_000 + 1_200 + 900) / 1e6
     )
 
+  def test_estimate_cost_without_output_rate(self):
+    pricing = gemini.GeminiModelInfo.Pricing(cost_per_1m_input_tokens=1.0)
+    self.assertIsNone(
+        pricing.estimate_cost(
+            lf.LMSamplingUsage(
+                prompt_tokens=100, completion_tokens=10, total_tokens=110
+            )
+        )
+    )
+
   def test_estimate_cost_long_context_threshold(self):
 
     def cost(model_id: str, prompt_tokens: int) -> float | None:
@@ -2314,6 +2324,30 @@ class GeminiBilledDiscardedResponseTest(unittest.TestCase):
     self.assertEqual(usages.total.num_requests, 1)
     self.assertEqual(usages.total.prompt_tokens, 20)
     self.assertEqual(usages.total.completion_tokens, 4_000)
+
+  def test_generation_that_never_finishes_is_tracked(self):
+    post = self._post(
+        _hop(
+            [{'text': 'a'}],
+            'CONTINUATION',
+            token='token-1',
+            candidates_token_count=1,
+        )
+    )
+    with mock.patch.object(gemini, '_MAX_CONTINUATION_HOPS', 3):
+      with mock.patch('requests.Session.post', side_effect=post):
+        with lf.track_usages() as usages:
+          with self.assertRaisesRegex(
+              lf.LMError, 'did not finish within 3 requests'
+          ):
+            self._lm()('hi')
+    # The 3 requests of the abandoned generation were billed.
+    self.assertEqual(usages.total.num_requests, 1)
+    self.assertEqual(usages.total.prompt_tokens, 30)
+    self.assertEqual(usages.total.completion_tokens, 3)
+    self.assertAlmostEqual(
+        usages.total.estimated_cost, (30 * 1.5 + 3 * 9.0) / 1e6
+    )
 
   def test_continuation_ending_unreadable_is_tracked(self):
     post = self._post(
