@@ -35,7 +35,7 @@ jobs:
         pytest -n auto -p no:threadexception --cov=langfun --cov-report=xml -vv
       timeout-minutes: 10
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
       with:
         file: ./coverage.xml
         token: ${{ secrets.CODECOV_TOKEN }}
