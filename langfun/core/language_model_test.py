@@ -336,6 +336,54 @@ class ModelInfoTest(unittest.TestCase):
     )
     self.assertEqual(launch.effective_on(datetime.date(2026, 12, 1)), standard)
 
+  def test_pricing_list_pricing_on(self):
+    standard = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=4.0,
+        cost_per_1m_output_tokens=20.0,
+    )
+    promotion = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=2.0,
+        cost_per_1m_output_tokens=10.0,
+        valid_through=datetime.date(2026, 11, 30),
+        next_pricing=standard,
+        promotional=True,
+    )
+    self.assertIs(
+        promotion.list_pricing_on(datetime.date(2026, 11, 30)), standard
+    )
+    self.assertIs(
+        promotion.list_pricing_on(datetime.date(2026, 12, 1)), standard
+    )
+    self.assertIs(
+        standard.list_pricing_on(datetime.date(2026, 11, 30)), standard
+    )
+
+    # A scheduled change that is not a promotion is the list price until it
+    # ends, and a promotion that follows it reverts to its own successor.
+    old = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=1.25,
+        cost_per_1m_output_tokens=10.0,
+        valid_through=datetime.date(2026, 11, 29),
+        next_pricing=promotion,
+    )
+    self.assertIs(old.list_pricing_on(datetime.date(2026, 11, 29)), old)
+    self.assertIs(old.list_pricing_on(datetime.date(2026, 11, 30)), standard)
+
+  def test_pricing_list_pricing_on_defaults_to_utc_today(self):
+    pricing = lm_lib.ModelInfo.Pricing(
+        cost_per_1m_input_tokens=1.0,
+        cost_per_1m_output_tokens=5.0,
+        valid_through=datetime.date(2026, 11, 30),
+        next_pricing=lm_lib.ModelInfo.Pricing(
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=10.0,
+        ),
+    )
+    with mock.patch.object(
+        lm_lib, '_utc_today', return_value=datetime.date(2026, 12, 1)
+    ):
+      self.assertEqual(pricing.list_pricing_on().cost_per_1m_input_tokens, 2.0)
+
   def test_pricing_effective_on_defaults_to_utc_today(self):
     pricing = lm_lib.ModelInfo.Pricing(
         cost_per_1m_input_tokens=2.0,
@@ -396,6 +444,13 @@ class ModelInfoTest(unittest.TestCase):
               valid_through=datetime.date(2026, 11, 30),
               next_pricing=lm_lib.ModelInfo.Pricing(),
           ),
+      )
+
+    with self.assertRaisesRegex(ValueError, 'must set `next_pricing`'):
+      lm_lib.ModelInfo.Pricing(
+          cost_per_1m_input_tokens=2.0,
+          cost_per_1m_output_tokens=10.0,
+          promotional=True,
       )
 
     class CustomPricing(lm_lib.ModelInfo.Pricing):

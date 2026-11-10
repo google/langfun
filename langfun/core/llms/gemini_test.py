@@ -240,6 +240,45 @@ class GeminiTest(unittest.TestCase):
       self.assertEqual(standard.cost_per_1m_cached_input_tokens, 0.15)
       self.assertEqual(standard.cost_per_1m_output_tokens, 7.5)
 
+  def test_list_pricing(self):
+    for model_id, rates in (
+        ('gemini-4-argon', (4.0, 0.2, 20.0)),
+        ('gemini-3.8-flash', (1.5, 0.15, 7.5)),
+        ('gemini-3.7-flash', (1.5, 0.15, 7.5)),
+        ('gemini-3.1-pro-preview', (2.0, 0.2, 12.0)),
+    ):
+      for date in (datetime.date(2026, 11, 9), datetime.date(2027, 1, 1)):
+        with self.subTest(model_id=model_id, date=date):
+          pricing = gemini.Gemini(model_id, api_endpoint='').pricing
+          list_pricing = pricing.list_pricing_on(date)
+          self.assertEqual(
+              (
+                  list_pricing.cost_per_1m_input_tokens,
+                  list_pricing.cost_per_1m_cached_input_tokens,
+                  list_pricing.cost_per_1m_output_tokens,
+              ),
+              rates,
+          )
+
+  def test_list_pricing_bills_promotional_usage_at_standard_rates(self):
+    pricing = gemini.Gemini('gemini-4-argon', api_endpoint='').pricing
+    usage = lf.LMSamplingUsage(
+        prompt_tokens=1_000_000,
+        completion_tokens=100_000,
+        total_tokens=1_200_000,
+        cached_prompt_tokens=400_000,
+        completion_tokens_details={'thinking_tokens': 100_000},
+    )
+    date = datetime.date(2026, 11, 9)
+    self.assertAlmostEqual(
+        pricing.effective_on(date).estimate_cost(usage),
+        0.6 * 2.0 + 0.4 * 0.1 + 0.2 * 10.0,
+    )
+    self.assertAlmostEqual(
+        pricing.list_pricing_on(date).estimate_cost(usage),
+        0.6 * 4.0 + 0.4 * 0.2 + 0.2 * 20.0,
+    )
+
   def test_generation_config(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
     json_schema = {
