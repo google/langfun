@@ -60,6 +60,144 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_carbon(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = vertexai.VertexAIGemini4Carbon(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-carbon')
+    # Gemini 4 models default to 'global', overriding the environment.
+    self.assertEqual(model.location, 'global')
+    self.assertIn('global', model.api_endpoint)
+    self.assertEqual(model.model_info.provider, 'VertexAI')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_carbon_string_id_resolves_to_global(self):
+    # The bare string id must resolve to VertexAIGemini4Carbon, not the generic
+    # VertexAIGemini, so it keeps the `global` location pin.
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = lf.LanguageModel.get('gemini-4-carbon')
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Carbon)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-carbon')
+    self.assertIn('global', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_carbon_model_uri(self):
+    model = lf.LanguageModel.get(
+        'gemini-4-carbon?project=lf-agent&max_attempts=80&thinking_level=high'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Carbon)
+    self.assertEqual(model.project, 'lf-agent')
+    self.assertEqual(model.max_attempts, 80)
+    self.assertEqual(model.timeout, 1200)
+    self.assertEqual(model.sampling_options.thinking_level, 'high')
+    self.assertEqual(model.sampling_options.max_tokens, 65_536)
+    self.assertEqual(
+        model.api_endpoint,
+        'https://aiplatform.googleapis.com/v1beta1/projects/lf-agent/'
+        'locations/global/publishers/google/models/gemini-4-carbon:'
+        'generateContent',
+    )
+    config = model.request(lf.UserMessage('hi'), model.sampling_options)[
+        'generationConfig'
+    ]
+    self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'high'})
+    self.assertEqual(config['maxOutputTokens'], 65_536)
+    self.assertEqual(config['mediaResolution'], 'MEDIA_RESOLUTION_HIGH')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_carbon_model_uri_overrides_defaults(self):
+    model = lf.LanguageModel.get(
+        'gemini-4-carbon?project=lf-agent&location=us&thinking_level=medium'
+        '&max_tokens=131072&api_version=v1&timeout=60'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Carbon)
+    self.assertEqual(model.sampling_options.thinking_level, 'medium')
+    self.assertEqual(model.sampling_options.max_tokens, 131_072)
+    self.assertEqual(model.timeout, 60)
+    self.assertEqual(
+        model.api_endpoint,
+        'https://aiplatform.googleapis.com/v1/projects/lf-agent/'
+        'locations/us/publishers/google/models/gemini-4-carbon:'
+        'generateContent',
+    )
+    # The overrides apply to this instance only.
+    self.assertEqual(
+        vertexai.VertexAIGemini4Carbon(project='lf-agent').timeout, 1200
+    )
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_carbon_resumes_a_response_cut_at_32k_tokens(self):
+    # The finish reasons and token counts are those of a live 56K-token
+    # response on 2026-11-10, whose text the first request cut mid-line.
+    hops = [
+        {
+            'candidates': [{
+                'content': {
+                    'role': 'model',
+                    'parts': [{'text': '{"id": 1065}\n{"id": 10'}],
+                },
+                'finishReason': 'CONTINUATION',
+                'continuationToken': 'token-1',
+            }],
+            'usageMetadata': {
+                'promptTokenCount': 38_281,
+                'candidatesTokenCount': 32_768,
+                'totalTokenCount': 71_049,
+            },
+        },
+        {
+            'candidates': [{
+                'content': {
+                    'role': 'model',
+                    'parts': [{'text': '66}\n{"id": 1067}'}],
+                },
+                'finishReason': 'STOP',
+            }],
+            'usageMetadata': {
+                'promptTokenCount': 71_049,
+                'candidatesTokenCount': 23_351,
+                'totalTokenCount': 94_400,
+                'cachedContentTokenCount': 38_282,
+            },
+        },
+    ]
+    calls = []
+
+    def post(url, json, **kwargs):
+      del kwargs
+      calls.append((url, json))
+      response = requests.Response()
+      response.status_code = 200
+      response._content = pg.to_json_str(hops[len(calls) - 1]).encode()  # pylint: disable=protected-access
+      return response
+
+    with mock.patch('requests.Session.post', side_effect=post):
+      with _today(2026, 11, 30):
+        response = vertexai.VertexAIGemini4Carbon(project='test-project')('hi')
+    self.assertEqual(response.text, '{"id": 1065}\n{"id": 1066}\n{"id": 1067}')
+    self.assertEqual(len(calls), 2)
+    self.assertIn('/v1beta1/projects/test-project/', calls[0][0])
+    self.assertEqual(calls[1][0], calls[0][0])
+    self.assertNotIn('continuationToken', calls[0][1])
+    self.assertEqual(calls[1][1]['continuationToken'], 'token-1')
+    self.assertEqual(
+        calls[1][1]['generationConfig']['maxOutputTokens'], 65_536
+    )
+    # Every request is billed, so the usage sums both.
+    self.assertEqual(response.usage.prompt_tokens, 109_330)
+    self.assertEqual(response.usage.cached_prompt_tokens, 38_282)
+    self.assertEqual(response.usage.completion_tokens, 56_119)
+    # (71,048 uncached * $2 + 38,282 cached * $0.10 + 56,119 output * $10) / 1M
+    self.assertAlmostEqual(response.usage.estimated_cost, 0.7071142)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_4_argon(self):
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'
@@ -949,8 +1087,9 @@ class VertexAIBillingTest(unittest.TestCase):
   """Tests the usage and cost reported for the latest models on Vertex AI.
 
   The token counts in the fake responses are those Vertex AI reported for live
-  calls on 2026-11-04. Each prompt had been cached by an earlier call, except in
-  the first Claude response, which wrote the prompt to the cache.
+  calls on 2026-11-04 (on 2026-11-10 for Gemini 4 Carbon). Each prompt had been
+  cached by an earlier call, except in the first Claude response, which wrote
+  the prompt to the cache, and the first Gemini 4 Carbon response.
   """
 
   _ARGON_RESPONSE = {
@@ -990,6 +1129,59 @@ class VertexAIBillingTest(unittest.TestCase):
     self.assertAlmostEqual(promotional.estimated_cost, 0.0127613)
     # The standard rates from 2026-12-01 are twice the promotional ones.
     self.assertAlmostEqual(standard.estimated_cost, 0.0255226)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_carbon_bills_cache_hits_and_thinking(self):
+    # Token counts of two live calls on 2026-11-10 with the same 17K-token
+    # prompt: the first missed the implicit cache, the second hit it.
+    miss = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': '9920'}]},
+            'finishReason': 'STOP',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 17_343,
+            'candidatesTokenCount': 8,
+            'totalTokenCount': 17_381,
+            'thoughtsTokenCount': 30,
+        },
+    }
+    hit = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': '9920'}]},
+            'finishReason': 'STOP',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 17_343,
+            'candidatesTokenCount': 8,
+            'totalTokenCount': 17_351,
+            'cachedContentTokenCount': 15_289,
+        },
+    }
+    lm = vertexai.VertexAIGemini4Carbon(project='test-project')
+    with mock.patch(
+        'requests.Session.post', side_effect=_serve_json(miss, hit, hit)
+    ):
+      with _today(2026, 11, 30):
+        miss_usage = lm('miss').usage
+        hit_usage = lm('hit').usage
+      with _today(2026, 12, 1):
+        standard = lm('standard').usage
+
+    self.assertEqual(miss_usage.prompt_tokens, 17_343)
+    self.assertEqual(miss_usage.cached_prompt_tokens, 0)
+    self.assertEqual(miss_usage.completion_tokens, 8)
+    self.assertEqual(
+        miss_usage.completion_tokens_details, {'thinking_tokens': 30}
+    )
+    # (17,343 input * $2 + (8 answer + 30 thinking) output * $10) / 1M
+    self.assertAlmostEqual(miss_usage.estimated_cost, 0.035066)
+    self.assertEqual(hit_usage.prompt_tokens, 17_343)
+    self.assertEqual(hit_usage.cached_prompt_tokens, 15_289)
+    # (2,054 uncached * $2 + 15,289 cached * $0.10 + 8 output * $10) / 1M
+    self.assertAlmostEqual(hit_usage.estimated_cost, 0.0057169)
+    # The standard rates from 2026-12-01 are twice the promotional ones.
+    self.assertAlmostEqual(standard.estimated_cost, 0.0114338)
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_38_flash_bills_cache_hits_and_thinking(self):
@@ -1098,6 +1290,33 @@ class VertexAIBillingTest(unittest.TestCase):
             )
         ),
         6.875,
+    )
+
+  def test_gemini_4_carbon_bills_a_premium_off_the_global_endpoint(self):
+    for location in ('us', 'eu'):
+      with self.subTest(location=location):
+        pricing = vertexai.VertexAIGemini4Carbon(
+            project='test-project', location=location
+        ).pricing
+        promotional = pricing.effective_on(datetime.date(2026, 11, 30))
+        self.assertEqual(promotional.cost_per_1m_input_tokens, 2.2)
+        self.assertEqual(promotional.cost_per_1m_cached_input_tokens, 0.11)
+        self.assertEqual(promotional.cost_per_1m_output_tokens, 11.0)
+        standard = pricing.effective_on(datetime.date(2026, 12, 1))
+        self.assertEqual(standard.cost_per_1m_input_tokens, 4.4)
+        self.assertEqual(standard.cost_per_1m_cached_input_tokens, 0.22)
+        self.assertEqual(standard.cost_per_1m_output_tokens, 22.0)
+        # The premium keeps the promotion flag, so the list price is scaled.
+        self.assertEqual(
+            pricing.list_pricing_on(datetime.date(2026, 11, 30)), standard
+        )
+    # The default endpoint is the global one, which bills the list rates.
+    pricing = vertexai.VertexAIGemini4Carbon(project='test-project').pricing
+    self.assertEqual(
+        pricing.effective_on(
+            datetime.date(2026, 11, 30)
+        ).cost_per_1m_input_tokens,
+        2.0,
     )
 
   def test_global_endpoints_and_older_models_bill_list_rates(self):
