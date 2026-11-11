@@ -326,6 +326,7 @@ SUPPORTED_MODELS = [
             cost_per_1m_input_tokens=2.0,
             cost_per_1m_output_tokens=10.0,
             valid_through=datetime.date(2026, 11, 30),
+            promotional=True,
             next_pricing=GeminiModelInfo.Pricing(
                 cost_per_1m_cached_input_tokens=0.2,
                 cost_per_1m_input_tokens=4.0,
@@ -529,12 +530,14 @@ SUPPORTED_MODELS = [
             max_output_tokens=65_536,
         ),
         # Introductory rates through 2026-12-31 per
-        # https://cloud.google.com/model-garden/pricing (global endpoint).
+        # https://cloud.google.com/model-garden/pricing (global endpoint),
+        # granted as 50% credits back on the standard rates.
         pricing=GeminiModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.075,
             cost_per_1m_input_tokens=0.75,
             cost_per_1m_output_tokens=3.75,
             valid_through=datetime.date(2026, 12, 31),
+            promotional=True,
             next_pricing=GeminiModelInfo.Pricing(
                 cost_per_1m_cached_input_tokens=0.15,
                 cost_per_1m_input_tokens=1.5,
@@ -564,12 +567,14 @@ SUPPORTED_MODELS = [
         ),
         # Introductory rates through 2026-12-31 per
         # https://cloud.google.com/model-garden/pricing (global endpoint) and
-        # https://ai.google.dev/gemini-api/docs/pricing.
+        # https://ai.google.dev/gemini-api/docs/pricing, granted as 50% credits
+        # back on the standard rates.
         pricing=GeminiModelInfo.Pricing(
             cost_per_1m_cached_input_tokens=0.075,
             cost_per_1m_input_tokens=0.75,
             cost_per_1m_output_tokens=3.75,
             valid_through=datetime.date(2026, 12, 31),
+            promotional=True,
             next_pricing=GeminiModelInfo.Pricing(
                 cost_per_1m_cached_input_tokens=0.15,
                 cost_per_1m_input_tokens=1.5,

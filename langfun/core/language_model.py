@@ -262,6 +262,16 @@ class ModelInfo(pg.Object):
         )
     ] = None
 
+    promotional: Annotated[
+        bool,
+        (
+            'If True, these rates are a promotion (e.g. launch credits back on '
+            'the standard rates) rather than the list price, which is what '
+            '`list_pricing_on` returns instead. Requires `next_pricing`: the '
+            'rates the promotion reverts to.'
+        ),
+    ] = False
+
     def _on_bound(self):
       super()._on_bound()
       if (self.valid_through is None) != (self.next_pricing is None):
@@ -290,6 +300,11 @@ class ModelInfo(pg.Object):
             f'Encountered: valid_through={self.valid_through!r}, '
             f'next_pricing.valid_through={self.next_pricing.valid_through!r}.'
         )
+      if self.promotional and self.next_pricing is None:
+        raise ValueError(
+            'Promotional pricing must set `next_pricing`, the rates it '
+            'reverts to.'
+        )
 
     def effective_on(
         self, date: datetime.date | None = None
@@ -311,6 +326,24 @@ class ModelInfo(pg.Object):
           and pricing.valid_through is not None
           and date > pricing.valid_through
       ):
+        pricing = pricing.next_pricing
+      return pricing
+
+    def list_pricing_on(
+        self, date: datetime.date | None = None
+    ) -> 'ModelInfo.Pricing':
+      """Returns the list (non-promotional) pricing on a date.
+
+      Args:
+        date: A date in UTC. If None, today's date in UTC is used.
+
+      Returns:
+        The pricing in effect on `date` (see `effective_on`) or, while that is
+        a promotion, the first non-promotional pricing it reverts to.
+      """
+      pricing = self.effective_on(date)
+      # `_on_bound` guarantees a promotion has `next_pricing`.
+      while pricing.promotional and pricing.next_pricing is not None:
         pricing = pricing.next_pricing
       return pricing
 
