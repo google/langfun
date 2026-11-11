@@ -95,6 +95,13 @@ class GeminiTest(unittest.TestCase):
         datetime.date(2025, 1, 31),
     )
 
+  def test_gemini_4_carbon_knowledge_cutoff(self):
+    model = gemini.Gemini('gemini-4-carbon', api_endpoint='')
+    self.assertEqual(
+        model.model_info.knowledge_cutoff,
+        datetime.date(2026, 3, 31),
+    )
+
   def test_knowledge_cutoff_default(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')
     self.assertIsNone(model.model_info.knowledge_cutoff)
@@ -215,6 +222,29 @@ class GeminiTest(unittest.TestCase):
     )
     self.assertAlmostEqual(
         cost('gemini-1.5-pro', 128_001), (128_001 * 2.5 + 1000 * 10.0) / 1e6
+    )
+
+  def test_gemini_4_carbon_pricing_schedule(self):
+    pricing = gemini.Gemini('gemini-4-carbon', api_endpoint='').pricing
+    promotional = pricing.effective_on(datetime.date(2026, 11, 30))
+    self.assertEqual(promotional.cost_per_1m_input_tokens, 2.0)
+    self.assertEqual(promotional.cost_per_1m_cached_input_tokens, 0.1)
+    self.assertEqual(promotional.cost_per_1m_output_tokens, 10.0)
+    standard = pricing.effective_on(datetime.date(2026, 12, 1))
+    self.assertEqual(standard.cost_per_1m_input_tokens, 4.0)
+    self.assertEqual(standard.cost_per_1m_cached_input_tokens, 0.2)
+    self.assertEqual(standard.cost_per_1m_output_tokens, 20.0)
+    # The launch rates are a promotion: the list price is the standard rate.
+    self.assertEqual(
+        pricing.list_pricing_on(datetime.date(2026, 11, 30)), standard
+    )
+
+  def test_gemini_4_carbon_is_priced_like_gemini_4_argon(self):
+    # Vertex AI lists both at the same rates under the same launch promotion,
+    # so the whole pricing objects must match, not just the rates.
+    self.assertEqual(
+        gemini.Gemini('gemini-4-carbon', api_endpoint='').pricing,
+        gemini.Gemini('gemini-4-argon', api_endpoint='').pricing,
     )
 
   def test_gemini_4_argon_pricing_schedule(self):
