@@ -138,10 +138,12 @@ class InMemory(base.LMCacheBase):
     return model_cache.pop(key, None) is not None
 
   def reset(self, model_id: str | None = None) -> None:
-    """Resets the cache."""
+    """Resets the cache, counting removed entries as deletions."""
     if model_id is not None:
+      self._stats.num_deletes += len(self._cache[model_id])
       self._cache[model_id].clear()
     else:
+      self._stats.num_deletes += len(self)
       self._cache.clear()
 
   def _sym_clone(self, deep: bool, memo: Any = None) -> 'InMemory':
@@ -157,7 +159,9 @@ class InMemory(base.LMCacheBase):
       path = self.filename
 
     # Do nothing if there is no update, this avoids unnecessary rewrites.
-    if self.stats.num_updates == 0 and path == self.filename:
+    if (self.stats.num_updates == 0
+        and self.stats.num_deletes == 0
+        and path == self.filename):
       return
 
     records = []
