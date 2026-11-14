@@ -300,6 +300,48 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
+    # Gemini 4 Carbon
+    GeminiModelInfo(
+        model_id='gemini-4-carbon',
+        in_service=True,
+        provider='VertexAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 4 Carbon: Frontier model for deep work on complex,'
+            ' real-world tasks.'
+        ),
+        release_date=datetime.datetime(2026, 11, 10),
+        # https://cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-carbon
+        # gives the month: March 2026.
+        knowledge_cutoff=datetime.date(2026, 3, 31),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        # Input and output share one 1,048,576-token window. Without
+        # `maxOutputTokens`, a generation gets 65,536 output tokens, the budget
+        # recorded here; long decode raises it to the window minus the input.
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        # Rates for the global endpoint per
+        # https://cloud.google.com/model-garden/pricing, which match
+        # https://ai.google.dev/gemini-api/docs/pricing. The launch rates are
+        # promotional (Vertex AI grants them as 50% credits back on the
+        # standard rates) and end on 2026-11-30. There is no long-context tier.
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.1,
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=10.0,
+            valid_through=datetime.date(2026, 11, 30),
+            promotional=True,
+            next_pricing=GeminiModelInfo.Pricing(
+                cost_per_1m_cached_input_tokens=0.2,
+                cost_per_1m_input_tokens=4.0,
+                cost_per_1m_output_tokens=20.0,
+            ),
+        ),
+        # rate_limits is left unset, so it defaults to None, which callers
+        # already read as "unknown".
+    ),
     # Gemini 4 Argon
     GeminiModelInfo(
         model_id='gemini-4-argon',
