@@ -1449,7 +1449,9 @@ class Anthropic(rest.REST):
     final_usage: dict[str, Any] = {}
     saw_message_stop = False
 
-    for raw_line in text.splitlines():
+    # Lines end at a line feed only: a JSON string may hold U+2028, U+2029 or
+    # U+0085 unescaped, where `str.splitlines` would end one.
+    for raw_line in text.split('\n'):
       line = raw_line.strip()
       if not line.startswith('data:'):
         continue
@@ -1598,7 +1600,9 @@ def _usage(usage: dict[str, Any]) -> lf.LMSamplingUsage:
   Anthropic splits the prompt into disjoint counts: tokens read from the
   prompt cache, tokens written to it, and the uncached rest after the last
   cache breakpoint (`input_tokens`). `prompt_tokens` is the whole prompt.
-  `output_tokens` already includes thinking tokens.
+  `output_tokens` already includes thinking tokens; where the response breaks
+  them out (`output_tokens_details`), they are itemized in
+  `completion_tokens_details` too, which no Anthropic pricing adds again.
 
   Args:
     usage: The `usage` object of a Messages API response.
@@ -1626,6 +1630,12 @@ def _usage(usage: dict[str, Any]) -> lf.LMSamplingUsage:
             cache_creation.get('ephemeral_1h_input_tokens') or 0
         ),
     }
+  completion_tokens_details = None
+  thinking_tokens = (usage.get('output_tokens_details') or {}).get(
+      'thinking_tokens'
+  )
+  if thinking_tokens is not None:
+    completion_tokens_details = {'thinking_tokens': thinking_tokens}
   return lf.LMSamplingUsage(
       prompt_tokens=prompt_tokens,
       completion_tokens=output_tokens,
@@ -1633,6 +1643,7 @@ def _usage(usage: dict[str, Any]) -> lf.LMSamplingUsage:
       cached_prompt_tokens=cached_prompt_tokens,
       cache_creation_prompt_tokens=cache_creation_prompt_tokens,
       prompt_tokens_details=prompt_tokens_details,
+      completion_tokens_details=completion_tokens_details,
   )
 
 

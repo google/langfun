@@ -1468,6 +1468,30 @@ class AnthropicCachingTest(unittest.TestCase):
         (16 + 5_000 + 16_000 + 200) / 1e6,
     )
 
+  def test_thinking_tokens_are_itemized_at_the_same_cost(self):
+    # Usage as Vertex AI reports it for a max-effort Opus 5.5 call.
+    lm = anthropic.Claude55Opus(api_key='fake_key')
+    usage = lm.result({
+        'content': [{'type': 'text', 'text': '391'}],
+        'usage': {
+            'input_tokens': 25,
+            'cache_creation_input_tokens': 0,
+            'cache_read_input_tokens': 0,
+            'cache_creation': {
+                'ephemeral_5m_input_tokens': 0,
+                'ephemeral_1h_input_tokens': 0,
+            },
+            'output_tokens': 68,
+            'speed': 'standard',
+            'output_tokens_details': {'thinking_tokens': 65},
+        },
+    }).usage
+    self.assertEqual(usage.completion_tokens, 68)
+    self.assertEqual(usage.completion_tokens_details, {'thinking_tokens': 65})
+    self.assertEqual(usage.total_tokens, 93)
+    # Thinking is part of the output, billed once: (25 * $4 + 68 * $20) / 1M.
+    self.assertAlmostEqual(lm.estimate_cost(usage), (100 + 1_360) / 1e6)
+
   def test_result_without_cache_fields(self):
     lm = anthropic.Claude55Opus(api_key='fake_key')
     result = lm.result({
@@ -1886,6 +1910,30 @@ class AnthropicStreamingSSETest(unittest.TestCase):
     self.assertEqual(reassembled['content'][0]['input'], {'x': 7})
     self.assertEqual(reassembled['stop_reason'], 'tool_use')
     self.assertEqual(reassembled['usage']['output_tokens'], 9)
+
+  def test_text_with_unicode_line_separators_reassembles(self):
+    # JSON strings may hold U+2028, U+2029 and U+0085 unescaped.
+    text = 'a\u2028b\u2029c\x85d'
+    sse = (
+        'event: message_start\n'
+        'data: {"type":"message_start","message":{"id":"m","type":"message",'
+        '"role":"assistant","model":"claude-opus-4-6","content":[],'
+        '"usage":{"input_tokens":5,"output_tokens":1}}}\n\n'
+        'event: content_block_start\n'
+        'data: {"type":"content_block_start","index":0,'
+        '"content_block":{"type":"text","text":""}}\n\n'
+        'event: content_block_delta\n'
+        'data: {"type":"content_block_delta","index":0,'
+        '"delta":{"type":"text_delta","text":"' + text + '"}}\n\n'
+        'event: content_block_stop\n'
+        'data: {"type":"content_block_stop","index":0}\n\n'
+        'event: message_delta\n'
+        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},'
+        '"usage":{"output_tokens":3}}\n\n'
+        'event: message_stop\ndata: {"type":"message_stop"}\n\n'
+    )
+    lm = anthropic.Claude46Opus(api_key='fake_key')
+    self.assertEqual(lm._reassemble_sse(sse)['content'][0]['text'], text)
 
   def test_malformed_stream_without_message_start_raises(self):
     """An SSE stream missing message_start is an unusable 200 => retryable."""
