@@ -62,7 +62,7 @@ SUPPORTED_MODELS = [
             max_output_tokens=128_000,
         ),
         pricing=lf.ModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=0.13,
+            cost_per_1m_cached_input_tokens=0.125,
             cost_per_1m_input_tokens=1.25,
             cost_per_1m_output_tokens=10.0,
         ),
@@ -156,9 +156,9 @@ SUPPORTED_MODELS = [
             max_output_tokens=100_000,
         ),
         pricing=lf.ModelInfo.Pricing(
-            cost_per_1m_cached_input_tokens=2.5,
-            cost_per_1m_input_tokens=10.0,
-            cost_per_1m_output_tokens=40.0,
+            cost_per_1m_cached_input_tokens=0.5,
+            cost_per_1m_input_tokens=2.0,
+            cost_per_1m_output_tokens=8.0,
         ),
         # Set to 1/3 of Tier 5 rate limits.
         rate_limits=lf.ModelInfo.RateLimits(

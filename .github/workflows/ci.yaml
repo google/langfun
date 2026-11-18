@@ -30,6 +30,8 @@ jobs:
         pip install pytest-xdist
         pip install pytest-cov
         pip install -r requirements.txt
+        # Only for langfun/core/llms/pricing_test.py; bump to re-check prices.
+        pip install llm-prices==1.7.2
     - name: Test with pytest and generate coverage report
       run: |
         pytest -n auto -p no:threadexception --cov=langfun --cov-report=xml -vv
