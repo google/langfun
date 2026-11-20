@@ -300,6 +300,40 @@ SUPPORTED_MODELS = [
     #
     # Production models.
     #
+    # Gemini 4 Neon
+    GeminiModelInfo(
+        model_id='gemini-4-neon',
+        in_service=True,
+        provider='VertexAI',
+        model_type='instruction-tuned',
+        description=(
+            'Gemini 4 Neon: High-performance coding, multi-step reasoning and'
+            ' low-latency agentic workflows.'
+        ),
+        release_date=datetime.datetime(2026, 11, 18),
+        # https://cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-neon
+        # gives the month: March 2026.
+        knowledge_cutoff=datetime.date(2026, 3, 31),
+        input_modalities=GeminiModelInfo.ALL_SUPPORTED_INPUT_TYPES,
+        # Input and output share one 1,048,576-token window. Without
+        # `maxOutputTokens`, a generation gets 65,536 output tokens, the budget
+        # recorded here; long decode raises it to the window minus the input.
+        context_length=lf.ModelInfo.ContextLength(
+            max_input_tokens=1_048_576,
+            max_output_tokens=65_536,
+        ),
+        # Rates for the global endpoint per
+        # https://cloud.google.com/model-garden/pricing, which match
+        # https://ai.google.dev/gemini-api/docs/pricing. There is no launch
+        # promotion and no long-context tier.
+        pricing=GeminiModelInfo.Pricing(
+            cost_per_1m_cached_input_tokens=0.15,
+            cost_per_1m_input_tokens=3.0,
+            cost_per_1m_output_tokens=15.0,
+        ),
+        # rate_limits is left unset, so it defaults to None, which callers
+        # already read as "unknown".
+    ),
     # Gemini 4 Carbon
     GeminiModelInfo(
         model_id='gemini-4-carbon',

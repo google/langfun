@@ -54,6 +54,7 @@ except ImportError:
 # (https://cloud.google.com/model-garden/partner-models/pricing).
 _NON_GLOBAL_PRICE_MULTIPLIER = 1.1
 _MODELS_WITH_NON_GLOBAL_PRICE_PREMIUM = frozenset([
+    'gemini-4-neon',
     'gemini-4-carbon',
     'gemini-4-argon',
     'gemini-3.8-flash',
@@ -334,6 +335,27 @@ class VertexAIGemini(VertexAI, gemini.Gemini):
 #
 # Production models.
 #
+class VertexAIGemini4Neon(VertexAIGemini):  # pylint: disable=invalid-name
+  """Gemini 4 Neon GA model launched on 11/18/2026."""
+
+  model = 'gemini-4-neon'
+  # Pinned: `VertexAIGemini` defaults to `us-central1`, but the model is
+  # documented on `global`, `us` and `eu` only, and `us` and `eu` bill 10% more
+  # than `global`.
+  location = 'global'
+  # A response stops at 65,536 tokens per segment, and the `continuationToken`
+  # that resumes it is documented for v1beta1 only.
+  api_version = 'v1beta1'
+  # The model's documented default output budget, pinned so that it bounds a
+  # generation whatever the service does without one. A generation that spends
+  # it is still resumed by `Gemini._sample_single`, up to
+  # `_MAX_PINNED_BUDGET_HOPS` times this ceiling.
+  sampling_options = lf.LMSamplingOptions(max_tokens=65_536)
+  # Vertex AI lets a response run up to 20 minutes, and one segment may hold
+  # 65,536 tokens, twice Gemini 4 Carbon's.
+  timeout = 1200.0
+
+
 class VertexAIGemini4Carbon(VertexAIGemini):  # pylint: disable=invalid-name
   """Gemini 4 Carbon GA model launched on 11/10/2026."""
 
@@ -989,6 +1011,7 @@ def _register_vertexai_models():
   # Registered after the generic loop so that the bare string ids resolve to
   # the location-pinned subclasses rather than the generic VertexAIGemini base
   # class.
+  lf.LanguageModel.register('gemini-4-neon', VertexAIGemini4Neon)
   lf.LanguageModel.register('gemini-4-carbon', VertexAIGemini4Carbon)
   lf.LanguageModel.register('gemini-4-argon', VertexAIGemini4Argon)
 

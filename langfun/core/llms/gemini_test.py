@@ -95,6 +95,13 @@ class GeminiTest(unittest.TestCase):
         datetime.date(2025, 1, 31),
     )
 
+  def test_gemini_4_neon_knowledge_cutoff(self):
+    model = gemini.Gemini('gemini-4-neon', api_endpoint='')
+    self.assertEqual(
+        model.model_info.knowledge_cutoff,
+        datetime.date(2026, 3, 31),
+    )
+
   def test_gemini_4_carbon_knowledge_cutoff(self):
     model = gemini.Gemini('gemini-4-carbon', api_endpoint='')
     self.assertEqual(
@@ -223,6 +230,19 @@ class GeminiTest(unittest.TestCase):
     self.assertAlmostEqual(
         cost('gemini-1.5-pro', 128_001), (128_001 * 2.5 + 1000 * 10.0) / 1e6
     )
+
+  def test_gemini_4_neon_pricing(self):
+    pricing = gemini.Gemini('gemini-4-neon', api_endpoint='').pricing
+    # No launch promotion: the same rates from the release day on, and they
+    # are the list price.
+    for day in (datetime.date(2026, 11, 18), datetime.date(2026, 12, 1)):
+      with self.subTest(day=day):
+        rates = pricing.effective_on(day)
+        self.assertEqual(rates.cost_per_1m_input_tokens, 3.0)
+        self.assertEqual(rates.cost_per_1m_cached_input_tokens, 0.15)
+        self.assertEqual(rates.cost_per_1m_output_tokens, 15.0)
+        self.assertFalse(rates.promotional)
+        self.assertEqual(pricing.list_pricing_on(day), rates)
 
   def test_gemini_4_carbon_pricing_schedule(self):
     pricing = gemini.Gemini('gemini-4-carbon', api_endpoint='').pricing
@@ -474,6 +494,14 @@ class GeminiTest(unittest.TestCase):
         lf.LMSamplingOptions(thinking_level='medium'),
     )
     self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'medium'})
+
+  def test_thinking_level_xhigh(self):
+    model = gemini.Gemini('gemini-4-neon', api_endpoint='')
+    config = model._generation_config(
+        lf.UserMessage('hi'),
+        lf.LMSamplingOptions(thinking_level='xhigh'),
+    )
+    self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'xhigh'})
 
   def test_request_tool_config(self):
     model = gemini.Gemini('gemini-1.5-pro', api_endpoint='')

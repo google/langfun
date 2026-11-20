@@ -60,6 +60,79 @@ class VertexAITest(unittest.TestCase):
     del os.environ['VERTEXAI_LOCATION']
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_neon(self):
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = vertexai.VertexAIGemini4Neon(location=pg.MISSING_VALUE)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-neon')
+    # Gemini 4 models default to 'global', overriding the environment.
+    self.assertEqual(model.location, 'global')
+    self.assertIn('global', model.api_endpoint)
+    self.assertEqual(model.model_info.provider, 'VertexAI')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_neon_string_id_resolves_to_global(self):
+    # The bare string id must resolve to VertexAIGemini4Neon, not the generic
+    # VertexAIGemini, so it keeps the `global` location pin.
+    os.environ['VERTEXAI_PROJECT'] = 'abc'
+    os.environ['VERTEXAI_LOCATION'] = 'us-central1'
+    # Unset via cleanup, so a failing assertion cannot leak into later tests.
+    self.addCleanup(os.environ.pop, 'VERTEXAI_PROJECT', None)
+    self.addCleanup(os.environ.pop, 'VERTEXAI_LOCATION', None)
+    model = lf.LanguageModel.get('gemini-4-neon')
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Neon)
+    self.assertEqual(model.resource_id, 'vertexai://gemini-4-neon')
+    self.assertIn('global', model.api_endpoint)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_neon_model_uri(self):
+    model = lf.LanguageModel.get(
+        'gemini-4-neon?project=lf-agent&max_attempts=80&thinking_level=xhigh'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Neon)
+    self.assertEqual(model.project, 'lf-agent')
+    self.assertEqual(model.max_attempts, 80)
+    self.assertEqual(model.timeout, 1200)
+    self.assertEqual(model.sampling_options.thinking_level, 'xhigh')
+    self.assertEqual(model.sampling_options.max_tokens, 65_536)
+    self.assertEqual(
+        model.api_endpoint,
+        'https://aiplatform.googleapis.com/v1beta1/projects/lf-agent/'
+        'locations/global/publishers/google/models/gemini-4-neon:'
+        'generateContent',
+    )
+    config = model.request(lf.UserMessage('hi'), model.sampling_options)[
+        'generationConfig'
+    ]
+    self.assertEqual(config['thinkingConfig'], {'thinkingLevel': 'xhigh'})
+    self.assertEqual(config['maxOutputTokens'], 65_536)
+    self.assertEqual(config['mediaResolution'], 'MEDIA_RESOLUTION_HIGH')
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_neon_model_uri_overrides_defaults(self):
+    model = lf.LanguageModel.get(
+        'gemini-4-neon?project=lf-agent&location=eu&thinking_level=low'
+        '&max_tokens=131072&api_version=v1&timeout=60'
+    )
+    self.assertIsInstance(model, vertexai.VertexAIGemini4Neon)
+    self.assertEqual(model.sampling_options.thinking_level, 'low')
+    self.assertEqual(model.sampling_options.max_tokens, 131_072)
+    self.assertEqual(model.timeout, 60)
+    self.assertEqual(
+        model.api_endpoint,
+        'https://aiplatform.googleapis.com/v1/projects/lf-agent/'
+        'locations/eu/publishers/google/models/gemini-4-neon:'
+        'generateContent',
+    )
+    # The overrides apply to this instance only.
+    self.assertEqual(
+        vertexai.VertexAIGemini4Neon(project='lf-agent').timeout, 1200
+    )
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_4_carbon(self):
     os.environ['VERTEXAI_PROJECT'] = 'abc'
     os.environ['VERTEXAI_LOCATION'] = 'us-central1'
@@ -1087,9 +1160,10 @@ class VertexAIBillingTest(unittest.TestCase):
   """Tests the usage and cost reported for the latest models on Vertex AI.
 
   The token counts in the fake responses are those Vertex AI reported for live
-  calls on 2026-11-04 (on 2026-11-10 for Gemini 4 Carbon). Each prompt had been
-  cached by an earlier call, except in the first Claude response, which wrote
-  the prompt to the cache, and the first Gemini 4 Carbon response.
+  calls on 2026-11-04 (on 2026-11-10 for Gemini 4 Carbon, on 2026-11-20 for
+  Gemini 4 Neon). Each prompt had been cached by an earlier call, except in the
+  first Claude response, which wrote the prompt to the cache, and the first
+  Gemini 4 Carbon and Gemini 4 Neon responses.
   """
 
   _ARGON_RESPONSE = {
@@ -1129,6 +1203,59 @@ class VertexAIBillingTest(unittest.TestCase):
     self.assertAlmostEqual(promotional.estimated_cost, 0.0127613)
     # The standard rates from 2026-12-01 are twice the promotional ones.
     self.assertAlmostEqual(standard.estimated_cost, 0.0255226)
+
+  @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
+  def test_gemini_4_neon_bills_cache_hits_and_thinking(self):
+    # Token counts of two live calls on 2026-11-20 at thinking level xhigh
+    # with the same 38K-token prompt: the first missed the implicit cache, the
+    # second hit it.
+    miss = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': '5214'}]},
+            'finishReason': 'STOP',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 37_653,
+            'candidatesTokenCount': 8,
+            'totalTokenCount': 38_154,
+            'thoughtsTokenCount': 493,
+        },
+    }
+    hit = {
+        'candidates': [{
+            'content': {'role': 'model', 'parts': [{'text': '5214'}]},
+            'finishReason': 'STOP',
+        }],
+        'usageMetadata': {
+            'promptTokenCount': 37_653,
+            'candidatesTokenCount': 8,
+            'totalTokenCount': 38_272,
+            'cachedContentTokenCount': 35_599,
+            'thoughtsTokenCount': 611,
+        },
+    }
+    lm = vertexai.VertexAIGemini4Neon(project='test-project')
+    with mock.patch(
+        'requests.Session.post', side_effect=_serve_json(miss, hit)
+    ):
+      miss_usage = lm('miss').usage
+      hit_usage = lm('hit').usage
+
+    self.assertEqual(miss_usage.prompt_tokens, 37_653)
+    self.assertEqual(miss_usage.cached_prompt_tokens, 0)
+    self.assertEqual(miss_usage.completion_tokens, 8)
+    self.assertEqual(
+        miss_usage.completion_tokens_details, {'thinking_tokens': 493}
+    )
+    # (37,653 input * $3 + (8 answer + 493 thinking) output * $15) / 1M
+    self.assertAlmostEqual(miss_usage.estimated_cost, 0.120474)
+    self.assertEqual(hit_usage.cached_prompt_tokens, 35_599)
+    self.assertEqual(
+        hit_usage.completion_tokens_details, {'thinking_tokens': 611}
+    )
+    # (2,054 uncached * $3 + 35,599 cached * $0.15
+    #  + (8 answer + 611 thinking) output * $15) / 1M
+    self.assertAlmostEqual(hit_usage.estimated_cost, 0.02078685)
 
   @mock.patch.object(vertexai.VertexAI, 'credentials', new=True)
   def test_gemini_4_carbon_bills_cache_hits_and_thinking(self):
@@ -1291,6 +1418,24 @@ class VertexAIBillingTest(unittest.TestCase):
         ),
         6.875,
     )
+
+  def test_gemini_4_neon_bills_a_premium_off_the_global_endpoint(self):
+    for location in ('us', 'eu'):
+      with self.subTest(location=location):
+        pricing = vertexai.VertexAIGemini4Neon(
+            project='test-project', location=location
+        ).pricing
+        self.assertEqual(pricing.cost_per_1m_input_tokens, 3.3)
+        self.assertEqual(pricing.cost_per_1m_cached_input_tokens, 0.165)
+        self.assertEqual(pricing.cost_per_1m_output_tokens, 16.5)
+        self.assertEqual(
+            pricing.list_pricing_on(datetime.date(2026, 11, 20)), pricing
+        )
+    # The default endpoint is the global one, which bills the list rates.
+    pricing = vertexai.VertexAIGemini4Neon(project='test-project').pricing
+    self.assertEqual(pricing.cost_per_1m_input_tokens, 3.0)
+    self.assertEqual(pricing.cost_per_1m_cached_input_tokens, 0.15)
+    self.assertEqual(pricing.cost_per_1m_output_tokens, 15.0)
 
   def test_gemini_4_carbon_bills_a_premium_off_the_global_endpoint(self):
     for location in ('us', 'eu'):

@@ -477,6 +477,14 @@ class LMSamplingOptionsTest(unittest.TestCase):
       # Make sure key1 does not change upon override.
       self.assertEqual(key1, (None, None, 1, 40, None, None))
 
+  def test_thinking_level(self):
+    for level in ('low', 'medium', 'high', 'xhigh'):
+      with self.subTest(level=level):
+        options = lm_lib.LMSamplingOptions(thinking_level=level)
+        self.assertEqual(options.thinking_level, level)
+    with self.assertRaises(ValueError):
+      lm_lib.LMSamplingOptions(thinking_level='max')
+
 
 class LanguageModelTest(unittest.TestCase):
   """Tests for LanguageModel."""

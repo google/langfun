@@ -812,10 +812,11 @@ class LMSamplingOptions(component.Component):
   ] = None
 
   thinking_level: Annotated[
-      Literal['low', 'medium', 'high'] | None,
+      Literal['low', 'medium', 'high', 'xhigh'] | None,
       (
           'Thinking level for Gemini models. High is for complex tasks, '
-          'while low is for faster responses. Supported levels vary by model.'
+          'while low is for faster responses; xhigh (e.g. Gemini 4 Neon) '
+          'thinks the most. Supported levels vary by model.'
       ),
   ] = None
 
